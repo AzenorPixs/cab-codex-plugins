@@ -33,6 +33,10 @@ def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)
 @server.tool()
+def run_reconcile_archive(project_id:str,run_id:str,archive_path:str,expected_framing_digest:str)->dict:
+    """Relocalise le seul change archivé du RUN direct propriétaire, sans rejeu."""
+    return client().command('run.reconcile_archive',locals())
+@server.tool()
 async def wait_for_handoff(project_id:str,run_id:str,after:int=0,timeout_ms:int=86400000)->dict:
     """Attend mécaniquement exception ou revue finale sans tours LLM de suivi. Lectures seulement ; aucune décision ou exécution implicite."""
     if not 1<=timeout_ms<=86400000:raise ValueError('handoff-timeout-invalid')
@@ -53,14 +57,16 @@ def native_bind(project_id:str,run_id:str,source_file:str)->dict:
 async def execute(kind,project_id,run_id,session_id,generation,request_id,argv,timeout_ms,resources,adapter_id='',files=None,phase='test'):
     c=client();data={'project_id':project_id,'run_id':run_id,'session_id':session_id,'generation':generation,'request_id':request_id,'kind':kind,'argv':argv,'timeout_ms':timeout_ms,'resources':resources or [],'phase':phase}
     if kind=='external':data.update(adapter_id=adapter_id,files=files or [])
-    result=await asyncio.to_thread(c.command,'operation.start',data)
+    try:result=await asyncio.to_thread(c.command,'operation.start',data)
+    except ClientError as error:
+        return {'state':'ADMISSION_UNCONFIRMED','error':str(error),'request_id':request_id,'run_id':run_id,'retry_execution':False,'next_action':'read-same-receipt'}
     # Attente mécanique du même reçu, jamais de nouvelle exécution.
     deadline=asyncio.get_running_loop().time()+timeout_ms/1000+60
     while result['state'] in ('WAITING','INTENT','RUNNING') and asyncio.get_running_loop().time()<deadline:
         await asyncio.sleep(0.2)
         try:result=await asyncio.to_thread(c.get,'operation',project_id=project_id,run_id=run_id,request_id=request_id)
         except ClientError as error:
-            if str(error)!='cab-unavailable':raise
+            if str(error)!='cab-unavailable':return {'state':'RECEIPT_UNCONFIRMED','error':str(error),'request_id':request_id,'run_id':run_id,'retry_execution':False}
     return result
 
 @server.tool()
@@ -70,7 +76,9 @@ async def atelier_execute(project_id:str,run_id:str,session_id:str,generation:in
 @server.tool()
 def atelier_status(project_id:str,run_id:str,request_id:str)->dict:
     """Consulte le même reçu, sans rejeu."""
-    return client().get('operation',project_id=project_id,run_id=run_id,request_id=request_id)
+    try:return client().get('operation',project_id=project_id,run_id=run_id,request_id=request_id)
+    except ClientError as error:
+        return {'state':'NOT_FOUND' if str(error)=='not-found' else 'RECEIPT_UNCONFIRMED','error':str(error),'request_id':request_id,'run_id':run_id,'retry_execution':False}
 @server.tool()
 def external_describe(project_id:str,run_id:str,profile:dict)->dict:
     """Prépare les références publiques du profil ; les valeurs de connexion restent locales."""
@@ -82,7 +90,9 @@ async def external_execute(project_id:str,run_id:str,session_id:str,generation:i
 @server.tool()
 def external_status(project_id:str,run_id:str,request_id:str)->dict:
     """Lit le reçu durable ; UNKNOWN conserve la protection."""
-    return client().get('operation',project_id=project_id,run_id=run_id,request_id=request_id)
+    try:return client().get('operation',project_id=project_id,run_id=run_id,request_id=request_id)
+    except ClientError as error:
+        return {'state':'NOT_FOUND' if str(error)=='not-found' else 'RECEIPT_UNCONFIRMED','error':str(error),'request_id':request_id,'run_id':run_id,'retry_execution':False}
 @server.tool()
 def bank_reserve(project_id:str,run_id:str,resource:str)->dict:
     """Réserve une ressource déjà cadrée ; ne crée pas d’autorisation métier."""

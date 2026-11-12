@@ -1,10 +1,23 @@
 from django.db import models
 
+class Configuration(models.Model):
+    key=models.CharField(primary_key=True,max_length=100)
+    value=models.JSONField(default=dict)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='configuration'
+
 class Project(models.Model):
     id=models.CharField(primary_key=True,max_length=64)
+    name=models.CharField(max_length=120,blank=True,default='')
     root=models.CharField(max_length=1500,unique=True)
     owner_uid=models.PositiveIntegerField()
+    owner_gid=models.PositiveIntegerField(null=True,blank=True)
+    creation_state=models.CharField(max_length=16,default='READY')
+    creation_request_id=models.CharField(max_length=36,blank=True,null=True,unique=True)
     created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='projects'
 
 class Actor(models.Model):
     id=models.CharField(primary_key=True,max_length=128)

@@ -1,348 +1,239 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 0.8
+Version : 1.2
 
 ## 1. Contexte
 
-* Projet : `Codex Approval Bridge` ;
-* Racine du projet : `/home/devops/datas/cab` ;
-* Règles de sécurité et de travails des LLM : `AGENTS.md` ;
-* Objectifs et architecture du projet : `PROJECT.md` ;
-* Cadrage technique : `TECHNICAL.md` ;
-* Cadrage de déploiement : `BUILD.md` ;
-* Envrionnement de développement : `DEVOPS.md` ;
-* Cartographie et progression du développement : `DEVELOPMENT_MAP.md` ;
-* Protocole des sessions de codage pilotées : résolution décrite en section 7
-  (contrat distribué CAB pour CAB, protocole explicitement retenu sinon) ;
+Projet : `Codex Approval Bridge`. Racine : `/home/devops/datas/cab`.
 
-La propagation des règles générales vers un projet consommateur conserve
-son identité et sa racine.
-Une adaptation locale ou une propagation vers d'autres consommateurs nécessite
-l'autorisation applicable ; elle ne modifie pas implicitement le référentiel.
+Références :
+* `AGENTS.md` : sécurité et règles de travail des LLM ;
+* [CODING_RULES.md](CODING_RULES.md) : règles générales par langage ;
+* `PROJECT.md` : objectifs et architecture ;
+* `TECHNICAL.md` : cadrage technique ;
+* `BUILD.md` : déploiement ;
+* `DEVOPS.md` : environnement de développement ;
+* `DEVELOPMENT_MAP.md` : cartographie et progression ;
+* section 7 : pilotage résolu depuis le référentiel des prompts de `DEVOPS.md`.
 
-`DEVOPS.md` est généré automatiquement. Son contenu dépend de l'environnement
-de développement local dans lequel il est généré et décrit l'état observé
-au moment de cette génération. Il est susceptible d'être régénéré en cours
-de session de codage. Après une régénération, l'agent DOIT relire les
-informations nécessaires à la poursuite du travail avant de s'y référer.
+`CODING_RULES.md` fait partie du socle commun et DOIT accompagner `AGENTS.md`
+lors de toute distribution autorisée.
 
-`DEVELOPMENT_MAP.md` fait partie des fichiers de cadrage du projet.
-Il constitue une synthèse de navigation et d’aide à la décision reliant
-les codes de lot, les changes OpenSpec actifs et archivés, leurs ensembles
-et sous-ensembles fonctionnels ou techniques, leurs dépendances et leur
-avancement vérifiable.
+La propagation des règles conserve l'identité et la racine du consommateur.
+Toute adaptation locale ou propagation à d'autres consommateurs nécessite
+l'autorisation applicable, sans modification implicite du référentiel.
 
-Son rôle principal est d’aider à orienter le choix des changes à engager :
-privilégier les travaux dont les prérequis sont vérifiés, puis favoriser
-un nombre et une difficulté faibles de dépendances non satisfaites,
-avant de considérer les travaux dont la réalisation débloque d’autres
-travaux. Il distingue l’avancement
-documentaire, la réalisabilité, les validations, la livraison et l’activation,
-sur la base de sources identifiées et de preuves datées.
+`DEVOPS.md`, généré automatiquement, décrit l'environnement local observé
+à sa génération. Après toute régénération, l'agent DOIT relire les éléments
+nécessaires avant de les réutiliser.
 
-Cette cartographie ne lance aucune session et ne remplace aucune validation
-requise. Les informations déterminantes DOIVENT être revérifiées avant
-d’engager les travaux concernés.
+`DEVELOPMENT_MAP.md` est un document de cadrage et d'aide au choix des changes.
+Il relie lots, changes OpenSpec actifs et archivés, ensembles et sous-ensembles
+fonctionnels ou techniques, dépendances et avancement vérifiable.
 
-L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de la racine
-applicable à son environnement sans validation explicite du développeur.
+Il distingue documentation, réalisabilité, validations, livraison et activation,
+avec sources identifiées et preuves datées. Priorité :
+1. prérequis vérifiés ;
+2. nombre et difficulté faibles de dépendances non satisfaites ;
+3. capacité à débloquer d'autres travaux.
+
+La cartographie ne lance aucune session ni ne remplace les validations requises.
+Les informations déterminantes DOIVENT être revérifiées avant engagement.
+
+Toute création, modification ou suppression de fichier hors de la racine
+applicable à l'environnement nécessite la validation explicite du développeur.
 
 ## 2. Priorité des règles
 
 En cas de contradiction, appliquer cet ordre :
-
-1. Demande explicite du développeur ;
-2. Spécifications OpenSpec validées ;
-3. Règles de sécurité et de travails des LLM : `AGENTS.md` ;
-4. Objectifs et architecture du projet : `PROJECT.md` ;
-5. Cadrage technique : `TECHNICAL.md` ;
-6. Cadrage de déploiement : `BUILD.md` ;
-7. Environnement de développement : `DEVOPS.md` ;
+1. demande explicite du développeur ;
+2. spécifications OpenSpec validées ;
+3. `AGENTS.md` et son extension `CODING_RULES.md` ;
+4. `PROJECT.md` ;
+5. `TECHNICAL.md` ;
+6. `BUILD.md` ;
+7. `DEVOPS.md` ;
 8. documentation officielle du projet ;
 9. code existant.
 
-Pour le choix des outils de développement, de construction, de test et de
-validation, `DEVOPS.md` fait autorité selon la section 13.1, sous réserve
-des instructions de priorité supérieure.
+`CODING_RULES.md` conserve la priorité des règles extraites d'`AGENTS.md`.
+En cas de contradiction entre les deux, `AGENTS.md` prévaut.
 
-`DEVELOPMENT_MAP.md` est une synthèse de cadrage subordonnée aux sources
-de vérité et aux preuves applicables. Il ne modifie pas leur ordre de
-priorité. Toute divergence DOIT être signalée et résolue avant d’utiliser
-l’information concernée.
+Un prompt explicitement demandé prévaut sur les fichiers de cadrage,
+dans les limites du mandat et des restrictions explicites du développeur.
+La stabilité prévaut sur l'optimisation.
 
-Un prompt demandé explicitement pour exécution prévaut sur les fichiers de cadrage du projet.
+Sous réserve des priorités supérieures, `DEVOPS.md` fait autorité pour
+les outils de développement, construction, test et validation (§13.1).
 
-Une spécification OpenSpec validée prévaut sur un code contradictoire.
+`DEVELOPMENT_MAP.md` reste subordonné aux sources de vérité et preuves
+applicables, sans modifier leur priorité. Toute divergence DOIT être
+signalée et résolue avant utilisation de l'information concernée.
 
-La stabilité du projet prévaut sur l'optimisation.
-
-Un `AGENTS.md` situé dans un sous-répertoire s'applique uniquement lorsqu'il est explicitement chargé ou lorsque l'agent travaille depuis ce sous-répertoire.
-
-Il DOIT reprendre explicitement les règles générales qui doivent continuer à s'appliquer.
-
-En cas de conflit, le `AGENTS.md` le plus proche du fichier concerné prévaut, sauf instruction explicite du développeur.
+Avant toute intervention sur un fichier, charger les `AGENTS.md` applicables
+à son chemin. Les règles générales restent applicables ; les règles locales
+les complètent ou les précisent. En cas de conflit,
+le plus proche du fichier concerné prévaut, sauf instruction explicite
+du développeur.
 
 ## 3. Ordre de lecture
 
-Avant toute intervention, l'agent DOIT lire uniquement ce qui est nécessaire, dans cet ordre :
-
+Avant toute intervention, l'agent DOIT limiter ses lectures au nécessaire,
+dans cet ordre :
 1. `AGENTS.md` ;
 2. `PROJECT.md` ;
 3. `TECHNICAL.md` ;
 4. `BUILD.md` ;
 5. `DEVOPS.md` ;
-6. `DEVELOPMENT_MAP.md`, pour les lots, changes et dépendances concernés ;
+6. `DEVELOPMENT_MAP.md` : lots, changes et dépendances concernés ;
 7. spécifications ou évolution OpenSpec applicables ;
-8. conventions applicables du projet ;
+8. `CODING_RULES.md`, sections des langages concernés, puis conventions applicables ;
 9. code et documentation concernés.
 
-Si `DEVELOPMENT_MAP.md` est absent, vide ou réduit à un squelette, l’agent
-DOIT le signaler et recommander le prompt ACL, sans le lancer automatiquement.
-Il poursuit le travail autorisé à partir des sources et preuves accessibles.
-Ce constat n’autorise ni la création ni la complétion de la cartographie.
+Si `DEVELOPMENT_MAP.md` est absent, vide ou squelettique, l'agent DOIT
+poursuivre le travail autorisé avec les sources et preuves accessibles.
+Ce constat n'autorise aucune création ni complétion.
 
-La création, la reconstruction ou la complétion globale de cette cartographie
-nécessite une validation explicite. Les amendements ciblés d’un document
+Créer, reconstruire ou compléter globalement la cartographie nécessite
+une validation explicite. Les amendements ciblés d'une cartographie
 exploitable restent soumis aux autorisations du processus applicable.
 
-L'agent DOIT privilégier :
+L'agent DOIT privilégier les recherches ciblées et les lectures partielles
+et incrémentales dans les répertoires concernés. Tout parcours récursif
+de l'ensemble du dépôt est interdit lorsqu'une lecture ciblée suffit.
 
-* les recherches ciblées ;
-* les lectures partielles ;
-* les lectures incrémentales ;
-* les répertoires directement concernés.
+Il DOIT minimiser les tokens d'entrée et de sortie par ces pratiques,
+des échanges concis et la réutilisation des informations obtenues.
+Si le fournisseur et l'outil le permettent, il DOIT optimiser l'écriture
+et la réutilisation du cache de prompt : instructions et éléments
+réutilisés stables, données variables séparées. Aucune mise en cache
+ni économie ne doit être supposée sans mesure.
 
-Il NE DOIT PAS parcourir récursivement l'ensemble du dépôt lorsqu'une lecture ciblée suffit.
-
-L'agent DOIT réduire autant que possible les tokens d'entrée et de sortie du
-LLM, notamment par des recherches et lectures ciblées, des échanges concis et
-la réutilisation des informations déjà obtenues. Lorsque le fournisseur et
-l'outil le permettent, il DOIT optimiser l'écriture et la réutilisation du
-cache de prompt, en conservant stables les instructions et éléments réutilisés
-et en plaçant les données variables séparément. Il NE DOIT PAS supposer qu'une
-mise en cache ou une économie a eu lieu sans mesure disponible. Ces efforts
-ne doivent pas compromettre la qualité, la sécurité, les autorisations, les
-preuves ni les vérifications requises.
-
-Lorsque le skill `caveman` est disponible dans son environnement, l’agent
-DEVRAIT l’utiliser au niveau `lite` pour ses échanges. S’il est absent ou
-inaccessible, l’agent poursuit normalement sans demander ni proposer son
-installation. La concision préserve les informations nécessaires, notamment
-les autorisations, identifiants, preuves, résultats, erreurs et incertitudes.
-Les instructions du développeur et les règles du projet prévalent.
+Ces efforts DOIVENT préserver qualité, sécurité, autorisations, preuves
+et vérifications requises.
 
 ## 4. Principes fondamentaux
 
-L'agent DOIT privilégier :
+L'agent DOIT privilégier stabilité, reproductibilité, simplicité, lisibilité,
+maintenabilité, sécurité, traçabilité, modularité et compatibilité.
 
-* la stabilité ;
-* la reproductibilité ;
-* la simplicité ;
-* la lisibilité ;
-* la maintenabilité ;
-* la sécurité ;
-* la traçabilité ;
-* la modularité ;
-* la compatibilité.
+Il DOIT limiter les modifications au minimum nécessaire à l'objectif validé
+et préserver les comportements non concernés.
 
-L'agent DOIT réaliser la modification minimale répondant correctement à l'objectif validé.
+Toute correction, refactoring, optimisation, reformatage, renommage,
+réorganisation ou modification de convention sans rapport avec la demande
+est interdit. Toute amélioration non demandée DOIT être proposée séparément.
 
-Il DOIT préserver tout comportement existant non concerné par la demande.
-
-Il NE DOIT PAS effectuer sans rapport avec la demande :
-
-* de correction ;
-* de refactoring ;
-* d'optimisation ;
-* de reformatage ;
-* de renommage ;
-* de réorganisation ;
-* de modification de convention.
-
-Toute amélioration non demandée DOIT être proposée séparément.
-
-Une évolution complexe DEVRAIT être découpée en modifications indépendantes, testables et réversibles.
+Une évolution complexe DEVRAIT être découpée en modifications indépendantes,
+testables et réversibles.
 
 ## 5. Méthode de travail et autorisations
 
-Avant toute modification, l'agent DOIT :
+Avant modification, l'agent DOIT comprendre la demande, consulter OpenSpec
+applicable, examiner l'existant, identifier les fichiers nécessaires,
+définir la modification minimale et obtenir les validations requises.
 
-1. comprendre la demande ;
-2. consulter les éléments OpenSpec applicables ;
-3. examiner l'implémentation actuelle ;
-4. identifier les fichiers concernés ;
-5. déterminer la modification minimale nécessaire ;
-6. obtenir une validation explicite lorsqu'elle est requise.
+Une validation explicite est une demande ou confirmation claire du développeur
+autorisant l'action concernée. Elle reste valable dans son périmètre tant que
+ses conditions demeurent réunies et qu'elle n'est pas révoquée.
+Si elle est requise mais absente, l'agent DOIT se limiter à l'analyse
+et aux propositions.
 
-L'agent DOIT modifier uniquement les fichiers nécessaires à l'objectif validé.
+Il DOIT modifier uniquement les fichiers nécessaires à l'objectif validé.
 
-Lorsqu'une validation explicite est requise mais absente, l'agent DOIT se limiter à l'analyse et aux propositions.
-
-Une validation explicite correspond à une demande ou confirmation claire du développeur autorisant l'action concernée.
-
-Après modification, l'agent DOIT :
-
-1. examiner les fichiers modifiés ;
-2. vérifier leur syntaxe ;
-3. exécuter les tests et vérifications applicables ;
-4. vérifier la conformité OpenSpec ;
-5. vérifier l'absence de modification hors périmètre ;
-6. rapporter les fichiers modifiés, validations, impacts, échecs et incertitudes.
+Après modification, il DOIT examiner les fichiers modifiés, vérifier leur
+syntaxe, exécuter les tests et contrôles applicables, vérifier la conformité
+OpenSpec et l'absence de modification hors périmètre, puis rapporter fichiers
+modifiés, validations, impacts, échecs et incertitudes.
 
 ## 6. Modifications fonctionnelles et OpenSpec
 
-OpenSpec constitue la source de vérité fonctionnelle et technique du projet.
+OpenSpec est la source de vérité fonctionnelle et technique :
+`openspec/config.yaml`, `openspec/changes/`, `openspec/specs/`.
 
-Sources faisant autorité :
+Avant toute évolution fonctionnelle, l'agent DOIT consulter les spécifications
+applicables. Toute évolution DOIT être précédée ou accompagnée de la création
+ou mise à jour OpenSpec correspondante. Implémenter une fonctionnalité absente
+d'une spécification validée nécessite l'autorisation explicite du développeur.
 
-* `openspec/config.yaml`
-* `openspec/changes/`
-* `openspec/specs/`
+Toute création, modification, suppression ou régénération OpenSpec nécessite
+une demande explicite sur les spécifications, une validation explicite du
+développeur ou une commande explicitement demandée autorisant l'écriture.
+Aucune nouvelle évolution ne peut être créée de sa propre initiative.
 
-L'agent DOIT consulter les spécifications applicables avant toute évolution fonctionnelle.
+Les commandes `/opsx-propose`, `/opsx-new`, `/opsx-continue`, `/opsx-update`,
+`/opsx-sync` et `/opsx-archive` explicitement demandées autorisent les écritures
+nécessaires à leur exécution.
 
-Il NE DOIT PAS implémenter une fonctionnalité absente d'une spécification validée, sauf autorisation explicite du développeur.
-
-Toute évolution fonctionnelle DOIT être précédée ou accompagnée de la création ou mise à jour OpenSpec correspondante.
-
-L'agent NE DOIT PAS créer une nouvelle évolution OpenSpec de sa propre initiative.
-
-La création, modification, suppression ou régénération d'éléments OpenSpec nécessite :
-
-* une demande explicite de travail sur les spécifications ;
-* une validation explicite du développeur ;
-* ou une commande OpenSpec explicitement demandée autorisant cette écriture.
-
-La demande explicite d'une des commandes suivantes autorise les écritures OpenSpec nécessaires à son exécution :
-
-* `/opsx-propose`
-* `/opsx-new`
-* `/opsx-continue`
-* `/opsx-update`
-* `/opsx-sync`
-* `/opsx-archive`
-
-### Délégation de pilotage OpenSpec
-
-Lorsqu'un agent orchestrateur tel que CGPT pilote un agent de codage, il PEUT valider et autoriser les créations, modifications, corrections, synchronisations et archivages OpenSpec nécessaires à l'objectif demandé, à condition qu'ils respectent strictement les spécifications OpenSpec préalablement validées par le développeur.
-
-Lorsqu’un mandat autonome CAB validé couvre le cycle OpenSpec du change,
-l’agent de codage PEUT réaliser ces écritures sans validation intermédiaire ;
-les preuves et la conformité sont examinées à la revue finale. Les choix et
-décisions nécessaires au change DOIVENT être tranchés entre développeur et
-orchestrateur avant le début du codage. Toute décision imprévue hors cadrage,
-action hors change, outil nécessaire absent ou consultation web constitue
-une exception à soumettre à l’orchestrateur. Cette branche prévaut sur la
-procédure unitaire suivante, qui conserve les profils historiques.
-
-Avant toute écriture OpenSpec, l'agent de codage DOIT présenter à l'agent orchestrateur les fichiers concernés et les modifications proposées, puis attendre sa validation explicite. La validation de l'agent orchestrateur vaut alors autorisation d'écriture dans ce périmètre.
-
-L'agent de codage NE DOIT PAS valider seul ses modifications OpenSpec, étendre le périmètre validé, créer une évolution non demandée, ni effectuer un commit ou un push sans autorisation distincte.
-
-Le développeur peut limiter ou révoquer cette délégation à tout moment. Ses instructions prévalent toujours.
+En session pilotée, l'orchestrateur PEUT autoriser les écritures OpenSpec
+nécessaires à l'objectif demandé, dans le strict respect des spécifications
+validées par le développeur et selon le protocole défini en section 7.
+Cette délégation est limitée ou révocable par le développeur et n'autorise
+aucun élargissement de périmètre, commit ou push sans autorisation distincte.
 
 Les spécifications OpenSpec DOIVENT rester cohérentes entre elles.
 
-## 7. OpenCode
+## 7. Sessions pilotées et archivage
 
-OpenCode est un composant technique du projet.
+Toute session pilotée DOIT appliquer le prompt explicitement demandé,
+résolu depuis le dossier et l'index de prompts indiqués dans `DEVOPS.md`.
+Le cadrage du codeur est résolu par l'entrée `ACSP` de cet index.
+Les deux agents DOIVENT connaître les obligations applicables avant exécution.
+Ces références complètent les règles du projet sans étendre les autorisations
+du développeur.
 
-Les éléments suivants sont générés par OpenSpec/OpenCode et NE DOIVENT PAS être modifiés manuellement sans autorisation explicite :
+Avant toute intervention sur l'intégration d'un agent, l'agent DOIT consulter
+les [règles d'intégration](AGENT_INTEGRATIONS.md). Toute modification
+de sa configuration ou modification manuelle de ses fichiers générés
+nécessite une validation explicite.
 
-* `.opencode/commands/`
-* `.opencode/skills/`
-
-Toute modification de la configuration OpenCode nécessite une validation explicite concernant OpenCode ou son intégration avec OpenSpec.
-
-### Sessions de codage pilotées par un agent orchestrateur
-
-Une session de codage directe ne nécessite aucun protocole de pilotage.
-
-Pour une session pilotée via CAB, le protocole fait autorité dans le skill
-`CAB` et son index de références distribués avec le plugin CAB. L'orchestrateur
-DOIT charger le noyau du contrat et les références nécessaires à l'action,
-vérifier la version applicable et transmettre à l'agent de codage les
-obligations correspondant à son mandat. Les deux agents DOIVENT connaître ces
-obligations avant leur exécution. Une copie locale historique ne prévaut pas
-sur le contrat CAB distribué.
-
-Pour un pilotage utilisant un autre protocole explicitement retenu par le
-projet, celui-ci définit les rôles, échanges, mandats et preuves ; les deux
-agents DOIVENT en prendre connaissance avant ce pilotage.
-
-Le protocole retenu complète `AGENTS.md` et les spécifications OpenSpec validées
-sans étendre les autorisations du développeur. S'il est inaccessible ou
-incohérent, l'agent DOIT diagnostiquer la référence ou la distribution concernée
-et utiliser uniquement les récupérations déjà autorisées. Il ne doit ni inventer
-une autorisation ni relancer un effet incertain ; les travaux indépendants et
-déjà autorisés peuvent continuer. Toute correction hors mandat nécessite sa
-validation explicite.
-
-### Statistiques d'archivage
-
-Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
-archive dans `openspec/changes/archive/<archive>/STATISTICS.md`, avec un
-mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
-s'applique. Vérifier les six sections, UTF-8/LF et les totaux ; afficher `N/A`
-motivé pour les mesures absentes. Ne pas déclarer `TERMINÉ` sans preuve du
-rapport. Si le rapport échoue, reprendre uniquement ce rapport, sans réarchiver.
+Après chaque archivage OpenSpec autorisé et réussi, produire
+`openspec/changes/archive/<archive>/STATISTICS.md`.
+Appliquer le format statistique référencé depuis `DEVOPS.md` :
+six sections, UTF-8/LF, totaux vérifiés et mesures absentes justifiées par `N/A`.
+Résoudre ce format par l'entrée `SGS` de l'index des prompts indiqué
+dans `DEVOPS.md`. Ne pas déclarer `TERMINÉ` sans preuve du rapport.
+En cas d'échec du rapport, reprendre uniquement celui-ci, sans réarchiver.
 
 ## 8. Arborescence et fichiers
 
 L'agent DOIT préserver l'arborescence et les conventions existantes.
+Les références aux prompts et sessions DOIVENT être résolues à partir
+des emplacements de sources et d'index indiqués dans `DEVOPS.md`.
 
-L'emplacement de la source des prompts et de leur index est indiqué dans `DEVOPS.md`.
-Toute référence à un prompt ou à une session DOIT être résolue à partir de ces informations.
+Renommer, déplacer ou supprimer un fichier ou répertoire nécessite
+la validation explicite du développeur. Tout fichier présumé inutilisé
+DOIT être signalé avant suppression ; toute suppression de code
+DOIT être strictement nécessaire et justifiée.
 
-Le renommage, déplacement ou la suppression d'un fichier ou répertoire nécessite une validation explicite du développeur.
+Exception : les fichiers temporaires et artefacts de construction
+explicitement régénérables PEUVENT être supprimés puis recréés si nécessaire.
 
-Lorsqu'un fichier semble inutilisé, l'agent DOIT le signaler avant toute suppression.
+Cette exception ne permet pas de supprimer ou régénérer sans validation
+explicite les éléments protégés suivants :
+* `.gitignore`, `AGENTS.md`, `CODING_RULES.md`, `BUILD.md`, `CHANGELOG.md`, `DEVOPS.md`,
+  `DEVELOPMENT_MAP.md`, `LICENSE`, `PROJECT.md`, `README.md`, `TECHNICAL.md` ;
+* `project.env` à la racine ;
+* `openspec/config.yaml`, `openspec/changes/`, `openspec/specs/`.
 
-Toute suppression de code existant DOIT être limitée au strict nécessaire et justifiée.
+Les protections propres aux intégrations d'agents sont définies dans
+leurs règles d'intégration, à consulter conformément à la section 7.
 
-Les fichiers temporaires ou artefacts de construction explicitement régénérables PEUVENT être supprimés puis recréés lorsque nécessaire.
-
-Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimés ou régénérés sans validation explicite :
-
-* `.gitignore`
-* `AGENTS.md`
-* `BUILD.md`
-* `CHANGELOG.md`
-* `DEVOPS.md`
-* `DEVELOPMENT_MAP.md`
-* `LICENSE`
-* `PROJECT.md`
-* `README.md`
-* `TECHNICAL.md`
-* `project.env` (à la racine du projet)
-* `.opencode/commands/`
-* `.opencode/skills/`
-* `.opencode/config/opencode.json`
-* `openspec/config.yaml`
-* `openspec/changes/`
-* `openspec/specs/`
-* `openspec/specs/`
-
-`project.env` est un fichier local protégé situé à la racine du projet.
-L'agent NE DOIT PAS le créer, le modifier ou le régénérer. Il PEUT en extraire
-les variables utiles au travail autorisé dont il pourrait avoir besoin, dans
-les conditions définies en section « Sources du projet ».
+L'agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
+Seule l'extraction locale filtrée prévue en section « Sources du projet »
+est autorisée pour les variables utiles au travail autorisé.
 
 ## 9. Sources du projet
 
-Les fichiers du projet non explicitement exclus PEUVENT être utilisés comme sources :
-
-* de code ;
-* de documentation ;
-* d'informations techniques ;
-* d'informations fonctionnelles.
+Les fichiers non exclus PEUVENT servir de sources de code, documentation
+et informations techniques ou fonctionnelles.
 
 Les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées,
-sauf pour l'accès local aux fichiers sensibles nécessaire au travail autorisé
-dans les conditions de la section « Secrets » et pour l'extraction définie
-ci-dessous :
+sauf accès local nécessaire au travail autorisé selon la section « Secrets »
+ou extraction filtrée définie ci-dessous.
 
-```text id="6zj1eg"
+Exclusions :
+```text
 __pycache__/
 **/*.crt
 **/*.cer
@@ -364,11 +255,6 @@ __pycache__/
 .idea/
 .mypy_cache/
 .npm/
-.opencode/.gitignore
-.opencode/cache/
-.opencode/config/
-.opencode/share/
-.opencode/state/
 .pytest_cache/
 .ruff_cache/
 .venv/
@@ -399,46 +285,46 @@ tmp/
 venv/
 ```
 
-### Exception limitée — variables locales non secrètes de project.env
+Les exclusions et inclusions propres aux intégrations d'agents DOIVENT
+être définies dans leurs règles d'intégration, consultées avant tout accès.
 
-Pour les besoins du projet et du travail autorisé, l’agent PEUT lancer, sans
-validation supplémentaire, une extraction locale filtrée des
-variables utiles au travail autorisé dans `project.env`, situé à la racine du
-projet concerné. Cette autorisation couvre notamment `PROJECT_*`,
-`LOCAL_DEFAULT_BRANCH`, `GIT_*` et `REMOTE_*`, sans se limiter à ces noms ou
-préfixes. Elle ne dépend pas de l’exécution d’un prompt particulier.
-Cette exception prévaut sur l’exclusion générale des fichiers `.env`
-uniquement pour ce traitement local.
+### Extraction filtrée de `project.env`
 
-Seul le processus local parcourt le fichier ; l’agent ne reçoit que les noms
-et valeurs des variables validées comme non secrètes et utiles au travail
-autorisé. Un nom ou un préfixe autorisé ne garantit pas l’absence de secret :
-les mots de passe, jetons, clés et autres données sensibles restent exclus,
-y compris dans les familles ci-dessus ou dans une URL contenant des secrets.
-Toute valeur dont le caractère non secret ne peut être établi est exclue de
-la restitution. Les valeurs exclues ne DOIVENT être ni affichées,
-journalisées, copiées, indexées, ni transmises au modèle.
-Le fichier ne DOIT JAMAIS être exécuté ou chargé dans l’environnement :
-`source`, `eval`, substitutions de commandes et interpolations sont interdits.
-Seules les affectations littérales sur une seule ligne sont acceptées ; les
-clés dupliquées et les syntaxes nécessitant une interprétation sont ambiguës.
-Aucune ligne rejetée ni sortie brute du fichier ne DOIT être restituée.
+Sauf interdiction explicite du développeur, une extraction locale filtrée
+des variables utiles au travail autorisé est permise sans validation
+supplémentaire ni invocation d'un prompt. Elle concerne uniquement
+`project.env` à la racine et déroge à l'exclusion des `.env` pour ce traitement.
 
-Si le fichier est absent ou inaccessible, si une variable nécessaire manque
-ou si sa valeur est vide ou ambiguë, demander au développeur uniquement la
-valeur manquante ou non vérifiable.
-L’agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
-Cette exception ne s’applique pas si le développeur interdit précisément
-cette extraction. Les autres accès aux fichiers sensibles restent soumis à
-la section « Secrets ».
+Seul le processus local parcourt le fichier. L'agent reçoit uniquement
+les noms et valeurs établis comme non secrets et utiles. Cela peut inclure
+`PROJECT_*`, `LOCAL_DEFAULT_BRANCH`, `GIT_*`, `REMOTE_*` ou d'autres variables :
+aucun nom ni préfixe ne garantit l'absence de secret, notamment dans les URL.
+
+Seules les affectations littérales sur une ligne sont acceptées.
+Les clés dupliquées et syntaxes nécessitant une interprétation sont ambiguës.
+Toute exécution ou tout chargement dans l'environnement est interdit :
+`source`, `eval`, substitutions de commandes et interpolations compris.
+
+Les valeurs secrètes ou incertaines sont exclues de toute restitution,
+journalisation, copie, indexation ou transmission au modèle.
+Aucune ligne rejetée ni sortie brute ne DOIT être restituée.
+
+Si le fichier est absent ou inaccessible, ou une variable nécessaire
+absente, vide ou ambiguë, demander uniquement la valeur manquante
+ou non vérifiable au développeur.
+
+L'agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
+Les autres accès sensibles relèvent de la section « Secrets ».
 
 ### Inclusions explicites
 
-Les inclusions suivantes prévalent sur les exclusions générales et PEUVENT être consultées lorsque nécessaire :
+Ces inclusions prévalent sur les exclusions générales pour les lectures
+nécessaires, sans conférer le statut de source de vérité fonctionnelle :
 
-```text id="3ewy6y"
+```text
 .gitignore
 AGENTS.md
+CODING_RULES.md
 BUILD.md
 CHANGELOG.md
 DEVOPS.md
@@ -448,9 +334,6 @@ PROJECT.md
 README.md
 TECHNICAL.md
 project.env
-.opencode/commands/
-.opencode/config/opencode.json
-.opencode/skills/
 openspec/AGENTS.md
 openspec/config.yaml
 openspec/changes/
@@ -459,435 +342,175 @@ output/
 reports/
 ```
 
-L’inclusion de `project.env` concerne exclusivement le fichier situé à la
-racine du projet et l’extraction locale filtrée définie ci-dessus. Elle
-n’autorise ni sa restitution brute, ni sa création, sa modification ou sa
-régénération.
+Pour `project.env`, seule l'extraction filtrée ci-dessus est autorisée.
 
-Ces éléments ne constituent pas nécessairement une source de vérité fonctionnelle.
+Toute modification nécessite la demande ou validation explicite applicable :
+intégration d'agent, OpenSpec, Git ou production de rapports techniques.
 
-Leur modification nécessite une demande ou validation explicite concernant, selon le cas :
-
-* OpenCode ;
-* OpenSpec ;
-* Git ;
-* la production de rapports techniques.
-
-`output/` et `reports/` :
-
-* PEUVENT être lus ;
-* NE DOIVENT PAS être considérés comme source de vérité ;
-* NE DOIVENT PAS être versionnés dans Git ;
-* NE DOIVENT être créés, modifiés ou supprimés que pour une demande explicite.
+`output/` et `reports/` sont lisibles, sans autorité de vérité, et NE DOIVENT
+PAS être versionnés. Leur création, modification ou suppression nécessite
+une demande explicite.
 
 ## 10. Secrets
 
-L'ouverture locale des fichiers sensibles est autorisée dans le cadre du projet
-et du travail autorisé. Pour un fichier sensible, l'agent PEUT uniquement
-signaler sa présence à partir de son nom ou de son chemin ; son contenu ne
-DOIT PAS être restitué lorsqu'il contient des secrets.
+L'ouverture locale des fichiers sensibles est autorisée uniquement pour
+les besoins du projet et du travail autorisé. Seuls leur nom ou chemin
+PEUVENT être signalés ; aucun contenu contenant des secrets ne DOIT être
+restitué.
 
-L'agent NE DOIT PAS :
+Les secrets, notamment mots de passe, clés privées ou SSH, jetons d'API,
+certificats et identifiants de connexion, NE DOIVENT PAS être transmis
+au modèle, indexés, versionnés ni affichés dans les journaux ou sorties.
 
-* transmettre un secret au modèle ;
-* indexer un secret ;
-* ajouter un secret à Git ;
-* afficher un secret dans les journaux ou sorties.
+Tout stockage local de secrets DOIT être exclu de Git et de l'indexation.
 
-Les données sensibles comprennent notamment :
-
-* mots de passe ;
-* clés privées ;
-* clés SSH ;
-* jetons d'API ;
-* certificats ;
-* identifiants de connexion.
-
-Pour `project.env`, l'agent NE DOIT PAS le créer, le modifier ou le régénérer.
-Il PEUT en extraire les variables utiles au travail autorisé selon les
-conditions définies dans la section « Sources du projet ». Toute valeur
-secrète ou dont le caractère non secret ne peut pas être établi DOIT être
-exclue de la restitution ; aucune ligne rejetée ni sortie brute ne DOIT être
-affichée.
-
-Les secrets DOIVENT rester hors des sources versionnées.
-
-Un emplacement local tel que `.opencode/share/` PEUT contenir des secrets uniquement s'il est exclu :
-
-* de Git ;
-* de l'indexation.
+Pour `project.env`, appliquer exclusivement les règles de la section
+« Sources du projet » : extraction locale filtrée des variables utiles
+établies comme non secrètes ; aucune restitution brute ni ligne rejetée ;
+création, modification et régénération interdites.
 
 ## 11. Sécurité
 
-L'agent DOIT privilégier :
+L'agent DOIT appliquer le moindre privilège, valider les entrées et gérer
+explicitement les erreurs, sans données sensibles dans les journaux.
+Il NE DOIT PAS supposer un accès complet à l'hôte.
 
-* le principe du moindre privilège ;
-* la validation des entrées ;
-* la gestion explicite des erreurs ;
-* des permissions minimales ;
-* l'absence de données sensibles dans les journaux.
-
-L'agent NE DOIT PAS supposer disposer d'un accès complet à la machine hôte.
-
-Sans validation explicite, il NE DOIT PAS modifier :
-
-* les montages Docker ;
-* les volumes ;
-* les utilisateurs du conteneur ;
-* les droits d'accès du conteneur ;
-* les permissions accordées au conteneur.
+Toute modification des montages Docker, volumes, utilisateurs, droits
+d'accès ou permissions du conteneur nécessite une validation explicite.
 
 ## 12. Git
 
-Sans validation explicite du développeur, l'agent NE DOIT PAS :
+Sans validation explicite du développeur, l'agent NE DOIT PAS modifier
+`.git/`, l'historique, les sous-modules ou la configuration Git du dépôt,
+supprimer des commits, effectuer un push, créer/modifier/supprimer
+des branches ni créer/modifier des hooks Git.
 
-* modifier `.git/` ;
-* réécrire l'historique ;
-* supprimer des commits ;
-* effectuer un push ;
-* modifier la configuration Git du dépôt ;
-* créer, modifier ou supprimer des branches ;
-* modifier les sous-modules ;
-* créer ou modifier des hooks Git.
+Chaque commit DOIT être atomique et correspondre à une modification
+clairement identifiable, sans mélanger des corrections, refactorings,
+évolutions fonctionnelles ou documentations indépendants.
 
-Les commits DOIVENT être atomiques.
+Avant toute proposition de commit, l'agent DOIT examiner les fichiers
+modifiés, vérifier la syntaxe, le périmètre attendu et l'absence de secret
+ajouté, exécuter les vérifications disponibles et décrire le contenu du commit.
 
-Un commit DOIT correspondre à une modification clairement identifiable.
+## 13. Programmation et validation
 
-Un commit NE DOIT PAS mélanger des modifications indépendantes de type :
-
-* correction ;
-* refactoring ;
-* évolution fonctionnelle ;
-* documentation.
-
-Avant toute proposition de commit, l'agent DOIT :
-
-1. vérifier la syntaxe ;
-2. examiner les fichiers modifiés ;
-3. vérifier que seuls les fichiers attendus sont modifiés ;
-4. vérifier qu'aucun secret n'a été ajouté ;
-5. exécuter les vérifications disponibles ;
-6. décrire clairement le contenu du commit.
-
-## 13. Langages de programmation
+Avant toute modification, l'agent DOIT consulter dans
+[CODING_RULES.md](CODING_RULES.md) les sections des langages concernés,
+puis appliquer les conventions du projet définies dans `TECHNICAL.md`
+et les outils et configurations de `DEVOPS.md`.
 
 ### 13.1. Règles communes
 
-`DEVOPS.md` constitue le référentiel faisant autorité pour le choix des
-outils de développement, de construction, de test et de validation, sous
-réserve des instructions de priorité supérieure. L'agent DOIT utiliser les
-outils qui y sont définis ; un outil hors de ce périmètre ne peut pas leur
-être substitué sans validation explicite du développeur.
+Sous réserve des priorités supérieures, les outils et configurations
+de développement, construction, test et validation DOIVENT respecter
+`DEVOPS.md`.
 
-Si un outil nécessaire est absent de `DEVOPS.md`, l'agent DOIT demander
-explicitement au développeur l'autorisation de l'utiliser, en précisant son
-rôle et la justification du besoin, puis attendre son accord avant toute
-installation ou utilisation. Sa disponibilité sur la machine ne vaut pas
-autorisation. Si un outil prescrit est indisponible, l'agent DOIT le signaler
-et obtenir cet accord avant toute substitution. Seules les opérations
-nécessitant cet outil restent en attente ; les travaux indépendants déjà
-autorisés peuvent se poursuivre. Ces règles n'autorisent pas la modification
-ou la régénération de `DEVOPS.md`.
+Tout outil nécessaire absent de ce référentiel nécessite l'accord explicite
+du développeur avant installation ou utilisation, avec rôle et justification.
+Sa disponibilité ne vaut pas autorisation. Tout outil prescrit indisponible
+DOIT être signalé ; sa substitution nécessite le même accord.
+Seules les opérations dépendantes restent en attente.
+Cela n'autorise ni modification ni régénération de `DEVOPS.md`.
 
-Le code DOIT rester compatible avec les versions des langages, runtimes et dépendances supportées par le projet.
+Le code DOIT respecter les versions supportées des langages, runtimes
+et dépendances, déterminées par les spécifications et configurations
+du projet, notamment `pyproject.toml`, `package.json` et `DEVOPS.md`.
+Une version locale plus récente ne relève pas implicitement le minimum
+supporté. Toute exigence de version supérieure DOIT être justifiée
+et soumise aux validations applicables.
 
-Les versions de référence DOIVENT être déterminées à partir des spécifications et des fichiers de configuration du projet, notamment `pyproject.toml`, `package.json` et `DEVOPS.md`.
+Le code DOIT respecter conventions et architecture, préserver les
+comportements non concernés, valider les entrées aux frontières du système,
+gérer les échecs attendus, détecter, traiter ou propager les erreurs sans
+les masquer, fournir des diagnostics compréhensibles sans secret et libérer
+les ressources, même en cas d'échec.
 
-La présence d'une version plus récente dans l'environnement de développement NE DOIT PAS conduire à relever implicitement la version minimale supportée.
-
-Toute fonctionnalité nécessitant une version plus récente DOIT être justifiée et respecter les règles de validation applicables.
-
-Quel que soit le langage, le code DOIT :
-
-* respecter les conventions et l'architecture existantes ;
-* valider les entrées aux frontières du système ;
-* gérer explicitement les échecs attendus ;
-* détecter, traiter ou propager les erreurs de manière explicite ;
-* NE JAMAIS masquer silencieusement une erreur ;
-* produire des diagnostics compréhensibles sans exposer de secret ;
-* libérer les ressources utilisées, y compris en cas d'échec ;
-* préserver les comportements existants non concernés.
-
-Les vérifications DOIVENT utiliser les outils et configurations retenus par le projet.
-
-L'ajout d'un outil, d'une dépendance ou d'un langage reste soumis aux règles applicables aux dépendances et aux choix techniques.
-
-Une vérification syntaxique réussie NE suffit PAS à démontrer la validité fonctionnelle du code. Les tests applicables restent obligatoires.
-
-Toute vérification indisponible, non exécutée ou échouée DOIT être signalée explicitement.
-
-### 13.2. Bash et Shell
-
-Les scripts DOIVENT rester compatibles avec la version de Bash fournie par les versions Debian supportées.
-
-Les constructions POSIX DEVRAIENT être privilégiées lorsqu'elles permettent simplement le même résultat.
-
-L'interpréteur déclaré par le shebang DOIT correspondre aux constructions utilisées. Un script déclaré pour `sh` NE DOIT PAS utiliser de constructions spécifiques à Bash.
-
-Pour Bash, les vérifications minimales sont :
-
-```bash
-bash -n "<fichier>"
-shellcheck "<fichier>"
-```
-
-Pour un script POSIX exécuté avec `sh`, la vérification syntaxique DOIT utiliser l'interpréteur cible :
-
-```sh
-sh -n "<fichier>"
-shellcheck "<fichier>"
-```
-
-Les scripts DOIVENT :
-
-* protéger les expansions de variables par des guillemets lorsque nécessaire ;
-* préserver les arguments et les chemins contenant des espaces ou caractères spéciaux ;
-* contrôler les codes de retour lorsque l'échec influence la suite du traitement ;
-* traiter explicitement les échecs attendus ;
-* retourner un code de sortie cohérent avec le résultat.
-
-L'utilisation de `set -e` NE remplace PAS une gestion explicite des erreurs.
-
-### 13.3. Python
-
-Le code DOIT respecter la plage de versions Python déclarée dans `pyproject.toml` et les versions effectivement supportées par le projet.
-
-Les commandes DOIVENT utiliser l'interpréteur et l'environnement Python retenus pour le projet.
-
-La bibliothèque standard DEVRAIT être privilégiée lorsqu'elle répond simplement au besoin.
-
-Le code Python DOIT :
-
-* capturer des exceptions précises lorsque leur traitement est nécessaire ;
-* préserver la cause d'origine lorsqu'une exception est transformée ;
-* éviter les captures générales qui masquent les erreurs inattendues ;
-* utiliser des gestionnaires de contexte lorsque adaptés à la libération des ressources ;
-* éviter les arguments par défaut mutables ;
-* éviter les effets de bord non nécessaires lors de l'import d'un module.
-
-Les annotations de types DEVRAIENT être utilisées pour les nouveaux contrats publics et les interfaces dont elles améliorent la compréhension.
-
-Pour chaque fichier Python modifié, la vérification syntaxique minimale est :
-
-```bash
-python3 -m py_compile "<fichier.py>"
-```
-
-Les tests applicables DOIVENT être exécutés avec le mécanisme retenu par le projet.
-
-Les contrôles de style, d'analyse statique et de types DOIVENT être exécutés lorsqu'ils sont configurés pour le périmètre concerné.
-
-Pour Django, les modifications DOIVENT également respecter les conventions du projet relatives aux modèles, migrations, transactions, contrôles et tests.
-
-### 13.4. JavaScript et TypeScript
-
-Le code DOIT rester compatible avec les versions de Node.js, les navigateurs cibles et les outils de construction supportés par le projet.
-
-Le système de modules et les conventions JavaScript ou TypeScript existants DOIVENT être respectés.
-
-Une conversion de JavaScript vers TypeScript, ou inversement, NE DOIT PAS être réalisée sans demande ou validation concernant cette conversion.
-
-Le code DOIT :
-
-* gérer les rejets des opérations asynchrones ;
-* éviter les promesses abandonnées sans traitement explicite ;
-* libérer les abonnements, écouteurs et temporisateurs lorsque nécessaire ;
-* valider les données externes à l'exécution ;
-* respecter les contrats API et les conventions des composants existants.
-
-Les types TypeScript NE remplacent PAS la validation des données reçues à l'exécution.
-
-En TypeScript, l'utilisation de `any` ou d'une suppression de diagnostic DOIT être limitée et justifiée.
-
-Avant de déclarer une modification valide, l’agent DOIT exécuter les tests et les constructions applicables au périmètre modifié, avec les commandes et configurations définies par le projet.
-
-Lorsqu'une application web nécessite des tests unitaires pour sa partie frontend, ces tests DOIVENT être exécutés dans les navigateurs web déclarés dans `DEVOPS.md`, en mode headless.
-
-Les contrôles de lint et de types DOIVENT également être exécutés lorsqu'ils sont configurés.
-
-Les modifications d'interface DOIVENT faire l'objet des vérifications navigateur applicables ; une construction réussie NE suffit PAS à valider le comportement visuel ou interactif.
-
-### 13.5. SQL et PostgreSQL
-
-Les requêtes et migrations DOIVENT rester compatibles avec les versions du serveur PostgreSQL supportées par le projet.
-
-Les valeurs externes DOIVENT être transmises par des paramètres de requête. Elles NE DOIVENT PAS être concaténées dans du SQL.
-
-Les identifiants SQL dynamiques DOIVENT utiliser les mécanismes adaptés du pilote ou de l'ORM.
-
-Les modifications DOIVENT :
-
-* respecter les contrats de données et les règles d'isolation du projet ;
-* utiliser les transactions lorsque l'atomicité est nécessaire ;
-* traiter explicitement les erreurs et les conflits attendus ;
-* préserver les contraintes et l'intégrité des données ;
-* documenter les impacts des migrations et leur stratégie de retour lorsque applicable.
-
-L'ORM et les mécanismes de migration existants DEVRAIENT être privilégiés lorsqu'ils répondent au besoin.
-
-Les vérifications DOIVENT utiliser les outils de migration et les tests applicables sur un environnement de test autorisé.
-
-L'exécution d'un fichier SQL NE DOIT PAS être présentée comme une simple vérification syntaxique sans effets de bord.
-
-### 13.6. HTML, CSS et autres langages
-
-Les modifications HTML et CSS DOIVENT respecter les navigateurs cibles, les conventions de composants, les thèmes, l'accessibilité et le comportement responsive du projet.
-
-Elles DOIVENT être vérifiées avec la construction et les contrôles navigateur applicables.
-
-Pour tout autre langage présent dans le périmètre, l'agent DOIT identifier :
-
-* les versions supportées ;
-* les conventions existantes ;
-* les outils de vérification configurés ;
-* les tests applicables.
-
-Il DOIT appliquer les règles communes de cette section et signaler toute absence de mécanisme de validation.
+Tout ajout d'outil, dépendance ou langage reste soumis aux autorisations
+applicables. La syntaxe seule ne prouve pas la validité fonctionnelle :
+les tests applicables sont obligatoires. Toute vérification indisponible,
+non exécutée ou échouée DOIT être signalée.
 
 ## 14. Variables
 
-Les variables de configuration DOIVENT rester cohérentes avec les spécifications.
-
-Les noms existants suffisamment explicites DOIVENT être conservés.
-
-Les renommages purement esthétiques sont interdits.
-
-Les valeurs codées en dur DOIVENT être évitées lorsque cela est raisonnable.
-
-Une variable existante DOIT être réutilisée lorsqu'elle répond déjà au besoin.
+Les variables de configuration DOIVENT respecter les spécifications.
+Réutiliser toute variable existante adaptée et conserver les noms
+suffisamment explicites ; les renommages purement esthétiques sont interdits.
+Éviter les valeurs codées en dur lorsque raisonnable.
 
 Toute nouvelle variable de configuration DOIT être documentée dans OpenSpec.
 
-Conventions :
-
-* globale : `MAJUSCULE`
-* locale : `minuscule`
-* séparateur : `_`
-* nouvelles variables : anglais
-
-Pour toutes les spécifications techniques générales, se référer au fichier TECHNICAL.md.
+Conventions : globales en `MAJUSCULE`, locales en `minuscule`,
+séparateur `_`, nouvelles variables en anglais.
+Pour les spécifications techniques générales, consulter `TECHNICAL.md`.
 
 ## 15. Chemins, compatibilité et portabilité
 
-L'agent DOIT privilégier les chemins relatifs au projet lorsqu'ils préservent la portabilité.
+Privilégier les chemins relatifs préservant la portabilité ; réserver
+autant que possible les chemins absolus aux exigences du projet.
 
-Les chemins absolus DEVRAIENT être utilisés uniquement lorsqu'ils sont imposés par le projet.
-
-Toute modification DOIT préserver la compatibilité avec :
-
-* les installations existantes ;
-* les versions stables de Debian supportées.
-
-Toute incompatibilité DOIT être explicitement signalée et spécifiée.
-
-Toute dépendance spécifique à une distribution ou version DOIT être documentée.
+Toute modification DOIT rester compatible avec les installations existantes
+et les versions stables de Debian supportées. Toute incompatibilité DOIT
+être explicitement signalée et spécifiée ; toute dépendance propre
+à une distribution ou version DOIT être documentée.
 
 ## 16. Idempotence
 
-Les scripts d'installation DEVRAIENT être idempotents lorsque raisonnablement possible.
-
-Une nouvelle exécution NE DOIT PAS provoquer d'effets de bord inattendus.
+Les scripts d'installation DEVRAIENT être idempotents lorsque raisonnable.
+Toute réexécution NE DOIT PAS provoquer d'effets de bord inattendus.
 
 ## 17. Dépendances
 
-L'agent DEVRAIT privilégier les outils disponibles dans une installation Debian standard.
-
-Une dépendance existante DOIT être réutilisée lorsqu'elle répond au besoin.
-
-Toute nouvelle dépendance nécessite :
-
-* une justification ;
-* une validation explicite du développeur ;
-* une documentation.
+Privilégier les outils d'une installation Debian standard.
+Toute dépendance existante adaptée DOIT être réutilisée.
+Toute nouvelle dépendance nécessite justification, validation explicite
+du développeur et documentation.
 
 ## 18. Conventions et style
 
-L'agent DOIT respecter les conventions existantes :
+Les conventions existantes de nommage, organisation, formatage et architecture
+DOIVENT être respectées ; leur modification nécessite une validation explicite.
+En cas d'ambiguïté, privilégier la cohérence avec le code existant.
 
-* nommage ;
-* organisation ;
-* formatage ;
-* architecture.
-
-Une convention existante NE DOIT PAS être modifiée sans validation explicite.
-
-En cas d'ambiguïté, l'agent DOIT privilégier la cohérence avec le code existant.
-
-Il DEVRAIT privilégier :
-
-* les fonctions courtes ;
-* les noms explicites ;
-* une indentation homogène ;
-* les commentaires utiles ;
-* les traitements simples ;
-* le principe KISS.
-
+Privilégier fonctions courtes, noms explicites, indentation homogène,
+commentaires utiles et traitements simples (KISS).
 La simplicité prévaut sur l'optimisation prématurée.
 
-Les commentaires existants DOIVENT être conservés lorsqu'ils restent exacts.
+Les commentaires encore exacts DOIVENT être conservés ; tout nouveau
+commentaire DOIT apporter une information utile sans simplement répéter le code.
 
-Un nouveau commentaire DOIT apporter une information utile et ne pas simplement répéter le code.
-
-L'agent NE DOIT PAS introduire `TODO`, `FIXME` ou `HACK` sans validation explicite.
-
-Un travail incomplet DEVRAIT être représenté dans OpenSpec plutôt que laissé sous forme de marqueur dans le code.
+Introduire `TODO`, `FIXME` ou `HACK` nécessite une validation explicite.
+Un travail incomplet DEVRAIT être représenté dans OpenSpec plutôt que
+par un marqueur dans le code.
 
 ## 19. Documentation, encodage et licences
 
-Toute évolution importante DOIT mettre à jour, lorsque nécessaire :
+Toute évolution importante DOIT actualiser, si nécessaire, les spécifications,
+la documentation et les commentaires concernés. Toute modification
+documentaire sans rapport avec la demande est interdite.
 
-* les spécifications ;
-* la documentation ;
-* les commentaires concernés.
-
-La documentation sans rapport avec la demande NE DOIT PAS être modifiée.
-
-Tous les fichiers texte DOIVENT utiliser :
-
-* UTF-8 ;
-* fins de ligne Unix LF.
-
-Les fins de ligne CRLF NE DOIVENT PAS être introduites.
+Les fichiers texte DOIVENT être en UTF-8 avec fins de ligne Unix LF,
+sans introduction de CRLF.
 
 Les en-têtes de licence existants DOIVENT être conservés.
-
-Aucune licence NE DOIT être modifiée sans validation explicite.
+Toute modification de licence nécessite une validation explicite.
 
 ## 20. Messages et robustesse
 
-Les messages des scripts DOIVENT être :
+Les messages des scripts DOIVENT être explicites, cohérents et utiles
+au suivi et au diagnostic, sans masquer d'échec, ignorer silencieusement
+d'erreur, exposer de données sensibles ni modifier le comportement attendu.
 
-* explicites ;
-* cohérents ;
-* utiles au suivi ;
-* utiles au diagnostic.
-
-Ils NE DOIVENT PAS :
-
-* masquer un échec ;
-* ignorer silencieusement une erreur ;
-* exposer des données sensibles ;
-* modifier le comportement fonctionnel attendu.
-
-Le code DEVRAIT privilégier :
-
-* une gestion explicite des erreurs ;
-* des messages d'erreur compréhensibles ;
-* des codes de retour explicites ;
-* la validation des entrées ;
-* l'idempotence lorsque pertinente.
+Le code DEVRAIT privilégier la gestion explicite des erreurs, des messages
+compréhensibles, des codes de retour explicites, la validation des entrées
+et l'idempotence lorsque pertinente.
 
 ## 21. Tests et validation finale
 
-Lorsqu'un mécanisme de test existe, l'agent DOIT exécuter les tests applicables avant de déclarer le travail valide.
+Avant de déclarer le travail valide, l'agent DOIT exécuter les tests
+applicables lorsqu'un mécanisme existe, vérifier la syntaxe, l'absence
+d'erreur évidente, la cohérence des fichiers modifiés, la conformité
+OpenSpec et l'absence de modification hors périmètre.
 
-Avant de déclarer une modification valide, l'agent DOIT vérifier :
-
-* la syntaxe ;
-* l'absence d'erreur évidente ;
-* la cohérence des fichiers modifiés ;
-* la conformité avec OpenSpec ;
-* l'absence de modification hors périmètre.
-
-L'agent NE DOIT JAMAIS déclarer qu'un test ou une vérification a réussi s'il ne l'a pas réellement exécuté avec succès.
+Aucun test ni contrôle ne DOIT être déclaré réussi sans exécution
+effective avec succès.

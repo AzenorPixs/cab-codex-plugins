@@ -3,11 +3,13 @@ import json
 import os
 import secrets
 import stat
+import copy
 from pathlib import Path
 
 STATE = Path(os.environ.get('CAB_STATE_DIR', '/var/lib/cab'))
 RUNTIME = Path(os.environ.get('CAB_RUNTIME_DIR', '/run/cab'))
 CONFIG = Path(os.environ.get('CAB_CONFIG', '/etc/cab/cab.json'))
+_active_config = None
 
 def private_dir(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -40,6 +42,13 @@ def read_json(path,default=None):
         return json.load(stream)
 
 def config():return read_json(CONFIG,{})
+
+def runtime_config():
+    """Configuration active du processus ; les changements techniques attendent son redémarrage."""
+    global _active_config
+    if _active_config is None or not _active_config.get('initialized'):
+        _active_config=config()
+    return copy.deepcopy(_active_config)
 
 def secret(name):
     private_dir(STATE);path=STATE/(name+'.json');value=read_json(path)

@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-11T13:32:04Z
+Début du relevé (UTC) : 2026-11-12T11:29:07Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -105,7 +105,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Node
 
-  * 24.22.2
+  * 24.22.3
   * /home/devops/node/current/bin/node
 
 
@@ -141,7 +141,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # OpenSpec
 
-  * 1.17.0
+  * 2.0.0
   * /home/devops/.local/npm/bin/openspec
 
 
@@ -174,13 +174,54 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Dépendances du projet - Source de vérité `pyproject.toml`
 
-  * Aucune dépendance déclarée dans [project].dependencies
+  * Django ==6.1.3 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * django-ninja ==1.7.1 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * uvicorn ==0.54.0 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * mcp ==2.3.0 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * httpx ==0.28.1 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * psycopg [binary]==3.3.6 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * asgiref ==3.12.1 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * sqlparse ==0.6.0 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * argon2-cffi ==25.1.0 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
+  * cryptography ==50.0.2 : non installé --> /home/devops/python/current/bin/python3
+    * Environnement : Python DevOps (repli)
+    * Installation : non observée
 
 
 # Python - Gestionnaire de paquets
 
   * 26.2.2
   * /home/devops/python/current/bin/pip3
+
+
+# Python - Outils de compilation
+
+  * Cython : installation non vérifiable
+    * Diagnostic : aucun venv du projet détecté
+    * Déclaration : Cython ==3.3.0
+    * Source : pyproject.toml — [build-system].requires
+  * Nuitka : installation non vérifiable
+    * Diagnostic : aucun venv du projet détecté
+    * Déclaration : Nuitka ==4.3.1
+    * Source : pyproject.toml — [build-system].requires
 
 
 # Prompts

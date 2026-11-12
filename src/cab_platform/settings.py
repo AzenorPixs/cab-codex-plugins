@@ -1,9 +1,11 @@
 import os
-from .paths import config,secret
+from urllib.parse import urlsplit
+from .paths import runtime_config as config,secret
 cfg=config()
 SECRET_KEY=secret('django-secret')
 DEBUG=False
-ALLOWED_HOSTS=['localhost','127.0.0.1','[::1]','testserver']
+ALLOWED_HOSTS=list(dict.fromkeys(['localhost','127.0.0.1','[::1]','testserver',*cfg.get('web_allowed_hosts',[]),*[('['+urlsplit(url).hostname+']') if ':' in urlsplit(url).hostname else urlsplit(url).hostname for url in cfg.get('web_public_urls',[]) if urlsplit(url).hostname]]))
+CSRF_TRUSTED_ORIGINS=cfg.get('web_csrf_trusted_origins',[])
 ROOT_URLCONF='cab_platform.urls'
 INSTALLED_APPS=['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','cab_platform.core']
 MIDDLEWARE=['cab_platform.core.middleware.PeerMiddleware','django.middleware.security.SecurityMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware']

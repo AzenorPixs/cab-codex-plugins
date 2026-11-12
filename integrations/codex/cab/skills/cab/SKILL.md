@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.0.0
+# CAB 3.0.1
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
@@ -36,3 +36,8 @@ Le retour intervient pour exception ou revue finale ; ne pas demander de compte
 rendu périodique au codeur. L’intégration Codex configure le délai du serveur
 pour cette attente. Chaque agent utilise son profil privé distinct ; aucun
 jeton SQL ou root n’est transmis au client.
+
+Après archivage d’un RUN direct, utiliser `run_reconcile_archive` (ou
+`cab call run.reconcile_archive`) avec l’archive exacte et le framing_digest
+courant. Aucun effet non terminal ni bail détenu ; identités, gel et reçus
+restent inchangés. Ne pas recréer la source ni utiliser run.adopt.
