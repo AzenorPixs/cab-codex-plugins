@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.0.1
+## Architecture CAB 3.0.2
 
 Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
 PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et

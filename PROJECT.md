@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.1
+## Plateforme CAB 3.0.2
 
 CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.

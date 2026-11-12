@@ -1517,3 +1517,5 @@ publication et activation2.7.1 à constater dans les reçus de livraison.
 Delta SCM CAB3.0.0 : [migrate-cab-to-system-platform](openspec/changes/archive/2026-11-11-migrate-cab-to-system-platform/QUALIFICATION.md), code non attribué, archivé ; plateforme Debian/Django/PostgreSQL/TanStack/Electric, 13 tests Python et parcours réels qualifiés. Rapport individuel SGS produit ; CI/CD et activation CABU vérifiées séparément. Les autres changes restent ouverts.
 
 [reconcile-archived-direct-mandates](openspec/changes/archive/2026-11-12-reconcile-archived-direct-mandates/), code non attribué : ARCHIVÉ, correctif SCM3.0.1 testé ; rapport individuel vérifié ; livraison et activation en attente.
+
+[qualify-public-runtime-permissions](openspec/changes/archive/2026-11-12-qualify-public-runtime-permissions/), code non attribué : ARCHIVÉ, paquet3.0.2 : deux tests spécifiques et25combinés réussis, rapport vérifié ; livraison et activation en attente.

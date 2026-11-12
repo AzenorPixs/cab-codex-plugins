@@ -626,3 +626,5 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | code non attribué | reconcile-hmac-key-permissions | ARCHIVÉ ; validations source et rapport individuel | [archive](changes/archive/2026-11-09-reconcile-hmac-key-permissions/) |
 
 [reconcile-archived-direct-mandates](changes/archive/2026-11-12-reconcile-archived-direct-mandates/), code non attribué : ARCHIVÉ, correctif SCM3.0.1 testé ; rapport individuel vérifié ; livraison et activation en attente.
+
+[qualify-public-runtime-permissions](changes/archive/2026-11-12-qualify-public-runtime-permissions/), code non attribué : ARCHIVÉ, paquet3.0.2 : deux tests spécifiques et25combinés réussis, rapport vérifié ; livraison et activation en attente.

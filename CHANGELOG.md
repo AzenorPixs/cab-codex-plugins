@@ -1,5 +1,15 @@
 # Historique des versions
 
+## 3.0.2 — clients non root
+
+- Corriger les droits des seuls runtimes publics extraits du paquet Debian,
+  indépendamment des modes du build et de l’umask : dossiers0755, fichiers0644
+  ou0755 pour les exécutables. Conserver les droits privés des états et secrets.
+- Qualifier l’import Python et l’exécution sous un autre UID, ainsi que le refus
+  d’une archive altérée avant remplacement. Le delta fonctionnel depuis3.0.0
+  reste décrit dans l’entrée3.0.1 ci-dessous.
+- Conserver dans la livraison le socle AGENTS.md1.2 et CODING_RULES.md0.1 validé.
+
 ## 3.0.1 — delta depuis 3.0.0
 
 - Réconcilier publiquement le mandat d’un RUN direct après archivage OpenSpec,

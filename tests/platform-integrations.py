@@ -28,5 +28,5 @@ with tempfile.TemporaryDirectory(dir=ROOT/'output/scm/cab-3.0.0',prefix='integra
         (opencode/'opencode.json').write_text(json.dumps({'mcp':{'cgpt-validation':{'type':'local','command':['python3','/old/cgpt_approval_bridge_server.py']},'unrelated':{'type':'local','command':['/bin/false']}}}))
         integration.integrate('opencode','fixture',package_root=package)
         cfg=json.loads((opencode/'opencode.json').read_text());assert 'cgpt-validation' not in cfg['mcp'];assert 'unrelated' in cfg['mcp'];assert cfg['mcp']['cab']['command']==['/usr/bin/cab','mcp','--agent','opencode']
-    proof={'codex_native_cli':True,'local_plugins_version':'3.0.1','idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
+    proof={'codex_native_cli':True,'local_plugins_version':'3.0.2','idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
     (ROOT/'output/scm/cab-3.0.0/integrations-proof.json').write_text(json.dumps(proof,indent=2)+'\n');print(json.dumps(proof))

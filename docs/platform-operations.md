@@ -127,3 +127,11 @@ reçus ne changent pas. Un nouveau test reste une requête distincte du proprié
 ADMISSION_UNCONFIRMED signale une erreur client sans prouver l’absence d’effet.
 Lire le même reçu ; NOT_FOUND signifie seulement son absence au moment de la
 lecture. Ne jamais relancer automatiquement un effet à partir de ces diagnostics.
+
+## Droits des runtimes publics Debian
+
+Les archives embarquées sont vérifiées puis normalisées dans leur staging :
+dossiers0755, fichiers0644 ou0755 s’ils sont exécutables. L’installation ne suit
+pas leurs liens symboliques et ne touche ni /etc/cab ni les états privés par ce
+parcours. Une dépendance publique ne doit pas devenir illisible pour un client
+non root du seul fait des modes de l’atelier de build ou de l’umask de l’installation.
