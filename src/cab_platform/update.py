@@ -36,11 +36,8 @@ def update(package=None):
         # apt/dpkg réalise preinst/postinst et conserve leurs reçus de maintenance.
         completed=subprocess.run(['/usr/bin/apt-get','install','-y',str(path)],capture_output=True,text=True)
         if completed.returncode:raise ClientError('debian-update-failed-preserved-receipt')
-        verification=subprocess.run(['/usr/bin/cab','maintenance','verify','--transaction','debian-upgrade'],capture_output=True,text=True)
+        # Le nouveau binaire lit le reçu idempotent produit par postinst.
+        verification=subprocess.run(['/usr/bin/cab','finalize'],capture_output=True,text=True)
         if verification.returncode:raise ClientError('updated-service-not-ready')
-        health=json.loads(verification.stdout);result={'package_sha256':sha,'state':health['state'],'version':health['version'],'verified':True}
-        from .integration import integrate
-        from .paths import config
-        import pwd
-        result['integrations']=[integrate(item['agent'],pwd.getpwuid(item['uid']).pw_name) for item in config().get('integrations',[]) if item['agent'] in ('codex','opencode')]
+        result=json.loads(verification.stdout);result['package_sha256']=sha
         atomic_json(STATE/'last-update.json',result);return result

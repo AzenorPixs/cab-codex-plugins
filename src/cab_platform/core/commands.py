@@ -80,7 +80,10 @@ def revision(run):
     return digest(entries)
 
 def projection(run):
-    SessionProjection.objects.update_or_create(binding=run,defaults={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state if not run.suspension else run.suspension,'change':run.change,'generation':run.generation})
+    from .monitor import ensure_records
+    ensure_records(run)
+    change=run.change_record
+    SessionProjection.objects.update_or_create(binding=run,defaults={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state if not run.suspension else run.suspension,'change':run.change,'generation':run.generation,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None})
 
 def event(run,kind,data):
     Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)
@@ -121,6 +124,18 @@ def begin_run(actor,data):
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode});return r
 
 @transaction.atomic
+def progress(actor,data):
+    r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    require(r.state in ('WORKING','REVIEW_PENDING','ACCEPTED') and not r.suspension,'run-not-active')
+    require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
+    stage=data.get('stage');phase=data.get('phase',r.phase)
+    require(type(stage) is int and 1<=stage<=11,'run-stage-invalid',400)
+    require(isinstance(phase,str) and bool(re.fullmatch(r'[A-Z0-9_-]{0,32}',phase)),'run-phase-invalid',400)
+    if r.stage!=stage or r.phase!=phase:
+        r.stage=stage;r.phase=phase;r.save(update_fields=['stage','phase','updated']);event(r,'run-progress',{'stage':stage,'phase':phase})
+    return {'run_id':r.run_id,'stage':r.stage,'phase':r.phase,'generation':r.generation}
+
+@transaction.atomic
 def reconcile_archive(actor,data):
     """Relocalisation du seul change archivé ; jamais un amendement libre."""
     from datetime import date
@@ -155,7 +170,7 @@ def reconcile_archive(actor,data):
     updated['framing_digest']=digest({key:value for key,value in updated.items() if key not in ('framing_digest','native_source','native_frozen_at')})
     record={'archive_path':archive,'previous_framing_digest':expected,'framing_digest':updated['framing_digest'],'source_revision':current,'paths':replacements,'at':timezone.now().isoformat()}
     updated['archive_reconciliations']=[record]
-    r.mandate=updated;r.source_revision=current;r.save()
+    r.mandate=updated;r.source_revision=current;r.stage=9;r.save()
     event(r,'mandate-archive-reconciled',{'actor':actor.pk,**record})
     return {'state':'RECONCILED','run_id':r.run_id,'session_id':r.session_id,'generation':r.generation,**record}
 
@@ -247,7 +262,7 @@ def submit(actor,data):
     require(set(t['criterion'] for t in tests)==set(r.mandate['criteria']),'criteria-not-covered')
     submission={'id':identifier(data['submission_id']),'source_revision':current,'tests':tests,'limits':data.get('limits',[]),'summary':str(data.get('summary',''))[:4000]}
     submission['digest']=digest(submission)
-    r.review={'submission':submission};r.source_revision=current;r.state='REVIEW_PENDING';r.save();event(r,'review-requested',{'submission_digest':submission['digest']});return submission
+    r.review={'submission':submission};r.source_revision=current;r.state='REVIEW_PENDING';r.stage=8;r.save();event(r,'review-requested',{'submission_digest':submission['digest']});return submission
 
 @transaction.atomic
 def review(actor,data):

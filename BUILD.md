@@ -1,6 +1,6 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.0.2 — Debian et clients légers
+## Livraison CAB 3.0.3 — Debian et clients légers
 
 Préparer le frontend avec `npm ci` puis `npm run build` dans frontend.
 Préparer les dépendances Python3.13 selon packaging/python-lock.txt et extraire
@@ -12,10 +12,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.0.2` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.0.3` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.0.2.
+prépaquet ne constitue pas la release 3.0.3.
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
 plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
@@ -1495,3 +1495,9 @@ vérifié, la clôture sûre et le nettoyage des sessions natives. Les données 
 change sont supprimées, celles des pairs et les preuves métier sont conservées ;
 la session métier de reprise prévue reste protégée en cas de dépendance.
 Sans état CAB utilisé, le nettoyage est déclaré non applicable.
+
+postinst exécute `cab finalize` : reçu et intégrations des comptes configurés sont
+actualisés sans invoquer cab update. L’empreinte des contenus et les marqueurs
+par compte évitent les doublons, y compris depuis un ancien wrapper CABU en mémoire.
+Qualifier l’installation APT directe, les clients non root et la préservation des
+sessions avant activation ; sauvegarder la base avant les migrations de suivi.

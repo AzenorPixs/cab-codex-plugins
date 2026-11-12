@@ -13,6 +13,7 @@ class Project(models.Model):
     root=models.CharField(max_length=1500,unique=True)
     owner_uid=models.PositiveIntegerField()
     owner_gid=models.PositiveIntegerField(null=True,blank=True)
+    configuration=models.JSONField(default=dict)
     creation_state=models.CharField(max_length=16,default='READY')
     creation_request_id=models.CharField(max_length=36,blank=True,null=True,unique=True)
     created=models.DateTimeField(auto_now_add=True)
@@ -29,6 +30,51 @@ class Actor(models.Model):
     native=models.JSONField(default=dict)
     active=models.BooleanField(default=True)
 
+class CodingSession(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='coding_sessions')
+    native_id=models.CharField(max_length=200)
+    agent=models.CharField(max_length=40)
+    uid=models.PositiveIntegerField()
+    configuration=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='sessions'
+        constraints=[models.UniqueConstraint(fields=['project','agent','uid','native_id'],name='cab_session_identity')]
+
+class Change(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='changes')
+    identifier=models.CharField(max_length=200)
+    configuration=models.JSONField(default=dict)
+    source_path=models.CharField(max_length=1500,blank=True)
+    source_state=models.CharField(max_length=24,default='unobserved')
+    tasks_done=models.PositiveIntegerField(null=True)
+    tasks_total=models.PositiveIntegerField(null=True)
+    tasks_sha256=models.CharField(max_length=64,blank=True)
+    observed_at=models.DateTimeField(null=True)
+    class Meta:
+        db_table='changes'
+        constraints=[models.UniqueConstraint(fields=['project','identifier'],name='cab_change_identity')]
+
+class ChangeTask(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='task_records')
+    source_id=models.CharField(max_length=128)
+    label=models.TextField()
+    completed=models.BooleanField(default=False)
+    position=models.PositiveIntegerField()
+    source_line=models.PositiveIntegerField()
+    active=models.BooleanField(default=True)
+    source_sha256=models.CharField(max_length=64)
+    observed_at=models.DateTimeField()
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='change_tasks'
+        ordering=['position','pk']
+        constraints=[models.UniqueConstraint(fields=['change','source_id'],name='cab_change_task_identity')]
+
 class Run(models.Model):
     project=models.ForeignKey(Project,on_delete=models.PROTECT)
     run_id=models.CharField(max_length=128)
@@ -36,6 +82,11 @@ class Run(models.Model):
     actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
     mode=models.CharField(max_length=12)
     change=models.CharField(max_length=200)
+    coding_session=models.ForeignKey(CodingSession,null=True,on_delete=models.PROTECT,related_name='runs')
+    change_record=models.ForeignKey(Change,null=True,on_delete=models.PROTECT,related_name='runs')
+    configuration=models.JSONField(default=dict)
+    stage=models.PositiveSmallIntegerField(null=True,blank=True)
+    phase=models.CharField(max_length=32,blank=True)
     state=models.CharField(max_length=32,default='WORKING')
     generation=models.PositiveBigIntegerField(default=1)
     mandate=models.JSONField(default=dict)
@@ -45,7 +96,8 @@ class Run(models.Model):
     created=models.DateTimeField(auto_now_add=True)
     updated=models.DateTimeField(auto_now=True)
     class Meta:
-        constraints=[models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity')]
+        db_table='runs'
+        constraints=[models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity'),models.CheckConstraint(condition=models.Q(stage__isnull=True)|models.Q(stage__gte=1,stage__lte=11),name='cab_run_stage_valid')]
 
 class Operation(models.Model):
     run=models.ForeignKey(Run,on_delete=models.PROTECT)
@@ -113,6 +165,10 @@ class SessionProjection(models.Model):
     state=models.CharField(max_length=32)
     change=models.CharField(max_length=200)
     generation=models.PositiveBigIntegerField()
+    stage=models.PositiveSmallIntegerField(null=True)
+    phase=models.CharField(max_length=32,blank=True)
+    tasks_done=models.PositiveIntegerField(null=True)
+    tasks_total=models.PositiveIntegerField(null=True)
     updated=models.DateTimeField(auto_now=True)
 
 class Incident(models.Model):

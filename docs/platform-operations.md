@@ -135,3 +135,58 @@ dossiers0755, fichiers0644 ou0755 s’ils sont exécutables. L’installation ne
 pas leurs liens symboliques et ne touche ni /etc/cab ni les états privés par ce
 parcours. Une dépendance publique ne doit pas devenir illisible pour un client
 non root du seul fait des modes de l’atelier de build ou de l’umask de l’installation.
+
+## Finalisation automatique du paquet3.0.3
+
+Après installation des runtimes, migrations, démarrage et contrôle du service,
+postinst exécute `cab finalize`. Ce parcours local ne lance ni APT, ni dpkg,
+ni téléchargement. Il lit les intégrations déclarées dans cab.json, met à jour
+leurs extensions et conserve un reçu privé dans last-finalization.json.
+last-update.json conserve le résumé CABU compatible. `cab update` réutilise cette
+finalisation après l’unique appel APT et ajoute l’empreinte du paquet.
+
+Le paquet fournit un exemplaire commun des plugins/skills/commandes sous
+/usr/lib/cab ; l’activation et les caches appartiennent à chaque UID configuré,
+root compris. Aucun parcours de tous les profils n’est effectué. Les marqueurs
+par compte vérifient aussi les contenus copiés : les étapes complètes restent
+sans effet ; un cache manquant peut être rétabli. Les éléments tiers restent
+intacts. L’installation des extensions ne crée ni rôle CAB ni autorisation projet.
+Avant le premier parcours Web validé, la finalisation est différée ; le service
+peut la reprendre après initialisation pour les comptes préconfigurés.
+
+## Versions et transports des agents
+
+La page Agents distingue fichier exécutable, processus et transport MCP local.
+Les pipes MCP peuvent être conservés sur des descripteurs privés par le SDK ;
+le contrôle examine les deux extrémités et leurs directions, pas seulement fd0/1.
+Le transport connecté ne constitue pas une validation de test ou de mandat.
+
+Les dépôts GitHub par défaut sont anomalyco/opencode et openai/codex. Les clés
+opencode_release_repository et codex_release_repository peuvent indiquer un
+owner/repo adapté à la distribution utilisée. Une seule lecture par dépôt et
+jour UTC est planifiée aléatoirement ; le premier contrôle attend0à60secondes.
+Le cache est indépendant des requêtes de page et conservé en cas d’échec.
+La version affichée est la dernière release stable observée, pas une consigne
+de mise à jour automatique ou une preuve de compatibilité d’un fork.
+
+## Cycle et tâches des changes
+
+Le propriétaire déclare l’étape1–11 et sa phase via `cab call run.progress`
+(project_id,run_id,stage,phase) ou run_progress. Les positions peuvent reculer.
+Le tableau temps réel porte étape et tâches réalisées ; le RUN ouvre
+/projects/<project_id>/runs/<run_id>. Les inconnues restent explicites.
+Les tâches proviennent du tasks.md unique actif ou archivé ; change_tasks
+mémorise les libellés, cases, ordre, lignes et empreinte, y compris les anciennes
+lignes retirées sous état inactif. Une source indisponible conserve le dernier
+instantané et le signale. Les cases ne valident ni le RUN ni le gate terminal.
+
+La migration normalise les tables projects, runs, sessions, changes et
+change_tasks sans modifier SID, générations, mandats ou reçus. Le service est
+arrêté à frontière sûre pendant le changement de schéma. Une sauvegarde logique
+et privée précède l’activation ; un retour à un ancien serveur exige une stratégie
+explicite de restauration/migration, jamais une restauration automatique.
+
+Les comptes configurés incluent aussi les agents enrôlés dans CAB dont le profil
+privé local correspond à l’acteur et à son jeton, sans parcourir les HOME non
+enrôlés. Cela couvre les comptes installés auparavant par cab enroll/integrate.
+Les plans préconfigurés avant bootstrap conservent leur champ role explicite.

@@ -3,7 +3,7 @@ name: sgs
 description: Produire ou consulter les rapports SGS des changes sans reconstruire implicitement le global.
 ---
 
-# SGS 3.0.2
+# SGS 3.0.3
 
 Résoudre SGS.md depuis DEVOPS.md et appliquer son contrat. Le moteur commun
 est `/usr/bin/cab sgs` ; VERSION est sans effet. En session, utiliser CHANGE
