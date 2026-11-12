@@ -66,3 +66,64 @@ ne se lance jamais implicitement après un effet. Aucun envoi hors machine ni
 objectif PITR/RPO/RTO n’est réputé activé sans configuration et qualification
 opérationnelles de sa destination ; ces mesures ne sont pas déduites des essais
 minimaux de livraison.
+
+## Accès Web distant et CSRF
+
+Les adresses de publication se configurent par hôte dans /etc/cab/cab.json :
+`web_allowed_hosts` contient les noms DNS ou adresses IP sans schéma ni port ;
+`web_csrf_trusted_origins` contient les origines exactes avec schéma et port
+lorsqu’il est non standard. Par exemple, un déploiement sur un nom DNS choisi
+peut autoriser ce nom dans les hôtes et son URL HTTP ou HTTPS dans les origines.
+Le programme ne dépend ni du nom de machine ni d’un domaine Tailscale particulier.
+Ces paramètres prennent effet au redémarrage du service. Le jeton et le cookie
+CSRF restent obligatoires ; les origines étrangères restent refusées.
+
+## Administration Web par sections (ajustement local 3.0.0)
+
+Le bandeau relie directement l’accueil vide, Administration et Projets.
+L’administration est répartie entre `agents`, `database`, `interface`, `projects`
+et `web-server` sous `/administration/`. Les menus latéraux occupent le bord gauche.
+Le zoom global est dans Interface ; le thème reste disponible dans le bandeau.
+
+Agents affiche les versions des exécutables sous leur identité POSIX et les
+configurations MCP des comptes CAB. Les chemins facultatifs `opencode_binary`,
+`codex_binary`, `opencode_mcp_config`, `codex_mcp_config` sont absolus ou vides pour
+la découverte automatique. Un MCP déclaré n’est pas une preuve de connexion ;
+aucun serveur ni session n’est démarré par l’inventaire. Les secrets sont exclus.
+
+Serveur Web conserve les origines exactes dans `web_public_urls`, les noms
+additionnels dans `web_allowed_hosts`, et les origines CSRF explicitement approuvées
+dans `web_csrf_trusted_origins`. Déclarer une URL ne crée aucun proxy ni certificat.
+Les changements techniques attendent un redémarrage contrôlé de `cab.service`.
+
+## Parents des ateliers directs et umask du service
+
+Les parents `.cab-tests/<change>` créés par le service portent le groupe du
+projet et les permissions 0770, avec héritage setgid si applicable. La préparation
+vérifie aussi les parents d’un atelier déjà enregistré et répare les seuls parents
+appartenant au service. Les dossiers RUN et reçus existants restent inchangés.
+Un parent inattendu, un lien ou un groupe incompatible provoque un refus explicite.
+Après un échec terminal non dispatché, conserver ce reçu ; une nouvelle exécution
+utilise une nouvelle identité de requête après vérification du mandat.
+
+## Réconcilier le mandat direct après archivage
+
+Le propriétaire du RUN relève son `mandate.framing_digest` via `run_status`,
+puis transmet sur stdin à la commande publique `cab call run.reconcile_archive` :
+
+```json
+{"project_id":"<projet>","run_id":"<RUN>","archive_path":"openspec/changes/archive/AAAA-MM-JJ-<change>","expected_framing_digest":"<digest courant>"}
+```
+
+Le MCP `run_reconcile_archive` porte le même contrat. Seul le change du RUN
+est relocalisable ; la source doit avoir disparu et l’archive doit être canonique
+avec proposal.md et tasks.md. Toute opération non terminale, bail détenu, cadrage
+périmé ou mauvais propriétaire provoque un refus. Aucune écriture SQL manuelle,
+recréation du change actif ou utilisation de run.adopt n’est nécessaire.
+Le retour RECONCILED (ou ALREADY_RECONCILED pour le même appel) inclut les
+empreintes et chemins, avec un événement durable. Le gel natif et les anciens
+reçus ne changent pas. Un nouveau test reste une requête distincte du propriétaire.
+
+ADMISSION_UNCONFIRMED signale une erreur client sans prouver l’absence d’effet.
+Lire le même reçu ; NOT_FOUND signifie seulement son absence au moment de la
+lecture. Ne jamais relancer automatiquement un effet à partir de ces diagnostics.

@@ -9,12 +9,12 @@ import secrets
 import subprocess
 import sys
 from . import __version__
-from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json,secret
+from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json,secret,runtime_config
 
 class BootstrapError(Exception):pass
 
 def status():
-    cfg=config()
+    cfg=runtime_config()
     if not cfg.get('initialized'):return {'state':'UNINITIALIZED','initialized':False,'version':__version__,'port':8790}
     try:
         import psycopg
@@ -46,7 +46,7 @@ def initialize(data,token):
         cfg=config()
         if cfg.get('initialized'):return status()
         username=data.get('username','admin');password=data.get('password','')
-        if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',username) or len(password)<14:raise BootstrapError('administrator-credentials-invalid')
+        if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',username):raise BootstrapError('administrator-credentials-invalid')
         import psycopg
         from psycopg import sql
         port=int(data.get('database_port',5433))

@@ -3,7 +3,7 @@ import hmac
 from django.contrib.auth.models import AnonymousUser
 from .models import Actor
 from .commands import Refused
-from cab_platform.paths import secret,config
+from cab_platform.paths import secret,runtime_config as config
 
 def principal(request,*,admin=False):
     if not config().get('initialized'):raise Refused('initialization-required',503)

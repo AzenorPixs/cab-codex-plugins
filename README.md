@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.0.0
+## CAB 3.0.1
 
 Plateforme système Debian pour les sessions de codage directes et pilotées.
 Un seul cab.service, PostgreSQL indépendant, API Django/OpenAPI, suivi Web
@@ -13,12 +13,19 @@ local sur http://127.0.0.1:8790 et utiliser le code local obtenu par
 `sudo cab bootstrap-token`. Aucune base CAB n’est créée avant validation Web.
 Ne pas communiquer le code ou les mots de passe dans une conversation.
 
+L’administration Web propose Agents, Base de données, Interface, Projets et
+Serveur Web. Le catalogue PostgreSQL crée les dossiers sous l’identité POSIX
+configurée. Les réglages privés et origines Web sont propres à chaque hôte.
+Après archivage d’un change direct, `run.reconcile_archive` relocalise son
+mandat à frontière sûre sans modifier ses identités, son gel ni ses reçus.
+
 Documentation d’administration : [docs/platform-operations.md](docs/platform-operations.md).
 L’architecture et les contrats 2.x ci-dessous sont conservés pour l’historique ;
 ils ne constituent pas la procédure d’installation de la plateforme3.0.0.
 
-CAB crée ses nouveaux fichiers et répertoires en `0770` et accepte les anciens
-modes compatibles avec les droits effectifs et les protections du protocole.
+Les fichiers des projets utilisent les droits de groupe prévus, dont `0770`.
+Les secrets et configurations système gardent leurs permissions privées propres ;
+les modes compatibles existants sont conservés.
 
 ## Coordination et bancs autonomes CAB 2.7.0
 

@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.0.0
+## Architecture CAB 3.0.1
 
 Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
 PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et
@@ -2264,3 +2264,10 @@ vérifié, la clôture sûre et le nettoyage des sessions natives. Les données 
 change sont supprimées, celles des pairs et les preuves métier sont conservées ;
 la session métier de reprise prévue reste protégée en cas de dépendance.
 Sans état CAB utilisé, le nettoyage est déclaré non applicable.
+
+## Réconciliation après archivage
+Le propriétaire d’un RUN direct WORKING utilise la commande publique
+`run.reconcile_archive` pour substituer le chemin actif disparu par son archive
+datée. Digest optimiste, frontière sans effet protégé et audit sont obligatoires.
+SID, RUN, génération, gel natif et reçus restent conservés ; aucun test n’est rejoué.
+La procédure détaillée est dans docs/platform-operations.md.

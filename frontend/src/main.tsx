@@ -1,24 +1,26 @@
-import {useEffect,useState,type FormEvent} from 'react'
+import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {createRoot} from 'react-dom/client'
 import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query'
-import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet} from '@tanstack/react-router'
+import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState} from '@tanstack/react-router'
 import {Shape,ShapeStream} from '@electric-sql/client'
+import {api} from './api'
+import {AppearanceProvider,ThemeToggle} from './Appearance'
+import {ConfigurationAccess,AdministrationShell} from './Administration'
+import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import './style.css'
 
 type Health={state:string;initialized:boolean;version:string;csrf_token:string}
-type Project={id:string;root:string}
 type Session={run_id:string;session_id:string;mode:string;state:string;change:string;generation:number|string;updated:string}
 const client=new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false}}})
-let csrf=''
-async function api<T>(path:string,body?:unknown,headers:Record<string,string>={}):Promise<T>{
-  const response=await fetch('/api/v1/'+path,{credentials:'same-origin',method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf,...headers},body:body===undefined?undefined:JSON.stringify(body)})
-  const value=await response.json()
-  if(!response.ok)throw new Error(value.error||'Requête refusée ('+response.status+')')
-  return value as T
+function Layout(){
+  const header=useRef<HTMLElement>(null)
+  const pathname=useRouterState({select:state=>state.location.pathname})
+  useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
+  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.0.1</span></Link><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')?'workspace-main':undefined}><Outlet/></main></>
 }
-function Layout(){return <><header><Link to="/" className="brand">CAB <span>3.0</span></Link><nav><Link to="/">Sessions</Link><Link to="/incidents">Incidents</Link><a href="/api/v1/docs">API</a></nav></header><main><Outlet/></main></>}
+
 function Gate({children}:{children:React.ReactNode}){
-  const health=useQuery({queryKey:['health'],queryFn:async()=>{const h=await api<Health>('health');csrf=h.csrf_token;return h},refetchInterval:15000})
+  const health=useQuery({queryKey:['health'],queryFn:()=>api<Health>('health'),refetchInterval:15000})
   if(health.isPending)return <p role="status">Connexion à CAB…</p>
   if(health.error)return <p role="alert">CAB est indisponible. Les sessions et reçus restent protégés.</p>
   if(!health.data.initialized)return <Initialize/>
@@ -30,17 +32,16 @@ function Initialize(){
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError('');const form=new FormData(e.currentTarget)
     try{await api('bootstrap',{username:form.get('username'),password:form.get('password')},{'X-CAB-Bootstrap':String(form.get('token'))});await client.invalidateQueries()}catch(error){setError(String(error))}finally{setBusy(false)}
   }
-  return <section className="setup"><p className="eyebrow">PREMIÈRE UTILISATION</p><h1>Initialiser CAB</h1><p>La validation de ce parcours crée la base CAB et son compte administrateur. Aucune session de codage ne démarre automatiquement.</p><p>L’administrateur de la machine obtient le code local avec <code>sudo cab bootstrap-token</code>.</p><form onSubmit={submit}><label>Code d’initialisation<input name="token" type="password" required autoComplete="off"/></label><label>Compte administrateur<input name="username" required autoComplete="username" pattern="[A-Za-z0-9_.-]{1,80}"/></label><label>Mot de passe<input name="password" type="password" required minLength={14} autoComplete="new-password"/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>{busy?'Initialisation en cours…':'Initialiser la plateforme'}</button></form></section>
+  return <section className="setup"><p className="eyebrow">PREMIÈRE UTILISATION</p><h1>Initialiser CAB</h1><p>La validation de ce parcours crée la base CAB et son compte administrateur. Aucune session de codage ne démarre automatiquement.</p><p>L’administrateur de la machine obtient le code d'initialisation avec la commande <code>sudo cab bootstrap-token</code>.</p><form onSubmit={submit}><label>Code d’initialisation<input name="token" type="password" required autoComplete="off"/></label><label>Compte administrateur<input name="username" required autoComplete="username" pattern="[A-Za-z0-9_.-]{1,80}"/></label><label>Mot de passe<input name="password" type="password" autoComplete="new-password"/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>{busy?'Initialisation en cours…':'Initialiser la plateforme'}</button></form></section>
 }
 function Login(){const [error,setError]=useState('');const [busy,setBusy]=useState(false)
-  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const form=new FormData(e.currentTarget);try{await api('login',{username:form.get('username'),password:form.get('password')});const h=await api<Health>('health');csrf=h.csrf_token;await client.invalidateQueries()}catch(error){setError(String(error))}finally{setBusy(false)}}
-  return <section className="setup"><p className="eyebrow">ACCÈS ADMINISTRATEUR</p><h1>Connexion à CAB</h1><form onSubmit={submit}><label>Compte<input name="username" required autoComplete="username"/></label><label>Mot de passe<input name="password" type="password" required autoComplete="current-password"/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>Se connecter</button></form></section>
+  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const form=new FormData(e.currentTarget);try{await api('login',{username:form.get('username'),password:form.get('password')});await api<Health>('health');await client.invalidateQueries()}catch(error){setError(String(error))}finally{setBusy(false)}}
+  return <section className="setup"><p className="eyebrow">ACCÈS ADMINISTRATEUR</p><h1>Connexion à CAB</h1><form onSubmit={submit}><label>Compte<input name="username" required autoComplete="username"/></label><label>Mot de passe<input name="password" type="password" autoComplete="current-password"/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>Se connecter</button></form></section>
 }
 function Projects({children}:{children:(projects:Project[])=>React.ReactNode}){
   const query=useQuery({queryKey:['projects'],queryFn:()=>api<{projects:Project[]}>('projects')})
   if(query.isPending)return <p role="status">Chargement des projets…</p>
   if(query.error)return <Login/>
-  if(!query.data.projects.length)return <section><h1>Vos projets</h1><p>Aucun projet enregistré. Les agents pourront enregistrer leurs projets une fois leur accès CAB configuré.</p></section>
   return children(query.data.projects)
 }
 function SessionList({project}:{project:Project}){
@@ -59,16 +60,24 @@ function RunDetails({project,run}:{project:string;run:string}){
   return <section className="details"><h2>Preuves et revue · {run}</h2>{query.error?<p role="alert">Détails indisponibles.</p>:<pre>{JSON.stringify(query.data,null,2)}</pre>}</section>
 }
 function ProjectScreen({projects,incidents=false}:{projects:Project[];incidents?:boolean}){
-  const [id,setId]=useState(projects[0].id);const selected=projects.find(p=>p.id===id)||projects[0]
-  return <><label className="project-select">Projet<select value={selected.id} onChange={e=>setId(e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>{p.root.split('/').pop()}</option>)}</select></label>{incidents?<IncidentList project={selected}/>:<SessionList project={selected}/>}</>
+  const search=useSearch({strict:false});const params=useParams({strict:false});const requested=params.projectId||search.project;const selected=requested?projects.find(p=>p.id===requested):incidents?projects[0]:undefined
+  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={selected?.id}/><section className="project-content">{selected&&<ProjectNavigation projectId={selected.id}/>}<div className="project-page-heading">{selected&&<p className="eyebrow">{selected.name||selected.root.split('/').pop()}</p>}</div>{!selected?<section><h1>{requested?'Projet introuvable':'Projets'}</h1><p>{requested?'Ce projet est introuvable ou ne fait pas partie de vos projets accessibles.':projects.length?'Sélectionnez un projet dans la colonne de gauche pour ouvrir sa page.':'Aucun projet enregistré. Utilisez le bouton + pour créer votre premier projet.'}</p></section>:selected.creation_state!=='READY'?<section><h1>{selected.name}</h1><p role="alert">La création de ce projet nécessite une vérification. Aucun dossier ne sera recréé automatiquement.</p></section>:incidents?<IncidentList project={selected}/>:<SessionList project={selected}/>}</section></div>
 }
 function IncidentList({project}:{project:Project}){
   const query=useQuery({queryKey:['incidents',project.id],queryFn:()=>api<{incidents:unknown[]}>('incidents?'+new URLSearchParams({project_id:project.id})),refetchInterval:15000})
   return <section><p className="eyebrow">REGISTRE CCAB</p><h1>Incidents</h1><p>{project.root}</p>{query.error?<p role="alert">Registre indisponible.</p>:query.data?.incidents.length?<pre>{JSON.stringify(query.data.incidents,null,2)}</pre>:<p>Aucun incident ouvert dans ce périmètre.</p>}</section>
 }
 const rootRoute=createRootRoute({component:Layout})
-const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
-const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,incidentRoute])})
+function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}}>Sessions</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link></nav>}
+const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof search.project==='string'?{project:search.project}:{}
+const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:()=>null})
+const projectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
+const projectDetailRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
+const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
+const newProjectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/new',component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><div className="project-content"><CreateProjectForm/></div></div>}</Projects></Gate>})
+const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate></AdministrationShell>})
+const administrationPages=(['agents','database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
+const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectIncidentRoute,newProjectRoute,administrationRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><RouterProvider router={router}/></QueryClientProvider>)
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><RouterProvider router={router}/></AppearanceProvider></QueryClientProvider>)

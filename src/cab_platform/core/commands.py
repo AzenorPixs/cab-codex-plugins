@@ -96,12 +96,14 @@ def working(run):
 def register_project(actor,root):
     p=project_path(root);require(writable(actor,p),'project-owner-required',403)
     key=hashlib.sha256(str(p).encode()).hexdigest()
-    project,_=Project.objects.get_or_create(pk=key,defaults={'root':str(p),'owner_uid':p.stat().st_uid})
+    project,_=Project.objects.get_or_create(pk=key,defaults={'name':p.name[:120],'root':str(p),'owner_uid':p.stat().st_uid,'owner_gid':p.stat().st_gid})
+    require(project.creation_state=='READY','project-creation-needs-reconciliation')
     actor.projects.add(project);return project
 
 @transaction.atomic
 def begin_run(actor,data):
     project=Project.objects.get(pk=data['project_id']);scope(actor,project)
+    require(project.creation_state=='READY','project-creation-needs-reconciliation')
     run_id=identifier(data['run_id']);sid=identifier(data['session_id']);mode=data['mode']
     require(mode in ('direct','piloted'),'run-mode-invalid',400)
     require(data.get('decisions_resolved') is True,'decisions-not-resolved',400)
@@ -117,6 +119,45 @@ def begin_run(actor,data):
         require(prior.actor_id==actor.pk and prior.session_id==sid and prior.mandate.get('framing_digest')==digest(data),'run-identity-conflict');return prior
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=identifier(data['change']),mandate={**data,'framing_digest':digest(data)})
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode});return r
+
+@transaction.atomic
+def reconcile_archive(actor,data):
+    """Relocalisation du seul change archivé ; jamais un amendement libre."""
+    from datetime import date
+    from types import SimpleNamespace
+    r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    require(r.mode=='direct' and r.state=='WORKING','archive-reconciliation-state-invalid')
+    expected=data.get('expected_framing_digest');archive=data.get('archive_path')
+    require(isinstance(expected,str) and re.fullmatch('[a-f0-9]{64}',expected),'framing-digest-invalid',400)
+    require(isinstance(archive,str) and re.fullmatch(r'openspec/changes/archive/\d{4}-\d{2}-\d{2}-'+re.escape(r.change),archive),'archive-path-invalid',400)
+    try:date.fromisoformat(Path(archive).name[:10])
+    except ValueError:raise Refused('archive-path-invalid',400) from None
+    prior=r.mandate.get('archive_reconciliations',[])
+    for record in prior:
+        if record['archive_path']==archive and record['previous_framing_digest']==expected:
+            require(r.mandate.get('framing_digest')==record['framing_digest'],'framing-stale')
+            return {'state':'ALREADY_RECONCILED','run_id':r.run_id,'session_id':r.session_id,'generation':r.generation,**record}
+    require(r.mandate.get('framing_digest')==expected,'framing-stale')
+    require(no_pending(r) and not Lease.objects.filter(run=r,state='HELD').exists(),'archive-effects-protected')
+    working(r)
+    root=Path(r.project.root);old='openspec/changes/'+r.change
+    source=safe_path(root,old,exists=False)
+    require(not source.exists(),'archive-source-still-present')
+    target=safe_path(root,archive);require(target.is_dir(),'archive-path-invalid',400)
+    for marker in ('proposal.md','tasks.md'):
+        require(safe_path(root,archive+'/'+marker).is_file(),'archive-proof-required',400)
+    paths=r.mandate['paths'];affected=[path for path in paths if path==old or path.startswith(old+'/')]
+    require(affected and not prior,'archive-source-not-framed')
+    replacements={path:archive+path[len(old):] for path in affected}
+    updated={**r.mandate,'paths':[replacements.get(path,path) for path in paths]}
+    require(len(set(updated['paths']))==len(updated['paths']),'archive-path-conflict')
+    current=revision(SimpleNamespace(project=r.project,mandate=updated))
+    updated['framing_digest']=digest({key:value for key,value in updated.items() if key not in ('framing_digest','native_source','native_frozen_at')})
+    record={'archive_path':archive,'previous_framing_digest':expected,'framing_digest':updated['framing_digest'],'source_revision':current,'paths':replacements,'at':timezone.now().isoformat()}
+    updated['archive_reconciliations']=[record]
+    r.mandate=updated;r.source_revision=current;r.save()
+    event(r,'mandate-archive-reconciled',{'actor':actor.pk,**record})
+    return {'state':'RECONCILED','run_id':r.run_id,'session_id':r.session_id,'generation':r.generation,**record}
 
 @transaction.atomic
 def start_operation(actor,data):
