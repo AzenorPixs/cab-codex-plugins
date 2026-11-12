@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.0.1
+## CAB 3.0.2
 
 Plateforme système Debian pour les sessions de codage directes et pilotées.
 Un seul cab.service, PostgreSQL indépendant, API Django/OpenAPI, suivi Web

@@ -1,4 +1,4 @@
-# Contrat CAB 3.0.1
+# Contrat CAB 3.0.2
 
 Le service système est l’autorité transactionnelle. Vérifier cab_status puis
 cab_contract. Direct : aucun orchestrateur fictif. Piloté : cadrage initial et
