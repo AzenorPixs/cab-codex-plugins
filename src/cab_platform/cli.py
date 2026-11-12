@@ -14,6 +14,7 @@ def main(argv=None):
     parser=argparse.ArgumentParser(prog='cab');parser.add_argument('--version',action='version',version=__version__)
     sub=parser.add_subparsers(dest='action',required=True)
     sub.add_parser('status')
+    sub.add_parser('finalize')
     serve=sub.add_parser('serve');serve.add_argument('--port',type=int,default=8790)
     mcp=sub.add_parser('mcp');mcp.add_argument('--agent',choices=['codex','opencode'],default='codex')
     sub.add_parser('bootstrap-token')
@@ -41,6 +42,9 @@ def main(argv=None):
         elif args.action=='update':
             from .update import update
             result=update(args.package)
+        elif args.action=='finalize':
+            from .finalization import finalize
+            result=finalize()
         elif args.action=='enroll':
             if os.getuid()!=0:raise ClientError('root-administration-required')
             user=pwd.getpwnam(args.user);actor_id=args.agent+'-'+str(user.pw_uid)+'-'+args.role

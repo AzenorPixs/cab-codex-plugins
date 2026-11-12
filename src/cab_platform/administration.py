@@ -12,8 +12,9 @@ from .core.commands import Refused,require
 
 MASK='__SECRET_CONSERVE__'
 PROJECT_SETTINGS={'projects_root','projects_user','projects_group'}
+RELEASE_SETTINGS={'opencode_release_repository','codex_release_repository'}
 AGENT_SETTINGS={'opencode_binary','codex_binary','opencode_mcp_config','codex_mcp_config'}
-EDITABLE={'logging','database','database_host','database_port','database_user','database_password','migrator_user','migrator_password','electric_user','electric_password','electric_secret','electric_port','web_allowed_hosts','web_csrf_trusted_origins','web_public_urls'}|PROJECT_SETTINGS|AGENT_SETTINGS
+EDITABLE={'logging','database','database_host','database_port','database_user','database_password','migrator_user','migrator_password','electric_user','electric_password','electric_secret','electric_port','web_allowed_hosts','web_csrf_trusted_origins','web_public_urls'}|PROJECT_SETTINGS|AGENT_SETTINGS|RELEASE_SETTINGS
 SENSITIVE=re.compile('password|secret|token|credential|api[_-]?key',re.I)
 
 def revision(value):
@@ -26,7 +27,7 @@ def masked(value):
 
 def view():
     saved=config();active=runtime_config()
-    pending=sorted(key for key in EDITABLE-{'logging'}-PROJECT_SETTINGS-AGENT_SETTINGS if saved.get(key)!=active.get(key))
+    pending=sorted(key for key in EDITABLE-{'logging'}-PROJECT_SETTINGS-AGENT_SETTINGS-RELEASE_SETTINGS if saved.get(key)!=active.get(key))
     return {'path':str(CONFIG),'revision':revision(saved),'configuration':masked({key:value for key,value in saved.items() if key in EDITABLE}),'read_only':masked({key:value for key,value in saved.items() if key not in EDITABLE}),'restart_required':bool(pending),'pending_fields':pending,'secret_placeholder':MASK,'logging_levels':sorted(LEVELS)}
 
 def save(expected,changes):
@@ -55,6 +56,10 @@ def save(expected,changes):
                 require(type(value) is int and 1024<=value<=65535,'configuration-port-invalid',400)
             else:
                 require(isinstance(value,str) and len(value)<=4096 and not any(c in value for c in ('\0','\n','\r')),'configuration-value-invalid',400)
+            if key in RELEASE_SETTINGS:
+                from .agent_releases import repository
+                try:repository({key:value},key.split('_',1)[0])
+                except ValueError:raise Refused('configuration-release-repository-invalid',400) from None
             if key in AGENT_SETTINGS:
                 require(value=='' or os.path.isabs(value),'configuration-agent-path-invalid',400)
             candidate[key]=value

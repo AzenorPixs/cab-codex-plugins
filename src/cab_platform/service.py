@@ -69,6 +69,14 @@ def relay(stream):
     for line in stream:
         log.info(redact(line.strip()),extra={'component':'electric'})
 
+def background_metadata():
+    from .finalization import finalize
+    from .agent_releases import refresh
+    if read_json(STATE/'last-finalization.json',{}).get('deferred') and config().get('initialized'):
+        finalize()
+    refresh()
+
+
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
@@ -79,11 +87,12 @@ def run(port=8790):
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
-    electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0
+    electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
     pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix='cab-worker')
+    metadata_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-metadata')
     try:
         while not stop.wait(0.2):
             if reload_requested.is_set():
@@ -120,14 +129,22 @@ def run(port=8790):
                         electric=subprocess.Popen(args,env=env,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
                         threading.Thread(target=relay,args=(electric.stdout,),daemon=True).start();log.info('Electric started')
                     else:log.error('Electric executable missing',extra={'code':'electric-unavailable'})
+                if metadata is not None and metadata.done():
+                    try:metadata.result()
+                    except Exception as error:log.warning('metadata refresh unavailable',extra={'code':type(error).__name__})
+                    metadata=None
+                if metadata is None and time.monotonic()>=next_metadata:
+                    metadata=metadata_pool.submit(background_metadata);next_metadata=time.monotonic()+30
                 if time.monotonic()>next_collect:
                     from .collectors import collect
-                    collect();next_collect=time.monotonic()+5
+                    from .core.monitor import refresh_changes
+                    collect();refresh_changes();next_collect=time.monotonic()+5
             except Exception as error:
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
         pool.shutdown(wait=True,cancel_futures=True)
+        metadata_pool.shutdown(wait=True,cancel_futures=True)
         if electric and electric.poll() is None:
             os.killpg(electric.pid,signal.SIGTERM)
             try:electric.wait(timeout=10)

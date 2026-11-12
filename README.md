@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.0.2
+## CAB 3.0.3
 
 Plateforme système Debian pour les sessions de codage directes et pilotées.
 Un seul cab.service, PostgreSQL indépendant, API Django/OpenAPI, suivi Web
@@ -174,3 +174,8 @@ séparément.
 Le [CHANGELOG](CHANGELOG.md) contient l’historique des versions.
 Les procédures détaillées restent dans les références du protocole ; ce
 README présente l’utilisation courante du projet.
+
+## Installation et suivi3.0.3
+Une mise à jour du paquet par DIU/APT finalise aussi les plugins, skills et commandes
+CAB des comptes configurés, sans second téléchargement ou réinstallation. Le suivi
+Web propose les onze étapes et les tâches de chaque change, avec un détail par RUN.

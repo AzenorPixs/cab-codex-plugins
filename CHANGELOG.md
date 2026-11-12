@@ -1,5 +1,22 @@
 # Historique des versions
 
+## 3.0.3 — finalisation Debian et suivi des sessions
+
+- Finaliser CABU automatiquement depuis postinst après contrôle du service,
+  sans téléchargement, appel récursif à APT ou réinstallation du paquet.
+- Mutualiser ce parcours avec cab update : reçu durable, verrou et reprise par
+  profil ; les contenus inchangés ne réexécutent pas les commandes natives.
+- Fournir et activer plugins CAB/CCAB/CABU, leurs skills et commandes pour les
+  comptes configurés, root compris ; conserver les extensions tierces et sessions.
+- Présenter OpenCode et Codex côte à côte : binaire installé, activité, transport
+  MCP observé, chemins en lecture seule et versions GitHub en cache quotidien.
+- Retirer la mention de cab.json des sous-pages Administration.
+- Normaliser projects/runs/sessions/changes et mémoriser les tâches dans
+  change_tasks, avec reprise des identités et relations historiques.
+- Afficher étape et tâches réalisées dans les sessions, ouvrir un détail par RUN
+  avec les onze étapes, les preuves et les inconnues explicites. Lire tasks.md
+  actif ou archivé sans assimiler les cases cochées à la validation du RUN.
+
 ## 3.0.2 — clients non root
 
 - Corriger les droits des seuls runtimes publics extraits du paquet Debian,

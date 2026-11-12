@@ -135,7 +135,7 @@ def web_login(request,body:Login):
 def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'updated':run.updated.isoformat()}
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':run.change_record.tasks_done if run.change_record else None,'tasks_total':run.change_record.tasks_total if run.change_record else None,'updated':run.updated.isoformat()}
 
 def operation_data(op):
     return {'id':op.pk,'request_id':op.request_id,'state':op.state,'receipt':op.receipt or None,'receipt_digest':op.receipt_digest or None,'source_revision':op.source_revision}
@@ -168,7 +168,8 @@ def sessions(request,project_id:str):
 @api.get('/run')
 def run_status(request,project_id:str,run_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
-    return {**run_data(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
+    from .monitor import details
+    return {**run_data(r),'monitor':details(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
 
 @api.get('/operation')
 def operation_status(request,project_id:str,run_id:str,request_id:str):
@@ -214,6 +215,7 @@ def command(request,body:Command):
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
     if name=='run.begin':return run_data(commands.begin_run(actor,data))
+    if name=='run.progress':return commands.progress(actor,data)
     if name=='run.reconcile_archive':return commands.reconcile_archive(actor,data)
     if name=='run.adopt':
         with transaction.atomic():
@@ -290,7 +292,7 @@ def command(request,body:Command):
             sha=hashlib.sha256(report.read_bytes()).hexdigest();commands.require(sha==data['sha256'],'closure-report-stale')
             receipt={'receipt_id':commands.identifier(data['receipt_id']),'branch':branch,'report':data['report'],'sha256':sha}
             previous=r.review.get('closure');commands.require(previous is None or previous==receipt,'closure-receipt-conflict')
-            r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.suspension='';r.save();commands.event(r,'run-closed',receipt)
+            r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.stage=11 if branch=='TERMINÉ' else r.stage;r.suspension='';r.save();commands.event(r,'run-closed',receipt)
             return receipt
     if name=='run.review':return commands.review(actor,data)
     if name=='run.suspend':return commands.suspend(actor,data)

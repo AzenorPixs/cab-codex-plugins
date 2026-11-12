@@ -22,11 +22,15 @@ with tempfile.TemporaryDirectory(dir=ROOT/'output/scm/cab-3.0.0',prefix='integra
     user=SimpleNamespace(pw_dir=str(home),pw_uid=os.getuid(),pw_gid=os.getgid(),pw_name='fixture')
     with patch.object(integration.pwd,'getpwnam',return_value=user),patch.object(integration,'STATE',state):
         integration.integrate('codex','fixture',package_root=package)
+        cached=home/'.codex/plugins/cache/cab_codex_plugins/CAB/3.0.3/skills/cab/SKILL.md'
+        cached.unlink()
         integration.integrate('codex','fixture',package_root=package)
+        assert cached.is_file()
+        assert integration.integrate('codex','fixture',package_root=package)['unchanged']
         cfg=tomllib.loads((home/'.codex/config.toml').read_text());assert cfg['model']=='fixture-model';assert cfg['mcp_servers']['unrelated']['command']=='/bin/false';assert cfg['mcp_servers']['cab']['tool_timeout_sec']==86430
         opencode=home/'.config/opencode';opencode.mkdir(parents=True)
         (opencode/'opencode.json').write_text(json.dumps({'mcp':{'cgpt-validation':{'type':'local','command':['python3','/old/cgpt_approval_bridge_server.py']},'unrelated':{'type':'local','command':['/bin/false']}}}))
         integration.integrate('opencode','fixture',package_root=package)
         cfg=json.loads((opencode/'opencode.json').read_text());assert 'cgpt-validation' not in cfg['mcp'];assert 'unrelated' in cfg['mcp'];assert cfg['mcp']['cab']['command']==['/usr/bin/cab','mcp','--agent','opencode']
-    proof={'codex_native_cli':True,'local_plugins_version':'3.0.2','idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
+    proof={'codex_native_cli':True,'local_plugins_version':'3.0.3','idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
     (ROOT/'output/scm/cab-3.0.0/integrations-proof.json').write_text(json.dumps(proof,indent=2)+'\n');print(json.dumps(proof))

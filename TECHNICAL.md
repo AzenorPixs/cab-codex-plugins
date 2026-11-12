@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.0.2
+## Architecture CAB 3.0.3
 
 Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
 PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et
@@ -2271,3 +2271,10 @@ Le propriétaire d’un RUN direct WORKING utilise la commande publique
 datée. Digest optimiste, frontière sans effet protégé et audit sont obligatoires.
 SID, RUN, génération, gel natif et reçus restent conservés ; aucun test n’est rejoué.
 La procédure détaillée est dans docs/platform-operations.md.
+
+## Finalisation et suivi3.0.3
+La finalisation CABU est commune à postinst et cab update, locale et idempotente
+par profil. Elle publie les extensions CAB pour les UID configurés après validation
+Web initiale, sans relancer les sessions. Les entités projets/RUN/sessions/changes
+et leurs tâches sont persistantes ; étapes déclarées et tâches observées ne
+constituent pas des validations. Voir docs/platform-operations.md pour les contrats.

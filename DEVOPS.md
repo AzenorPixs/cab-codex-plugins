@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-12T11:29:07Z
+Début du relevé (UTC) : 2026-11-12T16:54:02Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -174,34 +174,35 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Dépendances du projet - Source de vérité `pyproject.toml`
 
-  * Django ==6.1.3 : non installé --> /home/devops/python/current/bin/python3
+  * Recherche ou sonde des venv du projet non vérifiable : inventaire partiel.
+  * Django ==6.1.3 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * django-ninja ==1.7.1 : non installé --> /home/devops/python/current/bin/python3
+  * django-ninja ==1.7.1 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * uvicorn ==0.54.0 : non installé --> /home/devops/python/current/bin/python3
+  * uvicorn ==0.54.0 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * mcp ==2.3.0 : non installé --> /home/devops/python/current/bin/python3
+  * mcp ==2.3.0 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * httpx ==0.28.1 : non installé --> /home/devops/python/current/bin/python3
+  * httpx ==0.28.1 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * psycopg [binary]==3.3.6 : non installé --> /home/devops/python/current/bin/python3
+  * psycopg [binary]==3.3.6 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * asgiref ==3.12.1 : non installé --> /home/devops/python/current/bin/python3
+  * asgiref ==3.12.1 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * sqlparse ==0.6.0 : non installé --> /home/devops/python/current/bin/python3
+  * sqlparse ==0.6.0 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * argon2-cffi ==25.1.0 : non installé --> /home/devops/python/current/bin/python3
+  * argon2-cffi ==25.1.0 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
-  * cryptography ==50.0.2 : non installé --> /home/devops/python/current/bin/python3
+  * cryptography ==50.0.2 : non vérifiable --> /home/devops/python/current/bin/python3
     * Environnement : Python DevOps (repli)
     * Installation : non observée
 
@@ -222,6 +223,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
     * Diagnostic : aucun venv du projet détecté
     * Déclaration : Nuitka ==4.3.1
     * Source : pyproject.toml — [build-system].requires
+    * Diagnostic : recherche ou sonde des venv non vérifiable, inventaire partiel
 
 
 # Prompts
@@ -243,6 +245,6 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Firefox
 
-  * 153.6.0esr
+  * 153.7.0esr
   * /usr/bin/firefox
   * Mode headless : --headless
