@@ -33,6 +33,10 @@ def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)
 @server.tool()
+def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK')->dict:
+    """Déclare la position1–11 du cycle ; ne valide aucune étape ni gate."""
+    return client().command('run.progress',locals())
+@server.tool()
 def run_reconcile_archive(project_id:str,run_id:str,archive_path:str,expected_framing_digest:str)->dict:
     """Relocalise le seul change archivé du RUN direct propriétaire, sans rejeu."""
     return client().command('run.reconcile_archive',locals())

@@ -7,16 +7,17 @@ import {api} from './api'
 import {AppearanceProvider,ThemeToggle} from './Appearance'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
+import {RunView,stageLabel} from './RunView'
 import './style.css'
 
 type Health={state:string;initialized:boolean;version:string;csrf_token:string}
-type Session={run_id:string;session_id:string;mode:string;state:string;change:string;generation:number|string;updated:string}
+type Session={run_id:string;session_id:string;mode:string;state:string;change:string;generation:number|string;updated:string;stage:number|null;tasks_done:number|null;tasks_total:number|null}
 const client=new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false}}})
 function Layout(){
   const header=useRef<HTMLElement>(null)
   const pathname=useRouterState({select:state=>state.location.pathname})
   useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
-  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.0.2</span></Link><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')?'workspace-main':undefined}><Outlet/></main></>
+  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.0.3</span></Link><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')?'workspace-main':undefined}><Outlet/></main></>
 }
 
 function Gate({children}:{children:React.ReactNode}){
@@ -45,19 +46,19 @@ function Projects({children}:{children:(projects:Project[])=>React.ReactNode}){
   return children(query.data.projects)
 }
 function SessionList({project}:{project:Project}){
-  const [rows,setRows]=useState<Session[]>([]);const [status,setStatus]=useState('Connexion au suivi…');const [selected,setSelected]=useState('')
+  const [rows,setRows]=useState<Session[]>([]);const [status,setStatus]=useState('Connexion au suivi…')
   useEffect(()=>{
-    const controller=new AbortController();setRows([]);setStatus('Connexion au suivi…');setSelected('')
+    const controller=new AbortController();setRows([]);setStatus('Connexion au suivi…')
     const stream=new ShapeStream({url:new URL('/api/v1/sync/sessions',location.origin).href,params:{project_id:project.id},signal:controller.signal,onError:()=>{setStatus('Suivi temporairement indisponible · reconnexion en cours');return {}}})
     const shape=new Shape(stream)
-    const unsubscribe=shape.subscribe(({rows})=>{setRows(rows.map(row=>({run_id:String(row.run_id),session_id:String(row.session_id),mode:String(row.mode),state:String(row.state),change:String(row.change),generation:String(row.generation),updated:String(row.updated)})));setStatus('Suivi en direct · Electric')})
+    const unsubscribe=shape.subscribe(({rows})=>{setRows(rows.map(row=>({run_id:String(row.run_id),session_id:String(row.session_id),mode:String(row.mode),state:String(row.state),change:String(row.change),generation:String(row.generation),updated:String(row.updated),stage:row.stage==null?null:Number(row.stage),tasks_done:row.tasks_done==null?null:Number(row.tasks_done),tasks_total:row.tasks_total==null?null:Number(row.tasks_total)})));setStatus('Suivi en direct · Electric')})
     return ()=>{unsubscribe();controller.abort()}
   },[project.id])
-  return <><div className="section-heading"><div><p className="eyebrow">COORDINATION AUTONOME</p><h1>Sessions de codage</h1></div><p role="status" className="live">{status}</p></div><p className="project-path">{project.root}</p><div className="table-wrap"><table><thead><tr><th>RUN / Session</th><th>Change</th><th>Profil</th><th>État</th><th>Actualisation</th></tr></thead><tbody>{rows.map(row=><tr key={row.run_id}><td><button className="text-button" onClick={()=>setSelected(row.run_id)}>{row.run_id}</button><small>{row.session_id}</small></td><td>{row.change}</td><td>{row.mode==='piloted'?'Pilotée':'Directe'}</td><td><span className="badge">{row.state}</span></td><td>{new Date(row.updated).toLocaleString('fr-FR')}</td></tr>)}</tbody></table>{!rows.length&&<p className="empty">Aucune session pour ce projet.</p>}</div>{selected&&<RunDetails project={project.id} run={selected}/>}</>
+  return <><div className="section-heading"><div><p className="eyebrow">COORDINATION AUTONOME</p><h1>Sessions de codage</h1></div><p role="status" className="live">{status}</p></div><p className="project-path">{project.root}</p><div className="table-wrap"><table><thead><tr><th>RUN / Session</th><th>Change</th><th>Profil</th><th>État</th><th>Étape</th><th>Tâches réalisées</th><th>Actualisation</th></tr></thead><tbody>{rows.map(row=><tr key={row.run_id}><td><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td>{row.change}</td><td>{row.mode==='piloted'?'Pilotée':'Directe'}</td><td><span className="badge">{row.state}</span></td><td>{stageLabel(row.stage)}</td><td>{row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td>{new Date(row.updated).toLocaleString('fr-FR')}</td></tr>)}</tbody></table>{!rows.length&&<p className="empty">Aucune session pour ce projet.</p>}</div></>
 }
-function RunDetails({project,run}:{project:string;run:string}){
-  const query=useQuery({queryKey:['run',project,run],queryFn:()=>api<{review:unknown;operations:unknown[];exceptions:unknown[]}>('run?'+new URLSearchParams({project_id:project,run_id:run})),refetchInterval:10000})
-  return <section className="details"><h2>Preuves et revue · {run}</h2>{query.error?<p role="alert">Détails indisponibles.</p>:<pre>{JSON.stringify(query.data,null,2)}</pre>}</section>
+function ProjectRunScreen({projects}:{projects:Project[]}){
+  const params=useParams({strict:false});const project=projects.find(item=>item.id===params.projectId)
+  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={project?.id}/><section className="project-content">{project&&params.runId?<RunView projectId={project.id} runId={params.runId}/>:<h1>Projet introuvable</h1>}</section></div>
 }
 function ProjectScreen({projects,incidents=false}:{projects:Project[];incidents?:boolean}){
   const search=useSearch({strict:false});const params=useParams({strict:false});const requested=params.projectId||search.project;const selected=requested?projects.find(p=>p.id===requested):incidents?projects[0]:undefined
@@ -73,11 +74,12 @@ const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof se
 const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:()=>null})
 const projectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectDetailRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
+const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/runs/$runId',component:()=> <Gate><Projects>{projects=><ProjectRunScreen projects={projects}/>}</Projects></Gate>})
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const newProjectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/new',component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><div className="project-content"><CreateProjectForm/></div></div>}</Projects></Gate>})
 const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['agents','database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectIncidentRoute,newProjectRoute,administrationRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectRunRoute,projectIncidentRoute,newProjectRoute,administrationRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><RouterProvider router={router}/></AppearanceProvider></QueryClientProvider>)

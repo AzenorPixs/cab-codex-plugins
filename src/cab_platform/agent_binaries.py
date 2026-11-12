@@ -70,6 +70,9 @@ def mcp_configuration(path,user,agent):
 
 def inventory():
     configuration=config();users=accounts(configuration);result=[]
+    from .agent_runtime import processes,observation
+    from .agent_releases import cached
+    rows=processes({user.pw_uid for user in users});releases=cached()
     for agent,label,relative in [('opencode','OpenCode','.opencode/bin/opencode'),('codex','Codex CLI','.local/bin/codex')]:
         configured=configuration.get(agent+'_binary','')
         candidates=[Path(configured)] if configured else [Path(found) for found in [shutil.which(agent)] if found]+[Path(user.pw_dir)/relative for user in users]
@@ -95,5 +98,7 @@ def inventory():
                 if item.suffix=='.jsonc' and profile['state']=='invalid':profile['state']='jsonc_unverified'
                 profiles.append(profile)
             if override and profiles:break
-        result.append({'agent':agent,'label':label,'path':str(path) if path else '', 'resolved_path':str(path.resolve()) if path and path.exists() else '', 'state':state,'version':version(path,user) if executable and user else None,'mcp_configurations':profiles})
-    return {'agents':result,'runtime_notice':'Les états MCP indiquent la déclaration dans les fichiers ; la connexion dépend de chaque session native et n’est pas sondée ici.'}
+        runtime=observation(rows,agent)
+        release=releases.get(agent,{})
+        result.append({'runtime':runtime,'release':release,'connector_path':'/usr/bin/cab','agent':agent,'label':label,'path':str(path) if path else '', 'resolved_path':str(path.resolve()) if path and path.exists() else '', 'state':state,'version':version(path,user) if executable and user else None,'mcp_configurations':profiles})
+    return {'agents':result,'runtime_notice':'Activité et transport MCP observés sur la machine ; les versions GitHub proviennent du cache quotidien.'}

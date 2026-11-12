@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.2
+## Plateforme CAB 3.0.3
 
 CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.
@@ -1351,3 +1351,10 @@ Le propriétaire d’un RUN direct WORKING utilise la commande publique
 datée. Digest optimiste, frontière sans effet protégé et audit sont obligatoires.
 SID, RUN, génération, gel natif et reçus restent conservés ; aucun test n’est rejoué.
 La procédure détaillée est dans docs/platform-operations.md.
+
+## Finalisation et suivi3.0.3
+La finalisation CABU est commune à postinst et cab update, locale et idempotente
+par profil. Elle publie les extensions CAB pour les UID configurés après validation
+Web initiale, sans relancer les sessions. Les entités projets/RUN/sessions/changes
+et leurs tâches sont persistantes ; étapes déclarées et tâches observées ne
+constituent pas des validations. Voir docs/platform-operations.md pour les contrats.
