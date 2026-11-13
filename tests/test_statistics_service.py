@@ -45,6 +45,13 @@ class ServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(commands.Refused,'statistics-project-busy'):
                 with s.guarded(self.project,'test','TWO'):pass
         self.assertIsNone(StatisticsLock.objects.get(project=self.project).owner_id)
+    def test_framed_file_deletion_is_hashed_without_recreating_it(self):
+        path=self.root/'SGS.md';path.write_text('ancien prompt')
+        run=commands.begin_run(self.actor,{'project_id':self.project.pk,'run_id':'DELETE','session_id':'SID','mode':'direct','change':'deletion','paths':['SGS.md'],'criteria':['fixture'],'decisions_resolved':True})
+        before=commands.revision(run);path.unlink();after=commands.revision(run)
+        self.assertNotEqual(before,after);self.assertEqual(after,commands.revision(run));self.assertFalse(path.exists())
+        path.symlink_to(self.root/'other')
+        with self.assertRaises(commands.Refused):commands.revision(run)
     def test_unknown_changed_file_keeps_protection(self):
         path=self.source('done','# Original\n',True)/'STATISTICS.md';old=d.sha(path.read_bytes())
         with self.assertRaises(OSError):

@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 3.1.1 — 2026-11-13
+
+- Le hash d’un périmètre existant enregistre explicitement un fichier supprimé,
+  sans le recréer ni élargir le mandat : compatibilité de la suppression SGS.md.
+- Contrôles de chemins, liens, source modifiée et empreinte des reçus maintenus.
+
 ## 3.1.0 — 2026-11-13
 
 - SGS intégré au service CAB : fichiers locaux des changes seuls maîtres,

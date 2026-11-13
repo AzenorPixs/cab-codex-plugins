@@ -54,3 +54,14 @@ horodatage UTC, SHA du contenu hors marqueur et SHA intégral. Les fichiers
 manuels restent vérifiables sans marqueur, aucun estampillage à la simple lecture.
 Recette finale :42tests combinés réussis,12spécifiques au service/document et
 30régressions de périodes/liaison ; prototype réel inotify+clôture+marqueurs validé.
+
+## Compatibilité de fin de migration3.1.1
+CAB3.1.0 et prompts1.0.22 ont été publiés. Le RUN prompts conserve dans son cadrage
+SGS.md, dont la suppression est expressément autorisée. La révision du code doit
+représenter cette absence au lieu d’exiger de recréer le prompt. Le correctif
+3.1.1 ajoute une entrée missing à l’empreinte, sans réécrire le mandat, changer
+SID/RUN ou signer rétroactivement un reçu. Les chemins/liens restent contrôlés.
+La normalisation native Codex d’un startup_timeout_sec entier vers flottant de
+même valeur a changé une sérialisation, sans modifier la configuration tierce ;
+sauvegarde avant installation vérifiée identique au baseline, égalité sémantique
+actuelle établie, profils d’authentification intacts.
