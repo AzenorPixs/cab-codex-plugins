@@ -9,7 +9,7 @@ import django
 django.setup()
 from django.db import transaction
 from cab_platform.core import commands as c,historical as h
-from cab_platform.core.models import Actor,Event,Project,Operation,Lease,Resource,Maintenance,MeasurementPeriod
+from cab_platform.core.models import Actor,Event,Project,Operation,Lease,Resource,Maintenance,MeasurementPeriod,FinalizationPlan
 
 
 class HistoricalTests(unittest.TestCase):
@@ -19,6 +19,8 @@ class HistoricalTests(unittest.TestCase):
         self.project=Project.objects.create(pk=uuid.uuid4().hex,root=str(self.root),owner_uid=os.getuid(),owner_gid=os.getgid());self.actor.projects.add(self.project)
         (self.root/'source').write_text('stable')
         self.run=c.begin_run(self.actor,{'project_id':self.project.pk,'run_id':'HISTORY','session_id':'SID-HISTORY','mode':'direct','change':'fixture','paths':['source'],'criteria':['historical'],'decisions_resolved':True})
+        # Fixture de RUN historique antérieur au contrat autonome.
+        FinalizationPlan.objects.filter(run=self.run).delete()
         self.archive='openspec/changes/archive/2026-11-12-fixture';self.path=self.root/self.archive;self.path.mkdir(parents=True)
         for name in ('proposal.md','review.md','STATISTICS.md'):(self.path/name).write_text('# Preuve historique\n')
         (self.path/'tasks.md').write_text('- [x] 1. Travail historique\n')

@@ -11,7 +11,7 @@ from unittest.mock import patch
 from contextlib import closing
 from test_historical_closure import HistoricalTests
 from cab_platform.core import commands as c,run_lifecycle as l,statistics_service as s
-from cab_platform.core.models import Actor,Event,LegacySnapshot,Run,SessionArchive,SessionProjection
+from cab_platform.core.models import Actor,Event,LegacySnapshot,Run,SessionArchive,SessionProjection,FinalizationPlan
 from cab_platform.migration import cipher
 
 
@@ -51,6 +51,8 @@ class LifecycleTests(unittest.TestCase):
     def test_piloted_final_review_allows_worker_closure(self):
         parent=Actor.objects.create(pk='parent-lifecycle',uid=os.getuid(),agent='fixture',role='orchestrator',token_hash='fixture-parent');parent.projects.add(self.project)
         run=c.begin_run(parent,{'project_id':self.project.pk,'run_id':'PILOT','session_id':'SID-PILOT','mode':'piloted','change':'fixture','paths':['source'],'criteria':['pilot proof'],'decisions_resolved':True,'orchestrator_id':parent.pk,'coder_id':self.actor.pk})
+        # Cette non-régression représente un ancien RUN, sans adoption implicite.
+        FinalizationPlan.objects.filter(run=run).delete()
         self.accept(run,reviewer=parent)
         with patch.object(s,'sync',side_effect=lambda *a,**k:s.discover(self.project)):l.recheck(None,{'project_id':self.project.pk,'run_id':run.run_id},automatic=True)
         run.refresh_from_db();self.assertEqual(run.state,'CLOSED');self.assertEqual(run.stage,11);self.assertEqual(run.review['decision']['actor'],parent.pk)

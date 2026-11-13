@@ -44,9 +44,17 @@ def project_register(root:str)->dict:
     """Rattache un projet canonique autorisé au compte effectif."""
     return client().command('project.register',{'root':root})
 @server.tool()
-def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None)->dict:
+def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None)->dict:
     """Cadre un RUN. Piloté : autorité orchestrateur requise, choix résolus avant codage."""
-    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model})
+    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization})
+@server.tool()
+def finalization_status(project_id:str,run_id:str)->dict:
+    """Consulte le contrat, les preuves et les attentes ; aucun reçu inventé."""
+    return client().get('finalization',project_id=project_id,run_id=run_id)
+@server.tool()
+def finalization_configure(project_id:str,run_id:str,policy:dict)->dict:
+    """Déclare le contrat initial avant toute opération ; ensuite immutable."""
+    return client().command('finalization.configure',locals())
 @server.tool()
 def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""

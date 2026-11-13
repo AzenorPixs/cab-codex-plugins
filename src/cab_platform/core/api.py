@@ -197,6 +197,15 @@ def operation_status(request,project_id:str,run_id:str,request_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     return operation_data(Operation.objects.get(run=r,request_id=request_id))
 
+@api.get('/finalization')
+def finalization_status(request,project_id:str,run_id:str):
+    actor=principal(request);run=commands.run_scope(actor,run_id,project_id,owner=False)
+    from .models import FinalizationPlan
+    from .run_finalization import view
+    plan=FinalizationPlan.objects.filter(run=run).first()
+    if plan is None:return {'phase':'LEGACY','missing':[],'policy':None,'evidence':[]}
+    return {**view(run,plan),'policy':plan.policy,'evidence':list(run.finalization_evidence.order_by('pk').values('id','source','evidence_id','digest','payload','created')[:200])}
+
 @api.get('/handoff')
 def handoff(request,project_id:str,run_id:str,after:int=0):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
@@ -231,6 +240,9 @@ def update_availability(request):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    if name in ('finalization.configure','evidence.producer.register','evidence.producer.disable','evidence.attest'):
+        from . import run_evidence
+        return {'finalization.configure':run_evidence.configure,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
     if name=='system.update.check':
         commands.require(set(data)<={'force'} and type(data.get('force',False)) is bool,'update-fields-invalid',400)
         if data.get('force'):principal(request,admin=True)
@@ -324,6 +336,13 @@ def command(request,body:Command):
         bounded=run_statistics(actor,r)
         return {'frozen_at':r.mandate['native_frozen_at'],'run_id':r.run_id,'metrics':bounded['streams'],'statistics':bounded}
     if name=='run.close':
+        from .models import FinalizationPlan
+        candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
+        plan=FinalizationPlan.objects.filter(run=candidate).exclude(policy={}).first()
+        if plan and data.get('branch')=='TERMINÉ':
+            from .run_finalization import process
+            if plan.receipt:return plan.receipt
+            receipt=process(candidate.pk);commands.require(receipt,'finalization-proof-required');return receipt
         from .run_closure import close_normal
         return close_normal(actor,data)
     if name=='run.review':return commands.review(actor,data)

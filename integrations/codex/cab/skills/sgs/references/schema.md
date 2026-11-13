@@ -1,4 +1,4 @@
-# Schéma statistique CAB3.2.1
+# Schéma statistique CAB3.2.2
 
 Contrat : /usr/share/doc/cab/sgs-schema.md. Fichiers locaux maîtres, PG projection.
 Les écritures passent exclusivement par le service, via CLI cab statistics ou

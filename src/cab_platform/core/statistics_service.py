@@ -153,6 +153,8 @@ def evidence_for_change(change):
     accepted=[]
     for run in Run.objects.filter(change_record=change):
         accepted += [test.get('request_id') for test in run.review.get('submission',{}).get('tests',[]) if test.get('outcome')=='passed']
+        from .models import RunEvidence
+        accepted += [row.payload['request_id'] for row in RunEvidence.objects.filter(run=run,source='cab-operation',payload__result='passed') if row.payload.get('request_id')]
     test_count=0;observed=False
     for operation in Operation.objects.filter(run__change_record=change,request_id__in=set(accepted),state='COMPLETED'):
         if operation.receipt.get('exit_code')!=0:continue
@@ -226,7 +228,7 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False):
         retire_file_lock(project)
         targets={generate} if isinstance(generate,str) else set(generate or [])
         if automatic:
-            targets.update(Run.objects.filter(project=project,state__in=['WORKING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
+            targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
             targets.update(Change.objects.filter(pk__in=open_before,source_state='archived').values_list('identifier',flat=True))
         for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():generate_change(job,change)
         state=generate_global(job)

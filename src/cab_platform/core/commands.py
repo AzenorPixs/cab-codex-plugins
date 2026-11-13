@@ -150,7 +150,7 @@ def bind_native(actor,data):
     return {'bound':True,'run_id':r.run_id,'session_id':r.session_id}
 
 def working(run):
-    require(run.state=='WORKING' and not run.suspension,'run-not-working')
+    require(run.state in ('WORKING','FINALIZATION_PENDING') and not run.suspension,'run-not-working')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
 
 @transaction.atomic
@@ -184,12 +184,14 @@ def begin_run(actor,data):
     if prior:
         require(prior.actor_id==actor.pk and prior.session_id==sid and prior.mandate.get('framing_digest')==digest(data),'run-identity-conflict');return prior
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=identifier(data['change']),mandate={**data,'framing_digest':digest(data)})
+    from .run_evidence import initialize
+    initialize(r,data.get('finalization'))
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode});return r
 
 @transaction.atomic
 def progress(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
-    require(r.state in ('WORKING','REVIEW_PENDING','ACCEPTED') and not r.suspension,'run-not-active')
+    require(r.state in ('WORKING','FINALIZATION_PENDING','REVIEW_PENDING','ACCEPTED') and not r.suspension,'run-not-active')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
     stage=data.get('stage');phase=data.get('phase',r.phase)
     require(type(stage) is int and 1<=stage<=11,'run-stage-invalid',400)
@@ -309,11 +311,16 @@ def complete(operation_id,nonce,receipt):
         for lease in Lease.objects.filter(operation=op).select_related('resource'):
             if lease.resource.key.startswith('file:'):
                 resource=Resource.objects.select_for_update().get(pk=lease.resource_id);resource.revision+=1;resource.save()
+    if state in TERMINAL:
+        from .run_evidence import operation_completed
+        operation_completed(op)
     event(op.run,'operation-terminal',{'request_id':op.request_id,'state':state,'exit_code':receipt.get('exit_code')});return op
 
 @transaction.atomic
 def submit(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True);working(r);require(no_pending(r),'effects-unresolved')
+    from .models import FinalizationPlan
+    require(not FinalizationPlan.objects.filter(run=r).exclude(policy={}).exists(),'finalization-submission-owned-by-cab')
     current=revision(r);tests=data.get('tests',[]);require(tests,'tests-required',400)
     for test in tests:
         require(test.get('outcome') in ('passed','failed','unavailable'),'outcome-invalid',400)
