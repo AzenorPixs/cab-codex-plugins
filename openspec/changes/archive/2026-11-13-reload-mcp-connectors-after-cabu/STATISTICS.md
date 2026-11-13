@@ -8,14 +8,14 @@ Change : `reload-mcp-connectors-after-cabu` · état local : `archived`. Les val
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 3896.810715 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 3896.810715 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 31277147 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 103292 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 68025 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 30706176 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 31380439 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `reload-mcp-connectors-after-cabu` · état local : `archived`. Les val
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:cc0230951de77aeeb0c75846ca319fbf9156b276cc4ad5df30bc9005a7fabd2d
+Provenance : change-periods:e44df44d5235e2281b305eaf7815a3e07beccc2ff21cc4fc8fa8b86ca29b489a
 
 ## 2. Messages et outils
 
@@ -59,9 +59,9 @@ Provenance : change-periods:cc0230951de77aeeb0c75846ca319fbf9156b276cc4ad5df30bc
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 5 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 5 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,18 +91,5 @@ Provenance : change-periods:cc0230951de77aeeb0c75846ca319fbf9156b276cc4ad5df30bc
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 19035392 | bounded |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 19070870 | bounded |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 73814 | bounded |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 44896 | bounded |
-| SCM-mcp-reload-323 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 19144684 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "38c1ad86a9aa1ede2ca21aab84ff458523dce7f3f8d17f709147453b8c3e080a", "generated_at": "2026-11-13T20:02:25.908353+00:00", "revision": "38c1ad86a9aa1ede2ca21aab84ff458523dce7f3f8d17f709147453b8c3e080a", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "65eb81c4df30b592015a7b0a869c72c1cfb1b3427be2596192951150f9b8d2c2", "generated_at": "2026-11-13T20:29:26.496461+00:00", "revision": "65eb81c4df30b592015a7b0a869c72c1cfb1b3427be2596192951150f9b8d2c2", "scope": "change"} -->

@@ -1,3 +1,4 @@
+import {McpVersions} from './McpConnections'
 import {useState,type ReactNode} from 'react'
 import {Link,useRouterState} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
@@ -50,6 +51,7 @@ function Agents({initial,onSaved}:{initial:Configuration;onSaved:()=>void}){
       <div className="agent-title"><h2 className={installed?'agent-installed':'agent-missing'}>{agent.label}</h2>{installed&&<><span className={'status-dot '+(runtime.running?'status-up':'status-down')} role="img" aria-label={runtime.running?'Agent démarré':'Agent non démarré'} title={runtime.running?'Processus de l’agent détecté':'Aucun processus de l’agent détecté'}/><span className="installed-version" aria-label="Version installée">{agent.version||'Version inconnue'}</span>{release.version&&release.version!==agent.version&&<a className="available-version" href={release.url} target="_blank" rel="noreferrer" title="Dernière release GitHub observée">GitHub : {release.version}</a>}</>}</div>
       {installed&&<div className="agent-info"><span>Binaire</span><code>{agent.path}</code></div>}
       <div className="agent-info connector-info"><span>Connecteur MCP CAB</span><div className="connector-line"><code>{agent.connector_path} mcp --agent {agent.connector_agent}</code><span className={'status-dot '+(runtime.mcp_connected?'status-up':'status-down')} role="img" aria-label={runtime.mcp_connected?'MCP connecté':runtime.mcp_state==='unverified'?'Connexion MCP non vérifiée':'MCP non connecté'} title={runtime.mcp_connected?'Transport MCP connecté : extrémités observées':runtime.mcp_state==='unverified'?'Observation du transport incomplète':'Aucun transport MCP connecté observé'}/></div></div>
+      <McpVersions agent={agent.connector_agent}/>
       {release.status==='unavailable'&&<p className="release-note">Vérification GitHub indisponible ; dernière valeur connue conservée.</p>}
       {!release.version&&<p className="release-note">Vérification GitHub quotidienne planifiée.</p>}
       <details className="mcp-configurations"><summary>Configurations MCP</summary>{agent.mcp_configurations.map(profile=><div className="mcp-profile" key={profile.account+profile.path}><p><strong>{profile.account}</strong> · {states[profile.state]||profile.state}</p><code>{profile.path}</code>{profile.servers.length>0&&<ul>{profile.servers.map(server=><li key={server.name}><strong>{server.name}</strong> — {server.state==='disabled'?'Désactivé':'Déclaré'}</li>)}</ul>}</div>)}</details>
