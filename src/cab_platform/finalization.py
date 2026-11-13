@@ -80,6 +80,10 @@ def finalize(package_root=Path('/usr/lib/cab')):
                 steps[key]={'state':'FAILED','error':str(error) if isinstance(error,ClientError) else type(error).__name__}
                 atomic_json(STATE/'last-finalization.json',result)
                 raise ClientError('integration-finalization-failed:'+key) from None
+        from .core.connectors import attach_active_updates,snapshot,assess
+        attach_active_updates(__version__)
+        connector_state,connectors=assess(snapshot(),__version__)
+        result['connector_state']=connector_state;result['connectors']=connectors
         result['verified']=True
         atomic_json(STATE/'last-finalization.json',result);atomic_json(STATE/'last-update.json',result)
         return result

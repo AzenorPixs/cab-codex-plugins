@@ -240,6 +240,9 @@ def update_availability(request):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    if name=='connector.heartbeat':
+        from .connectors import heartbeat
+        return heartbeat(actor,data,getattr(request,'cab_peer',None))
     if name in ('finalization.configure','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
         return {'finalization.configure':run_evidence.configure,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
