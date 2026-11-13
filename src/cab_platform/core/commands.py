@@ -206,7 +206,7 @@ def reconcile_archive(actor,data):
     from datetime import date
     from types import SimpleNamespace
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
-    require(r.mode=='direct' and r.state=='WORKING','archive-reconciliation-state-invalid')
+    require(r.mode=='direct' and r.state in ('WORKING','FINALIZATION_PENDING'),'archive-reconciliation-state-invalid')
     expected=data.get('expected_framing_digest');archive=data.get('archive_path')
     require(isinstance(expected,str) and re.fullmatch('[a-f0-9]{64}',expected),'framing-digest-invalid',400)
     require(isinstance(archive,str) and re.fullmatch(r'openspec/changes/archive/\d{4}-\d{2}-\d{2}-'+re.escape(r.change),archive),'archive-path-invalid',400)

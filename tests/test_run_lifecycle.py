@@ -11,7 +11,7 @@ from unittest.mock import patch
 from contextlib import closing
 from test_historical_closure import HistoricalTests
 from cab_platform.core import commands as c,run_lifecycle as l,statistics_service as s
-from cab_platform.core.models import Actor,Event,LegacySnapshot,Run,SessionArchive,SessionProjection,FinalizationPlan
+from cab_platform.core.models import Actor,Event,LegacySnapshot,Operation,Run,SessionArchive,SessionProjection,FinalizationPlan
 from cab_platform.migration import cipher
 
 
@@ -58,6 +58,10 @@ class LifecycleTests(unittest.TestCase):
         run.refresh_from_db();self.assertEqual(run.state,'CLOSED');self.assertEqual(run.stage,11);self.assertEqual(run.review['decision']['actor'],parent.pk)
 
     def test_unaccepted_completed_tasks_require_historical_confirmation(self):
+        guided=l.recheck(self.actor,self.data)
+        self.assertEqual(guided['action'],'configure');self.assertEqual(guided['next_actions'][0]['command'],'finalization.configure')
+        self.assertFalse(FinalizationPlan.objects.filter(run=self.run).exists())
+        Operation.objects.create(run=self.run,request_id='OLD-FAILED',state='FAILED_TO_START',input_digest='fixture',source_revision='fixture')
         view=l.recheck(self.actor,self.data);self.assertEqual(view['action'],'historical');self.run.refresh_from_db();self.assertEqual(self.run.state,'WORKING')
         (self.path/'tasks.md').write_text('Aucune tâche observée\n')
         self.assertEqual(l.evaluate(self.run)['reasons'],['archive-tasks-incomplete'])

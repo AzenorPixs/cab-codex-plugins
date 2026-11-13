@@ -1,5 +1,15 @@
 # Historique des versions
 
+## 3.2.5 — 2026-11-13
+
+- Révision autonome et idempotente du seul argv d'un contrôle récupérable,
+  par son codeur direct ou piloté, avec empreinte attendue et justification.
+- Historique complet et révisions monotones : aucun ancien succès réactivé,
+  aucune modification des critères, exigences, producteurs ou décisions réservées.
+- Actions de finalisation explicites et requêtes indécises identifiées ; un
+  ancien RUN admissible est orienté vers le contrat normal, sans migration implicite.
+- Migration additive0016 ; API/MCP/CLI et skill CAB partagent le même parcours.
+
 ## 3.2.4 — 2026-11-13
 
 - Arrêt du seul moteur MCP enfant : sortie gracieuse, TERM/KILL configurables,

@@ -211,7 +211,13 @@ def finalization_status(request,project_id:str,run_id:str):
     from .models import FinalizationPlan
     from .run_finalization import view
     plan=FinalizationPlan.objects.filter(run=run).first()
-    if plan is None:return {'phase':'LEGACY','missing':[],'policy':None,'evidence':[]}
+    if plan is None:
+        from cab_platform.finalization_contract import next_actions
+        missing=['finalization-contract-required']
+        actions=next_actions(missing,{})
+        if run.operation_set.exists() or run.review or run.mandate.get('native_frozen_at') or run.mandate.get('legacy_snapshot_id'):
+            actions[0]['blocked_by']=['finalization-adoption-not-safe']
+        return {'phase':'LEGACY','missing':missing,'policy':None,'evidence':[],'next_actions':actions}
     return {**view(run,plan),'policy':plan.policy,'evidence':list(run.finalization_evidence.order_by('pk').values('id','source','evidence_id','digest','payload','created')[:200])}
 
 @api.get('/handoff')
@@ -257,9 +263,9 @@ def command(request,body:Command):
     if name=='connector.disconnected':
         from .connectors import disconnected
         return disconnected(actor,data,getattr(request,'cab_peer',None))
-    if name in ('finalization.configure','evidence.producer.register','evidence.producer.disable','evidence.attest'):
+    if name in ('finalization.configure','finalization.revise_check','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
-        return {'finalization.configure':run_evidence.configure,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
+        return {'finalization.configure':run_evidence.configure,'finalization.revise_check':run_evidence.revise_check,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
     if name=='system.update.check':
         commands.require(set(data)<={'force'} and type(data.get('force',False)) is bool,'update-fields-invalid',400)
         if data.get('force'):principal(request,admin=True)

@@ -1,6 +1,10 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.2.4
+## Plateforme CAB 3.2.5
+
+La finalisation expose ses actions manquantes et permet au codeur de corriger
+en autonomie le seul argv d'un contrôle récupérable. Versions et échecs restent
+conservés ; la clôture exige une preuve nouvelle, avec critères et revue protégés.
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

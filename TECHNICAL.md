@@ -1,6 +1,11 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.2.4
+## Architecture CAB 3.2.5
+
+FinalizationPlan.check_revisions versionne les contrôles ; les preuves CAB
+portent leur révision. finalization.revise_check verrouille RUN/plan, contrôle
+propriété/frontière/empreinte, ne remplace qu'argv et conserve l'événement complet.
+Le statut expose next_actions/pending_operations sans exécution implicite.
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

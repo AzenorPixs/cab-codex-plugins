@@ -1,5 +1,6 @@
 """Validation pure du contrat ; aucune inférence à partir du texte des critères."""
 import re
+from copy import deepcopy
 
 KINDS={'verification','publication','installation','availability','service_end'}
 NATURES={'development','delivery','activation','service'}
@@ -10,6 +11,44 @@ def require(value,code):
     if not value:raise ContractError(code)
 
 def identifier(value):return isinstance(value,str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}',value) is not None
+
+def replace_check_argv(policy: dict,check_id: str,argv: list[str]) -> dict:
+    """Le cadrage reste fixe : seule la commande du contrôle est révisable."""
+    result=deepcopy(policy)
+    check=next((item for item in result.get('checks',[]) if item['id']==check_id),None)
+    require(check is not None,'finalization-check-unknown')
+    require(check['argv']!=argv,'finalization-check-unchanged')
+    check['argv']=argv
+    return result
+
+def next_actions(missing: list[str],policy: dict) -> list[dict]:
+    """Instructions factuelles ; aucune opération n'est exécutée ni rejouée."""
+    actions=[]
+    for reason in missing:
+        action={'reason':reason,'automatic':False,'replay':False}
+        if reason=='finalization-contract-required':
+            action.update(command='finalization.configure',requires=['policy couvrant les critères','adoption avant opération/revue/gel'])
+        elif reason.startswith('evidence:'):
+            rules=sorted(policy.get('checks',[])+policy.get('requirements',[]),key=lambda item:len(item['id']),reverse=True)
+            rule=next((item for item in rules if reason.startswith('evidence:'+item['id']+':')),{})
+            key=rule.get('id','');detail=reason[len('evidence:'+key+':'):]
+            action['rule_id']=key
+            if 'argv' in rule:
+                action.update(command='operation.start',argv=rule['argv'],requires=['nouveau request_id','preuve de la révision courante'])
+                if detail in ('not-passed','source-stale','check-revised','receipt-stale'):
+                    action['alternative']={'command':'finalization.revise_check','requires':['expected_policy_digest','nouvel argv justifié','request_id stable']}
+            elif rule.get('producer')=='cab-update':action.update(command='system.update.status',request_id=policy.get('update_request_id'),requires=['même reçu CABU ; aucune réinstallation'])
+            else:action.update(command='evidence.attest',producer=rule.get('producer'),kind=rule.get('kind'),requires=['attestation du producteur autorisé','preuve de la révision courante'])
+        elif reason=='closure-effects-protected':action.update(query='operation',requires=['réconcilier les requêtes non terminales et baux ; aucun rejeu'])
+        elif reason=='reserved-review-required':action.update(command='run.review',requires=['décision de l’autorité réservée sur le dossier courant'])
+        elif reason in ('change-still-open','archive-missing-or-ambiguous','archive-tasks-incomplete','archive-proposal-missing'):
+            action.update(query='finalization',requires=['archive unique réelle et tâches accomplies sur preuves'])
+        else:action.update(query='finalization',requires=[reason])
+        blockers=[item for item in missing if item in ('closure-effects-protected','maintenance-in-progress','run-suspended','closure-exception-unresolved')]
+        if blockers and action.get('command') in ('operation.start','finalization.configure'):
+            action['blocked_by']=blockers
+        actions.append(action)
+    return actions
 
 def validate(policy: dict,criteria: list[str],mode: str) -> dict:
     require(isinstance(policy,dict) and not set(policy)-{'nature','checks','requirements','review_required','update_request_id','target_version'},'finalization-fields-invalid')

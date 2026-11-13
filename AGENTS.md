@@ -136,15 +136,12 @@ définir la modification minimale et obtenir les validations requises.
 Une validation explicite est une demande ou confirmation claire du développeur
 autorisant l'action concernée. Elle reste valable dans son périmètre tant que
 ses conditions demeurent réunies et qu'elle n'est pas révoquée.
-Si elle est requise mais absente, l'agent DOIT se limiter à l'analyse
+Si une validation requise manque, l'agent DOIT se limiter à l'analyse
 et aux propositions.
 
-Il DOIT modifier uniquement les fichiers nécessaires à l'objectif validé.
-
-Après modification, il DOIT examiner les fichiers modifiés, vérifier leur
-syntaxe, exécuter les tests et contrôles applicables, vérifier la conformité
-OpenSpec et l'absence de modification hors périmètre, puis rapporter fichiers
-modifiés, validations, impacts, échecs et incertitudes.
+Il DOIT modifier uniquement les fichiers nécessaires à l'objectif validé,
+appliquer les vérifications de la section 21 après modification, puis rapporter
+fichiers modifiés, validations, impacts, échecs et incertitudes.
 
 ## 6. Modifications fonctionnelles et OpenSpec
 
@@ -187,12 +184,13 @@ les [règles d'intégration](AGENT_INTEGRATIONS.md). Toute modification
 de sa configuration ou modification manuelle de ses fichiers générés
 nécessite une validation explicite.
 
-Après chaque archivage OpenSpec autorisé et réussi, le processus CAB génère
-ou amende STATISTICS.md dans le change, puis le global du projet. Le LLM ne
-calcule ni ne rédige ces rapports. Les fichiers locaux des changes restent la
-seule source de vérité ; PG est leur projection. Consulter le contrat installé
-CAB et vérifier les reçus, sans reconstruire de preuve absente. Un échec reprend
-seulement la génération, sans réarchiver ni perdre l’historique.
+Après chaque archivage OpenSpec autorisé et réussi, produire
+`openspec/changes/archive/<archive>/STATISTICS.md`.
+Appliquer le format statistique référencé depuis `DEVOPS.md` :
+six sections, UTF-8/LF, totaux vérifiés et mesures absentes justifiées par `N/A`.
+Résoudre ce format par l'entrée `SGS` de l'index des prompts indiqué
+dans `DEVOPS.md`. Ne pas déclarer `TERMINÉ` sans preuve du rapport.
+En cas d'échec du rapport, reprendre uniquement celui-ci, sans réarchiver.
 
 ## 8. Arborescence et fichiers
 
@@ -405,30 +403,27 @@ Sous réserve des priorités supérieures, les outils et configurations
 de développement, construction, test et validation DOIVENT respecter
 `DEVOPS.md`.
 
-Tout outil nécessaire absent de ce référentiel nécessite l'accord explicite
-du développeur avant installation ou utilisation, avec rôle et justification.
-Sa disponibilité ne vaut pas autorisation. Tout outil prescrit indisponible
-DOIT être signalé ; sa substitution nécessite le même accord.
-Seules les opérations dépendantes restent en attente.
-Cela n'autorise ni modification ni régénération de `DEVOPS.md`.
+Tout outil nécessaire absent ou toute substitution à un outil prescrit
+indisponible nécessite l'accord explicite du développeur avant installation
+ou utilisation, avec rôle et justification. Signaler l'indisponibilité ;
+la présence locale ne vaut pas autorisation. Seules les opérations dépendantes
+attendent. Cela n'autorise ni modification ni régénération de `DEVOPS.md`.
 
-Le code DOIT respecter les versions supportées des langages, runtimes
-et dépendances, déterminées par les spécifications et configurations
-du projet, notamment `pyproject.toml`, `package.json` et `DEVOPS.md`.
+Le code DOIT respecter les versions supportées des langages, runtimes et
+dépendances, établies par les spécifications et configurations du projet,
+notamment `pyproject.toml`, `package.json` et `DEVOPS.md`.
 Une version locale plus récente ne relève pas implicitement le minimum
-supporté. Toute exigence de version supérieure DOIT être justifiée
-et soumise aux validations applicables.
+supporté ; toute exigence supérieure DOIT être justifiée et validée
+selon les règles applicables.
 
-Le code DOIT respecter conventions et architecture, préserver les
-comportements non concernés, valider les entrées aux frontières du système,
-gérer les échecs attendus, détecter, traiter ou propager les erreurs sans
-les masquer, fournir des diagnostics compréhensibles sans secret et libérer
-les ressources, même en cas d'échec.
+Le code DOIT respecter conventions et architecture, préserver les comportements
+non concernés, valider les entrées aux frontières du système, gérer les échecs
+attendus, détecter, traiter ou propager les erreurs sans les masquer et libérer
+les ressources, même en cas d'échec. Il DEVRAIT privilégier les codes de retour
+explicites et l'idempotence lorsque pertinente.
 
 Tout ajout d'outil, dépendance ou langage reste soumis aux autorisations
-applicables. La syntaxe seule ne prouve pas la validité fonctionnelle :
-les tests applicables sont obligatoires. Toute vérification indisponible,
-non exécutée ou échouée DOIT être signalée.
+applicables. Les diagnostics et vérifications relèvent des sections 20 et 21.
 
 ## 14. Variables
 
@@ -496,20 +491,20 @@ Toute modification de licence nécessite une validation explicite.
 
 ## 20. Messages et robustesse
 
-Les messages des scripts DOIVENT être explicites, cohérents et utiles
-au suivi et au diagnostic, sans masquer d'échec, ignorer silencieusement
-d'erreur, exposer de données sensibles ni modifier le comportement attendu.
-
-Le code DEVRAIT privilégier la gestion explicite des erreurs, des messages
-compréhensibles, des codes de retour explicites, la validation des entrées
-et l'idempotence lorsque pertinente.
+Le code DOIT fournir des diagnostics compréhensibles sans données sensibles.
+Les messages des scripts DOIVENT aussi être explicites, cohérents et utiles
+au suivi et au diagnostic, sans modifier le comportement fonctionnel attendu.
 
 ## 21. Tests et validation finale
 
-Avant de déclarer le travail valide, l'agent DOIT exécuter les tests
-applicables lorsqu'un mécanisme existe, vérifier la syntaxe, l'absence
-d'erreur évidente, la cohérence des fichiers modifiés, la conformité
-OpenSpec et l'absence de modification hors périmètre.
+Après modification et avant de déclarer le travail valide, l'agent DOIT
+examiner les fichiers modifiés et vérifier syntaxe, absence d'erreur évidente,
+cohérence, conformité OpenSpec et absence de modification hors périmètre.
+
+Il DOIT exécuter les contrôles applicables et, lorsqu'un mécanisme de test
+existe, les tests applicables. Une syntaxe valide ne prouve pas la validité
+fonctionnelle. Toute vérification indisponible, non exécutée ou échouée
+DOIT être signalée.
 
 Aucun test ni contrôle ne DOIT être déclaré réussi sans exécution
 effective avec succès.

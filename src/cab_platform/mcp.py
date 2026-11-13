@@ -56,6 +56,10 @@ def finalization_configure(project_id:str,run_id:str,policy:dict)->dict:
     """Déclare le contrat initial avant toute opération ; ensuite immutable."""
     return client().command('finalization.configure',locals())
 @server.tool()
+def finalization_revise_check(project_id:str,run_id:str,request_id:str,expected_policy_digest:str,check_id:str,argv:list[str],reason:str)->dict:
+    """Codeur : corrige un contrôle récupérable, sans changer critères/reçus ni rejouer ; preuve nouvelle obligatoire."""
+    return client().command('finalization.revise_check',locals())
+@server.tool()
 def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)

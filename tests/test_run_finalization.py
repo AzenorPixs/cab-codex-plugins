@@ -11,11 +11,11 @@ class FinalizationTests(unittest.TestCase):
     tearDown=fixture.HistoricalTests.tearDown
     def policy(self,**extra):return {'checks':[{'id':'unit','argv':['/bin/true'],'criteria':['historical']}],**extra}
     def configure(self,policy=None):return e.configure(self.actor,{**self.data,'policy':policy or self.policy()})
-    def operation(self,argv=None,state='COMPLETED'):
+    def operation(self,argv=None,state='COMPLETED',exit_code=0):
         run=self.run
         op,_=c.start_operation(self.actor,{'project_id':self.project.pk,'run_id':run.run_id,'session_id':run.session_id,'generation':run.generation,'request_id':'OP-'+str(run.operation_set.count()),'kind':'local','argv':argv or ['/bin/true']})
         op=c.claim_operation(op.pk);c.dispatched(op.pk,op.dispatch_nonce)
-        c.complete(op.pk,op.dispatch_nonce,{'request_id':op.request_id,'input_digest':op.input_digest,'source_revision':op.source_revision,'state':state,'exit_code':0 if state=='COMPLETED' else None})
+        op=c.complete(op.pk,op.dispatch_nonce,{'request_id':op.request_id,'input_digest':op.input_digest,'source_revision':op.source_revision,'state':state,'exit_code':exit_code if state=='COMPLETED' else None})
         return op
     def process(self):
         with patch.object(s,'sync',side_effect=lambda *a,**k:s.discover(self.project)):return f.process(self.run.pk)
@@ -82,5 +82,52 @@ class FinalizationTests(unittest.TestCase):
         self.run.refresh_from_db();self.assertEqual(self.run.state,'FINALIZING')
         before=list(self.run.operation_set.values('request_id','receipt_digest'))
         self.process();self.run.refresh_from_db();self.assertEqual(self.run.state,'CLOSED');self.assertEqual(before,list(self.run.operation_set.values('request_id','receipt_digest')))
+
+    def revision(self,argv=None,key='FIX',check='unit'):
+        plan=FinalizationPlan.objects.get(run=self.run)
+        return {**{k:self.data[k] for k in ('project_id','run_id')},'request_id':key,'check_id':check,'expected_policy_digest':plan.digest,'argv':argv or ['/bin/true'],'reason':'Correction démontrée du cadrage du contrôle de fixture.'}
+    def test_failed_check_repair_preserves_receipt_and_closes_only_with_new_execution(self):
+        self.configure({'checks':[{'id':'unit','argv':['/bin/false'],'criteria':['historical']}]})
+        failed=self.operation(['/bin/false'],exit_code=1);saved=(failed.receipt,failed.receipt_digest)
+        self.assertIn('alternative',f.view(self.run)['next_actions'][0])
+        data=self.revision();receipt=e.revise_check(self.actor,data)
+        self.assertEqual(receipt,e.revise_check(self.actor,data));self.assertEqual(receipt['check_revision'],2)
+        with self.assertRaisesRegex(c.Refused,'request-conflict'):e.revise_check(self.actor,{**data,'reason':'Autre justification incompatible avec la requête.'})
+        self.process();self.run.refresh_from_db();self.assertNotEqual(self.run.state,'CLOSED')
+        self.assertIn('evidence:unit:check-revised',f.view(self.run)['missing'])
+        self.operation();self.process();self.run.refresh_from_db();failed.refresh_from_db()
+        self.assertEqual(self.run.state,'CLOSED');self.assertEqual(saved,(failed.receipt,failed.receipt_digest))
+        self.assertEqual(self.run.operation_set.count(),2);self.assertEqual(self.run.event_set.filter(kind='finalization-check-revised').count(),1)
+        self.assertEqual(e.revise_check(self.actor,data),receipt)
+    def test_revision_protects_owner_stale_contract_freeze_leases_and_unknown(self):
+        self.configure();data=self.revision(['/bin/false'])
+        other=Actor.objects.create(pk='other-reviser',uid=os.getuid(),agent='fixture',token_hash='other');other.projects.add(self.project)
+        with self.assertRaises(c.Refused):e.revise_check(other,data)
+        with self.assertRaisesRegex(c.Refused,'stale'):e.revise_check(self.actor,{**data,'expected_policy_digest':'0'*64})
+        with self.assertRaisesRegex(c.Refused,'fields-invalid'):e.revise_check(self.actor,{**data,'criteria':['weakened']})
+        self.run.mandate['native_frozen_at']='fixture';self.run.save()
+        with self.assertRaisesRegex(c.Refused,'protected'):e.revise_check(self.actor,data)
+        self.run.mandate.pop('native_frozen_at');self.run.save()
+        from cab_platform.core.models import Lease,Resource
+        resource=Resource.objects.create(key='fixture-revision-resource');lease=Lease.objects.create(run=self.run,resource=resource,fencing=1)
+        with self.assertRaisesRegex(c.Refused,'effects-protected'):e.revise_check(self.actor,data)
+        lease.delete();self.operation(state='UNKNOWN')
+        with self.assertRaisesRegex(c.Refused,'effects-protected'):e.revise_check(self.actor,data)
+    def test_success_protected_and_old_success_cannot_resurrect_after_argv_roundtrip(self):
+        self.configure();self.operation()
+        with self.assertRaisesRegex(c.Refused,'already-passed'):e.revise_check(self.actor,self.revision(['/bin/false']))
+        (self.root/'source').write_text('changed');e.revise_check(self.actor,self.revision(['/bin/false']))
+        (self.root/'source').write_text('stable');e.revise_check(self.actor,self.revision(key='FIX-AGAIN'))
+        self.assertIn('evidence:unit:check-revised',f.view(self.run)['missing'])
+        self.assertEqual(self.run.operation_set.count(),1)
+    def test_piloted_coder_repairs_without_parent_but_final_review_remains_reserved(self):
+        parent=Actor.objects.create(pk='parent-reviser',uid=os.getuid(),role='orchestrator',agent='fixture',token_hash='parent');parent.projects.add(self.project)
+        self.run.mode='piloted';self.run.mandate['orchestrator_id']=parent.pk;self.run.save()
+        e.configure(parent,{**self.data,'policy':{'checks':[{'id':'unit','argv':['/bin/false'],'criteria':['historical']}]}})
+        self.operation(['/bin/false'],exit_code=1);e.revise_check(self.actor,self.revision());self.operation();self.process();self.run.refresh_from_db()
+        self.assertEqual(self.run.state,'REVIEW_PENDING')
+        with self.assertRaises(c.Refused):e.revise_check(self.actor,self.revision(['/bin/false'],key='LATE'))
+        c.review(parent,{**self.data,'submission_digest':self.run.review['submission']['digest'],'decision':'accept','reason':'Validation réservée réelle de fixture.'})
+        self.process();self.run.refresh_from_db();self.assertEqual(self.run.state,'CLOSED')
 
 if __name__=='__main__':unittest.main()

@@ -1,6 +1,11 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.2.4
+## CAB 3.2.5
+
+Le codeur corrige en autonomie un contrôle de finalisation récupérable, sans
+intervention SQL ni accord intermédiaire. Historique et reçus restent conservés ;
+CAB exige une preuve nouvelle et expose les actions manquantes. Les critères
+et la revue finale réservée restent protégés.
 
 Arrêt MCP borné par politique et pidfd, avec escalade SIGTERM/SIGKILL seulement
 à frontière sûre. Les versions connectées sont poussées en direct sur Agents
