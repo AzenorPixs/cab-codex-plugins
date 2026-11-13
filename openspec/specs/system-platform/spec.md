@@ -509,3 +509,13 @@ et les globaux sans rédaction LLM ; le prompt SGS autonome MUST être retiré.
 #### Scenario: Change ouvert sans codage
 - **WHEN** un change ouvert n’a encore accueilli aucune session de codage
 - **THEN** l’absence de STATISTICS.md est normale, aucun fichier individuel n’est créé et cet état ne constitue pas une lacune statistique
+
+### Requirement: Empreinte distincte du code et des statistiques
+L’empreinte de validation du code MUST exclure les STATISTICS.md générés du projet
+et de ses changes, protégés par leurs propres empreintes. Elle MUST conserver
+les chemins cadrés et représenter explicitement l’absence d’un fichier supprimé,
+sans le recréer ni accepter silencieusement une autre source.
+
+#### Scenario: Fichier cadré supprimé
+- **WHEN** un fichier cadré est supprimé dans le périmètre autorisé
+- **THEN** son absence modifie l’empreinte de façon stable, sans modifier le mandat et en conservant les refus de chemins ou liens non sûrs

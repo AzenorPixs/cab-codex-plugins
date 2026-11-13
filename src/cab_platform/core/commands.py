@@ -69,7 +69,9 @@ def revision(run):
     roots=run.mandate.get('paths',[]);require(roots,'mandate-paths-required',400)
     entries=[];total=0
     for name in sorted(roots):
-        p=safe_path(Path(run.project.root),name)
+        p=safe_path(Path(run.project.root),name,exists=False)
+        if not p.exists():
+            entries.append([name,'missing']);continue
         files=sorted(p.rglob('*')) if p.is_dir() else [p]
         for f in files:
             rel=str(f.relative_to(run.project.root))
