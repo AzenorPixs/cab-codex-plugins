@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 3.1.4 — 2026-11-13
+
+- Réévaluation et clôture normales automatiques sur revue, archive et preuves
+  valides ; périodes ouvertes, effets inconnus et baux restent bloquants.
+- Diagnostic services/imports : étape11 réconciliée sur snapshot terminal
+  authentifié, état et IMPORT_PROTECTED distincts sans levée de protection.
+- Icônes Réévaluer/clôturer et Archiver, confirmation historique explicite ;
+  page /projects/<ID>/archives et table dédiée conservant RUN/SID/preuves.
+
 ## 3.1.3 — 2026-11-13
 
 - Clôture historique explicite des RUN directs archivés : inspection des preuves,

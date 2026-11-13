@@ -164,6 +164,8 @@ class SessionProjection(models.Model):
     session_id=models.CharField(max_length=200)
     mode=models.CharField(max_length=12)
     state=models.CharField(max_length=32)
+    suspension=models.CharField(max_length=32,blank=True)
+    archived=models.BooleanField(default=False)
     change=models.CharField(max_length=200)
     generation=models.PositiveBigIntegerField()
     stage=models.PositiveSmallIntegerField(null=True)
@@ -309,6 +311,15 @@ class LegacySnapshot(models.Model):
     imported=models.DateTimeField(auto_now_add=True)
     class Meta:
         constraints=[models.UniqueConstraint(fields=['source','sha256'],name='cab_legacy_snapshot')]
+
+class SessionArchive(models.Model):
+    run=models.OneToOneField(Run,on_delete=models.PROTECT,related_name='session_archive')
+    request_id=models.CharField(max_length=200)
+    actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
+    evidence=models.JSONField()
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='session_archives'
 
 class Workshop(models.Model):
     run=models.OneToOneField(Run,on_delete=models.PROTECT)

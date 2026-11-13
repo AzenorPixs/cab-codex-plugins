@@ -8,14 +8,14 @@ Change : `regularize-historical-archived-runs` · état local : `archived`. Les 
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 382.120335 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 382.120335 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 2211164 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 12578 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 2009 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 2189696 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 2223742 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `regularize-historical-archived-runs` · état local : `archived`. Les 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:b162d2cc292015aa4a016350f5f61ce3d4c3f94d946b8ff59b6f255a7d6b0fb0
+Provenance : change-periods:723bb295fdb5d952b5dc937a59b4a761b0ff3884ecfb5f3f382aeec971af1ae5
 
 ## 2. Messages et outils
 
@@ -59,9 +59,9 @@ Provenance : change-periods:b162d2cc292015aa4a016350f5f61ce3d4c3f94d946b8ff59b6f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,18 +91,5 @@ Provenance : change-periods:b162d2cc292015aa4a016350f5f61ce3d4c3f94d946b8ff59b6f
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 2189696 | bounded |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 2211164 | bounded |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 12578 | bounded |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 2009 | bounded |
-| SCM-historical-closure-313 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 2223742 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "659aa71e11f47c71c6dd8da5cb1d0896acb6a4ec24b013161d0b60508ac424f9", "generated_at": "2026-11-13T14:44:31.676440+00:00", "revision": "659aa71e11f47c71c6dd8da5cb1d0896acb6a4ec24b013161d0b60508ac424f9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ba8e00bcfaf01574d9b172d28d3d9bd21da36476f5ac1ee57fc42750134b94c8", "generated_at": "2026-11-13T14:48:01.003222+00:00", "revision": "ba8e00bcfaf01574d9b172d28d3d9bd21da36476f5ac1ee57fc42750134b94c8", "scope": "change"} -->
