@@ -92,6 +92,28 @@ def event(run,kind,data):
 
 def no_pending(run):return not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists()
 
+def resolve_native(actor,project,session_id,data):
+    from cab_platform.native_sources import inspect,locate,NativeSourceError
+    require(actor.agent=='codex','native-source-agent-unsupported',400)
+    require(isinstance(data.get('source_file',''),str) and isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
+    try:
+        return inspect(actor.uid,session_id,project.root,data['source_file']) if data.get('source_file') else locate(actor.uid,session_id,project.root,data.get('codex_home',''))
+    except NativeSourceError as error:raise Refused(str(error),400) from None
+
+def locate_native(actor,data):
+    project=Project.objects.get(pk=data['project_id']);scope(actor,project)
+    source=resolve_native(actor,project,identifier(data['session_id']),{**data,'source_file':''})
+    return {'project_id':project.pk,'session_id':data['session_id'],**source}
+
+@transaction.atomic
+def bind_native(actor,data):
+    r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    source=resolve_native(actor,r.project,r.session_id,data)
+    previous=r.mandate.get('native_source');require(previous is None or previous==source,'native-source-replacement-refused')
+    if previous is None:
+        r.mandate['native_source']=source;r.save();event(r,'native-source-bound',{'agent':actor.agent})
+    return {'bound':True,'run_id':r.run_id,'session_id':r.session_id}
+
 def working(run):
     require(run.state=='WORKING' and not run.suspension,'run-not-working')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)

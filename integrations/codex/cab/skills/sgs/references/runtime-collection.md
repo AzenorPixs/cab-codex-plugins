@@ -1,9 +1,14 @@
-# Collecte native CAB 3.0.4
+# Collecte native CAB 3.0.5
 
 Le service cab.service collecte dans PostgreSQL ; aucun daemon de plugin ni
 moniteur direct séparé. Après cab_status et cab_contract, utiliser project_register
 puis run_begin avec la vraie identité native, son mode et son cadrage résolu.
-Pour Codex direct, appeler native_bind avec le fichier JSONL exact de la session ;
+Pour Codex direct, native_locate ou `cab native-source --project-id <ID> --session-id <SID>`
+résout en lecture seule le seul fichier de la session. native_bind peut omettre
+source_file (ou passer une chaîne vide avec un client déjà chargé) ; le chemin
+explicite reste compatible pour les stockages spécifiques. CODEX_HOME est
+transmis par les clients CLI/MCP, codex_home peut être fourni au contrat API.
+Le jour UUIDv7 et le SID exact bornent la recherche ; absence/ambiguïté sont refusées ;
 le service vérifie compte, projet, SID et inode. Aucun scan de conversations et
 aucun prompt ne sont exportés. La collecte quantitative est périodique, indépendante
 du LLM. Une même identité d’agent peut héberger plusieurs RUN sans mélanger les
@@ -20,3 +25,7 @@ TERMINÉ, receipt_id stable, report relatif et sha256 du STATISTICS.md durable.
 La branche BLOQUÉ exige le rapport et BLOCKERS.md ; elle n’est pas une acceptation
 pour intégration. Les effets incertains et baux détenus empêchent la clôture.
 Conserver le même reçu lors d’une reprise ; aucun effacement des pairs ni rejeu.
+
+Un JSONL peut servir plusieurs RUN/changes de la même session native. Les
+compteurs sont cumulatifs pour cette session, sans ventilation prouvée par
+RUN/change ; ne pas les additionner comme des mesures disjointes.

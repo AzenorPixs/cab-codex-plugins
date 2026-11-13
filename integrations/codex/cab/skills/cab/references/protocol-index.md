@@ -1,4 +1,4 @@
-# Références CAB 3.0.4
+# Références CAB 3.0.5
 
 - Cadrage et reprise : protocol-core.md et outils cab_contract/run_status.
 - Ateliers : atelier_execute/status ; piloté sous /tmp/cab/<projet>/.cab-tests.
@@ -9,4 +9,4 @@
 - Incidents : skill CCAB ; maintenance : skill CABU.
 
 Les anciens contrats 2.x du dépôt sont historiques et ne sont pas distribués
-comme moteur dans le paquet ou les plugins CAB 3.0.4.
+comme moteur dans le paquet ou les plugins CAB 3.0.5.

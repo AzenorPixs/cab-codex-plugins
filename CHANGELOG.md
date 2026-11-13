@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 3.0.5 — 2026-11-13
+
+- Résolution native publique limitée au SID Codex et à son jour, sans ouverture
+  des autres conversations, disponible en prévol sans RUN.
+- Rattachement automatique compatible avec la source explicite, répétable sans
+  nouvel effet ; CLI/MCP et procédure des clients déjà chargés documentés.
+- Préservation des identités, sessions et tests DIU ; diagnostics sûrs en cas
+  d’absence, ambiguïté, lien, propriétaire ou identité divergents.
+
 ## 3.0.4 — agents et identifiants de projets
 
 - Déplacer Agents vers /agents, après Administration dans le bandeau ; conserver

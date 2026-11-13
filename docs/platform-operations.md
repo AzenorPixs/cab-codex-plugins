@@ -221,3 +221,39 @@ remplacés par l’adresse lisible lorsqu’elle est connue.
 La page Agents réinterroge les états visibles toutes les deux secondes. Les
 versions installées sont mises en cache selon l’identité et les dates du fichier
 binaire ; ce rythme ne relance pas les programmes à chaque interrogation.
+
+### Résoudre une source Codex sans connaître son chemin —3.0.5
+
+Le prévol public ne crée aucun RUN :
+
+```sh
+cab native-source --project-id '<ID interne CAB du projet>' --session-id '<SID Codex>'
+```
+
+Le SID peut être omis si CODEX_THREAD_ID est fourni par le client. CODEX_HOME,
+si défini, indique le stockage du compte ; --codex-home permet sa transmission
+explicite. Le MCP native_locate propose le même prévol. Le résultat ne contient
+que le chemin et les métadonnées de liaison, jamais les messages.
+
+Le service utilise le jour UTC encodé dans le SID UUIDv7 et le suffixe exact du
+nom de fichier sous sessions/YYYY/MM/DD. Il examine au plus10000noms dans ce
+seul dossier, ouvre uniquement le candidat exact et vérifie propriétaire, type,
+liens, SID et cwd. Aucun autre contenu de conversation n’est parcouru. Une
+absence, ambiguïté ou divergence est refusée ; aucun fallback global n’existe.
+Un SID d’un autre format garde le parcours par source_file explicite.
+
+Après run_begin, native_bind peut omettre source_file. Les clients déjà chargés
+peuvent passer source_file vide ou utiliser, sans redémarrage :
+
+```sh
+printf '%s\n' '{"project_id":"<ID interne CAB>","run_id":"<RUN existant>"}' | cab call native.bind
+```
+
+Un stockage personnalisé peut fournir codex_home dans ce JSON. Répéter la même
+liaison ne crée pas de nouvel événement ; une source différente est refusée.
+La résolution ne crée pas de session et ne rejoue aucun test.
+
+Un JSONL correspond à une session native, qui peut participer à plusieurs RUN
+et changes. Les totaux collectés sont ceux de cette session : ils ne prouvent
+pas une ventilation par RUN/change et ne doivent pas être additionnés comme
+des populations disjointes. Cette correction ne change pas le collecteur.

@@ -234,22 +234,8 @@ def command(request,body:Command):
                 session(r)
             r.source_revision=commands.revision(r);r.state='WORKING';r.suspension='';r.save();commands.event(r,'legacy-run-adopted',{'session_id':r.session_id,'generation':r.generation})
             return run_data(r)
-    if name=='native.bind':
-        import os,stat
-        r=commands.run_scope(actor,data['run_id'],data['project_id'])
-        commands.require(actor.agent=='codex','native-source-agent-unsupported',400)
-        path=Path(data['source_file']);commands.require(path.is_absolute() and path.resolve()==path,'native-source-path-invalid',400)
-        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
-        with os.fdopen(fd,'r') as stream:
-            info=os.fstat(stream.fileno());commands.require(stat.S_ISREG(info.st_mode) and info.st_uid==actor.uid and info.st_nlink==1,'native-source-owner-invalid',403)
-            first=stream.readline(65536)
-        identity=json.loads(first)
-        commands.require(identity.get('type')=='session_meta' and identity.get('payload',{}).get('id')==r.session_id and identity['payload'].get('cwd')==r.project.root,'native-source-identity-divergent')
-        with transaction.atomic():
-            r=Run.objects.select_for_update().get(pk=r.pk);source={'source_file':str(path),'device':info.st_dev,'inode':info.st_ino,'uid':info.st_uid}
-            previous=r.mandate.get('native_source');commands.require(previous is None or previous==source,'native-source-replacement-refused')
-            r.mandate['native_source']=source;r.save();commands.event(r,'native-source-bound',{'agent':actor.agent})
-        return {'bound':True,'run_id':r.run_id,'session_id':r.session_id}
+    if name=='native.locate':return commands.locate_native(actor,data)
+    if name=='native.bind':return commands.bind_native(actor,data)
     if name=='operation.start':
         op,created=commands.start_operation(actor,data);return {**operation_data(op),'created':created}
     if name=='external.describe':

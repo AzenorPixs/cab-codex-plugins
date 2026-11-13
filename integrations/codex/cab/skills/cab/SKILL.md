@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.0.4
+# CAB 3.0.5
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
@@ -46,3 +46,7 @@ Déclarer la position du cycle par `run_progress` (ou `cab call run.progress`),
 étape1–11 et phase. Une position peut reculer et ne valide aucune étape ni gate.
 Les tâches du change sont observées depuis tasks.md et mémorisées en base ;
 leurs cases ne remplacent ni les tests ni la revue finale.
+
+Codex : prévol `cab native-source --project-id <ID> --session-id <SID>` ou
+native_locate, puis native_bind avec source_file omis/vide. Résolution ciblée
+au seul jour et SID ; chemin explicite compatible, aucune conversation exportée.
