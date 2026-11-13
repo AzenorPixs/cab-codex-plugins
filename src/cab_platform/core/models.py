@@ -340,6 +340,35 @@ class LegacySnapshot(models.Model):
     class Meta:
         constraints=[models.UniqueConstraint(fields=['source','sha256'],name='cab_legacy_snapshot')]
 
+class FinalizationPlan(models.Model):
+    run=models.OneToOneField(Run,on_delete=models.PROTECT,related_name='finalization_plan')
+    policy=models.JSONField(default=dict)
+    digest=models.CharField(max_length=64,blank=True)
+    phase=models.CharField(max_length=24,default='WAITING')
+    missing=models.JSONField(default=list)
+    receipt=models.JSONField(default=dict)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='run_finalization_plans'
+
+class EvidenceProducer(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
+    kinds=models.JSONField()
+    active=models.BooleanField(default=True)
+    class Meta:db_table='evidence_producers'
+
+class RunEvidence(models.Model):
+    run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='finalization_evidence')
+    source=models.CharField(max_length=220)
+    evidence_id=models.CharField(max_length=200)
+    payload=models.JSONField()
+    digest=models.CharField(max_length=64)
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='run_evidence'
+        constraints=[models.UniqueConstraint(fields=['run','source','evidence_id'],name='cab_run_evidence_identity')]
+
 class SessionArchive(models.Model):
     run=models.OneToOneField(Run,on_delete=models.PROTECT,related_name='session_archive')
     request_id=models.CharField(max_length=200)

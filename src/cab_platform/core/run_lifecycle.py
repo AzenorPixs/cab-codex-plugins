@@ -23,10 +23,10 @@ def archive_state(run):
     return str(path.relative_to(root)),observed
 
 
-def guard(run):
+def guard(run,*,allow_measurement=False):
     c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     c.require(c.no_pending(run) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
-    c.require(not MeasurementPeriod.objects.filter(run=run,ended__isnull=True).exists(),'closure-measurement-open')
+    c.require(allow_measurement or not MeasurementPeriod.objects.filter(run=run,ended__isnull=True).exists(),'closure-measurement-open')
     requested={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-requested')}
     decided={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-decided')}
     c.require(not requested-decided,'closure-exception-unresolved')
@@ -64,6 +64,12 @@ def terminal_proof(run):
 
 def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
+    from .models import FinalizationPlan
+    plan=FinalizationPlan.objects.filter(run=run).first()
+    if plan and run.state!='CLOSED':
+        from .run_finalization import view
+        status=view(run,plan)
+        return {**result,'action':'finalize' if status['phase']=='READY' else 'waiting','reasons':status['missing'],'finalization':status}
     try:
         guard(run)
         if SessionArchive.objects.filter(run=run).exists():result['action']='archived';return result
@@ -77,6 +83,8 @@ def evaluate(run):
         if run.state=='CLOSED':
             proof=terminal_proof(run)
             result.update(action='normalize' if run.stage!=11 else 'closed',terminal=proof)
+            if plan and plan.receipt and plan.policy['nature']!='development':
+                result['archive_allowed']=True;result['evaluation_digest']=c.digest(result);return result
             try:
                 archive,tasks=archive_state(run);result.update(archive_allowed=True,archive_path=archive,tasks_sha256=tasks['tasks_sha256'])
             except c.Refused as error:result['reasons'].append(error.code)
@@ -105,6 +113,9 @@ def scoped(actor,data,*,lock=False):
 def recheck(actor,data,*,automatic=False):
     run=Run.objects.get(project_id=data['project_id'],run_id=data['run_id']) if automatic else scoped(actor,data)
     evaluation=evaluate(run)
+    if evaluation['action'] in ('waiting','finalize'):
+        from .run_finalization import process
+        process(run.pk);run.refresh_from_db();return evaluate(run)
     if evaluation['action']=='close':
         from .run_closure import close_normal
         # La preuve de revue est l'autorité métier ; aucune identité de pair simulée.
@@ -144,6 +155,12 @@ def sweep():
     if not rows:_cursor=0;return
     try:
         for run in rows:
+            from .models import FinalizationPlan
+            if FinalizationPlan.objects.filter(run=run).exists() and run.state!='CLOSED':
+                from .run_finalization import process
+                try:process(run.pk)
+                except (c.Refused,OSError,ValueError):continue
+                run.refresh_from_db()
             evaluation=evaluate(run)
             if evaluation['action'] in ('close','normalize'):
                 try:recheck(None,{'project_id':run.project_id,'run_id':run.run_id},automatic=True)

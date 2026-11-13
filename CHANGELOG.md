@@ -17,6 +17,15 @@
 - Lecture littérale filtrée, secrets exclus et projection publique dédiée ;
   une absence ou erreur du fichier est signalée sans bloquer l’accueil.
 
+## 3.2.2 — 2026-11-13
+
+- Contrat immutable par RUN et registre de preuves authentifiées, sans couplage
+  à un outil de publication. Capture des checks CAB et mises à jour CABU corrélées.
+- Dossier assemblé par CAB, revue réservée préservée en piloté, périodes et
+  statistiques finalisées puis CLOSED11 sans soumission finale du LLM.
+- Attentes explicites, preuves périmées et effets inconnus protégés ; reprise
+  sans rejeu et sans migration implicite des anciens RUN.
+
 ## 3.1.4 — 2026-11-13
 
 - Réévaluation et clôture normales automatiques sur revue, archive et preuves
