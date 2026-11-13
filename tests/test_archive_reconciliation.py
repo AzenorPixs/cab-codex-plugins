@@ -49,6 +49,12 @@ class ArchiveTests(unittest.TestCase):
         self.archive_files()
         for value in ['openspec/changes/archive/2026-11-12-other','openspec/changes/archive/2026-99-99-'+self.change,'../outside']:
             with self.assertRaises(commands.Refused):commands.reconcile_archive(self.actor,{**self.payload,'archive_path':value})
+    def test_pending_finalization_can_reconcile_archive_without_rearming(self):
+        self.archive_files();self.run.state='FINALIZATION_PENDING';self.run.save()
+        result=commands.reconcile_archive(self.actor,self.payload);self.run.refresh_from_db()
+        self.assertEqual(result['state'],'RECONCILED');self.assertEqual(self.run.state,'FINALIZATION_PENDING')
+        self.assertEqual(self.run.session_id,'SID-EXACT');self.assertEqual(self.run.generation,1)
+        self.assertEqual(self.run.operation_set.count(),1)
     def test_stale_digest_and_other_actor_refused(self):
         self.archive_files()
         with self.assertRaises(commands.Refused):commands.reconcile_archive(self.actor,{**self.payload,'expected_framing_digest':'0'*64})

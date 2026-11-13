@@ -4,6 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 from . import commands as c,run_evidence as evidence
 from .models import EvidenceProducer,FinalizationPlan,Operation,Run
+from cab_platform.finalization_contract import next_actions
 
 def dossier(run,plan):
     from .run_lifecycle import archive_state,guard
@@ -30,11 +31,12 @@ def dossier(run,plan):
         if row is None:reason='missing'
         elif row.digest!=c.digest(row.payload):reason='integrity'
         elif row.payload.get('scope')!=evidence.identity(run):reason='scope'
+        elif source=='cab-operation' and row.payload.get('check_revision',1)!=plan.check_revisions.get(rule['id'],1):reason='check-revised'
         elif row.payload.get('result')!='passed':reason='not-passed'
         elif row.payload.get('source_revision') not in revisions:reason='source-stale'
         elif source=='cab-operation':
             op=Operation.objects.filter(pk=row.payload.get('operation_id'),run=run).first()
-            if not op or op.state!='COMPLETED' or op.receipt.get('exit_code')!=0 or op.receipt_digest!=row.payload.get('receipt_digest') or row.payload.get('source_after')!=op.source_revision:reason='receipt-stale'
+            if not op or op.request.get('argv')!=rule['argv'] or op.state!='COMPLETED' or op.receipt.get('exit_code')!=0 or op.receipt_digest!=row.payload.get('receipt_digest') or row.payload.get('source_after')!=op.source_revision:reason='receipt-stale'
         elif source.startswith('producer:'):
             producer=EvidenceProducer.objects.filter(pk=rule['producer'],project=run.project,active=True,actor__active=True,actor__role='collector').first()
             if not producer or rule['kind'] not in producer.kinds:reason='producer-inactive'
@@ -52,10 +54,11 @@ def dossier(run,plan):
 
 def view(run,plan=None):
     plan=plan or FinalizationPlan.objects.get(run=run)
-    if run.state=='CLOSED' and plan.receipt:return {'phase':'CLOSED','missing':[],'policy_digest':plan.digest,'receipt':plan.receipt}
+    if run.state=='CLOSED' and plan.receipt:return {'phase':'CLOSED','missing':[],'next_actions':[],'policy_digest':plan.digest,'receipt':plan.receipt}
     try:result=dossier(run,plan)
     except (c.Refused,OSError,ValueError) as error:result={'missing':[getattr(error,'code','finalization-source-unavailable')],'proofs':[],'boundary':False}
-    return {**result,'phase':'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
+    pending=list(run.operation_set.exclude(state__in=c.TERMINAL).values('request_id','state'))
+    return {**result,'next_actions':next_actions(result['missing'],plan.policy),'pending_operations':pending,'check_revisions':plan.check_revisions,'phase':'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
 
 def prepare_review(run,plan,result):
     tests=[]

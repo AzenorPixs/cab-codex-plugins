@@ -1,5 +1,28 @@
 # Administration CAB 3
 
+## Convergence autonome de la finalisation
+
+GET /api/v1/finalization et finalization_status exposent missing, next_actions
+et pending_operations. Les actions nomment contrôle, producteur, requête ou
+décision manquants ; elles ne lancent rien et ne rejouent aucun travail.
+Un CABU incomplet renvoie vers le même reçu system.update.status.
+
+Le codeur propriétaire direct ou piloté utilise finalization_revise_check ou
+cab call finalization.revise_check avec project_id, run_id, request_id stable,
+expected_policy_digest, check_id, argv et reason (10–4000 caractères).
+La correction d'attente, donnée ou périmètre du contrôle doit être démontrée ;
+les critères ne sont jamais affaiblis pour obtenir un résultat vert. Seul argv
+est révisable. Chaque version et reçu reste conservé. Une exécution du contrôle
+corrigé porte un nouveau request_id ; une réponse perdue se relit sur son
+identifiant initial. Un succès passé ne prouve jamais une nouvelle version.
+
+La commande refuse effets non terminaux/indécis, baux, maintenance, gel, import,
+revue/clôture et contrôle actuellement réussi. La revue finale pilotée reste
+celle du parent. finalization-revision-stale impose de relire le contrat ; un
+doublon identique restitue son reçu. Les anciens RUN ne sont pas migrés
+implicitement. La migration0016 considère les preuves antérieures en révision1
+sans réécrire leurs reçus. CAB clôture automatiquement après preuves requises.
+
 Le service système unique `cab.service` utilise les droits root et démarre avec
 la machine. PostgreSQL reste indépendant. L’installation neuve expose uniquement
 le parcours Web d’initialisation sur le port 8790 ; le démarrage du service ne
