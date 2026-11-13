@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.1
+# CABU 3.2.2
 
 Sur demande explicite ou dans la livraison CICD CAB autorisée, appeler l’outil
 MCP `cab_update` avec un request_id stable et la version cible demandée, ou

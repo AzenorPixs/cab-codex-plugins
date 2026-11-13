@@ -59,7 +59,7 @@ class Watcher:
                     if is_root and (name=='project.env' or mask&(0x400|0x800)):self.env_dirty[project_id]=now
                     if mask&(0x100|0x200|0x400|0x800):self.next_inventory=0
         if now>=self.next_active:
-            for project_id in Run.objects.filter(state__in=['WORKING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('project_id',flat=True).distinct():
+            for project_id in Run.objects.filter(state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('project_id',flat=True).distinct():
                 if project_id in self.projects:self.dirty.setdefault(project_id,now-1)
             self.next_active=now+5
         if now>=self.env_catchup:

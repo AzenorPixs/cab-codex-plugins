@@ -3,7 +3,7 @@ name: sgs
 description: Produire ou consulter les rapports SGS des changes sans reconstruire implicitement le global.
 ---
 
-# SGS CAB3.2.1
+# SGS CAB3.2.2
 
 Les statistiques sont gérées par cab.service. Consulter statistics_change pour
 la projection du STATISTICS.md local (source unique), statistics_project pour

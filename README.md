@@ -1,6 +1,12 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.2.1
+## CAB 3.2.2
+
+Les nouveaux RUN déclarent un contrat de finalisation. CAB capture les reçus,
+assemble le dossier, ferme les périodes/statistiques et clôture sur preuves sans
+commande finale du codeur. Les décisions réservées restent explicites et les
+preuves manquantes sont visibles. Contrat indépendant de l'outil de publication :
+[parcours et API](docs/run-finalization.md).
 
 CAB réévalue et clôture automatiquement les RUN normalement acceptés et archivés
 sur preuves, sans rejeu. L'interface propose Réévaluer/clôturer, les diagnostics

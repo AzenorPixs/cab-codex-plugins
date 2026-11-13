@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — preuves et finalisation autonome, 13 novembre 2026
+
+`finalize-runs-from-trusted-evidence`, code non attribué : contrat, producteurs
+autorisés, capture et automate indépendant des outils de publication. Source :
+archive `2026-11-13-finalize-runs-from-trusted-evidence` ; 6 tests purs, 9 PostgreSQL, 16 historiques et 7 statistiques réussis, parcours réel et Chromium/Firefox. Livraison3.2.2 et activation à constater séparément.
+Anciens RUN/imports non migrés, protections conservées. Attribution par ACL
+ultérieur, aucune dépendance métier DIU.
+
 ## SCM — clôture autonome et archives, 13 novembre 2026
 
 `automate-proven-run-closure`, code non attribué : worker et commande communs,
