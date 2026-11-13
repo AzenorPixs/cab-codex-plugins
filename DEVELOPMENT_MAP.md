@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — clôture autonome et archives, 13 novembre 2026
+
+`automate-proven-run-closure`, code non attribué : worker et commande communs,
+protection des imports/services, icônes et page Archives. Source : change
+OpenSpec archivé `2026-11-13-automate-proven-run-closure` ; 16 tests métier et 7 régressions, worker réel et Chromium/Firefox qualifiés. Livraison3.1.4 et activation à constater séparément.
+Migration additive de projection et table session_archives, aucune suppression
+de RUN ni levée d'IMPORT_PROTECTED. Attribution ultérieure par ACL.
+
 ## SCM — clôture historique, 13 novembre 2026
 
 `regularize-historical-archived-runs`, code non attribué : mécanisme explicite

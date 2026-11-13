@@ -1,6 +1,10 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.1.3
+## CAB 3.1.4
+
+CAB réévalue et clôture automatiquement les RUN normalement acceptés et archivés
+sur preuves, sans rejeu. L'interface propose Réévaluer/clôturer, les diagnostics
+de protection et Archives pour conserver les sessions CLOSED validées.
 
 Les RUN directs historiques archivés disposent d'une régularisation explicite
 sur preuves, sans réexécution ni reçus de tests reconstruits. Procédure et
