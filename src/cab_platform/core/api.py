@@ -152,6 +152,15 @@ def projects_settings(request):
     from cab_platform.projects import settings_view
     return settings_view()
 
+@api.post('/projects/{project_id}/refresh')
+def refresh_project(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_metadata import synchronize
+    return {'public_metadata':synchronize(project.pk)}
+
 @api.post('/projects')
 def new_project(request,body:NewProject):
     actor=principal(request,admin=True)

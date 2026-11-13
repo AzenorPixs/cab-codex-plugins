@@ -17,13 +17,20 @@ def frontend(request,path=''):
     if index.is_file() and '.' not in Path(path).name:return FileResponse(index.open('rb'),content_type='text/html')
     return HttpResponse('Interface CAB non construite',status=503,content_type='text/plain')
 
-def sync_sessions(request):
+def sync_sessions(request):return sync_projection(request,'cab_core_sessionprojection')
+
+def sync_project(request):return sync_projection(request,'project_metadata_projection')
+
+def sync_projection(request,table):
     try:
         actor=principal(request);project=Project.objects.get(pk=request.GET.get('project_id',''))
         if actor.role!='admin':scope(actor,project)
     except (Refused,Project.DoesNotExist):return JsonResponse({'error':'project-not-authorized'},status=403)
     cfg=config();params={k:request.GET[k] for k in ('offset','handle','live','cursor') if k in request.GET}
-    params.update(table='cab_core_sessionprojection',where="project_id = '"+project.pk+"'",secret=cfg['electric_secret'])
+    # L'identifiant est encodé comme littéral SQL même pour un catalogue importé.
+    identity=project.pk.replace("'","''")
+    params.update(table=table,where=("id" if table=='project_metadata_projection' else 'project_id')+" = '"+identity+"'",secret=cfg['electric_secret'])
+    if table=='project_metadata_projection':params['columns']='id,public_metadata'
     import httpx
     try:response=httpx.get('http://127.0.0.1:'+str(cfg.get('electric_port',8791))+'/v1/shape',params=params,timeout=65)
     except httpx.HTTPError:return JsonResponse({'error':'sync-unavailable'},status=503)

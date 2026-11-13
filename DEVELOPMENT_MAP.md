@@ -1544,3 +1544,11 @@ Delta SCM CAB3.0.0 : [migrate-cab-to-system-platform](openspec/changes/archive/2
 [attribute-statistics-to-change-intervals](openspec/changes/archive/2026-11-13-attribute-statistics-to-change-intervals/), code non attribué : SCM3.0.6 livrée/active ; correctif de qualification3.0.7 en cours : index du journal repris et gardes de fraîcheur, même change.
 
 [delegate-statistics-to-cab-service](openspec/changes/archive/2026-11-13-delegate-statistics-to-cab-service/), code non attribué : SCM CAB3.1.0 en cours, fichiers locaux maîtres et projection/génération de service.
+
+## Accueil projet — SCM du 13 novembre 2026
+
+[add-project-home-and-env-sync](openspec/changes/archive/2026-11-13-add-project-home-and-env-sync/), code non attribué : ARCHIVÉ.
+Instantané public project.env dans projects, accueil et sessions séparés,
+projection Electric dédiée ; 26 tests Python, bootstrap neuf et parcours
+Chromium/Firefox validés le 13 novembre 2026. Livraison et activation distinctes.
+Aucune dépendance à un autre change actif ; socle system-platform existant.

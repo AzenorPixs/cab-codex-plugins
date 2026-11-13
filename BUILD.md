@@ -1,6 +1,6 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.1.4 — Debian et clients légers
+## Livraison CAB 3.2.0 — Debian et clients légers
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -25,10 +25,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.1.4` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.0` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.1.4.
+prépaquet ne constitue pas la release 3.2.0.
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
 plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
@@ -1514,3 +1514,11 @@ actualisés sans invoquer cab update. L’empreinte des contenus et les marqueur
 par compte évitent les doublons, y compris depuis un ancien wrapper CABU en mémoire.
 Qualifier l’installation APT directe, les clients non root et la préservation des
 sessions avant activation ; sauvegarder la base avant les migrations de suivi.
+
+La migration0011 ajoute l’instantané projet et sa table publique de projection.
+L’installateur ajoute cette table à la publication Electric sous administration
+PostgreSQL locale, après migration ; le rôle applicatif ne reçoit aucun droit
+administratif supplémentaire. Un retour à0010 exige d’abord le retrait de
+project_metadata_projection de la publication, puis la migration inverse ;
+seul l’instantané régénérable est perdu. Qualifier mise à niveau, installation
+neuve et droits de lecture séparément avant activation.

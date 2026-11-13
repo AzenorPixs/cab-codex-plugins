@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.1.4
+## Architecture CAB 3.2.0
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -25,7 +25,8 @@ Les exécutions sont préparées et lancées sous l’UID du codeur, avec isolat
 et autorisations du mandat ; aucun droit root n’est donné au client MCP.
 Identités de pair Unix et jeton local authentifient les clients. Web : session
 administrateur, CSRF et code local pour l’amorçage. Django porte les transactions
-et règles ; Electric expose seulement une projection de sessions autorisée.
+et règles ; Electric expose seulement les projections autorisées de sessions et de
+métadonnées publiques des projets.
 
 Les opérations passent par WAITING/INTENT/RUNNING et reçu durable corrélé.
 Une réponse perdue demeure UNKNOWN avec ses baux ; aucun rejeu automatique.
@@ -2295,3 +2296,16 @@ constituent pas des validations. Voir docs/platform-operations.md pour les contr
 La page /agents distingue les trois programmes et leurs transports MCP. Les
 projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
+
+## Métadonnées publiques des projets
+
+`projects.public_metadata` mémorise les valeurs littérales validées de
+`project.env` et leur révision monotone. `project_metadata_projection` est
+actualisée dans la même transaction : Electric exige REPLICA IDENTITY FULL,
+cette table ne contient donc que id et public_metadata. Le compte Electric
+ne dispose d’aucun SELECT sur la configuration privée de projects. La shape
+et la relecture exigent l’accès au projet. La liste des variables est dans
+la spécification system-platform ; une valeur absente ou non vérifiable est
+retirée du nouvel instantané. L’inotify existant surveille la racine, avec
+rattrapage toutes les 60 secondes ; la sélection déclenche une relecture
+indépendante de l’affichage initial depuis la base.

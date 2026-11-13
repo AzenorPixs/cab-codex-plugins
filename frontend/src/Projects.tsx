@@ -3,10 +3,11 @@ import {Link,useNavigate} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
-export type Project={id:string;identifier:string|null;name:string;root:string;owner_uid:number;owner_gid:number|null;creation_state:string}
+export type PublicMetadata={state:string;values:Record<string,string>;revision:number}
+export type Project={id:string;identifier:string|null;name:string;root:string;owner_uid:number;owner_gid:number|null;creation_state:string;public_metadata?:PublicMetadata}
 type Settings={projects_root:string;projects_user:string;projects_group:string;configured:boolean;error:string|null}
 export function ProjectSidebar({projects,selected}:{projects:Project[];selected?:string}){
-  return <aside className="project-sidebar"><div className="project-sidebar-heading"><h2>Projets</h2><Link to="/projects/new" className="add-project" aria-label="Créer un projet" title="Créer un projet">+</Link></div><nav aria-label="Liste des projets">{projects.map(project=><Link key={project.id} to="/projects/$projectId" params={{projectId:project.identifier||project.id}} className={selected===project.id?'project-link selected':'project-link'} title={project.root}><span>{project.name||project.root.split('/').pop()}</span>{project.creation_state!=='READY'&&<small>Création à vérifier</small>}</Link>)}{!projects.length&&<p>Aucun projet.</p>}</nav></aside>
+  return <aside className="project-sidebar"><div className="project-sidebar-heading"><h2>Projets</h2><Link to="/projects/new" className="add-project" aria-label="Créer un projet" title="Créer un projet">+</Link></div><nav aria-label="Liste des projets">{projects.map(project=><Link key={project.id} to="/projects/$projectId" params={{projectId:project.identifier||project.id}} className={selected===project.id?'project-link selected':'project-link'} title={project.root}><span>{project.public_metadata?.values?.PROJECT_NAME||project.name||project.root.split('/').pop()}</span>{project.creation_state!=='READY'&&<small>Création à vérifier</small>}</Link>)}{!projects.length&&<p>Aucun projet.</p>}</nav></aside>
 }
 export function CreateProjectForm(){
   const client=useQueryClient();const navigate=useNavigate();const request=useRef(crypto.randomUUID());const [name,setName]=useState('');const [folder,setFolder]=useState('');const [edited,setEdited]=useState(false)
