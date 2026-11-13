@@ -632,3 +632,5 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 [finalize-debian-installation-cabu](changes/archive/2026-11-12-finalize-debian-installation-cabu/), code non attribué : ARCHIVÉ ; finalisation, extensions, écrans et migration qualifiés en fixture ; rapport individuel vérifié ; livraison et activation 3.0.3 à vérifier.
 
 [correct-agent-routing-and-connections](changes/archive/2026-11-13-correct-agent-routing-and-connections/), code non attribué : SCM3.0.4 qualifié et archivé ; corrections Agents, transports et identifiants ; livraison DIU/activation à vérifier séparément.
+
+[resolve-native-session-source](changes/archive/2026-11-13-resolve-native-session-source/), code non attribué : SCM3.0.5 qualifié et archivé ; découverte native publique ciblée ; livraison/activation à vérifier, aucun test DIU.

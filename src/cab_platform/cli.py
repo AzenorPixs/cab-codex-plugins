@@ -21,6 +21,7 @@ def main(argv=None):
     update_parser=sub.add_parser('update');update_parser.add_argument('--package')
     enroll=sub.add_parser('enroll');enroll.add_argument('--user',required=True);enroll.add_argument('--agent',required=True);enroll.add_argument('--role',choices=['coder','orchestrator','collector'],default='coder')
     call=sub.add_parser('call');call.add_argument('name');call.add_argument('--admin',action='store_true')
+    native=sub.add_parser('native-source');native.add_argument('--project-id',required=True);native.add_argument('--session-id',default=os.environ.get('CODEX_THREAD_ID',''));native.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',''))
     integrate=sub.add_parser('integrate');integrate.add_argument('agent',choices=['codex','opencode']);integrate.add_argument('--user',required=True);integrate.add_argument('--workspace')
     maintenance=sub.add_parser('maintenance');maintenance.add_argument('step',choices=['prepare','resume','cancel','verify']);maintenance.add_argument('--transaction',required=True)
     imp=sub.add_parser('import-legacy');imp.add_argument('manifest')
@@ -53,6 +54,7 @@ def main(argv=None):
             target=write_profile(user,args.agent,{'actor_id':result['actor_id'],'token':result['token']})
             result={'actor_id':result['actor_id'],'profile':str(target),'token_exposed':False}
         elif args.action=='call':result=Client(admin=args.admin).command(args.name,json.load(sys.stdin))
+        elif args.action=='native-source':result=Client().command('native.locate',{'project_id':args.project_id,'session_id':args.session_id,'codex_home':args.codex_home})
         elif args.action=='integrate':
             from .integration import integrate
             result=integrate(args.agent,args.user,args.workspace)

@@ -25,7 +25,7 @@ def main():
     if not (public/'bin/entrypoint').is_file():raise RuntimeError('pinned-electric-image-extraction-required')
     vendor=OUT/'python-vendor'
     if not (vendor/'django/__init__.py').is_file():raise RuntimeError('locked-python-vendor-required')
-    manifest={'version':'3.0.4','platform':'Debian 13 amd64, Python 3.13','electric_image':'electricsql/electric@sha256:efb6fa43859d67cb8c73439e0c8bc0f7a3daa467500fb06f2a924bcb2070c139','python_lock_sha256':hashlib.sha256((ROOT/'packaging/python-lock.txt').read_bytes()).hexdigest(),'archives':{'python-vendor':archive(vendor,OUT/'python-vendor.tar.xz'),'electric':archive(public,OUT/'electric.tar.xz')}}
+    manifest={'version':'3.0.5','platform':'Debian 13 amd64, Python 3.13','electric_image':'electricsql/electric@sha256:efb6fa43859d67cb8c73439e0c8bc0f7a3daa467500fb06f2a924bcb2070c139','python_lock_sha256':hashlib.sha256((ROOT/'packaging/python-lock.txt').read_bytes()).hexdigest(),'archives':{'python-vendor':archive(vendor,OUT/'python-vendor.tar.xz'),'electric':archive(public,OUT/'electric.tar.xz')}}
     (OUT/'runtime-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     for name,source in [('plugins',ROOT/'integrations/codex'),('commands',ROOT/'integrations/commands'),('docs',ROOT/'docs')]:
         destination=OUT/name
@@ -35,6 +35,6 @@ def main():
     catalog=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
     for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab'}[plugin['name']]
     (OUT/'marketplace.json').write_text(json.dumps(catalog,indent=2)+'\n')
-    print(json.dumps({'prepared':True,'version':'3.0.4','archives':{k:v['sha256'] for k,v in manifest['archives'].items()}}))
+    print(json.dumps({'prepared':True,'version':'3.0.5','archives':{k:v['sha256'] for k,v in manifest['archives'].items()}}))
 
 if __name__=='__main__':main()
