@@ -138,7 +138,19 @@ def incident_report(project_id:str,incident_id:str,category:str,summary:str,evid
     return client().command('incident.report',locals())
 @server.tool()
 def statistics(project_id:str,run_id:str,after:int=0)->dict:
-    """Mesures natives et couverture réelle ; indisponible ne vaut pas zéro."""
+    """Mesures bornées du RUN ; totaux historiques de session exclus, manques explicites."""
     return client().get('metrics',project_id=project_id,run_id=run_id,after=after)
+@server.tool()
+def statistics_begin(project_id:str,run_id:str,request_id:str,from_coding_start:bool=False)->dict:
+    """Ouvre la mesure du change et ferme le contexte précédent du même SID, en autonomie."""
+    return client().command('statistics.begin',locals())
+@server.tool()
+def statistics_end(project_id:str,run_id:str,request_id:str)->dict:
+    """Ferme la période du seul RUN ; même request_id, même reçu sans rejeu."""
+    return client().command('statistics.end',locals())
+@server.tool()
+def statistics_change(project_id:str,change:str,after:int=0)->dict:
+    """Agrège les périodes du change sur ses RUN/SID et fournit les preuves SGS."""
+    return client().command('statistics.change',locals())
 
 def run():server.run(transport='stdio')

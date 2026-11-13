@@ -1,6 +1,12 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.5
+## Plateforme CAB 3.0.6
+
+Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
+contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions
+sans totaux partagés. Couverture incomplète : N/A, pas de rétroactivité. Parcours
+et limites dans docs/platform-operations.md et docs/sgs-schema.md.
+
 
 CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.

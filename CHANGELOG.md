@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 3.0.6 — 2026-11-13
+
+- Périodes statistiques persistées par change/RUN/SID ; un contexte actif par
+  SID, bascule autonome, pause/reprise et reçus idempotents.
+- Agrégation multi-RUN et multi-sessions par écarts natifs bornés ; durée active
+  sans doubler les temps simultanés, absence/reset/source remplacée explicites.
+- Export SGS du change avec couverture et empreintes ; les anciens totaux de
+  session ne sont plus exposés comme métriques propres au RUN ou au change.
+
 ## 3.0.5 — 2026-11-13
 
 - Résolution native publique limitée au SID Codex et à son jour, sans ouverture
