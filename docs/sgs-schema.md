@@ -1,239 +1,116 @@
-# Schéma SGS CAB — cab-sgs-1
+# Statistiques CAB — contrat3.1.0
 
-Python 3.11 ou supérieur, bibliothèque standard uniquement. Commandes et modes
-en MAJUSCULES. Le moteur est une brique documentaire de CAB, indépendante du
-broker et du pilotage. VERSION est sans effet ; INSPECT et QUERY ne créent aucun fichier.
+## Autorité
+Les STATISTICS.md locaux de chaque change sont les seuls maîtres. Les tables PG
+sont des projections révisables et historisées. Les sources actives, archivées,
+reprises et amendées restent liées à un seul projet logique ; plusieurs chemins
+historiques d’un même change sont conservés sans fabriquer de RUN ou de session.
+Le texte complet est conservé, même si un ancien format est partiellement compris.
+La divergence d’un tableau visible avec un ancien registre embarqué est signalée,
+jamais résolue par une valeur cachée choisie arbitrairement.
 
-## Contribution
+## Cycle et synchronisation
+Le codeur déclare ses périodes en autonomie. La collecte native et les reçus sont
+les preuves de génération, pas une autre source statistique officielle du change.
+CAB génère la source locale puis la projette en base. Les modifications locales
+OpenSpec et statistiques sont surveillées par inotify ; les sources inactives sont
+réexaminées dans un délai aléatoire de12à24heures, planifié durablement en PG.
+Un change ouvert sans session de codage reste not-started : aucun rapport requis.
+Les autres absences, fichiers illisibles et mesures manquantes restent explicites.
 
-Le moteur expose `blank()` pour construire une contribution complète sans
-réinventer ses clés. Chaque mesure contient exactement :
+Après archive, le service produit ou amende le rapport et le global. run.close
+attend cette production et enregistre l’empreinte du rapport sans demander son
+contenu, son calcul ou sa rédaction au LLM. Les blocs manuels restent maîtres ;
+une modification d’une zone CAB est conservée et n’est pas écrasée silencieusement.
+Les versions par empreinte, tableaux, coûts, rôles, modèles et couvertures sont
+accessibles dans les projections statistiques du change.
 
-```json
-{"state":"known","value":"12","reason":null,"evidence":[{"line":42,"note":"Total final explicitement documenté"}]}
-```
+## Global
+Le STATISTICS.md racine concatène les rapports locaux disponibles, avec chemins
+sources et statut de chaque change. Il inclut changes ouverts et archivés ;
+l’inventaire distingue les changes non commencés des rapports réellement manquants.
+Le global est créé automatiquement après inventaire complet, sans registre JSON
+STATISTICS_CONTRIBUTIONS.json ni contrat de prompt externe. La concaténation
+n’additionne pas des compteurs partagés ou des versions historiques d’un change.
 
-`value` est une chaîne décimale exacte, jamais un flottant ; les comptages sont
-entiers. `unavailable` et `contradictory` utilisent `value:null`, un motif et les
-preuves disponibles. Zéro connu est différent de null. L’unité de chaque clé
-est définie dans METRICS : secondes pour les durées, tokens et comptages.
+## Protection
+Toute publication est une opération CAB sous réservation PG durable. La connexion
+ou le client disparu ne libère pas une écriture inconnue. Les PID/starttimes,
+empreintes attendues et reçus permettent une reprise vérifiée sans réémission
+aveugle. Le fichier local est publié atomiquement sous UID légitime, avec contrôle
+de la source attendue. Aucun .STATISTICS.lock nouveau n’est créé.
 
-Les clés de contribution sont `metrics`, `agents`, `bounds`, `performance`,
-`costs`, `breakdowns`, `web_calls`, `sessions`, `proof_ids`.
+## Interfaces
+cab statistics sync --project-root /chemin demande le rattrapage.
+cab statistics generate --project-root /chemin --change identifiant demande au
+service de produire la source. status/change/project consultent les projections.
+Les anciens appels cab sgs passent aussi par CAB ; leurs preuves LLM ne servent
+pas de données mesurées et leurs anciens contrats externes ne sont plus résolus.
+MCP : statistics_sync, statistics_change, statistics_project. Les appels de périodes
+statistics_begin/end restent communs aux sessions directes et pilotées.
 
-- `agents` : objets `{role,agent,model,reasoning}` ; rôle `coder` ou
-  `orchestrator`, agent libre déclaré (chaîne non vide de160caractères maximum, sans caractère
-  de contrôle ni séparateur de tableau), ou null si inconnu. Aucun produit
-  n’est requis ; `codex` et `opencode` restent des identités compatibles.
-- `bounds` : `{start,end}`, secondes UTC en chaînes ou null ; seules les
-  bornes globales complètes du change sont retenues.
-- `performance` : objets `{model,reasoning,ttmt,throughput}` pour les seuls
-  codeurs OpenCode ; mesures moyennes par change, chaînes ou null.
-- `costs` : dictionnaire par devise ISO, valeurs au format mesure.
-- `breakdowns` : catégories (`tools`, `message_roles`, `command_families`, `test_categories`,
-  `openspec_results`) de couples `{numerator,denominator}`, en chaînes, pour
-  des populations compatibles. Le moteur produit aussi les index `ratios`.
-- `web_calls` : objets `{type,tool,target,result}` pour les seuls appels
-  attestés ; ni URL simplement citée ni transport privé.
-- `sessions` et `proof_ids` : identifiants de provenance, sans contenu brut.
+## Champs structurés
+Les tableaux, headings, agents, performances, coûts, ventilations, identités de
+provenance et texte intégral complètent la table normalisée des métriques suivantes.
+Une mesure absente/contradictoire ne devient jamais zéro. Les cache/raisonnement
+ne sont pas additionnés au total natif qui les contient déjà. Les durées actives
+restent des unions de périodes, pas une somme de temps simultanés.
 
-Le registre `schema_version:1`, `engine_format:"cab-sgs-1"` contient le contrat
-SGS exact, génération, empreinte du rapport, `complete`, `changes`,
-`aggregate_state` et `code_state`. Chaque change est indexé par son chemin
-relatif d’archive et contient `report_path`, `report_sha256`, `contribution` et
-`review` éventuelle. Les index agrégés conservent sommes/effectifs, identités et
-multiplicités ; ils ne demandent aucune relecture des autres archives en DELTA.
+| Clé | Mesure | Unité |
+| --- | --- | --- |
+| duration | Durée globale | s |
+| net_duration | Durée hors pauses et attentes | s |
+| tokens_input | Tokens d’entrée | tokens |
+| tokens_output | Tokens de sortie | tokens |
+| tokens_reasoning | Tokens de raisonnement | tokens |
+| tokens_cache_read | Tokens de cache lus | tokens |
+| tokens_cache_write | Tokens de cache écrits | tokens |
+| tokens_total | Total natif des tokens | tokens |
+| compactions | Compactions achevées | count |
+| messages | Messages des codeurs | count |
+| messages_user | Messages utilisateur | count |
+| messages_assistant | Messages assistant | count |
+| tools | Appels d’outils des codeurs | count |
+| tools_completed | Appels terminés | count |
+| tools_error | Erreurs techniques | count |
+| tools_running | Appels en cours | count |
+| permissions | Demandes d’autorisation distinctes | count |
+| permissions_approved | Demandes approuvées | count |
+| permissions_rejected | Demandes refusées | count |
+| permissions_expired | Demandes expirées | count |
+| permissions_cancelled | Demandes annulées | count |
+| writes | Écritures effectivement exécutées | count |
+| files_touched | Fichiers distincts touchés par change | count |
+| commands | Commandes exécutées | count |
+| commands_success | Commandes réussies | count |
+| commands_failure | Commandes en échec | count |
+| web | Appels aux outils web | count |
+| web_success | Appels web réussis | count |
+| web_search | Recherches web | count |
+| web_open | Consultations web | count |
+| tests | Tests exécutés dans le bilan final | count |
+| tests_success | Tests finaux réussis | count |
+| tests_failure | Tests finaux échoués | count |
+| syntax_files | Fichiers ayant passé un contrôle syntaxique | count |
+| openspec_standard_success | Validations OpenSpec standard réussies | count |
+| openspec_standard_failure | Validations OpenSpec standard échouées | count |
+| openspec_strict_success | Validations OpenSpec strictes réussies | count |
+| openspec_strict_failure | Validations OpenSpec strictes échouées | count |
+| tasks | Tâches OpenSpec prouvées et terminées | count |
+| domain_write | Écritures de fichiers | count |
+| domain_command | Commandes | count |
+| domain_web | Web | count |
+| domain_other | Autres outils | count |
+| domain_total | Total | count |
 
-## Revue d’une extraction narrative
-
-`.STATISTICS.review.json` est un objet indexé par chemin d’archive. Chaque
-entrée fournit `report_sha256` et les seuls champs corrigés de contribution.
-Les mesures remplacées utilisent le format complet ci-dessus. Les lignes
-doivent exister dans ce rapport. Le moteur conserve la revue dans le registre.
-Une revue périmée est refusée, sans réutilisation arbitraire des anciennes valeurs.
-Le motif documente la résolution ou l’indisponibilité ; il ne remplace pas
-l’examen. La revue est un fichier technique temporaire autorisé par SGS.
-
-## Preuves de session pour CHANGE
-
-Les preuves JSON sur stdin (--evidence -) contiennent les champs obligatoires `schema_version:1`,
-`session_id`, `scope` et `contribution` complète. `scope` vaut `cumulative`
-(instantané de l’ensemble du change) ou `increment` (session disjointe).
-Un cumul remplace les compteurs antérieurs dans le calcul, sans effacer leur
-historique. Les tests, tâches et contrôles syntaxiques décrivent l’état final
-du dernier relevé, sans addition des campagnes répétées. Des incréments dont
-une mesure manque ne deviennent pas un total exhaustif connu.
-
-Un champ optionnel `details` conserve les preuves propres au rapport individuel
-qui ne sont pas des mesures du global : dictionnaire par section `"1"` à `"6"`,
-chaque valeur étant une liste de `{label,value,proof}` textuels sur une ligne.
-Il permet notamment les décisions, chemins de fichiers, commandes, résultats
-et limites de collecte. Les quotas éventuellement autorisés par une session
-pilotée restent dans ces détails individuels ; ils ne sont jamais extraits
-dans SGS. Aucune donnée sensible ou sortie brute n’est admise.
-
-Un nouveau rapport canonique conserve les six sections de niveau2 et un commentaire
-`CAB_SGS_SESSIONS_V1` avec les sessions structurées. Un ancien rapport est
-préservé, ses mesures initiales deviennent un relevé historique ; les nouveaux
-faits sont ajoutés dans chacune de ses sections. Le moteur ne modifie ni tâches,
-ni BLOCKERS.md, ni autres artefacts. L’état `blocked` requiert BLOCKERS.md et un
-change ouvert ; `archived` requiert le dossier d’archive existant.
-
-## Import optionnel d’un résumé public CAB
-
-L’enveloppe JSON contient `schema_version:1`, `project_root` absolu canonique,
-`summary` (réponse publique CAB `schemaVersion:2`) et `bindings`. Chaque binding
-contient exactement :
-
-```json
-{"archive_path":"openspec/changes/archive/2026-11-05-example","report_sha256":"<SHA256 du rapport>","runId":"RUN","contextId":1,"role":"coder","coverage":"complete-production"}
-```
-
-`complete-production` est une attestation vérifiée par l’appelant, pas une
-déduction du moteur depuis un compteur. Contexte et change doivent correspondre.
-Un contexte dupliqué, une autre racine, une empreinte périmée ou des événements
-abandonnés sont refusés. Messages et outils peuvent compléter des mesures
-absentes ; une valeur présente est comparée, jamais ajoutée. Aucune durée busy,
-quota, décision d’orchestration, coût ou token absent du résumé n’est inventé.
-Le moteur ne se connecte à aucun endpoint. Conserver les preuves pertinentes
-dans le rapport de change pour les futurs deltas sans import global.
-
-## Transactions
-
-Le verrou système commun `.STATISTICS.lock` reste présent après libération.
-Les seuls fichiers de publication sont le couple, `.STATISTICS.transaction.json`
-et `.STATISTICS.<nom du fichier>.candidate` / `.backup`. Le journal est durable
-avant les remplacements et supprimé en dernier. RECOVER valide identités,
-empreintes, rendu et association du couple avant de terminer une publication.
-Un état extérieur divergent n’est pas écrasé. La suppression préalable en
-REBUILD restaure l’absence du rapport en cas d’échec, sans sauvegarde de l’ancien.
-
-Une erreur est un JSON `status:error`, code1 ; une invocation syntaxiquement
-invalide relève d’argparse, code2. Aucun échec technique ne devient un N/A de
-substitution d’un rapport non analysé. Les progrès du recalcul sont sur stderr.
-
-## Richesse des rapports de change
-
-Les références de qualification sont les rapports Pixs : tableaux complets
-d’agents, distributions des rôles et outils, résultats techniques, décisions,
-chemins absolus, commandes et sorties qualifiées, web, bornes, quotas autorisés,
-sondes et reprises datées. Rien de disponible n’est remplacé par N/A pour
-simplifier le rendu. Les exclusions de SGS concernent le global uniquement.
-
-`agent_details` est une liste optionnelle de `{role,model,version,provider,
-reasoning,ttmt,throughput,service_percent}` textuels. Les deux tableaux d’agents
-sont rendus avant les six sections ; sans cette métadonnée, seules les valeurs
-présentes dans la contribution sont utilisées et les autres restent N/A.
-
-`tables` est un dictionnaire par section `"1"` à `"6"`, chaque valeur étant une
-liste de `{title,columns,rows}`. Colonnes : libellés textuels ; lignes : listes
-de même largeur, cellules textuelles ou entières. Ces tableaux préservent les
-colonnes détaillées des références : par fichier, commande, statut, sonde, etc.
-`notes` contient par section une liste de paragraphes factuels. Les tableaux,
-notes et détails historiques sont conservés lors des amendements. Un export
-CAB attaché à CHANGE génère directement ses tableaux par rôle et outil, sans
-faire reconstruire ces ventilations au prompt de codage. Ce résumé public ne
-collecte pas les chemins et commandes exactes : ne pas les inventer.
-
-Dans le global, les populations de répartitions exhaustives partagent le même
-dénominateur même si certains rôles ou outils ont un effectif nul et ne sont
-pas nommés dans chaque change. Les répartitions partielles conservent leurs
-seuls dénominateurs attestés ; les index nécessaires sont retirés et ajoutés
-avec la contribution. Les exemples de Pixs sont lus en qualification, sans
-modifier ses rapports ni utiliser ses chiffres pour le projet CAB.
-
-## Modes de publication
-
-`--file-mode` exige 0770 lorsqu’il est fourni. Sans option, les modes existants sont
-conservés ; un nouveau rapport et un nouveau registre utilisent 0770. Les
-candidats et retours arrière conservent les modes des livrables ; les nouveaux
-verrous utilisent 0770. Pour CAB, passer explicitement 0770.
-
-Les `.STATISTICS.*` sont des fichiers techniques non versionnés. SGS ne modifie
-pas `.gitignore` ; leur exclusion relève du processus Git autorisé du projet.
-Ne pas supprimer le verrou persistant lors du nettoyage.
-
-## Requêtes indépendantes des agents
-
-Toute session directe ou pilotée appelle la même CLI Python, avec sorties JSON
-et codes0 (résultat, y compris absence),1 (erreur),2 (syntaxe invalide). Aucun
-identifiant CAB, orchestrateur précis ou SDK n’est obligatoire. L’import CAB
-est un adaptateur optionnel ; le contrat SGS définit le périmètre des mesures,
-notamment les performances OpenCode historiques, sans restreindre les appelants.
-
-`QUERY --project-root /racine --contract /prompts/SGS.md` consulte le couple
-publié sous verrou partagé existant, sans création, récupération ou recalcul.
-Le résultat contient `status:queried`, `mutated:false`, `engine_format`,
-`generation`, `nca`, `report_sha256` et `data`. Sans filtre, `data` contient
-`aggregate_state` et `code_state`. `--metric <clé METRICS>` renvoie le bucket
-exact `{sum,count}` ; ce sont la somme et le nombre de contributions connues,
-pas une moyenne déjà calculée. Avec `--change <chemin relatif d’archive>`,
-`data` contient la contribution complète ou sa mesure filtrée
-`{state,value,reason,evidence}` ; `source_sha256` et `report_path` l’identifient.
-`not-found` signifie une archive absente du registre ; `absent` signifie que les
-deux livrables manquent. Un couple partiel/divergent ou une transaction en attente
-échoue sans mutation. Les empreintes sources sont celles de la génération
-publiée ; `VERIFY --sources` contrôle explicitement leur actualité. INSPECT
-consulte directement un rapport, y compris un change ouvert encore exclu du global.
-
-
-## Isolation du rapport individuel — CAB2.3.2
-
-CHANGE accepte --evidence - (stdin, limité à64Mio comme un fichier). Un fichier
-explicitement réservé reste compatible ; sa préparation et lecture doivent
-être isolées. CHANGE ne récupère jamais le global pour générer son rapport.
-Le verrou local porte sur l’inode du répertoire du rapport, sans fichier
-persistant supplémentaire. Le seul candidat est <rapport>.sgs-candidate,
-nettoyé après remplacement ou échec propre. Ne pas supprimer un candidat
-préexistant qui n’appartient pas à cette invocation.
-
---report sélectionne un fichier existant dans le change ciblé. Une variante
-connue sans sélection explicite est ambiguë et ne crée pas STATISTICS.md.
-Une structure autre que six sections reçoit une annexe de niveau3 ou inférieur,
-sans modification de ses titres H2 ou de son contenu historique. Une variante
-reste exclue du global ; --maintain-global retourne not-admissible pour elle.
-
---maintain-global produit d’abord le rapport sous sa protection locale, puis
-appelle DELTA sous le verrou global. Une erreur globale attendue est restituée
-dans global.status=error, avec cause ; le statut individuel et le code0 restent
-ceux du rapport réussi. L’absence de --maintain-global n’accède à aucun état
-transactionnel global. Le consommateur vérifie les deux statuts séparément.
-
-Sous CAB, REPORT réserve le rapport et son candidat exact. La restauration
-accepte aussi les anciennes réservations du seul rapport ; /closing les
-réancre explicitement avant utilisation du candidat. Le delta est appelé
-par l’orchestrateur sous autorisation distincte, hors du mandat REPORT du codeur.
-
-
-## Point de départ du suivi
-
-Dès l’amorçage de la session, après résolution des sources requises et avant
-l’exploration métier, l’appelant vérifie VERSION puis
-initialise en mémoire schema_version:1, session_id stable, scope:cumulative
-et contribution:blank(). Il fournit la borne de début UTC attestée dans
-contribution.bounds.start et les agents connus ; la borne de fin reste null.
-Il conserve project_root et change_id dans le contexte de son historique ou
-checkpoint déjà autorisé. Ces deux champs ne sont pas ajoutés au JSON CHANGE,
-car ils sont fournis par les arguments explicites --project-root et --change.
-change_id reste null jusqu’à la sélection autorisée et est fixé avant la
-première tâche ; aucune cible fictive n’est créée pour initialiser le suivi.
-Les compteurs absents restent unavailable. L’appelant alimente les preuves
-pendant les tâches ; le moteur ne dispose pas d’un observateur universel des
-agents. Aucun nouveau fichier de suivi partagé n’est requis.
-
-## Export des périodes CAB3.0.6
-
-La commande publique statistics.change renvoie cab-change-statistics-1 et son
-sgs_evidence directement admissible comme entrée structurée de CHANGE. Ce bilan
-est cumulatif pour le change, avec plusieurs RUN/SID possibles ; ses proof_ids
-identifient l’empreinte de toutes les périodes. Les pages servent à inspecter
-les affiliations et bornes, sans contenu de conversation.
-
-change_coverage_complete exige toutes les périodes fermées et un premier début
-attesté pour chaque RUN. Sinon les mesures natives/durées du change restent
-indisponibles dans SGS ; les seuls écarts observés sont conservés dans l’export
-comme mesures partielles. Les preuves de tests et tâches restent indépendantes.
-Les anciens totaux session-wide n’alimentent jamais cette contribution.
-
-CAB3.0.7 exclut aussi les compteurs non actualisés et les bornes temporelles
-manquantes ; une valeur inchangée dans un vieux journal ne prouve pas zéro token.
+## Marqueurs et contrôle de synchronisation
+Les publications CAB contiennent CAB_STATISTICS_DOCUMENT_V1 : scope change ou
+project, revision (empreinte de contenu), generated_at UTC, content_sha256 hors
+marqueur. Les marqueurs des changes restent inclus dans la concaténation globale ;
+seul le marqueur propre du global est exclu de son empreinte de contenu.
+PG conserve le SHA256 intégral du fichier, son mtime_ns, imported_at et les révisions.
+statistics_change retourne actual_sha256 et in_sync pour chaque source locale ;
+statistics_project retourne actual_global_sha256, global_in_sync et la validité des
+sources du manifeste global (global_sources_current). Les marqueurs réels et ceux
+en base sont distingués. Un fichier manuel ou ancien sans marqueur reste vérifiable
+par ses octets ; aucun marqueur n’est inventé ni inséré pour une simple lecture.

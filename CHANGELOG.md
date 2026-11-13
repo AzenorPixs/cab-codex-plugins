@@ -1,5 +1,16 @@
 # Historique des versions
 
+## 3.1.0 — 2026-11-13
+
+- SGS intégré au service CAB : fichiers locaux des changes seuls maîtres,
+  catalogue complet par projet et projections PG avec révisions/métriques.
+- Synchronisation inotify, rattrapage aléatoire12–24h, génération/amendement
+  automatique en activité et après archive ; global concaténé créé si absent.
+- Réservations PG durables, publications atomiques sous UID légitime ; aucun
+  nouveau verrou fichier ni registre JSON global. Amendements manuels préservés.
+- Changes ouverts sans session recensés normalement sans rapport artificiel.
+- CLI/skills statistiques allégés ; écritures SGS locales retirées, route CAB.
+
 ## 3.0.7 — 2026-11-13
 
 - Résolution du journal actif par l’index natif Codex, SID exact, en lecture seule

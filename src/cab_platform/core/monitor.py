@@ -30,6 +30,10 @@ def task_source(change):
     root=Path(change.project.root);slug=change.identifier
     if root.resolve()!=root or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}',slug):raise ValueError('change-path-invalid')
     parent=root/'openspec/changes';candidates=[]
+    if change.source_path:
+        preferred=root/change.source_path
+        if preferred.name=='tasks.md' and preferred.is_relative_to(parent) and preferred.exists() and preferred.resolve()==preferred:
+            return preferred,'archived' if '/archive/' in str(preferred) else 'open'
     active=parent/slug
     if active.exists():candidates.append((active,'open'))
     for path in (parent/'archive').glob('????-??-??-'+slug):

@@ -1,4 +1,4 @@
-# Collecte native CAB 3.0.7
+# Collecte native CAB 3.1.0
 
 Le service cab.service collecte dans PostgreSQL ; aucun daemon de plugin ni
 moniteur direct séparé. Après cab_status et cab_contract, utiliser project_register
@@ -23,34 +23,15 @@ le précédent à la même frontière, sans suspendre les RUN ni demander d’av
 Pour une pause, statistics_end ferme la période ; reprendre avec un nouveau
 request_id de début. Répéter un même request_id lit son reçu, sans réouvrir.
 
-statistics expose seulement les périodes bornées du RUN. statistics_change
-agrège tous les RUN et SID du change et fournit sgs_evidence. Les anciens totaux
-natifs de session sont des diagnostics et ne sont jamais des totaux du change.
-Un RUN non mesuré depuis son entrée en codage empêche un total complet SGS ;
-les mesures partielles restent inspectables. Source/compteur divergents ou
-champ manquant restent N/A. Les écarts portent les observations natives entre
-bornes ; aucun événement tardif ou requête chevauchante n’est découpé ou estimé.
+statistics expose les périodes du RUN ; statistics_change consulte la projection
+du STATISTICS.md local du change. Le service collecte les observations natives,
+produit le fichier local puis le projette dans PG, sans rédaction par le LLM.
 
-Avant le rapport final, statistics_end ferme la dernière période. run.freeze
-ferme aussi uniquement celle du RUN concerné avant de figer la collecte. Utiliser
-sgs_evidence de statistics_change comme preuve structurée de CHANGE, puis DELTA
-pour le seul global existant. Aucun total natif partagé n’est réinjecté à la main.
-Les autres preuves (tests, syntaxe, tâches) ne deviennent pas zéro si la source
-native ne les fournit pas : les documenter séparément dans le bilan final.
+statistics_end ferme les périodes. À l’archivage et lors de run.close, CAB produit
+ou amende le rapport, synchronise le catalogue et le global ; lire le reçu de
+clôture, sans produire de preuves statistiques JSON à sa place. Les champs non
+observés restent inconnus et les bornes tardives ne deviennent pas rétroactives.
 
-Après archivage réussi, cab call run.close reçoit project_id, run_id, branch
-TERMINÉ, receipt_id stable, report relatif et sha256 du STATISTICS.md durable.
-La branche BLOQUÉ exige rapport et BLOCKERS.md. Même SID/RUN et même reçu ;
-aucun effacement des pairs ni rejeu. Un change peut regrouper plusieurs RUN et
-plusieurs sessions ; seuls leurs écarts de périodes sont agrégés, une fois.
-
-Après reprise Codex, native_locate consulte l’index natif pour le seul SID,
-sans scanner les conversations. Si la liaison désigne l’ancien fichier, fermer
-sa période puis native_bind(resume=true) : index courant vérifié, historique
-conservé, même SID/RUN, aucun effet en cours ni gel. Recommencer la mesure avec
-un nouveau request_id ; ne pas mélanger les compteurs des deux fichiers. Un
-compteur non actualisé reste indisponible, jamais interprété comme zéro.
-
-En piloté, le codeur gère les mêmes périodes en autonomie. Pour le CLI OpenCode
-déjà chargé : CAB_AGENT=opencode cab call statistics.begin/end/change, avec le
-profil du codeur. L’orchestrateur n’approuve pas les bascules.
+Reprise Codex : native_bind(resume=true) conserve SID/RUN et historique après
+fermeture de période et vérification du journal indexé courant. La synchronisation
+statistique est événementielle et rattrapée aléatoirement dans les24heures.

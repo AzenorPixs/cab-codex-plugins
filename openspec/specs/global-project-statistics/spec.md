@@ -7,272 +7,54 @@ en conservant les preuves, les historiques et la cohérence du couple global.
 
 ## Requirements
 
-### Requirement: Brique Statistiques du Web Monitor
-Le Web Monitor MUST afficher la version et l’état du service SGS réellement chargé, par une requête IPC bornée sans génération de rapport. Une source indisponible ou divergente MUST être distincte de READY. La CLI de rapports MUST rester utilisable sans service permanent. La carte MUST NOT lancer une reconstruction statistique ni exposer chemins privés, secrets ou sorties brutes.
+### Requirement: Fichiers locaux statistiques maîtres
+Les STATISTICS.md de chaque change MUST rester seuls maîtres, actifs, archivés
+ou amendés. CAB MUST préserver texte, tableaux, agents, modèles, coûts, preuves
+et révisions ; les mesures absentes ou contradictoires MUST rester explicites.
+PG MUST être une projection locale vers base, sans écraser une modification
+manuelle par une valeur stockée antérieurement en base.
 
-#### Scenario: Service SGS disponible
-- **WHEN** SGS répond READY avec sa version chargée
-- **THEN** la carte affiche cette version sans lancer de rapport ou de reconstruction
+#### Scenario: Amendement manuel
+- **WHEN** un rapport local est amendé
+- **THEN** la projection et son historique sont mis à jour depuis ses octets, les valeurs manuelles ne sont pas écrasées silencieusement
 
-#### Scenario: Moteur cohérent disponible
-- **WHEN** le service SGS et le moniteur ont une version cohérente et le service est READY
-- **THEN** la carte présente Disponible et sa version chargée sans génération de rapport
+### Requirement: Catalogue et synchronisation automatiques
+CAB MUST rattacher chaque change à un projet unique, même sans RUN, et conserver
+les sources d’archives et amendements. Les éditions locales MUST déclencher une
+projection rapide ; un rattrapage aléatoire de toutes les sources MUST survenir
+au moins toutes les24heures. Un change ouvert sans codage MUST pouvoir ne pas
+avoir de rapport sans être déclaré en erreur.
 
-#### Scenario: Paquet incomplet ou version différente
-- **WHEN** le service ne répond pas ou sa version diffère de celle attendue
-- **THEN** la carte indique Indisponible ou Version divergente sans bloquer les autres vues
+#### Scenario: Change non commencé
+- **WHEN** un change ouvert n’a pas accueilli de session de codage
+- **THEN** il est recensé, son rapport n’est pas créé et son absence est normale
 
-### Requirement: Équivalence des rapports existants
-Les rapports produits MUST conserver au minimum la richesse des rapports de
-change et du global Pixs examinés comme références. Le global MUST couvrir
-tous les indicateurs SGS et leurs ventilations disponibles. Un rapport de
-change MUST conserver agents, preuves, tableaux détaillés, historique et
-inconnues ; le générateur MUST NOT remplacer une mesure disponible par N/A
-au seul motif que son format narratif diffère.
+### Requirement: Générations CAB et global dérivé
+CAB MUST générer ou amender les statistiques après archivage et gérer leur mise
+à jour pendant le codage, sans rédaction ni calcul LLM. Le global MUST concaténer
+les sources locales disponibles de chaque change et signaler les manquants.
+Après inventaire complet, un global absent MUST être généré automatiquement,
+avec projection par projet en PG ; aucun registre JSON global n’est requis.
 
-#### Scenario: Références riches Pixs
-- **WHEN** les rapports contiennent modèles, tokens, cache, sondes, rôles, outils et résultats détaillés
-- **THEN** des fixtures représentatives vérifient extraction et rendu de ces champs sans modifier Pixs ni copier ses chiffres dans CAB
+#### Scenario: Global absent
+- **WHEN** CAB a inventorié complètement les sources d’un projet
+- **THEN** il génère le global depuis les rapports locaux, sans chiffres inventés ni intervention LLM
 
-### Requirement: Moteur distribué indépendant du pilotage
-Le plugin CAB MUST fournir un moteur Python en bibliothèque standard, le skill
-`sgs` et la commande `/SGS` en majuscules. Le moteur MUST exiger une racine de
-projet et un contrat SGS explicites. Il MUST NOT démarrer CAB, OpenCode, un
-service, une collecte de quota ou une installation de dépendance.
+### Requirement: Protections transactionnelles du service
+Les écritures statistiques MUST passer par CAB et des réservations PG durables.
+Aucun fichier .STATISTICS.lock MUST être créé. Un effet incertain MUST garder
+sa protection jusqu’à vérification ; les publications MUST être atomiques,
+vérifier la version locale attendue et respecter les comptes POSIX légitimes.
 
-#### Scenario: Invocation manuelle
-- **WHEN** SGS est demandé manuellement pour un projet
-- **THEN** le moteur reconstruit le global depuis toutes les archives admissibles et le code actuel, sans réutiliser les anciens agrégats
+#### Scenario: Publication incertaine
+- **WHEN** une écriture perd sa confirmation ou une source change concurremment
+- **THEN** CAB conserve preuves et protection, sans réémettre aveuglément l’écriture ni remplacer une édition locale plus récente
 
-### Requirement: Extraction traçable et examen des ambiguïtés
-Chaque mesure MUST conserver son état connu, absent ou contradictoire, son unité
-et sa preuve. Une correction d'extraction MUST être liée à l'empreinte du rapport
-et aux lignes de preuve. Un rapport non analysé MUST NOT devenir entièrement
-indisponible pour contourner son examen. Les nombres MUST rester exacts jusqu’à l’affichage ; les quotas MUST NOT figurer
-dans le global.
+### Requirement: Appelants sans prompt SGS autonome
+Les prompts et skills MUST référencer le contrat CAB installé, sans résolution
+d’un prompt SGS.md ni production de preuves statistiques par le LLM. Le codeur
+MUST garder son autonomie ; seuls exceptions et revue finale sollicitent le parent.
 
-#### Scenario: Agrégation
-- **WHEN** les mesures sont agrégées
-- **THEN** les tests finaux restent distincts des essais et sous-ensembles, et les moyennes et ratios utilisent leurs populations valides respectives
-
-#### Scenario: Valeurs contradictoires
-- **WHEN** deux valeurs incompatibles restent sans résolution documentée
-- **THEN** la seule mesure concernée devient indisponible avec motif et les autres mesures sont traitées
-
-### Requirement: Séparation stricte entre reconstruction et delta
-En reconstruction explicite, le moteur MUST supprimer le seul rapport global
-avant recalcul et MUST laisser ce rapport absent si le recalcul échoue. En
-maintenance de codage, le moteur MUST ne rien créer si le global est absent.
-Une incompatibilité MUST NOT déclencher une reconstruction automatique.
-
-#### Scenario: Delta compatible
-- **WHEN** le couple est compatible
-- **THEN** seule la contribution ciblée et ses index sont remplacés sans autre lecture historique, et une seconde application reste sans double compte
-
-#### Scenario: Global absent en session de codage
-- **WHEN** le rapport de change est amendé mais le global est absent
-- **THEN** la maintenance retourne absent sans créer de rapport ni de registre
-
-#### Scenario: Amendement d'une archive
-- **WHEN** une contribution archivée déjà incluse change
-- **THEN** son ancien delta est retiré puis remplacé une seule fois sans modifier les autres entrées
-
-### Requirement: Rapports de change persistants
-Le moteur MUST créer les rapports canoniques en six sections pour un change
-archivé ou bloqué, depuis des preuves structurées. Un rapport existant MUST
-garder structure, emplacement et historique, avec annexe si nécessaire. Les
-sessions MUST être dédupliquées et leurs incréments/cumuls distingués. Un arrêt
-MUST exiger BLOCKERS.md et MUST NOT valoir archivage. Le moteur MUST NOT modifier
-les autres artefacts métier.
-
-#### Scenario: Reprise d'un change bloqué
-- **WHEN** une nouvelle session est ajoutée à un rapport existant puis le change archivé
-- **THEN** le même rapport conserve les sessions antérieures, les nouveaux faits et son état final sans cumul double
-
-### Requirement: Réutilisation des observations CAB
-Un export CAB MUST être rattaché à la racine, au change et aux contextes de
-codeurs effectivement couverts. Sans couverture exhaustive attestée, les
-observations partielles MUST NOT devenir des totaux exhaustifs. Le moteur MUST
-dédupliquer les contextes et preuves et MUST NOT additionner un compteur natif
-à son rappel dans un rapport. Il MUST NOT lire les états privés CAB ou secrets.
-
-#### Scenario: Comptage déjà présent
-- **WHEN** un export natif et un rapport décrivent le même comptage
-- **THEN** une seule valeur est conservée, avec contradiction signalée si les valeurs diffèrent
-
-### Requirement: Publication récupérable et validation indépendante
-Pour le couple global, le moteur MUST utiliser `.STATISTICS.lock`, sérialiser lecture et publication,
-préparer les deux candidats et un journal durable, vérifier les empreintes et
-récupérer une interruption avant toute nouvelle mutation globale. Le contrôle indépendant MUST vérifier empreintes, NCA, agrégats, rendu et index.
-
-#### Scenario: Sources de code
-- **WHEN** le code actuel est compté
-- **THEN** les chemins restent dans la racine sans liens ni secrets, l’analyse est lexicale et un langage non pris en charge est explicitement indisponible
-
-#### Scenario: Publication interrompue
-- **WHEN** le processus s'arrête entre les deux remplacements
-- **THEN** le prochain lecteur récupère ou refuse l'état ambigu avant tout delta ou succès
-
-### Requirement: Modes de publication du projet
-Le moteur MUST lire et préserver les modes des livrables existants compatibles.
-L'option `--file-mode`, lorsqu'elle est fournie, MUST exiger 0770 pour les
-rapports et leur registre. Les nouveaux verrous et journaux techniques MUST
-être en 0770 ; les anciens modes compatibles restent utilisables.
-
-#### Scenario: Convention CAB
-- **WHEN** la publication demande explicitement le mode 0770
-- **THEN** les rapports et le registre publiés utilisent 0770 et le retour arrière conserve les modes initiaux
-
-### Requirement: Utilisation et interrogation agnostiques
-Le moteur MUST être utilisable par toute session directe ou pilotée, par tout
-agent de codage et tout orchestrateur via la même CLI et les mêmes JSON.
-Il MUST accepter une identité d’agent déclarée sans liste de produits autorisés.
-L’import CAB MUST rester facultatif. Les autorisations spécifiques à un
-protocole MUST NOT devenir une dépendance du moteur pour les autres appelants.
-
-#### Scenario: Agent sans CAB
-- **WHEN** une session directe fournit des preuves structurées avec une identité d’agent différente de Codex ou OpenCode
-- **THEN** CHANGE accepte ces preuves et produit le même rapport sans service ni identifiant CAB
-
-### Requirement: Requête statistique sans mutation
-QUERY MUST consulter le global ou une contribution archivée, éventuellement
-filtrés par mesure, sans créer, recalculer ou récupérer de fichier. La réponse
-MUST exposer génération, empreintes et valeurs exactes avec leurs états connus
-ou indisponibles. INSPECT MUST permettre la consultation d’un rapport ouvert.
-
-#### Scenario: Requête depuis un orchestrateur quelconque
-- **WHEN** l’appelant interroge un couple publié cohérent avec QUERY et ses filtres
-- **THEN** il reçoit les données et leurs empreintes en JSON sans mutation et sans déclencher REBUILD
-
-#### Scenario: Requête sans instantané exploitable
-- **WHEN** le couple est absent, divergent ou possède une transaction en attente
-- **THEN** QUERY retourne une absence explicite ou une erreur sans création ni récupération implicite
-
-### Requirement: Rapport individuel indépendant du global
-CHANGE MUST produire le rapport sans lire ou récupérer la transaction globale.
-Un delta demandé ensuite MUST utiliser sa propre protection et MUST retourner
-son échec séparément sans retirer le succès du rapport individuel.
-
-#### Scenario: Journal global irrécupérable
-- **WHEN** une transaction globale ne peut pas être récupérée
-- **THEN** CHANGE peut réussir et le delta échoue séparément en préservant le couple
-
-### Requirement: Preuves sans fichier partagé
-CHANGE MUST accepter les preuves JSON sur stdin avec --evidence - et MUST
-sérialiser les éditions du même répertoire de rapport. Le candidat MUST être
-le chemin du rapport suivi de .sgs-candidate et MUST être nettoyé après échec
-propre. Deux changes MUST NOT partager leur fichier de preuves ou de candidat.
-
-#### Scenario: Deux changes simultanés
-- **WHEN** deux rapports sont générés avec leurs preuves sur stdin
-- **THEN** leurs données et candidats restent distincts sans verrou global
-
-### Requirement: Rapport historique explicitement identifié
---report MUST désigner un fichier existant dans le change ciblé. Sans option,
-une variante connue MUST empêcher une création canonique ambiguë. Une structure
-ancienne différente MUST être préservée avec une annexe sans nouveaux titres H2.
-
-#### Scenario: Revalidation historique
-- **WHEN** le rapport existant n’a pas six sections ou porte un autre nom
-- **THEN** son contenu reste conservé dans le même fichier sans doublon canonique
-
-### Requirement: Suivi initialisé avant les tâches
-La session MUST vérifier VERSION et initialiser le suivi dès l’amorçage après
-les sources requises, avant l’exploration métier. Elle MUST conserver session,
-borne de début, deux rôles et sources disponibles, puis rattacher le change
-autorisé avant sa première tâche. Un compteur non observé MUST rester inconnu.
-Une reprise MUST préserver les identifiants et signaler les lacunes.
-
-#### Scenario: Session directe ou pilotée
-- **WHEN** la session démarre puis sélectionne son change
-- **THEN** le contexte est initialisé à l’amorçage puis rattaché au change autorisé, sans sonde de pilotage implicite en mode direct
-
-### Requirement: Nettoyage des statistiques après rapport durable
-Après vérification du rapport individuel, la clôture MUST intégrer les données
-statistiques rattachées au change dans l’effacement terminal des briques CAB,
-après le nettoyage natif des sessions. Les branches TERMINÉ et BLOQUÉ pour
-dépendance MUST être couvertes. Les pairs, rapports durables et états de reprise
-prévus MUST être préservés. Un résultat non vérifié MUST rester un échec explicite.
-
-#### Scenario: Rapport archivé ou blocage documenté
-- **WHEN** le rapport est vérifié et les conditions de clôture sûre sont satisfaites
-- **THEN** les statistiques du change sont effacées avec les états CAB puis leur absence est vérifiée sur disque et en mémoire
-
-#### Scenario: Statistiques partagées
-- **WHEN** une observation historique contient le change et un pair
-- **THEN** seule la référence du change est retirée et les données du pair restent conservées
-
-### Requirement: SGS permanent et autonome
-SGS SHALL fonctionner comme service permanent, collecter les sources natives Codex/OpenCode pour les codeurs et orchestrateurs directs/pilotés et recevoir directement les statistiques des briques. Les LLM SHALL compléter uniquement les faits non natifs. Les événements SHALL porter provenance, namespace instance et curseur de déduplication. Une source indisponible SHALL être N/A motivée. Une indisponibilité SGS SHALL ne pas bloquer le codage ; une outbox durable SHALL permettre reprise.
-
-#### Scenario: Changement de modèle et reprise de collecte
-- **WHEN** modèle/fournisseur/raisonnement change ou le collecteur redémarre
-- **THEN** SGS conserve les périodes horodatées et reprend sans doublon ni perte des compteurs acquittés
-
-#### Scenario: Historique après nettoyage
-- **WHEN** les buffers d’un RUN clos sont supprimés
-- **THEN** les rapports STATISTICS.md durables permettent la restitution SGS sans conserver le runtime du RUN
-
-### Requirement: Retrait ciblé d'instantanés de sessions libérées dans un rapport ouvert
-
-SGS MUST permettre le retrait ciblé des instantanés runtime de sessions dont la
-libération est prouvée, tout en préservant les sessions étrangères, les
-rapports source et les statistiques globales. SGS MUST empêcher la
-réimportation des mêmes instantanés sans exclure les nouveaux RUN. Une preuve
-de purge MUST être délivrée et toute propriété ambiguë MUST être refusée.
-
-#### Scenario: Session libérée et pair conservé
-- **WHEN** la session ciblée est libérée et qu’un rapport ouvert contient aussi un pair
-- **THEN** SGS retire l’instantané ciblé et conserve celui du pair ainsi que le fichier source
-
-#### Scenario: Réimport et nouveau RUN
-- **WHEN** le même rapport est importé après purge avec un relevé pour un nouveau RUN
-- **THEN** SGS ne recrée pas l’ancien instantané et conserve le nouveau relevé
-
-#### Scenario: Propriété incertaine
-- **WHEN** la libération ou l’identité de la session n’est pas vérifiable
-- **THEN** SGS refuse la purge sans modifier les données
-
-### Requirement: Retrait explicite du rapport runtime d'un change clos
-
-Lorsque le développeur demande le retrait de toutes les données CAB d’un change
-clos, SGS MUST retirer sa copie runtime et ses agrégats, après preuve de
-libération et vérification de l’absence de RUN actif. Le rapport source et les
-autres changes MUST rester intacts. Les anciens relevés supprimés MUST rester
-exclus lors d’un réimport du change ouvert ou archivé ; un nouveau RUN MUST
-pouvoir produire ses propres données.
-
-#### Scenario: Historique du change et nouveau RUN
-- **WHEN** la copie runtime d’un change clos est supprimée puis un nouveau RUN produit un relevé
-- **THEN** SGS conserve le nouveau relevé sans réimporter les relevés supprimés
-
-#### Scenario: Même session réutilisée
-- **WHEN** un nouveau RUN réutilise une session dont un ancien relevé a été supprimé
-- **THEN** SGS conserve son nouveau binding et refuse d’attribuer un agrégat cumulatif non séparable à ce seul RUN
-
-#### Scenario: Autre change ou session active
-- **WHEN** une session du rapport appartient à un autre change ou que le change ciblé reste actif
-- **THEN** SGS refuse le retrait et conserve toutes les données
-
-### Requirement: Publication statistique en 0770
-
-Le moteur SGS SHALL accepter `--file-mode 0770` pour les rapports et registres, avec conservation des protections et contrôles transactionnels existants.
-
-#### Scenario: Rapport en mode du projet
-- **WHEN** le développeur choisit `--file-mode 0770`
-- **THEN** le rapport publié utilise 0770 sans modifier le contenu des autres contributions
-
-### Requirement: Continuité quantitative native après handoff
-
-SGS MUST collecter les mesures OpenCode depuis la source native liée au RUN et
-conserver leur provenance, les zéros observés et la couverture indisponible.
-Un handoff du contrôleur MUST NOT créer une nouvelle identité de collecte ni
-compter une seconde fois les messages déjà collectés.
-
-#### Scenario: Contrôleur remplacé sans changement de session native
-- **WHEN** un contrôleur compatible reprend un RUN lié à la même instance et session OpenCode
-- **THEN** SGS conserve le binding et les mesures natives, puis déduplique toute relecture des mêmes messages
-
-#### Scenario: Mesure non exposée ou nulle
-- **WHEN** une source native ne fournit pas une mesure ou fournit explicitement zéro
-- **THEN** SGS distingue la couverture indisponible du zéro observé, sans valeur inventée
+#### Scenario: Session pilotée
+- **WHEN** un codeur pilote ses périodes et termine son change
+- **THEN** CAB gère rapports et synchronisation sans validation intermédiaire d’orchestrateur, avec reçus vérifiables

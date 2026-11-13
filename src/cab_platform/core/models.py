@@ -221,6 +221,87 @@ class MeasurementAction(models.Model):
         db_table='measurement_actions'
         constraints=[models.UniqueConstraint(fields=['run','request_id'],name='cab_measurement_receipt')]
 
+class ChangeSource(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='local_sources')
+    path=models.CharField(max_length=1500)
+    archived=models.BooleanField(default=False)
+    present=models.BooleanField(default=True)
+    manifest=models.JSONField(default=dict)
+    observed_at=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='change_sources'
+        constraints=[models.UniqueConstraint(fields=['change','path'],name='cab_change_source_path')]
+
+class StatisticsDocument(models.Model):
+    source=models.OneToOneField(ChangeSource,on_delete=models.PROTECT,related_name='statistics')
+    content=models.TextField(default='')
+    sha256=models.CharField(max_length=64,blank=True)
+    status=models.CharField(max_length=32,default='missing')
+    structure=models.JSONField(default=dict)
+    source_mtime=models.PositiveBigIntegerField(default=0)
+    imported_at=models.DateTimeField(auto_now=True)
+    generated_digest=models.CharField(max_length=64,blank=True)
+    generated_block_sha=models.CharField(max_length=64,blank=True)
+    manual_override=models.BooleanField(default=False)
+    class Meta:db_table='change_statistics'
+
+class StatisticsRevision(models.Model):
+    document=models.ForeignKey(StatisticsDocument,on_delete=models.PROTECT,related_name='revisions')
+    sha256=models.CharField(max_length=64)
+    content=models.TextField()
+    structure=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='change_statistics_revisions'
+        constraints=[models.UniqueConstraint(fields=['document','sha256'],name='cab_statistics_revision')]
+
+class StatisticsMetric(models.Model):
+    document=models.ForeignKey(StatisticsDocument,on_delete=models.PROTECT,related_name='metrics')
+    key=models.CharField(max_length=80)
+    state=models.CharField(max_length=24)
+    value=models.CharField(max_length=200,null=True)
+    unit=models.CharField(max_length=40)
+    reason=models.TextField(null=True)
+    evidence=models.JSONField(default=list)
+    class Meta:
+        db_table='change_statistics_metrics'
+        constraints=[models.UniqueConstraint(fields=['document','key'],name='cab_statistics_metric')]
+
+class ProjectStatistics(models.Model):
+    project=models.OneToOneField(Project,on_delete=models.PROTECT,related_name='statistics')
+    content=models.TextField(default='')
+    sha256=models.CharField(max_length=64,blank=True)
+    manifest=models.JSONField(default=list)
+    inventory_complete=models.BooleanField(default=False)
+    coverage_complete=models.BooleanField(default=False)
+    next_full_sync=models.DateTimeField(null=True)
+    last_full_sync=models.DateTimeField(null=True)
+    updated=models.DateTimeField(auto_now=True)
+    error=models.CharField(max_length=200,blank=True)
+    class Meta:db_table='project_statistics'
+
+class StatisticsJob(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    action=models.CharField(max_length=32)
+    request_id=models.CharField(max_length=200)
+    state=models.CharField(max_length=32,default='RUNNING')
+    owner_pid=models.PositiveIntegerField()
+    owner_start=models.CharField(max_length=80)
+    expected=models.JSONField(default=dict)
+    result=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='statistics_jobs'
+        constraints=[models.UniqueConstraint(fields=['project','request_id'],name='cab_statistics_job_request')]
+
+class StatisticsLock(models.Model):
+    project=models.OneToOneField(Project,on_delete=models.PROTECT,primary_key=True)
+    owner=models.ForeignKey(StatisticsJob,null=True,on_delete=models.PROTECT)
+    fencing=models.PositiveBigIntegerField(default=0)
+    class Meta:db_table='statistics_locks'
+
 class LegacySnapshot(models.Model):
     source=models.CharField(max_length=1800)
     sha256=models.CharField(max_length=64)
