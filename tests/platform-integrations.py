@@ -9,7 +9,7 @@ import tomllib
 from types import SimpleNamespace
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'src'))
-from cab_platform import integration
+from cab_platform import integration,__version__
 with tempfile.TemporaryDirectory(dir=ROOT/'output/scm/cab-3.0.0',prefix='integrations-') as folder:
     root=Path(folder);home=root/'home';home.mkdir(mode=0o700);(home/'.codex').mkdir()
     (home/'.codex/config.toml').write_text('model = "fixture-model"\n[mcp_servers.unrelated]\ncommand = "/bin/false"\n')
@@ -22,15 +22,28 @@ with tempfile.TemporaryDirectory(dir=ROOT/'output/scm/cab-3.0.0',prefix='integra
     user=SimpleNamespace(pw_dir=str(home),pw_uid=os.getuid(),pw_gid=os.getgid(),pw_name='fixture')
     with patch.object(integration.pwd,'getpwnam',return_value=user),patch.object(integration,'STATE',state):
         integration.integrate('codex','fixture',package_root=package)
-        cached=home/'.codex/plugins/cache/cab_codex_plugins/CAB/3.1.2/skills/cab/SKILL.md'
+        cached=home/f'.codex/plugins/cache/cab_codex_plugins/CAB/{__version__}/skills/cab/SKILL.md'
         cached.unlink()
         integration.integrate('codex','fixture',package_root=package)
         assert cached.is_file()
         assert integration.integrate('codex','fixture',package_root=package)['unchanged']
         cfg=tomllib.loads((home/'.codex/config.toml').read_text());assert cfg['model']=='fixture-model';assert cfg['mcp_servers']['unrelated']['command']=='/bin/false';assert cfg['mcp_servers']['cab']['tool_timeout_sec']==86430
+        # Le choix natif explicitement désactivé doit rester intact.
+        import subprocess
+        executable=shutil.which('codex')
+        features=subprocess.run([executable,'features','list'],env=integration.user_environment(user),capture_output=True,text=True,check=True)
+        if any(line.split() and line.split()[0]=='mcp_tool_list_changed' for line in features.stdout.splitlines()):
+            assert cfg['features']['mcp_tool_list_changed'] is True
+            # La CLI retire l'override lors de disable ; créer ici un choix littéral explicite.
+            configuration=home/'.codex/config.toml'
+            text=configuration.read_text().replace('mcp_tool_list_changed = true','mcp_tool_list_changed = false')
+            configuration.write_text(text)
+            assert tomllib.loads(text)['features']['mcp_tool_list_changed'] is False
+            integration.integrate('codex','fixture',package_root=package)
+            assert tomllib.loads((home/'.codex/config.toml').read_text())['features']['mcp_tool_list_changed'] is False
         opencode=home/'.config/opencode';opencode.mkdir(parents=True)
         (opencode/'opencode.json').write_text(json.dumps({'mcp':{'cgpt-validation':{'type':'local','command':['python3','/old/cgpt_approval_bridge_server.py']},'unrelated':{'type':'local','command':['/bin/false']}}}))
         integration.integrate('opencode','fixture',package_root=package)
         cfg=json.loads((opencode/'opencode.json').read_text());assert 'cgpt-validation' not in cfg['mcp'];assert 'unrelated' in cfg['mcp'];assert cfg['mcp']['cab']['command']==['/usr/bin/cab','mcp','--agent','opencode']
-    proof={'codex_native_cli':True,'local_plugins_version':'3.1.2','idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
+    proof={'codex_native_cli':True,'local_plugins_version':__version__,'idempotent_registration':True,'handoff_timeout_seconds':86430,'unrelated_configuration_preserved':True,'opencode_legacy_mcp_replaced':True,'user_profiles_isolated':True}
     (ROOT/'output/scm/cab-3.0.0/integrations-proof.json').write_text(json.dumps(proof,indent=2)+'\n');print(json.dumps(proof))

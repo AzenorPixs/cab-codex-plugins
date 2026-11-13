@@ -144,6 +144,7 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
         with os.fdopen(fd,'wb') as stream:stream.write(original)
     env=user_environment(user)
     options={'user':user.pw_uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)} if os.getuid()==0 else {}
+    catalog_refresh='protocol-notification'
     if agent=='codex':
         configured=config().get('codex_binary') if os.getuid()==0 else None
         if configured and (not Path(configured).is_absolute() or not Path(configured).is_file() or not os.access(configured,os.X_OK)):raise ClientError('codex-cli-unavailable')
@@ -167,6 +168,17 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
         text=text[:match.end()]+'\ntool_timeout_sec = 86430\n'+section+text[end:]
         if tomllib.loads(text)['mcp_servers']['cab']['tool_timeout_sec']!=86430:raise ClientError('codex-tool-timeout-invalid')
         write_user_file(target,text.encode(),env,options)
+        previous=old.get('features',{}).get('mcp_tool_list_changed')
+        if previous is False:catalog_refresh='explicitly-disabled'
+        elif previous is True:catalog_refresh='enabled'
+        else:
+            features=subprocess.run([executable,'features','list'],env=env,capture_output=True,text=True,timeout=30,**options)
+            supported=features.returncode==0 and any(line.split() and line.split()[0]=='mcp_tool_list_changed' for line in features.stdout.splitlines())
+            if supported:
+                enabled=subprocess.run([executable,'features','enable','mcp_tool_list_changed'],env=env,capture_output=True,timeout=30,**options)
+                if enabled.returncode or tomllib.loads(read_user_file(target,user.pw_uid).decode()).get('features',{}).get('mcp_tool_list_changed') is not True:raise ClientError('codex-catalog-refresh-enable-failed')
+                catalog_refresh='enabled'
+            else:catalog_refresh='client-capability-unavailable'
         # Le catalogue local du paquet remplace seulement la provenance CAB.
         listing=subprocess.run([executable,'plugin','marketplace','list','--json'],env=env,capture_output=True,text=True,timeout=30,**options)
         if listing.returncode:raise ClientError('codex-marketplace-inventory-failed')
@@ -195,4 +207,4 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if isinstance(server,dict) and any(str(value).endswith(('/cgpt-approval-bridge-broker.mjs','/cgpt_approval_bridge_server.py')) for value in server.get('command',[])):del current['mcp'][name]
         current.setdefault('mcp',{})['cab']={'type':'local','command':['/usr/bin/cab','mcp','--agent','opencode'],'enabled':True}
         write_user_file(target,(json.dumps(current,indent=2)+'\n').encode(),env,options)
-    return {'agent':agent,'uid':user.pw_uid,'configuration':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'backup':str(backup) if backup else None,'runtime':'/usr/bin/cab','credentials_exposed':False}
+    return {'agent':agent,'uid':user.pw_uid,'configuration':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'backup':str(backup) if backup else None,'runtime':'/usr/bin/cab','credentials_exposed':False,'catalog_refresh':catalog_refresh}

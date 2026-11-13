@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — reconnexion MCP, 13 novembre 2026
+
+`reload-mcp-connectors-after-cabu`, code non attribué : relais stable, registre
+et preuves moteur/catalogue, reçu CABU composé et protection des anciens clients.
+Source : archive `2026-11-13-reload-mcp-connectors-after-cabu` ; 5 tests relais, 4 registre, 20 CABU, deux profils stdio, intégration native et navigateurs qualifiés. Livraison3.2.3 et reconnexion réelle restent distinctes. Première reprise native non forcée.
+
 ## SCM — preuves et finalisation autonome, 13 novembre 2026
 
 `finalize-runs-from-trusted-evidence`, code non attribué : contrat, producteurs

@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 3.2.3 — 2026-11-13
+
+- Relais MCP stdio stable Codex/OpenCode : moteur rechargeable à frontière sûre,
+  notifications de catalogue et acquittement vérifié sans rejeu d'appel métier.
+- Registre authentifié par processus/génération et reçu CABU distinguant paquet
+  installé, reconnexion en cours et reprise native requise des anciens clients.
+- Attente CABU indépendante du moteur remplacé ; paramètres, SID/RUN et reçus
+  conservés. Activation native du rafraîchissement Codex sans écraser un false.
+
 ## Unreleased
 
 - CABU via MCP : job système autonome, agnostique aux comptes, sans sudo client ;

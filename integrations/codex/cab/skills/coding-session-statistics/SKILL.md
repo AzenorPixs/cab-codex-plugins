@@ -3,7 +3,7 @@ name: coding-session-statistics
 description: Produire un bilan quantifié de session à partir de la télémétrie native CAB.
 ---
 
-# Statistiques de session CAB3.2.2
+# Statistiques de session CAB3.2.3
 
 Avec un contrat de finalisation, CAB ferme la période du seul RUN lorsque sa
 frontière de fin est prouvée, puis produit les rapports. Aucune commande de fin

@@ -25,7 +25,7 @@ async def cab_update(request_id:str,version:str='',timeout_ms:int=1800000)->dict
     except ClientError as error:
         return {'request_id':request_id,'state':'ADMISSION_UNCONFIRMED','error':str(error),'next_action':'cab_update_status','retry_execution':False}
     deadline=asyncio.get_running_loop().time()+timeout_ms/1000
-    while result['state'] not in ('OK','FAILED','UNKNOWN') and asyncio.get_running_loop().time()<deadline:
+    while result['state'] not in ('OK','FAILED','UNKNOWN','RELOAD_REQUIRED') and asyncio.get_running_loop().time()<deadline:
         await asyncio.sleep(1)
         try:result=await asyncio.to_thread(c.command,'system.update.status',{'request_id':request_id})
         except ClientError as error:

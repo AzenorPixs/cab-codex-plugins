@@ -18,6 +18,7 @@ def main(argv=None):
     sub.add_parser('update-worker')
     serve=sub.add_parser('serve');serve.add_argument('--port',type=int,default=8790)
     mcp=sub.add_parser('mcp');mcp.add_argument('--agent',choices=['codex','opencode'],default='codex')
+    worker=sub.add_parser('mcp-worker');worker.add_argument('--agent',choices=['codex','opencode'],default='codex')
     sub.add_parser('bootstrap-token')
     update_parser=sub.add_parser('update');update_parser.add_argument('--package')
     enroll=sub.add_parser('enroll');enroll.add_argument('--user',required=True);enroll.add_argument('--agent',required=True);enroll.add_argument('--role',choices=['coder','orchestrator','collector'],default='coder')
@@ -36,6 +37,10 @@ def main(argv=None):
             from .service import run
             run(args.port);return 0
         elif args.action=='mcp':
+            os.environ['CAB_AGENT']=args.agent
+            from .mcp_bridge import run
+            run(args.agent);return 0
+        elif args.action=='mcp-worker':
             from .mcp import run
             os.environ['CAB_AGENT']=args.agent;run();return 0
         elif args.action=='bootstrap-token':

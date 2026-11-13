@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.2.2
+## Plateforme CAB 3.2.3
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

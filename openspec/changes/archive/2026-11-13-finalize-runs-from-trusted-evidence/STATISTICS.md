@@ -8,14 +8,14 @@ Change : `finalize-runs-from-trusted-evidence` · état local : `archived`. Les 
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 1808.321292 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 1808.321292 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 12035937 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 61487 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 31653 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 11988992 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 12097424 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `finalize-runs-from-trusted-evidence` · état local : `archived`. Les 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:ae3cd4d8c1249402296fb4f698774dbc5c09adf3e1407f40232e6920f085654b
+Provenance : change-periods:17ee9a10f4321603a9848fa7b9519eaaac7b304be2535bd47b4983dd2e6b0d34
 
 ## 2. Messages et outils
 
@@ -59,9 +59,9 @@ Provenance : change-periods:ae3cd4d8c1249402296fb4f698774dbc5c09adf3e1407f40232e
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,18 +91,5 @@ Provenance : change-periods:ae3cd4d8c1249402296fb4f698774dbc5c09adf3e1407f40232e
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 9426304 | bounded |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 9458322 | bounded |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 53655 | bounded |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 26163 | bounded |
-| SCM-evidence-finalization-322 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 9511977 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "27007e8ab59f57cead4a8e9705e6320e84ab28752a9a9e7b8f5d30f03edc6c4d", "generated_at": "2026-11-13T19:08:43.975012+00:00", "revision": "27007e8ab59f57cead4a8e9705e6320e84ab28752a9a9e7b8f5d30f03edc6c4d", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "df50deb6a6f9efc709bb7b83976bec9204737dfe59e17e911a5c00275aefc8bb", "generated_at": "2026-11-13T19:13:50.385441+00:00", "revision": "df50deb6a6f9efc709bb7b83976bec9204737dfe59e17e911a5c00275aefc8bb", "scope": "change"} -->

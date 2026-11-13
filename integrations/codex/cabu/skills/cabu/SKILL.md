@@ -3,7 +3,15 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.2
+# CABU 3.2.3
+
+Le reçu distingue paquet/service vérifiés et connecteurs MCP. RECONNECTING
+attend la frontière sûre ou le catalogue ; RELOAD_REQUIRED indique une reprise
+native nécessaire pour un ancien connecteur sans relais. Garder le même
+request_id, ne pas réinstaller et ne pas tuer Codex/OpenCode. La première reprise
+d'un ancien programme déjà en mémoire ne peut pas être fabriquée par CAB.
+Les connecteurs supervisés rechargent leur moteur sans rejouer les appels ;
+le relais maintient l'attente CABU pendant son propre remplacement.
 
 Sur demande explicite ou dans la livraison CICD CAB autorisée, appeler l’outil
 MCP `cab_update` avec un request_id stable et la version cible demandée, ou
