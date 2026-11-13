@@ -13,7 +13,7 @@ from .core.commands import Refused,require
 MASK='__SECRET_CONSERVE__'
 PROJECT_SETTINGS={'projects_root','projects_user','projects_group'}
 RELEASE_SETTINGS={'opencode_release_repository','codex_release_repository'}
-AGENT_SETTINGS={'opencode_binary','codex_binary','opencode_mcp_config','codex_mcp_config'}
+AGENT_SETTINGS={'codex_desktop_binary','opencode_binary','codex_binary','opencode_mcp_config','codex_mcp_config'}
 EDITABLE={'logging','database','database_host','database_port','database_user','database_password','migrator_user','migrator_password','electric_user','electric_password','electric_secret','electric_port','web_allowed_hosts','web_csrf_trusted_origins','web_public_urls'}|PROJECT_SETTINGS|AGENT_SETTINGS|RELEASE_SETTINGS
 SENSITIVE=re.compile('password|secret|token|credential|api[_-]?key',re.I)
 

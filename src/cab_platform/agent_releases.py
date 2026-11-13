@@ -21,17 +21,24 @@ def repository(cfg,agent):
 
 def cached():return read_json(STATE/'agent-releases.json',{})
 
-def fetch(repo):
-    request=Request('https://api.github.com/repos/'+repo+'/releases/latest',headers={'Accept':'application/vnd.github+json','User-Agent':'CAB/'+__version__})
-    with urlopen(request,timeout=4) as response:raw=response.read(1024*1024+1)
-    if len(raw)>1024*1024:raise ValueError('agent-release-response-too-large')
-    data=json.loads(raw)
-    if not isinstance(data,dict) or not isinstance(data.get('tag_name'),str) or not isinstance(data.get('html_url'),str):raise ValueError('agent-release-response-invalid')
-    match=re.fullmatch(r'(?:rust-v|v)?(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?)',data.get('tag_name',''))
-    if not match or data.get('draft') or data.get('prerelease'):raise ValueError('agent-release-tag-invalid')
-    url=data.get('html_url','')
-    if not url.lower().startswith(('https://github.com/'+repo+'/releases/tag/').lower()):raise ValueError('agent-release-url-invalid')
-    return {'version':match.group(1),'url':url}
+def fetch(repo,major=None):
+    endpoint='/releases?per_page=100' if major is not None else '/releases/latest'
+    request=Request('https://api.github.com/repos/'+repo+endpoint,headers={'Accept':'application/vnd.github+json','User-Agent':'CAB/'+__version__})
+    with urlopen(request,timeout=4) as response:raw=response.read(16*1024*1024+1)
+    if len(raw)>16*1024*1024:raise ValueError('agent-release-response-too-large')
+    data=json.loads(raw);items=data if isinstance(data,list) else [data];candidates=[]
+    for item in items:
+        if not isinstance(item,dict) or not isinstance(item.get('tag_name'),str) or not isinstance(item.get('html_url'),str):continue
+        match=re.fullmatch(r'(?:rust-v|v)?(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?)',item['tag_name'])
+        if not match or item.get('draft') or item.get('prerelease'):continue
+        version=match.group(1);numbers=tuple(map(int,version.split('-',1)[0].split('+',1)[0].split('.')))
+        if major is not None and numbers[0]!=major:continue
+        url=item['html_url']
+        if not url.lower().startswith(('https://github.com/'+repo+'/releases/tag/').lower()):continue
+        candidates.append((numbers,{'version':version,'url':url}))
+    if not candidates:raise ValueError('agent-release-tag-invalid')
+    return max(candidates,key=lambda pair:pair[0])[1]
+
 
 def refresh(now=None):
     cfg=config()
@@ -43,10 +50,10 @@ def refresh(now=None):
         except BlockingIOError:return
         values=cached();before=json.dumps(values,sort_keys=True)
         for agent in REPOSITORIES:
-            repo=repository(cfg,agent);record=values.get(agent,{})
-            if record.get('repository')!=repo:record={'repository':repo,'next_check':now+secrets.randbelow(61),'status':'pending'}
+            repo=repository(cfg,agent);record=values.get(agent,{});major=2 if agent=='opencode' else None
+            if record.get('repository')!=repo or record.get('major')!=major:record={'major':major,'repository':repo,'next_check':now+secrets.randbelow(61),'status':'pending'}
             if now>=record['next_check'] and record.get('checked_day')!=day:
-                try:record.update(fetch(repo),status='ok')
+                try:record.update(fetch(repo,major=major),status='ok')
                 except (URLError,OSError,ValueError,TimeoutError) as error:record.update(status='unavailable',error=type(error).__name__)
                 record.update(checked_at=now,checked_day=day,next_check=(day+1)*86400+secrets.randbelow(86400))
             elif record.get('checked_day')==day and now>=record['next_check']:

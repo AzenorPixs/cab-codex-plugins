@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "3.0.3"
+VERSION = "3.0.4"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")

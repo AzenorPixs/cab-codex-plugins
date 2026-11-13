@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.0.3
+# CAB 3.0.4
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
