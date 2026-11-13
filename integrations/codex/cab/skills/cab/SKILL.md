@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.1.4
+# CAB 3.2.1
 
 Le service réévalue et clôture les RUN admissibles sur preuves, sans tour LLM.
 `run_reevaluate` expose les motifs ; services sans preuve et effets inconnus

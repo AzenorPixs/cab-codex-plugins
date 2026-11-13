@@ -1552,3 +1552,11 @@ Instantané public project.env dans projects, accueil et sessions séparés,
 projection Electric dédiée ; 26 tests Python, bootstrap neuf et parcours
 Chromium/Firefox validés le 13 novembre 2026. Livraison et activation distinctes.
 Aucune dépendance à un autre change actif ; socle system-platform existant.
+
+## Mise à jour autonome — 13 novembre 2026
+
+[align-packaged-integration-versions](openspec/changes/archive/2026-11-13-align-packaged-integration-versions/), code non attribué, ARCHIVÉ.
+Versions3.2.1, précontrôle, MCP autonome, cache quotidien et page administrative.
+Prérequis : plateforme système existante ; pas de dépendance à un change actif.
+Qualification sources :55tests Python et Chromium/Firefox validés.
+Livraison et activation sont vérifiées séparément, sans preuve déduite du code.

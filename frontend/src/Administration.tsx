@@ -5,7 +5,7 @@ import {api} from './api'
 import {FontControls} from './Appearance'
 
 type Section='agents'|'database'|'interface'|'projects'|'web-server'
-const pages=[['database','Base de données'],['interface','Interface'],['projects','Projets'],['web-server','Serveur Web']] as const
+const pages=[['database','Base de données'],['interface','Interface'],['update','Mise à jour'],['projects','Projets'],['web-server','Serveur Web']] as const
 export function AdministrationShell({children}:{children:ReactNode}){
   const path=useRouterState({select:state=>state.location.pathname})
   return <div className="administration-layout"><aside className="administration-sidebar"><h2>Administration</h2><nav aria-label="Administration">{pages.map(([id,label])=><Link key={id} to={`/administration/${id}`} activeOptions={{exact:true}} className={path===`/administration/${id}`||id==='database'&&path==='/administration'?'selected':''}>{label}</Link>)}</nav></aside><div className="administration-content">{children}</div></div>

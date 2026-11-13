@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.2.0
+## Architecture CAB 3.2.1
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -2309,3 +2309,20 @@ la spécification system-platform ; une valeur absente ou non vérifiable est
 retirée du nouvel instantané. L’inotify existant surveille la racine, avec
 rattrapage toutes les 60 secondes ; la sélection déclenche une relecture
 indépendante de l’affichage initial depuis la base.
+
+La mise à jour CAB peut être demandée par le MCP cab_update ou par le bouton
+permanent de /administration/update. CAB conduit seul le job durable via
+cab-update.service, hors du groupe du service actualisé, et retourne OK avec
+la version uniquement après vérifications Debian, READY et finalisation.
+Tout client CAB actif authentifié est admis pour cette seule opération officielle,
+sans liste de comptes, commande arbitraire ou sudo client. Les reçus inconnus
+restent protégés et ne provoquent aucune réinstallation automatique.
+
+SystemUpdate sérialise globalement l’effet avec active_slot unique et conserve
+request_id, demandeur, cible, étapes et reçu. L’admission est idempotente ;
+la lecture est réservée au demandeur ou administrateur. Le superviseur délègue
+GitHub et le démarrage de l’unité à des workers séparés, sans attente réseau
+sur le rendu ou les boucles métier. APT et la finalisation conservent leurs
+gardes. UNKNOWN conserve sa case active ; le client reconnecte le même reçu.
+Les contrôles administratifs forcés restent authentifiés et distincts du cache
+24h automatique. Aucune variable de configuration ni dépendance nouvelle.

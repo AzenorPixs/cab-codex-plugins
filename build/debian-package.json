@@ -13,6 +13,7 @@
     {"source":"output/package/runtime-manifest.json","destination":"/usr/lib/cab/runtime-manifest.json","mode":"0644"},
     {"source":"packaging/cab","destination":"/usr/bin/cab","mode":"0755"},
     {"source":"packaging/systemd/cab.service","destination":"/usr/lib/systemd/system/cab.service","mode":"0644"},
+    {"source":"packaging/systemd/cab-update.service","destination":"/usr/lib/systemd/system/cab-update.service","mode":"0644"},
     {"source":"output/package/docs","destination":"/usr/share/doc/cab"},
     {"source":"output/package/plugins","destination":"/usr/lib/cab/plugins"},
     {"source":"output/package/commands","destination":"/usr/lib/cab/commands"},

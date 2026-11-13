@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- CABU via MCP : job système autonome, agnostique aux comptes, sans sudo client ;
+  OK et version après installation, santé et finalisation vérifiées.
+- Contrôle GitHub en arrière-plan et cache partagé24h ; étiquette Mise à jour
+  dans le bandeau et page /administration/update avec bouton manuel permanent.
+- Précontrôle des versions embarquées avant préparation : corrige la divergence
+  de plugins qui empêchait la finalisation de3.2.0.
+
+
 - Nouvel accueil `/projects/<ID>` : maison, nom, version, étiquettes PROJECT_TYPE
   et cartes Forgejo/GitHub/GitLab ; Sessions utilise désormais `/sessions`.
 - Affichage immédiat depuis les métadonnées en base, puis relecture de

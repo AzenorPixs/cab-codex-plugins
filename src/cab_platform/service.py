@@ -95,7 +95,8 @@ def run(port=8790):
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
-    closure_future=None;next_closure=0
+    closure_future=None;next_closure=0;next_update=0
+    update_future=None;availability_future=None
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -103,6 +104,7 @@ def run(port=8790):
     metadata_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-metadata')
     statistics_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-statistics')
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
+    update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     try:
         while not stop.wait(0.2):
             if reload_requested.is_set():
@@ -116,6 +118,16 @@ def run(port=8790):
             if not config().get('initialized'):continue
             try:
                 refresh_database()
+                if time.monotonic()>=next_update:
+                    from .system_updates import dispatch
+                    from .update_availability import check as check_update
+                    for future in (update_future,availability_future):
+                        if future is not None and future.done():
+                            try:future.result()
+                            except Exception as error:log.warning('update worker unavailable',extra={'code':type(error).__name__})
+                    if update_future is None or update_future.done():update_future=update_pool.submit(dispatch)
+                    if availability_future is None or availability_future.done():availability_future=update_pool.submit(check_update)
+                    next_update=time.monotonic()+2
                 recover_receipts()
                 if not recovered:
                     configure();os.kill(api.pid,signal.SIGHUP)
@@ -174,6 +186,7 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        update_pool.shutdown(wait=True,cancel_futures=True)
         closure_pool.shutdown(wait=True,cancel_futures=True)
         statistics_pool.shutdown(wait=True,cancel_futures=True)
         if statistics_watcher is not None:statistics_watcher.close()

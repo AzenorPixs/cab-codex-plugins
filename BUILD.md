@@ -1,6 +1,6 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.2.0 — Debian et clients légers
+## Livraison CAB 3.2.1 — Debian et clients légers
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -25,10 +25,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.0` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.1` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.2.0.
+prépaquet ne constitue pas la release 3.2.1.
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
 plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
@@ -1522,3 +1522,18 @@ administratif supplémentaire. Un retour à0010 exige d’abord le retrait de
 project_metadata_projection de la publication, puis la migration inverse ;
 seul l’instantané régénérable est perdu. Qualifier mise à niveau, installation
 neuve et droits de lecture séparément avant activation.
+
+La mise à jour CAB peut être demandée par le MCP cab_update ou par le bouton
+permanent de /administration/update. CAB conduit seul le job durable via
+cab-update.service, hors du groupe du service actualisé, et retourne OK avec
+la version uniquement après vérifications Debian, READY et finalisation.
+Tout client CAB actif authentifié est admis pour cette seule opération officielle,
+sans liste de comptes, commande arbitraire ou sudo client. Les reçus inconnus
+restent protégés et ne provoquent aucune réinstallation automatique.
+
+prepare.py refuse toute divergence de version Python, frontend, manifestes ou
+commandes avant mutation des payloads. La migration0012 ajoute les jobs et le
+cache de disponibilité. L’unité cab-update.service est livrée sans dépendance
+à cab.service, pour survivre à son redémarrage. L’activation initiale depuis
+un ancien paquet sans outil MCP passe une fois par l’update administratif existant.
+Les versions3.2.0 partiellement configurées ne sont pas des succès CABU.

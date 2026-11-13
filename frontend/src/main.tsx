@@ -8,6 +8,7 @@ import {AppearanceProvider,ThemeToggle} from './Appearance'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
+import {UpdateBadge,HomeVersionCheck,SystemUpdatePage} from './SystemUpdate'
 import {RunView,stageLabel} from './RunView'
 import {SessionActions,SessionArchives,useEvaluations} from './SessionLifecycle'
 import './style.css'
@@ -19,7 +20,7 @@ function Layout(){
   const header=useRef<HTMLElement>(null)
   const pathname=useRouterState({select:state=>state.location.pathname})
   useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
-  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.2.0</span></Link><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'?'workspace-main':undefined}><Outlet/></main></>
+  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.2.1</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'?'workspace-main':undefined}><Outlet/></main></>
 }
 
 function Gate({children}:{children:React.ReactNode}){
@@ -76,7 +77,7 @@ function IncidentList({project}:{project:Project}){
 const rootRoute=createRootRoute({component:Layout})
 function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link></nav>}
 const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof search.project==='string'?{project:search.project}:{}
-const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:()=>null})
+const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:HomeVersionCheck})
 const projectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectDetailRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/sessions',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} sessions/>}</Projects></Gate>})
@@ -87,8 +88,9 @@ const newProjectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/
 const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="database" login={<Login/>}/></Gate></AdministrationShell>})
 const agentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/agents',component:()=> <div className="agents-page"><Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate></div>})
 const legacyAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <Navigate to="/agents" replace/>})
+const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,legacyAgentsRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,legacyAgentsRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><RouterProvider router={router}/></AppearanceProvider></QueryClientProvider>)

@@ -37,6 +37,28 @@ class Actor(models.Model):
     native=models.JSONField(default=dict)
     active=models.BooleanField(default=True)
 
+class SystemUpdate(models.Model):
+    request_id=models.CharField(primary_key=True,max_length=200)
+    actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
+    target_version=models.CharField(max_length=100,blank=True)
+    state=models.CharField(max_length=24,default='QUEUED')
+    active_slot=models.PositiveSmallIntegerField(unique=True,null=True,default=1)
+    result=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='system_updates'
+
+class UpdateAvailability(models.Model):
+    id=models.PositiveSmallIntegerField(primary_key=True,default=1)
+    latest_version=models.CharField(max_length=100,blank=True)
+    checked_at=models.DateTimeField(null=True)
+    next_check_at=models.DateTimeField(null=True)
+    checking_until=models.DateTimeField(null=True)
+    requested=models.BooleanField(default=True)
+    forced=models.BooleanField(default=False)
+    error=models.CharField(max_length=100,blank=True)
+    class Meta:db_table='update_availability'
+
 class CodingSession(models.Model):
     id=models.CharField(primary_key=True,max_length=64)
     project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='coding_sessions')

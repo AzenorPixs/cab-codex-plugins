@@ -3,11 +3,25 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.1.4
+# CABU 3.2.1
 
-Sur demande explicite de mise à jour, exécuter `sudo cab update` jusqu’au reçu
-terminal. Une provenance locale explicitement autorisée peut utiliser
-`sudo cab update --package /chemin/paquet.deb`. Ne pas créer de RUN.
+Sur demande explicite ou dans la livraison CICD CAB autorisée, appeler l’outil
+MCP `cab_update` avec un request_id stable et la version cible demandée, ou
+version vide pour la release officielle courante. Aucun sudo client et aucun
+RUN ne sont nécessaires. Tout client CAB actif authentifié est admis, sans
+liste de comptes ; le service root porte uniquement cette opération bornée.
+
+CAB orchestre seul les étapes via cab-update.service, distinct de cab.service.
+L’outil attend mécaniquement le même reçu pendant le redémarrage. Une réponse
+perdue, un délai client ou ADMISSION_UNCONFIRMED impose `cab_update_status`
+avec le même request_id ; ne jamais créer une nouvelle demande pour contourner
+un état inconnu. `state=OK` et `version` prouvent paquet configuré, santé READY
+et finalisation vérifiée. FAILED/UNKNOWN ne sont pas des réussites.
+
+Si le client MCP chargé ne fournit pas ces outils, signaler le client ancien
+et son besoin de rechargement natif, sans modifier les configurations à la main.
+Le parcours administratif `sudo cab update` reste disponible pour l’amorçage
+initial de cette capacité ou une intervention explicitement demandée.
 
 Le paquet arrête cab.service à frontière sûre, installe les runtimes publics
 hors réseau, applique les migrations d’une base déjà initialisée, redémarre et
