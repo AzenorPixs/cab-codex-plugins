@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.3
+## Plateforme CAB 3.0.4
 
 CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.
@@ -1358,3 +1358,7 @@ par profil. Elle publie les extensions CAB pour les UID configurés après valid
 Web initiale, sans relancer les sessions. Les entités projets/RUN/sessions/changes
 et leurs tâches sont persistantes ; étapes déclarées et tâches observées ne
 constituent pas des validations. Voir docs/platform-operations.md pour les contrats.
+
+La page /agents distingue les trois programmes et leurs transports MCP. Les
+projets utilisent leur identifiant métier dans les URL, sans modifier leurs
+identités internes ; voir docs/platform-operations.md pour la compatibilité.

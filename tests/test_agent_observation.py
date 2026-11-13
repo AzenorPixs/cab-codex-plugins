@@ -1,5 +1,6 @@
 """Cache GitHub journalier et transport MCP sur métadonnées synthétiques."""
 import json
+import io
 import os
 from pathlib import Path
 import sys
@@ -18,6 +19,11 @@ class ReleaseTests(unittest.TestCase):
                 releases.refresh(now);releases.refresh(now+2);self.assertEqual(fetch.call_count,2)
                 fetch.side_effect=URLError('offline');releases.refresh(101*86400+1);releases.refresh(101*86400+2);self.assertEqual(fetch.call_count,4)
                 data=releases.cached();self.assertEqual(data['codex']['version'],'1.2.3');self.assertEqual(data['codex']['status'],'unavailable');self.assertEqual((state/'agent-releases.json').stat().st_mode&0o777,0o600)
+    def test_opencode_two_is_selected_even_if_latest_is_one(self):
+        data=[{'tag_name':'v1.99.0','html_url':'https://github.com/anomalyco/opencode/releases/tag/v1.99.0'}, {'tag_name':'v2.2.7','html_url':'https://github.com/anomalyco/opencode/releases/tag/v2.2.7'}, {'tag_name':'v2.3.0','html_url':'https://github.com/anomalyco/opencode/releases/tag/v2.3.0','prerelease':True}]
+        with patch.object(releases,'urlopen',return_value=io.BytesIO(json.dumps(data).encode())) as request:
+            result=releases.fetch('anomalyco/opencode',major=2)
+        self.assertEqual(result['version'],'2.2.7');self.assertIn('releases?per_page',request.call_args.args[0].full_url)
     def test_bootstrap_never_fetches_and_repository_is_bounded(self):
         with patch.object(releases,'config',return_value={'initialized':False}),patch.object(releases,'fetch') as fetch:releases.refresh();fetch.assert_not_called()
         for value in ['https://elsewhere/repo','../repo','owner/repo?token=value']:
@@ -31,9 +37,24 @@ class TransportTests(unittest.TestCase):
                 path=root/str(pid);(path/'fd').mkdir(parents=True);(path/'fdinfo').mkdir()
                 for fd,pipe,flags in entries:
                     (path/'fd'/str(fd)).symlink_to(pipe);(path/'fdinfo'/str(fd)).write_text('flags:\t'+flags+'\n')
-                return {'pid':pid,'uid':1,'agent':'codex' if not mcp else None,'mcp':mcp,'proc':path}
+                return {'ppid':2 if mcp else 0,'pid':pid,'uid':1,'agent':'codex' if not mcp else None,'mcp':mcp,'proc':path}
             server=process(1,'codex',[(0,'/dev/null','0'),(1,'pipe:[log]','1'),(2,'pipe:[log]','1'),(6,'pipe:[in]','0'),(7,'pipe:[out]','1')]);peer=process(2,None,[(3,'pipe:[in]','1'),(4,'pipe:[out]','0')])
             result=agent_runtime.observation([server,peer],'codex');self.assertTrue(result['mcp_connected']);self.assertTrue(result['running'])
             (peer['proc']/'fd/4').unlink();result=agent_runtime.observation([server,peer],'codex');self.assertFalse(result['mcp_connected'])
+
+    def test_unix_sockets_and_program_parent_are_distinct(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            def process(pid,agent,mcp,ppid,entries):
+                path=root/str(pid);(path/'fd').mkdir(parents=True);(path/'fdinfo').mkdir()
+                (path/'fd/2').symlink_to('/dev/null')
+                for fd,inode in entries:
+                    (path/'fd'/str(fd)).symlink_to('socket:['+str(inode)+']');(path/'fdinfo'/str(fd)).write_text('flags:\t2\n')
+                return {'pid':pid,'ppid':ppid,'uid':1,'agent':agent,'mcp':mcp,'proc':path}
+            child=process(1,None,'opencode',2,[(6,10),(7,11)]);parent=process(2,'opencode',None,0,[(3,20),(4,21)])
+            self.assertTrue(agent_runtime.observation([child,parent],'opencode',peers={10:20,11:21})['mcp_connected'])
+            (parent['proc']/'fd/4').unlink();self.assertFalse(agent_runtime.observation([child,parent],'opencode',peers={10:20,11:21})['mcp_connected'])
+            child['mcp']='codex';parent['agent']='codex_desktop'
+            self.assertFalse(agent_runtime.observation([child,parent],'codex',peers={10:20,11:21})['mcp_running'])
 
 if __name__=='__main__':unittest.main()

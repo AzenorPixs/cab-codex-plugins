@@ -630,3 +630,5 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 [qualify-public-runtime-permissions](changes/archive/2026-11-12-qualify-public-runtime-permissions/), code non attribué : ARCHIVÉ, paquet3.0.2 : deux tests spécifiques et25combinés réussis, rapport vérifié ; livraison et activation en attente.
 
 [finalize-debian-installation-cabu](changes/archive/2026-11-12-finalize-debian-installation-cabu/), code non attribué : ARCHIVÉ ; finalisation, extensions, écrans et migration qualifiés en fixture ; rapport individuel vérifié ; livraison et activation 3.0.3 à vérifier.
+
+[correct-agent-routing-and-connections](changes/archive/2026-11-13-correct-agent-routing-and-connections/), code non attribué : SCM3.0.4 qualifié et archivé ; corrections Agents, transports et identifiants ; livraison DIU/activation à vérifier séparément.

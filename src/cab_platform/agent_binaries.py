@@ -30,8 +30,14 @@ def accounts(configuration):
     return result
 
 
+_versions={}
+
 def version(path,user):
     """Ne jamais exécuter un binaire utilisateur avec les privilèges du service."""
+    try:
+        info=path.stat();key=(str(path),info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns,info.st_size,user.pw_uid,user.pw_dir)
+    except OSError:return None
+    if key in _versions:return _versions[key]
     options={'user':user.pw_uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)} if os.getuid()==0 else {}
     if os.getuid() not in (0,user.pw_uid):return None
     try:
@@ -41,7 +47,11 @@ def version(path,user):
             if completed.returncode:return None
             output.seek(0);text=output.read(512).decode('utf-8',errors='replace')
         found=re.search(r'\b[vV]?(\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9.-]+)?)',text)
-        return found.group(1) if found else None
+        value=found.group(1) if found else None
+        if value:
+            if len(_versions)>=32:_versions.clear()
+            _versions[key]=value
+        return value
     except (OSError,subprocess.TimeoutExpired):return None
 
 
@@ -68,37 +78,51 @@ def mcp_configuration(path,user,agent):
     return result
 
 
+def binary_path(configuration,users,agent,rows):
+    configured=configuration.get(agent+'_binary','')
+    if configured:return Path(configured)
+    if agent=='codex_desktop':
+        cli=binary_path(configuration,users,'codex',rows)
+        candidates=[Path(row['exe']) for row in rows if row['agent']=='codex' and 'resources' in Path(row['exe']).parts]
+        candidates+=[Path(path) for path in ('/usr/lib/chatgpt/resources/codex','/opt/Codex/resources/codex','/opt/codex/resources/codex','/usr/lib/codex/resources/codex')]
+        return next((path for path in candidates if path.is_file() and (cli is None or path.resolve()!=cli.resolve())),None)
+    relative='.opencode/bin/opencode' if agent=='opencode' else '.local/bin/codex'
+    candidates=[Path(found) for found in [shutil.which(agent)] if found]+[Path(user.pw_dir)/relative for user in users]
+    return next((path for path in candidates if path.is_file() and os.access(path,os.X_OK)),candidates[0] if candidates else None)
+
+
 def inventory():
     configuration=config();users=accounts(configuration);result=[]
     from .agent_runtime import processes,observation
     from .agent_releases import cached
     rows=processes({user.pw_uid for user in users});releases=cached()
-    for agent,label,relative in [('opencode','OpenCode','.opencode/bin/opencode'),('codex','Codex CLI','.local/bin/codex')]:
-        configured=configuration.get(agent+'_binary','')
-        candidates=[Path(configured)] if configured else [Path(found) for found in [shutil.which(agent)] if found]+[Path(user.pw_dir)/relative for user in users]
-        path=next((p for p in candidates if p.is_file() and os.access(p,os.X_OK)),candidates[0] if candidates else None)
+    binaries={agent:binary_path(configuration,users,agent,rows) for agent in ('opencode','codex','codex_desktop')}
+    for row in rows:
+        if row['agent']=='codex':
+            row['agent']=next((key for key in ('codex','codex_desktop') if binaries[key] and Path(row['exe']).resolve()==binaries[key].resolve()),None)
+    for agent,label in [('opencode','OpenCode'),('codex','Codex CLI'),('codex_desktop','Codex')]:
+        family='codex' if agent=='codex_desktop' else agent;path=binaries[agent]
         executable=bool(path and path.is_file() and os.access(path,os.X_OK))
-        user=next((u for u in users if path and path.is_relative_to(u.pw_dir) and u.pw_uid!=0),None)
+        user=next((user for user in users if path and path.is_relative_to(user.pw_dir) and user.pw_uid!=0),None)
         if user is None and path:
             try:user=pwd.getpwuid(path.stat().st_uid)
             except (KeyError,OSError):pass
         state='available' if executable else 'not_executable' if path and path.is_file() else 'not_file' if path and path.exists() else 'missing'
-        profiles=[];override=configuration.get(agent+'_mcp_config','')
+        profiles=[];override=configuration.get(family+'_mcp_config','')
         for account in users:
-            paths=[Path(override)] if override else ([Path(account.pw_dir)/'.codex/config.toml'] if agent=='codex' else [Path(account.pw_dir)/'.config/opencode/opencode.json',Path(account.pw_dir)/'.config/opencode/opencode.jsonc'])
+            paths=[Path(override)] if override else ([Path(account.pw_dir)/'.codex/config.toml'] if family=='codex' else [Path(account.pw_dir)/'.config/opencode/opencode.json',Path(account.pw_dir)/'.config/opencode/opencode.jsonc'])
             for item in paths:
-                # L'override n'est lu que sous l'identité du propriétaire.
                 if override:
                     try:
                         if item.stat().st_uid!=account.pw_uid:continue
                     except FileNotFoundError:
                         if account!=users[0]:continue
                     except OSError:continue
-                profile=mcp_configuration(item,account,agent)
+                profile=mcp_configuration(item,account,family)
                 if item.suffix=='.jsonc' and profile['state']=='invalid':profile['state']='jsonc_unverified'
                 profiles.append(profile)
             if override and profiles:break
-        runtime=observation(rows,agent)
-        release=releases.get(agent,{})
-        result.append({'runtime':runtime,'release':release,'connector_path':'/usr/bin/cab','agent':agent,'label':label,'path':str(path) if path else '', 'resolved_path':str(path.resolve()) if path and path.exists() else '', 'state':state,'version':version(path,user) if executable and user else None,'mcp_configurations':profiles})
-    return {'agents':result,'runtime_notice':'Activité et transport MCP observés sur la machine ; les versions GitHub proviennent du cache quotidien.'}
+        release=releases.get(family,{})
+        if family=='opencode' and not str(release.get('version','')).startswith('2.'):release={'status':'pending'}
+        result.append({'runtime':observation(rows,agent),'release':release,'connector_path':'/usr/bin/cab','connector_agent':family,'agent':agent,'label':label,'path':str(path) if path else '', 'resolved_path':str(path.resolve()) if path and path.exists() else '', 'state':state,'version':version(path,user) if executable and user else None,'mcp_configurations':profiles})
+    return {'agents':result,'runtime_notice':'Activité et transport MCP observés par programme ; les versions GitHub proviennent du cache quotidien.'}

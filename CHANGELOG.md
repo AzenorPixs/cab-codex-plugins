@@ -1,5 +1,18 @@
 # Historique des versions
 
+## 3.0.4 — agents et identifiants de projets
+
+- Déplacer Agents vers /agents, après Administration dans le bandeau ; conserver
+  une redirection de /administration/agents et retirer son entrée latérale.
+- Suivre les releases stables OpenCode 2.x, même si GitHub Latest pointe sur 1.x.
+- Détecter les transports MCP par pipes et sockets Unix et les rattacher au
+  programme parent ; conserver les profils et connexions existants.
+- Distinguer Codex intégré au bureau du binaire Codex CLI : chemins, versions et
+  activités propres, connecteur et profils partagés sans duplication.
+- Utiliser l’identifiant métier unique dans les liens projets, par exemple
+  /projects/pixs, sans modifier les PK, relations ou contrats internes CAB.
+  Les anciennes adresses restent compatibles et deviennent canoniques.
+
 ## 3.0.3 — finalisation Debian et suivi des sessions
 
 - Finaliser CABU automatiquement depuis postinst après contrôle du service,
