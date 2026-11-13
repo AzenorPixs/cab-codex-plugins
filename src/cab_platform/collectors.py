@@ -39,7 +39,7 @@ def opencode_metrics(actor):
             with transaction.atomic():
                 metric,created=Metric.objects.select_for_update().get_or_create(run=run,source='opencode-native',stream=row['id'][:200],defaults={'sequence':sequence})
                 if not created and sequence<metric.sequence:continue
-                metric.sequence=sequence;metric.values=values;metric.coverage={k:'native' for k in values};metric.model={k:str(v)[:160] for k,v in row.get('model',{}).items() if k in ('id','providerID','variant')};metric.save()
+                metric.sequence=sequence;metric.values=values;metric.coverage={**{k:'native' for k in values},'_scope':'session-wide','_eligible_for_change':False};metric.model={k:str(v)[:160] for k,v in row.get('model',{}).items() if k in ('id','providerID','variant')};metric.save()
 
 def codex_metrics(run):
     actor=run.actor
@@ -65,7 +65,7 @@ def codex_metrics(run):
         with transaction.atomic():
             current,created=Metric.objects.select_for_update().get_or_create(run=run,source='codex-native',stream='native-tokens',defaults={'sequence':sequence})
             if not created and sequence<=current.sequence:return
-            current.sequence=sequence;current.values=metrics;current.coverage={k:'native' for k in metrics};current.save()
+            current.sequence=sequence;current.values=metrics;current.coverage={**{k:'native' for k in metrics},'_scope':'session-wide','_eligible_for_change':False};current.save()
     except (OSError,UnicodeError) as error:
         log.debug('native source unavailable',extra={'run_id':run.run_id,'code':type(error).__name__})
 
