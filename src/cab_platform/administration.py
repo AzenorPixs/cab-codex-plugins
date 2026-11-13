@@ -14,7 +14,7 @@ MASK='__SECRET_CONSERVE__'
 PROJECT_SETTINGS={'projects_root','projects_user','projects_group'}
 RELEASE_SETTINGS={'opencode_release_repository','codex_release_repository'}
 AGENT_SETTINGS={'codex_desktop_binary','opencode_binary','codex_binary','opencode_mcp_config','codex_mcp_config'}
-EDITABLE={'logging','database','database_host','database_port','database_user','database_password','migrator_user','migrator_password','electric_user','electric_password','electric_secret','electric_port','web_allowed_hosts','web_csrf_trusted_origins','web_public_urls'}|PROJECT_SETTINGS|AGENT_SETTINGS|RELEASE_SETTINGS
+EDITABLE={'mcp_reload','logging','database','database_host','database_port','database_user','database_password','migrator_user','migrator_password','electric_user','electric_password','electric_secret','electric_port','web_allowed_hosts','web_csrf_trusted_origins','web_public_urls'}|PROJECT_SETTINGS|AGENT_SETTINGS|RELEASE_SETTINGS
 SENSITIVE=re.compile('password|secret|token|credential|api[_-]?key',re.I)
 
 def revision(value):
@@ -27,7 +27,7 @@ def masked(value):
 
 def view():
     saved=config();active=runtime_config()
-    pending=sorted(key for key in EDITABLE-{'logging'}-PROJECT_SETTINGS-AGENT_SETTINGS-RELEASE_SETTINGS if saved.get(key)!=active.get(key))
+    pending=sorted(key for key in EDITABLE-{'logging','mcp_reload'}-PROJECT_SETTINGS-AGENT_SETTINGS-RELEASE_SETTINGS if saved.get(key)!=active.get(key))
     return {'path':str(CONFIG),'revision':revision(saved),'configuration':masked({key:value for key,value in saved.items() if key in EDITABLE}),'read_only':masked({key:value for key,value in saved.items() if key not in EDITABLE}),'restart_required':bool(pending),'pending_fields':pending,'secret_placeholder':MASK,'logging_levels':sorted(LEVELS)}
 
 def save(expected,changes):
@@ -50,6 +50,10 @@ def save(expected,changes):
                         require(parsed.scheme in ('http','https') and parsed.hostname and not any(c in item for c in ('*','\n','\r',' ')) and parsed.username is None and parsed.password is None and parsed.path=='' and not parsed.query and not parsed.fragment,'configuration-web-trust-invalid',400)
                         try:parsed.port
                         except ValueError:raise Refused('configuration-web-trust-invalid',400) from None
+            elif key=='mcp_reload':
+                from .worker_stop import policy
+                try:value=policy(value)
+                except ValueError as error:raise Refused(str(error),400) from error
             elif key=='logging':
                 require(isinstance(value,dict) and set(value)=={'level'} and isinstance(value['level'],str) and value['level'] in LEVELS,'configuration-log-level-invalid',400)
             elif key.endswith('_port'):

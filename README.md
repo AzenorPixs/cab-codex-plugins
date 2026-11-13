@@ -1,6 +1,11 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.2.3
+## CAB 3.2.4
+
+Arrêt MCP borné par politique et pidfd, avec escalade SIGTERM/SIGKILL seulement
+à frontière sûre. Les versions connectées sont poussées en direct sur Agents
+et dans le bandeau (boule et texte verts), sans rafraîchissement de page.
+[Politique et capacités des relais](docs/mcp-stop-policy.md).
 
 Les connecteurs utilisent un relais stdio stable et remplacent leur moteur à
 une frontière sûre après CABU, sans rejouer les requêtes. Le reçu distingue la

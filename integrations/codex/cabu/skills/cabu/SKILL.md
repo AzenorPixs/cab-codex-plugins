@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.3
+# CABU 3.2.4
 
 Le reçu distingue paquet/service vérifiés et connecteurs MCP. RECONNECTING
 attend la frontière sûre ou le catalogue ; RELOAD_REQUIRED indique une reprise

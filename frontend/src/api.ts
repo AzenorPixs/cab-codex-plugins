@@ -33,5 +33,6 @@ export async function api<T>(path:string,body?:unknown,headers:Record<string,str
   try{value=await response.json()}catch{throw new Error('Le serveur CAB est temporairement indisponible.')}
   if(!response.ok)throw new Error(messages[value.error]||value.error||'Requête refusée ('+response.status+')')
   if(typeof value.csrf_token==='string')csrf=value.csrf_token
+  if(path==='login'||path==='logout')window.dispatchEvent(new Event('cab-auth-changed'))
   return value as T
 }

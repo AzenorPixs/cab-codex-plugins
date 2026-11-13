@@ -19,7 +19,7 @@ from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
-from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration
+from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate
 
 class LocalBearer(HttpBearer):
     def authenticate(self,request,token):return principal(request)
@@ -197,6 +197,14 @@ def operation_status(request,project_id:str,run_id:str,request_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     return operation_data(Operation.objects.get(run=r,request_id=request_id))
 
+@api.get('/connectors/policy')
+def connector_policy(request):
+    actor=principal(request)
+    from cab_platform.paths import config
+    from cab_platform.worker_stop import policy
+    blocked=Operation.objects.filter(run__actor=actor).exclude(state__in=commands.TERMINAL).exists() or Lease.objects.filter(run__actor=actor,state='HELD').exists() or Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists() or SystemUpdate.objects.filter(actor=actor,state='UNKNOWN').exists()
+    return {'mcp_reload':policy(config().get('mcp_reload')),'stop_allowed':not blocked}
+
 @api.get('/finalization')
 def finalization_status(request,project_id:str,run_id:str):
     actor=principal(request);run=commands.run_scope(actor,run_id,project_id,owner=False)
@@ -243,6 +251,12 @@ def command(request,body:Command):
     if name=='connector.heartbeat':
         from .connectors import heartbeat
         return heartbeat(actor,data,getattr(request,'cab_peer',None))
+    if name=='connector.stop_report':
+        from .connectors import stop_report
+        return stop_report(actor,data,getattr(request,'cab_peer',None))
+    if name=='connector.disconnected':
+        from .connectors import disconnected
+        return disconnected(actor,data,getattr(request,'cab_peer',None))
     if name in ('finalization.configure','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
         return {'finalization.configure':run_evidence.configure,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)

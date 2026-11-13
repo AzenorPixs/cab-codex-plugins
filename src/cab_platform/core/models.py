@@ -67,12 +67,32 @@ class McpConnector(models.Model):
     worker=models.JSONField(default=dict)
     loaded_version=models.CharField(max_length=100,blank=True)
     catalog_version=models.CharField(max_length=100,blank=True)
+    relay_version=models.CharField(max_length=100,blank=True)
     generation=models.PositiveBigIntegerField(default=0)
     pending=models.PositiveIntegerField(default=0)
     state=models.CharField(max_length=40,default='STARTING')
     error=models.CharField(max_length=100,blank=True)
     seen=models.DateTimeField(auto_now=True)
     class Meta:db_table='mcp_connectors'
+
+class McpConnectorProjection(models.Model):
+    connector=models.OneToOneField(McpConnector,on_delete=models.PROTECT,primary_key=True,related_name='public_projection')
+    agent=models.CharField(max_length=24)
+    uid=models.PositiveIntegerField()
+    loaded_version=models.CharField(max_length=100,blank=True)
+    catalog_version=models.CharField(max_length=100,blank=True)
+    relay_version=models.CharField(max_length=100,blank=True)
+    state=models.CharField(max_length=40)
+    connected=models.BooleanField(default=False)
+    class Meta:db_table='mcp_connector_projection'
+
+class McpStopAttempt(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    connector=models.ForeignKey(McpConnector,on_delete=models.PROTECT)
+    digest=models.CharField(max_length=64)
+    report=models.JSONField()
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:db_table='mcp_stop_attempts'
 
 class ConnectorReload(models.Model):
     update=models.OneToOneField(SystemUpdate,on_delete=models.PROTECT,primary_key=True,related_name='connector_reload')

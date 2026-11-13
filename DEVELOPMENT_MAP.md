@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — arrêt borné et versions en direct, 13 novembre 2026
+
+`bound-mcp-stop-escalation-and-live-versions`, code non attribué : politique
+/etc, pidfd et audit, projection Electric minimale et versions dans le bandeau
+et Agents. Source : archive `2026-11-13-bound-mcp-stop-escalation-and-live-versions` ; 18 tests ciblés et parcours stdio/navigateurs réussis. Livraison3.2.4, activation et capacités des relais déjà chargés distinctes.
+
 ## SCM — reconnexion MCP, 13 novembre 2026
 
 `reload-mcp-connectors-after-cabu`, code non attribué : relais stable, registre
