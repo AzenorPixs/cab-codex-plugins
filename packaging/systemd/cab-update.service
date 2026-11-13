@@ -1,0 +1,16 @@
+[Unit]
+Description=Mise à jour autonome de Codex Approval Bridge
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/cab update-worker
+TimeoutStartSec=1800s
+TimeoutStopSec=90s
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cab-update

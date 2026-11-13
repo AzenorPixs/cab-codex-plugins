@@ -13,6 +13,25 @@ def cab_status()->dict:
     """État du service, amorçage et version ; ne lance aucun RUN."""
     return client().get('health')
 @server.tool()
+def cab_update_status(request_id:str)->dict:
+    """Lit le même reçu durable de mise à jour ; aucune nouvelle installation."""
+    return client().command('system.update.status',{'request_id':request_id})
+@server.tool()
+async def cab_update(request_id:str,version:str='',timeout_ms:int=1800000)->dict:
+    """Demande explicite CABU : CAB met à jour sa source officielle sans sudo client ni LLM intermédiaire. OK porte la version vérifiée."""
+    if type(timeout_ms) is not int or not 1000<=timeout_ms<=1800000:raise ValueError('update-wait-invalid')
+    c=client()
+    try:result=await asyncio.to_thread(c.command,'system.update',{'request_id':request_id,'version':version})
+    except ClientError as error:
+        return {'request_id':request_id,'state':'ADMISSION_UNCONFIRMED','error':str(error),'next_action':'cab_update_status','retry_execution':False}
+    deadline=asyncio.get_running_loop().time()+timeout_ms/1000
+    while result['state'] not in ('OK','FAILED','UNKNOWN') and asyncio.get_running_loop().time()<deadline:
+        await asyncio.sleep(1)
+        try:result=await asyncio.to_thread(c.command,'system.update.status',{'request_id':request_id})
+        except ClientError as error:
+            if str(error)!='cab-unavailable':raise
+    return result
+@server.tool()
 def cab_contract()->dict:
     """Contrat commun avant cadrage et autonomie ; aucune initialisation ni permission implicite."""
     return {'version':__version__,'service':'cab.service','api':'/api/v1/openapi.json','profiles':['direct','piloted'],'pilotage':'choix résolus et mandat initial, autonomie de réalisation/tests/coordination, exceptions et revue finale seulement','exceptions':['outside-change','outside-framing','missing-tool','web-consultation'],'workshop':'piloted: /tmp/cab/<project>/.cab-tests/<change>/<RUN> ; direct: projet/.cab-tests','recovery':'Même request_id, lecture du reçu ; UNKNOWN interdit tout rejeu.'}
