@@ -8,6 +8,8 @@ from pathlib import Path
 import secrets
 import sys
 import time
+from . import __version__
+from .connector_process import identity
 from .client import Client,ClientError
 
 MAX_LINE=8*1024*1024
@@ -29,19 +31,58 @@ class Bridge:
         self.version='';self.catalog='';self.state='STARTING';self.error='';self.serial=0
         self.lock=asyncio.Lock();self.output_lock=asyncio.Lock();self.bootstrap=None;self.stopped=False
         self.client_factory=Client;self.client=self.client_factory()
+        self.uncertain=False;self.client_closed=False;self.worker_identity=None;self.stop_reports=[];self.write_uncertain=set()
 
     async def output(self,message):
+        if self.client_closed:return
         raw=(json.dumps(message,separators=(',',':'),ensure_ascii=False)+'\n').encode()
         async with self.output_lock:
             sys.stdout.buffer.write(raw);sys.stdout.buffer.flush()
 
     async def send(self,message):
         if self.child is None or self.child.returncode is not None:raise ConnectionError('mcp-worker-unavailable')
-        self.child.stdin.write((json.dumps(message,separators=(',',':'))+'\n').encode());await self.child.stdin.drain()
+        try:
+            self.child.stdin.write((json.dumps(message,separators=(',',':'))+'\n').encode());await self.child.stdin.drain()
+        except (OSError,RuntimeError) as error:
+            if 'id' in message:self.write_uncertain.add(key(message['id']))
+            self.state='FAILED'
+            raise ConnectionError('mcp-worker-write-outcome-unconfirmed') from error
 
     async def spawn(self):
         self.child=await asyncio.create_subprocess_exec('/usr/bin/cab','mcp-worker','--agent',self.agent,stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=None,limit=MAX_LINE+1)
         self.reader_task=asyncio.create_task(self.read_worker(self.child))
+        self.worker_identity=identity(self.child.pid)
+
+    def quiet(self):
+        return not self.pending and not self.server_pending and not ((self.uncertain or self.write_uncertain) and self.child and identity(self.child.pid))
+
+    async def stop_worker(self,process):
+        import importlib
+        from . import worker_stop
+        importlib.reload(worker_stop)
+        try:settings=(await asyncio.to_thread(self.client_factory().get,'connectors/policy'))['mcp_reload']
+        except (ClientError,KeyError):settings={**worker_stop.DEFAULT,'allow_sigkill':False}
+        async def boundary():
+            if not self.quiet():return False
+            try:allowed=(await asyncio.to_thread(self.client_factory().get,'connectors/policy')).get('stop_allowed') is True
+            except ClientError:return False
+            return allowed and self.quiet()
+        report=await worker_stop.stop_child(process,self.agent,settings,boundary)
+        if report['worker'] is None:report['worker']=self.worker_identity
+        attempt=secrets.token_hex(16)
+        sys.stderr.write(json.dumps({'component':'cab-mcp-stop','attempt_id':attempt,'state':report['state'],'stages':report['stages'],'reason':report['reason']})+'\n');sys.stderr.flush()
+        self.stop_reports.append({'connector_id':self.connector_id,'attempt_id':attempt,'report':report})
+        self.stop_reports=self.stop_reports[-128:]
+        await self.flush_reports()
+        return report
+
+    async def flush_reports(self):
+        for item in list(self.stop_reports):
+            try:await asyncio.to_thread(self.client_factory().command,'connector.stop_report',item)
+            except ClientError as error:
+                if str(error) in ('not-found','connector-stop-worker-divergent'):self.stop_reports.remove(item)
+                else:break
+            else:self.stop_reports.remove(item)
 
     async def read_worker(self,process):
         try:
@@ -55,6 +96,8 @@ class Bridge:
                     continue
                 if 'method' in message and 'id' in message:self.server_pending.add(key(message['id']))
                 if 'id' in message and 'method' not in message:
+                    if key(message['id']) in self.write_uncertain:
+                        self.write_uncertain.discard(key(message['id']));continue
                     original=self.pending.pop(key(message['id']),None)
                     if original:
                         method=original.get('method')
@@ -67,7 +110,8 @@ class Bridge:
         except (OSError,ValueError,asyncio.LimitOverrunError) as error:
             self.error=type(error).__name__
         finally:
-            if process is self.child and not self.stopped:
+            if process is self.child:
+                if self.pending or self.server_pending:self.uncertain=True
                 self.state='FAILED'
                 if self.bootstrap:
                     future=self.bootstrap[1];self.bootstrap=None
@@ -79,14 +123,14 @@ class Bridge:
 
     async def reload(self):
         async with self.lock:
-            if self.pending or self.server_pending or not self.initialized:return
+            if not self.quiet() or not self.initialized:return
             self.state='RELOADING';old=self.child;task=self.reader_task
-            self.child=None
-            if old and old.returncode is None:
-                old.terminate()
-                try:await asyncio.wait_for(old.wait(),10)
-                except asyncio.TimeoutError:old.kill();await old.wait()
+            if old:
+                report=await self.stop_worker(old)
+                if report['state']!='STOPPED':
+                    self.state='FAILED';self.error=report['reason'];return
             if task:await task
+            self.child=None;self.uncertain=False;self.write_uncertain.clear()
             self.catalog=''
             await self.spawn();self.serial+=1
             marker='cab-internal-'+self.connector_id+'-'+str(self.serial)
@@ -103,9 +147,10 @@ class Bridge:
         if not self.child or not self.version or self.child.returncode is not None:return
         state='BUSY' if self.pending or self.server_pending else 'READY' if self.catalog==self.version else 'CATALOG_PENDING'
         if self.state=='FAILED':state='FAILED'
-        body={'connector_id':self.connector_id,'worker_pid':self.child.pid,'loaded_version':self.version,'catalog_version':self.catalog,'pending':len(self.pending)+len(self.server_pending),'state':state,'error':self.error}
+        body={'connector_id':self.connector_id,'worker_pid':self.child.pid,'loaded_version':self.version,'catalog_version':self.catalog,'relay_version':__version__,'pending':len(self.pending)+len(self.server_pending),'state':state,'error':self.error}
         try:
             self.client=self.client_factory()
+            await self.flush_reports()
             await asyncio.to_thread(self.client.command,'connector.heartbeat',body);self.error=''
         except ClientError as error:
             code=str(error)[:100]
@@ -116,7 +161,7 @@ class Bridge:
         while not self.stopped:
             try:
                 target=await asyncio.to_thread(installed_version)
-                if self.initialized and not self.pending and not self.server_pending and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
+                if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
                     try:health=await asyncio.to_thread(self.client.get,'health')
                     except ClientError:health={}
                     if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):await self.reload()
@@ -178,14 +223,17 @@ class Bridge:
                             self.pending.pop(marker,None)
                             await self.output({'jsonrpc':'2.0','id':message['id'],'error':{'code':-32001,'message':'mcp-worker-unavailable-no-replay'}})
         finally:
-            self.stopped=True;watcher.cancel()
+            self.stopped=True;self.client_closed=True;watcher.cancel()
+            try:await asyncio.to_thread(self.client_factory().command,'connector.disconnected',{'connector_id':self.connector_id})
+            except ClientError:pass
             await asyncio.gather(watcher,return_exceptions=True)
             for task in self.control.values():task.cancel()
             await asyncio.gather(*self.control.values(),return_exceptions=True)
-            if self.child and self.child.returncode is None:
-                self.child.terminate()
-                try:await asyncio.wait_for(self.child.wait(),10)
-                except asyncio.TimeoutError:self.child.kill();await self.child.wait()
+            # Une disparition du client ne transforme pas une requête en autorisation de kill.
+            while self.child and identity(self.child.pid) and not self.quiet():await asyncio.sleep(.2)
+            if self.child:
+                report=await self.stop_worker(self.child)
+                if report['state']!='STOPPED':await self.child.wait()
             if self.reader_task:await self.reader_task
 
 def run(agent):asyncio.run(Bridge(agent).serve())

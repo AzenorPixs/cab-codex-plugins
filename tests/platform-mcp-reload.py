@@ -11,10 +11,12 @@ assert os.environ.get('CAB_TEST_FIXTURE')=='1' and Path('/.dockerenv').exists()
 os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
 import django
 django.setup()
-from cab_platform.core.models import McpConnector,Operation,Run
+from cab_platform.core.models import McpConnector,Operation,Run,McpStopAttempt
+from cab_platform import __version__
+import importlib.util
 
 VERSION=Path('/usr/lib/cab/python/cab_platform/__init__.py');original=VERSION.read_text()
-old=original.replace("'3.2.3'","'3.2.2'")
+old=original.replace(repr(__version__),repr("3.2.3"))
 assert old!=original
 def wait(check,label,seconds=30):
     until=time.monotonic()+seconds
@@ -65,12 +67,12 @@ class Wire:
 proof=[]
 try:
     for agent in ('codex','opencode'):
-        VERSION.write_text(old);wire=Wire(agent)
+        VERSION.write_text(old);Path(importlib.util.cache_from_source(str(VERSION))).unlink(missing_ok=True);wire=Wire(agent)
         try:
             initialized=wire.rpc('initialize',{'protocolVersion':'2025-11-25','capabilities':{},'clientInfo':{'name':agent+'-qualification','version':'1'}})
-            assert initialized['serverInfo']['version']=='3.2.2';assert initialized['capabilities']['tools']['listChanged']
+            assert initialized['serverInfo']['version']=='3.2.3';assert initialized['capabilities']['tools']['listChanged']
             wire.send('notifications/initialized',notification=True);wire.rpc('tools/list')
-            row=wait(lambda:McpConnector.objects.filter(process__pid=wire.process.pid,catalog_version='3.2.2').first(),'initial-catalog')
+            row=wait(lambda:McpConnector.objects.filter(process__pid=wire.process.pid,catalog_version='3.2.3').first(),'initial-catalog')
             before={'connector':row.pk,'process':row.process,'worker':row.worker,'generation':row.generation}
             root=Path(tempfile.mkdtemp(prefix='cab-mcp-reload-'));(root/'source').write_text('source stable\n');change=root/'openspec/changes/reload';change.mkdir(parents=True);(change/'tasks.md').write_text('- [ ] Fixture active\n')
             project=wire.tool('project_register',{'root':str(root)})['project_id'];run='RELOAD-'+agent+'-'+root.name
@@ -83,14 +85,15 @@ try:
             result=wire.response(rpc);result=result.get('structuredContent') or json.loads(result['content'][0]['text'])
             assert result['state']=='COMPLETED' and result['receipt']['exit_code']==0,result
             def reloaded():
-                row.refresh_from_db();return row.loaded_version=='3.2.3' and row.generation>before['generation']
+                row.refresh_from_db();return row.loaded_version==__version__ and row.generation>before['generation']
             wait(reloaded,'worker-reloaded');assert row.catalog_version==''
             assert row.process==before['process'] and row.worker!=before['worker']
-            wire.rpc('tools/list');wait(lambda:McpConnector.objects.filter(pk=row.pk,catalog_version='3.2.3').exists(),'catalog-ack')
-            assert wire.tool('cab_contract',{})['version']=='3.2.3'
+            wire.rpc('tools/list');wait(lambda:McpConnector.objects.filter(pk=row.pk,catalog_version=__version__).exists(),'catalog-ack')
+            assert wire.tool('cab_contract',{})['version']==__version__
             operation=Operation.objects.get(run=target,request_id=request);assert operation.receipt_digest==result['receipt_digest'];assert Operation.objects.filter(run=target).count()==1
             target.refresh_from_db();assert target.session_id=='SID-'+run and target.generation==1
-            proof.append({'agent':agent,'stable_client_process':True,'business_finished_before_reload':True,'worker_replaced':True,'catalog_ack_observed':True,'one_execution_only':True,'same_run_sid_generation_and_receipt':True,'notification_seen':any(n.get('method')=='notifications/tools/list_changed' for n in wire.notifications)})
+            assert McpStopAttempt.objects.filter(connector=row,report__state='STOPPED').exists()
+            proof.append({'stop_audit_persisted':True,'agent':agent,'stable_client_process':True,'business_finished_before_reload':True,'worker_replaced':True,'catalog_ack_observed':True,'one_execution_only':True,'same_run_sid_generation_and_receipt':True,'notification_seen':any(n.get('method')=='notifications/tools/list_changed' for n in wire.notifications)})
         finally:wire.close()
 finally:VERSION.write_text(original)
-Path('/tmp/mcp-reload-323-proof.json').write_text(json.dumps(proof,indent=2));print(json.dumps(proof))
+Path('/tmp/mcp-reload-proof.json').write_text(json.dumps(proof,indent=2));print(json.dumps(proof))

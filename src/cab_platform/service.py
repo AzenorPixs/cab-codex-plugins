@@ -95,7 +95,7 @@ def run(port=8790):
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
-    closure_future=None;next_closure=0;next_update=0
+    closure_future=None;next_closure=0;next_update=0;next_connectors=0
     update_future=None;availability_future=None
     from .core.models import Operation,Maintenance
     from .core import commands
@@ -118,6 +118,9 @@ def run(port=8790):
             if not config().get('initialized'):continue
             try:
                 refresh_database()
+                if time.monotonic()>=next_connectors:
+                    from .core.connectors import refresh_projection
+                    refresh_projection();next_connectors=time.monotonic()+1
                 if time.monotonic()>=next_update:
                     from .system_updates import dispatch
                     from .update_availability import check as check_update

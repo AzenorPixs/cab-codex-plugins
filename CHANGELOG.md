@@ -1,5 +1,13 @@
 # Historique des versions
 
+## 3.2.4 — 2026-11-13
+
+- Arrêt du seul moteur MCP enfant : sortie gracieuse, TERM/KILL configurables,
+  identité vérifiée et pidfd ; refus sur requête indécise et politique indisponible.
+- Audit technique des tentatives, versions de relais distinctes du moteur chargé.
+- Projection Electric minimale et abonnement partagé pour les versions MCP sur
+  Agents et à gauche d'API, boule verte et texte vert gras, sans reload du document.
+
 ## 3.2.3 — 2026-11-13
 
 - Relais MCP stdio stable Codex/OpenCode : moteur rechargeable à frontière sûre,

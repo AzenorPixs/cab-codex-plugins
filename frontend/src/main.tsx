@@ -11,6 +11,7 @@ import {ProjectHome} from './ProjectHome'
 import {UpdateBadge,HomeVersionCheck,SystemUpdatePage} from './SystemUpdate'
 import {RunView,stageLabel} from './RunView'
 import {SessionActions,SessionArchives,useEvaluations,runStateLabel} from './SessionLifecycle'
+import {McpConnectionsProvider,McpVersions} from './McpConnections'
 import './style.css'
 
 type Health={state:string;initialized:boolean;version:string;csrf_token:string}
@@ -20,7 +21,7 @@ function Layout(){
   const header=useRef<HTMLElement>(null)
   const pathname=useRouterState({select:state=>state.location.pathname})
   useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
-  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.2.3</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'?'workspace-main':undefined}><Outlet/></main></>
+  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>3.2.4</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><McpVersions header/><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'?'workspace-main':undefined}><Outlet/></main></>
 }
 
 function Gate({children}:{children:React.ReactNode}){
@@ -93,4 +94,4 @@ const administrationPages=(['database','interface','projects','web-server'] as c
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,legacyAgentsRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><RouterProvider router={router}/></AppearanceProvider></QueryClientProvider>)
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></AppearanceProvider></QueryClientProvider>)

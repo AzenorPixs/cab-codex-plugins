@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.3
+# CAB 3.2.4
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
