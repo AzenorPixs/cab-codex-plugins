@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.1.2 — 2026-11-13
+
+- L’atelier ne monte pas un fichier cadré supprimé : absence réelle préservée,
+  aucune recréation ou permission ajoutée, liens non sûrs toujours refusés.
+
 ## 3.1.1 — 2026-11-13
 
 - Le hash d’un périmètre existant enregistre explicitement un fichier supprimé,
