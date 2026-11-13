@@ -1,4 +1,4 @@
-# Collecte native CAB 3.0.5
+# Collecte native CAB 3.0.6
 
 Le service cab.service collecte dans PostgreSQL ; aucun daemon de plugin ni
 moniteur direct séparé. Après cab_status et cab_contract, utiliser project_register
@@ -14,18 +14,32 @@ aucun prompt ne sont exportés. La collecte quantitative est périodique, indép
 du LLM. Une même identité d’agent peut héberger plusieurs RUN sans mélanger les
 sources. OpenCode utilise le profil natif explicite du compte et le SID du RUN.
 
-Consulter statistics pour les valeurs natives et leur couverture. Les absences
-restent N/A ; ne pas additionner cache ou raisonnement à un total qui les contient.
-Avant le rapport final, `cab call run.freeze` avec project_id et run_id sur stdin
-fige la collecte après son dernier relevé. Utiliser ensuite `cab sgs CHANGE`,
-puis DELTA pour le seul global existant. Aucune reconstruction implicite.
+Avant la première tâche du RUN, ouvrir sa mesure avec statistics_begin
+(project_id, run_id, request_id stable, from_coding_start=true). Le codeur
+atteste ainsi que cette borne précède effectivement le codage. Une reprise
+historique déjà engagée utilise false : aucune mesure rétroactive n’est inventée.
+Un seul contexte est ouvert par SID ; commencer celui d’un autre change ferme
+le précédent à la même frontière, sans suspendre les RUN ni demander d’aval.
+Pour une pause, statistics_end ferme la période ; reprendre avec un nouveau
+request_id de début. Répéter un même request_id lit son reçu, sans réouvrir.
 
-Après archivage réussi, `cab call run.close` reçoit project_id, run_id, branch
+statistics expose seulement les périodes bornées du RUN. statistics_change
+agrège tous les RUN et SID du change et fournit sgs_evidence. Les anciens totaux
+natifs de session sont des diagnostics et ne sont jamais des totaux du change.
+Un RUN non mesuré depuis son entrée en codage empêche un total complet SGS ;
+les mesures partielles restent inspectables. Source/compteur divergents ou
+champ manquant restent N/A. Les écarts portent les observations natives entre
+bornes ; aucun événement tardif ou requête chevauchante n’est découpé ou estimé.
+
+Avant le rapport final, statistics_end ferme la dernière période. run.freeze
+ferme aussi uniquement celle du RUN concerné avant de figer la collecte. Utiliser
+sgs_evidence de statistics_change comme preuve structurée de CHANGE, puis DELTA
+pour le seul global existant. Aucun total natif partagé n’est réinjecté à la main.
+Les autres preuves (tests, syntaxe, tâches) ne deviennent pas zéro si la source
+native ne les fournit pas : les documenter séparément dans le bilan final.
+
+Après archivage réussi, cab call run.close reçoit project_id, run_id, branch
 TERMINÉ, receipt_id stable, report relatif et sha256 du STATISTICS.md durable.
-La branche BLOQUÉ exige le rapport et BLOCKERS.md ; elle n’est pas une acceptation
-pour intégration. Les effets incertains et baux détenus empêchent la clôture.
-Conserver le même reçu lors d’une reprise ; aucun effacement des pairs ni rejeu.
-
-Un JSONL peut servir plusieurs RUN/changes de la même session native. Les
-compteurs sont cumulatifs pour cette session, sans ventilation prouvée par
-RUN/change ; ne pas les additionner comme des mesures disjointes.
+La branche BLOQUÉ exige rapport et BLOCKERS.md. Même SID/RUN et même reçu ;
+aucun effacement des pairs ni rejeu. Un change peut regrouper plusieurs RUN et
+plusieurs sessions ; seuls leurs écarts de périodes sont agrégés, une fois.

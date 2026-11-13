@@ -257,3 +257,52 @@ Un JSONL correspond à une session native, qui peut participer à plusieurs RUN
 et changes. Les totaux collectés sont ceux de cette session : ils ne prouvent
 pas une ventilation par RUN/change et ne doivent pas être additionnés comme
 des populations disjointes. Cette correction ne change pas le collecteur.
+
+### Statistiques propres au change —3.0.6
+
+Une période appartient au triplet change/RUN/session. Un même change peut avoir
+plusieurs RUN et SID, y compris simultanés ; chaque SID n’a qu’une période
+ouverte. La bascule est opérée par le codeur, sans validation de l’orchestrateur.
+
+Après liaison native et avant la première tâche :
+
+```sh
+printf '%s\n' '{"project_id":"<ID interne>","run_id":"<RUN>","request_id":"MESURE-DEBUT-1","from_coding_start":true}' | cab call statistics.begin
+```
+
+Ce booléen atteste le début réel du codage. Pour une session déjà engagée avant
+l’installation, utiliser false : aucune borne rétroactive. Pour une pause/fin :
+
+```sh
+printf '%s\n' '{"project_id":"<ID interne>","run_id":"<RUN>","request_id":"MESURE-FIN-1"}' | cab call statistics.end
+```
+
+Reprendre avec un nouveau request_id de début. Même requête = même reçu, même
+si la période est ensuite fermée ; un autre contenu avec cet ID est refusé.
+Commencer un autre contexte du même SID ferme le précédent et ouvre le suivant
+sur le même instantané. Gel et clôture ferment uniquement la période de leur RUN.
+Les clients MCP disposent de statistics_begin, statistics_end, statistics_change.
+Les clients déjà chargés gardent le CLI public sans redémarrage.
+
+L’API metrics/statistics expose les périodes du RUN, sans anciens totaux de
+session. statistics.change fournit l’agrégat de tous les RUN/SID de ce change,
+les périodes (pages de50, after/next_after), leur empreinte et sgs_evidence pour
+le moteur SGS. Un maximum explicite de1000périodes protège cette réponse ; au-delà,
+la lecture refuse avec statistics-period-limit, sans fournir un total tronqué.
+
+Les compteurs natifs sont pris au début et à la fin ; leur différence seule est
+admissible. Ils restent des observations natives : timestamps natifs et serveur
+sont conservés, sans interpolation à l’intérieur d’un événement natif ni
+attribution certaine d’un événement tardif. Source remplacée, compteur réinitialisé,
+champ absent ou données OpenCode encore en cours donnent des valeurs indisponibles.
+Les métriques que le natif ne fournit pas ne sont pas fabriquées.
+
+Une couverture du change exige des périodes fermées et une attestation de début
+pour chaque RUN lié. Sinon les écarts observés restent visibles comme partiels,
+mais les totaux SGS restent N/A. Les anciens RUN n’obtiennent aucune période
+rétroactive et les anciens Metric sont conservés comme diagnostics session-wide.
+Durée globale : première borne à dernière borne. Durée active : union temporelle
+des périodes, sans addition des temps simultanés entre codeurs.
+
+Tables PostgreSQL measurement_periods et measurement_actions : bornes, instantanés
+numériques, affiliations et reçus ; aucune conversation n’est copiée en base.

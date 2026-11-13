@@ -196,6 +196,31 @@ class Metric(models.Model):
     class Meta:
         constraints=[models.UniqueConstraint(fields=['run','source','stream'],name='cab_metric_stream')]
 
+class MeasurementPeriod(models.Model):
+    session=models.ForeignKey(CodingSession,on_delete=models.PROTECT,related_name='measurement_periods')
+    run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='measurement_periods')
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='measurement_periods')
+    started=models.DateTimeField()
+    ended=models.DateTimeField(null=True)
+    start_snapshot=models.JSONField(default=dict)
+    end_snapshot=models.JSONField(default=dict)
+    values=models.JSONField(default=dict)
+    coverage=models.JSONField(default=dict)
+    stop_reason=models.CharField(max_length=40,blank=True)
+    class Meta:
+        db_table='measurement_periods'
+        constraints=[models.UniqueConstraint(fields=['session'],condition=models.Q(ended__isnull=True),name='cab_one_measurement_per_sid')]
+
+class MeasurementAction(models.Model):
+    run=models.ForeignKey(Run,on_delete=models.PROTECT)
+    request_id=models.CharField(max_length=200)
+    digest=models.CharField(max_length=64)
+    result=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='measurement_actions'
+        constraints=[models.UniqueConstraint(fields=['run','request_id'],name='cab_measurement_receipt')]
+
 class LegacySnapshot(models.Model):
     source=models.CharField(max_length=1800)
     sha256=models.CharField(max_length=64)

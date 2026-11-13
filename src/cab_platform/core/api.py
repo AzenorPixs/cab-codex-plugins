@@ -192,8 +192,8 @@ def events(request,project_id:str,after:int=0):
 @api.get('/metrics')
 def metrics(request,project_id:str,run_id:str,after:int=0):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
-    rows=list(Metric.objects.filter(run=r,pk__gt=max(0,after)).order_by('pk').values('id','source','stream','sequence','values','coverage','model')[:200])
-    return {'run_id':r.run_id,'streams':rows,'next_after':rows[-1]['id'] if len(rows)==200 else None}
+    from .measurements import run_statistics
+    return run_statistics(actor,r,after)
 
 @api.get('/incidents')
 def incidents(request,project_id:str|None=None):
@@ -236,6 +236,9 @@ def command(request,body:Command):
             return run_data(r)
     if name=='native.locate':return commands.locate_native(actor,data)
     if name=='native.bind':return commands.bind_native(actor,data)
+    if name in ('statistics.begin','statistics.end','statistics.change'):
+        from . import measurements
+        return measurements.change_statistics(actor,data) if name=='statistics.change' else measurements.transition(actor,data,name.rsplit('.',1)[1])
     if name=='operation.start':
         op,created=commands.start_operation(actor,data);return {**operation_data(op),'created':created}
     if name=='external.describe':
@@ -260,13 +263,27 @@ def command(request,body:Command):
     if name=='run.freeze':
         r=commands.run_scope(actor,data['run_id'],data['project_id']);commands.require(commands.no_pending(r),'effects-unresolved')
         if r.mandate.get('native_frozen_at'):return {'frozen_at':r.mandate['native_frozen_at'],'run_id':r.run_id}
+        from .measurements import end_if_open
+        end_if_open(actor,r)
         from cab_platform.collectors import codex_metrics,opencode_metrics
         if actor.agent=='opencode':opencode_metrics(actor)
         else:codex_metrics(r)
         with transaction.atomic():
             r=Run.objects.select_for_update().get(pk=r.pk);r.mandate['native_frozen_at']=timezone.now().isoformat();r.save();commands.event(r,'native-source-frozen',{})
-        return {'frozen_at':r.mandate['native_frozen_at'],'run_id':r.run_id,'metrics':list(Metric.objects.filter(run=r).values('source','stream','values','coverage','model'))}
+        from .measurements import run_statistics
+        bounded=run_statistics(actor,r)
+        return {'frozen_at':r.mandate['native_frozen_at'],'run_id':r.run_id,'metrics':bounded['streams'],'statistics':bounded}
     if name=='run.close':
+        from .measurements import end_if_open
+        candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
+        commands.require(commands.no_pending(candidate) and not Lease.objects.filter(run=candidate,state='HELD').exists(),'closure-effects-protected')
+        commands.require(data['branch'] in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
+        if data['branch']=='TERMINÉ':commands.require(candidate.state in ('ACCEPTED','CLOSED'),'final-acceptance-required')
+        candidate_report=commands.safe_path(Path(candidate.project.root),data['report'])
+        commands.require(candidate_report.name=='STATISTICS.md' and candidate.change in candidate_report.parent.name,'closure-report-outside-change')
+        commands.require(hashlib.sha256(candidate_report.read_bytes()).hexdigest()==data['sha256'],'closure-report-stale')
+        if data['branch']=='BLOQUÉ':commands.require((candidate_report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
+        end_if_open(actor,candidate)
         with transaction.atomic():
             r=commands.run_scope(actor,data['run_id'],data['project_id'],lock=True)
             commands.require(commands.no_pending(r) and not Lease.objects.filter(run=r,state='HELD').exists(),'closure-effects-protected')

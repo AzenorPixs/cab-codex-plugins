@@ -634,3 +634,5 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 [correct-agent-routing-and-connections](changes/archive/2026-11-13-correct-agent-routing-and-connections/), code non attribué : SCM3.0.4 qualifié et archivé ; corrections Agents, transports et identifiants ; livraison DIU/activation à vérifier séparément.
 
 [resolve-native-session-source](changes/archive/2026-11-13-resolve-native-session-source/), code non attribué : SCM3.0.5 qualifié et archivé ; découverte native publique ciblée ; livraison/activation à vérifier, aucun test DIU.
+
+[attribute-statistics-to-change-intervals](changes/archive/2026-11-13-attribute-statistics-to-change-intervals/), code non attribué : SCM3.0.6 qualifié et archivé, périodes par change/RUN/SID ; livraison et activation à vérifier.

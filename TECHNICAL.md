@@ -1,6 +1,12 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.0.5
+## Architecture CAB 3.0.6
+
+Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
+contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions
+sans totaux partagés. Couverture incomplète : N/A, pas de rétroactivité. Parcours
+et limites dans docs/platform-operations.md et docs/sgs-schema.md.
+
 
 Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
 PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et

@@ -220,3 +220,17 @@ première tâche ; aucune cible fictive n’est créée pour initialiser le suiv
 Les compteurs absents restent unavailable. L’appelant alimente les preuves
 pendant les tâches ; le moteur ne dispose pas d’un observateur universel des
 agents. Aucun nouveau fichier de suivi partagé n’est requis.
+
+## Export des périodes CAB3.0.6
+
+La commande publique statistics.change renvoie cab-change-statistics-1 et son
+sgs_evidence directement admissible comme entrée structurée de CHANGE. Ce bilan
+est cumulatif pour le change, avec plusieurs RUN/SID possibles ; ses proof_ids
+identifient l’empreinte de toutes les périodes. Les pages servent à inspecter
+les affiliations et bornes, sans contenu de conversation.
+
+change_coverage_complete exige toutes les périodes fermées et un premier début
+attesté pour chaque RUN. Sinon les mesures natives/durées du change restent
+indisponibles dans SGS ; les seuls écarts observés sont conservés dans l’export
+comme mesures partielles. Les preuves de tests et tâches restent indépendantes.
+Les anciens totaux session-wide n’alimentent jamais cette contribution.
