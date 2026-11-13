@@ -340,3 +340,22 @@ Le même protocole statistique s’applique aux codeurs pilotés : ils ouvrent,
 ferment et basculent leurs périodes sans approbation d’orchestrateur. Pour les
 clients OpenCode déjà chargés, le CLI utilise CAB_AGENT=opencode et le profil
 privé du codeur ; aucun jeton root ni identité fictive n’est nécessaire.
+## Régularisation historique de RUN archivés
+
+Un RUN direct ancien peut avoir une archive complète sans reçus de tests CAB.
+Sur autorisation explicite du développeur, le propriétaire ou l'administrateur
+utilise `cab call run.inspect_historical`, puis `cab call run.close_historical`.
+Les corps JSON contiennent project_id, run_id et archive_path canonique ; la
+confirmation ajoute evidence_digest retourné, receipt_id stable, authorization
+(référence de la demande), reason et developer_authorized=true.
+
+CAB vérifie archive unique, source active absente, proposal/tasks/review non
+vides, tâches toutes cochées et rapport local lisible. Il refuse maintenance,
+effets non terminaux/inconnus, bail détenu, période ouverte, liens non sûrs et
+preuve modifiée. Une réponse perdue se récupère avec la même confirmation.
+Le reçu `kind=historical`, `branch=HISTORIQUE`, `normal_acceptance=false` porte
+les empreintes documentaires et l'autorité ; CLOSED à l'étape11 ferme seulement
+le cycle historique. Ni qualification actuelle des tests/livraison, ni reçu
+d'exécution n'est reconstruit. SID, RUN, génération, mandat, gel et reçus restent
+inchangés. Le service conserve la gestion statistique ; aucune opération DIU
+historique n'est rejouée. MCP expose les deux mêmes commandes sans autre logique.

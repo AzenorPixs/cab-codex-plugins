@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 3.1.3 — 2026-11-13
+
+- Clôture historique explicite des RUN directs archivés : inspection des preuves,
+  confirmation liée à leur empreinte, autorisation développeur et audit durable.
+- Reçus historiques distincts d'une acceptation normale ; aucun test inventé ou
+  rejoué. Effets incertains, baux, périodes ouvertes et preuves périmées protégés.
+
 ## 3.1.2 — 2026-11-13
 
 - L’atelier ne monte pas un fichier cadré supprimé : absence réelle préservée,
