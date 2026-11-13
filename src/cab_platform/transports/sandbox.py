@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "3.1.1"
+VERSION = "3.1.2"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
@@ -212,6 +212,8 @@ def sandbox_command(args,grant):
                     or any(part in {'.git','.opencode','.cab-tests','.codex'} or SECRET.search(part)
                            for part in path.relative_to(workspace).parts)):
                 raise AtelierError('atelier-autonomy-path-invalid')
+            # Une suppression cadrée est un état réel, pas un fichier à recréer.
+            if not path.exists():continue
             candidates=[path]
             if path.is_dir():
                 for directory,dirs,files in os.walk(path,followlinks=False):

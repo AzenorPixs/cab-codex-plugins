@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.1.1
+## CAB 3.1.2
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

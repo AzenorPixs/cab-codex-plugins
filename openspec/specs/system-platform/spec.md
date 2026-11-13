@@ -518,4 +518,4 @@ sans le recréer ni accepter silencieusement une autre source.
 
 #### Scenario: Fichier cadré supprimé
 - **WHEN** un fichier cadré est supprimé dans le périmètre autorisé
-- **THEN** son absence modifie l’empreinte de façon stable, sans modifier le mandat et en conservant les refus de chemins ou liens non sûrs
+- **THEN** son absence modifie l’empreinte de façon stable, l’atelier ne monte ni ne recrée ce chemin et conserve les refus de chemins ou liens non sûrs
