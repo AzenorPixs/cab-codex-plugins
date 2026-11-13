@@ -66,6 +66,10 @@ def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
     from .models import FinalizationPlan
     plan=FinalizationPlan.objects.filter(run=run).first()
+    if plan is None and run.state=='WORKING' and not run.suspension and not run.operation_set.exists() and not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'):
+        from cab_platform.finalization_contract import next_actions
+        result.update(action='configure',reasons=['finalization-contract-required'],next_actions=next_actions(['finalization-contract-required'],{}))
+        result['evaluation_digest']=c.digest(result);return result
     if plan and run.state!='CLOSED':
         from .run_finalization import view
         status=view(run,plan)

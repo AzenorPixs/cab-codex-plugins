@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+`recover-finalization-checks-autonomously`, code non attribué : révision autonome des contrôles et actions de convergence, migration additive0016. Sources : change OpenSpec du même nom ; 13 tests PostgreSQL, 9 tests purs et parcours API réel réussis. Livraison/activation3.2.5 à vérifier séparément.
+
 Raccordement commun du 9 novembre 2026 : `unify-session-coordination-adapter`, ARCHIVÉ,
 code non attribué ; réalisation source et validations propres au projet cab
 vérifiées, rapport individuel vérifié ; livraison distincte à constater. [Tâches](changes/archive/2026-11-09-unify-session-coordination-adapter/tasks.md).

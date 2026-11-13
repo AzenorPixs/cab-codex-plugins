@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.4
+# CAB 3.2.5
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -17,6 +17,18 @@ un journal de tokens ou une déclaration de l'agent ne prouve pas son exécution
 finalization_status expose les manques. finalization_configure permet une seule
 adoption avant opération/revue/gel ; aucun RUN ancien/importé migré implicitement.
 Contrat et API indépendants des outils de publication, sans rejeu de travaux.
+
+Le codeur direct ou piloté corrige seul un contrôle récupérable par
+finalization_revise_check : request_id stable, expected_policy_digest courant,
+check_id, nouvel argv et justification démontrée. Seul argv change ; critères,
+producteurs, exigences et revue réservée restent fixes. CAB conserve versions
+et reçus ; une preuve nouvelle est requise pour chaque nouvelle révision,
+même après retour à un ancien argv. Un succès courant, effet indécis, bail,
+gel, import ou revue/clôture interdit cette révision. Ne pas modifier SQL.
+finalization_status expose next_actions et pending_operations : corriger ou
+exécuter le seul contrôle affecté avec un nouvel identifiant, lire/réconcilier
+un effet inconnu, attendre le producteur, l'archive ou la revue indiqués.
+Ces actions sont des demandes précises, jamais des réexécutions automatiques.
 
 Le service réévalue et clôture les RUN admissibles sur preuves, sans tour LLM.
 `run_reevaluate` expose les motifs ; services sans preuve et effets inconnus

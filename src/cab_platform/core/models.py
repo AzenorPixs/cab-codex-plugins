@@ -391,6 +391,7 @@ class FinalizationPlan(models.Model):
     phase=models.CharField(max_length=24,default='WAITING')
     missing=models.JSONField(default=list)
     receipt=models.JSONField(default=dict)
+    check_revisions=models.JSONField(default=dict)
     updated=models.DateTimeField(auto_now=True)
     class Meta:db_table='run_finalization_plans'
 

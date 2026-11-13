@@ -1,9 +1,9 @@
 """Registre immutable ; seules les autorités déclarées attestent des faits."""
 import re
 from django.db import transaction
-from cab_platform.finalization_contract import validate,ContractError,KINDS
+from cab_platform.finalization_contract import validate,replace_check_argv,ContractError,KINDS
 from . import commands as c
-from .models import Actor,EvidenceProducer,FinalizationPlan,Operation,Run,RunEvidence,SystemUpdate
+from .models import Actor,Event,EvidenceProducer,FinalizationPlan,Operation,Run,RunEvidence,SystemUpdate
 
 def validate_policy(run,policy):
     try:return validate(policy,run.mandate['criteria'],run.mode)
@@ -29,6 +29,38 @@ def configure(actor,data):
     return {'policy':plan.policy,'digest':plan.digest}
 
 @transaction.atomic
+def revise_check(actor,data):
+    c.require(set(data)=={'project_id','run_id','request_id','expected_policy_digest','check_id','argv','reason'},'finalization-revision-fields-invalid',400)
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    key=c.identifier(data['request_id']);fingerprint=c.digest(data)
+    previous=Event.objects.filter(run=run,kind='finalization-check-revised',data__request_id=key).first()
+    if previous:
+        c.require(previous.data['input_digest']==fingerprint,'finalization-revision-request-conflict')
+        return previous.data['receipt']
+    c.working(run)
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'finalization-revision-protected')
+    plan=FinalizationPlan.objects.select_for_update().filter(run=run).first()
+    c.require(plan and plan.policy and not plan.receipt,'finalization-contract-required')
+    c.require(plan.digest==data['expected_policy_digest'] and plan.digest==c.digest(plan.policy),'finalization-revision-stale')
+    reason=data['reason'];c.require(isinstance(reason,str) and 10<=len(reason.strip())<=4000,'finalization-revision-reason-required',400)
+    try:value=replace_check_argv(plan.policy,data['check_id'],data['argv'])
+    except ContractError as error:raise c.Refused(str(error),400) from error
+    value=validate_policy(run,value)
+    check=next(item for item in plan.policy['checks'] if item['id']==data['check_id'])
+    version=plan.check_revisions.get(check['id'],1)
+    latest=run.finalization_evidence.filter(source='cab-operation',payload__rule_id=check['id']).order_by('-pk').first()
+    current=c.revision(run)
+    c.require(not (latest and latest.payload.get('check_revision',1)==version and latest.payload.get('result')=='passed' and latest.payload.get('source_revision')==current),'finalization-check-already-passed')
+    old_policy=plan.policy;old_digest=plan.digest
+    plan.policy=value;plan.digest=c.digest(value);plan.check_revisions={**plan.check_revisions,check['id']:version+1}
+    plan.phase='WAITING';plan.missing=['evidence:'+check['id']+':check-revised'];plan.save()
+    receipt={'request_id':key,'check_id':check['id'],'check_revision':version+1,'previous_policy_digest':old_digest,'policy_digest':plan.digest,'new_execution_required':True,'effects_issued':False}
+    c.event(run,'finalization-check-revised',{'request_id':key,'input_digest':fingerprint,'actor':actor.pk,'reason':reason,'source_revision':current,'old_policy':old_policy,'new_policy':value,'receipt':receipt})
+    return receipt
+
+@transaction.atomic
 def store(run,source,key,payload):
     c.identifier(key);fingerprint=c.digest(payload)
     current=Run.objects.select_for_update().get(pk=run.pk)
@@ -49,7 +81,7 @@ def operation_completed(op):
     try:after=c.revision(op.run)
     except (c.Refused,OSError,ValueError):after=None
     for check in matches:
-        payload={'rule_id':check['id'],'kind':'verification','result':'passed' if op.state=='COMPLETED' and op.receipt.get('exit_code')==0 and op.source_revision==after else 'unavailable' if after is None else 'failed','source_revision':op.source_revision,'source_after':after,'operation_id':op.pk,'request_id':op.request_id,'receipt_digest':op.receipt_digest,'exit_code':op.receipt.get('exit_code'),'scope':identity(op.run)}
+        payload={'rule_id':check['id'],'check_revision':plan.check_revisions.get(check['id'],1),'kind':'verification','result':'passed' if op.state=='COMPLETED' and op.receipt.get('exit_code')==0 and op.source_revision==after else 'unavailable' if after is None else 'failed','source_revision':op.source_revision,'source_after':after,'operation_id':op.pk,'request_id':op.request_id,'receipt_digest':op.receipt_digest,'exit_code':op.receipt.get('exit_code'),'scope':identity(op.run)}
         store(op.run,'cab-operation',check['id']+':'+op.request_id if len(check['id']+':'+op.request_id)<=200 else c.digest([check['id'],op.request_id]),payload)
 
 def identity(run):return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'change':run.change,'generation':run.generation}
