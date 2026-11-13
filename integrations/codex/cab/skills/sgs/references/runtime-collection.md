@@ -1,4 +1,4 @@
-# Collecte native CAB 3.0.6
+# Collecte native CAB 3.0.7
 
 Le service cab.service collecte dans PostgreSQL ; aucun daemon de plugin ni
 moniteur direct séparé. Après cab_status et cab_contract, utiliser project_register
@@ -43,3 +43,14 @@ TERMINÉ, receipt_id stable, report relatif et sha256 du STATISTICS.md durable.
 La branche BLOQUÉ exige rapport et BLOCKERS.md. Même SID/RUN et même reçu ;
 aucun effacement des pairs ni rejeu. Un change peut regrouper plusieurs RUN et
 plusieurs sessions ; seuls leurs écarts de périodes sont agrégés, une fois.
+
+Après reprise Codex, native_locate consulte l’index natif pour le seul SID,
+sans scanner les conversations. Si la liaison désigne l’ancien fichier, fermer
+sa période puis native_bind(resume=true) : index courant vérifié, historique
+conservé, même SID/RUN, aucun effet en cours ni gel. Recommencer la mesure avec
+un nouveau request_id ; ne pas mélanger les compteurs des deux fichiers. Un
+compteur non actualisé reste indisponible, jamais interprété comme zéro.
+
+En piloté, le codeur gère les mêmes périodes en autonomie. Pour le CLI OpenCode
+déjà chargé : CAB_AGENT=opencode cab call statistics.begin/end/change, avec le
+profil du codeur. L’orchestrateur n’approuve pas les bascules.

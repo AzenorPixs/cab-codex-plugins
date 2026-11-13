@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.6
+## Plateforme CAB 3.0.7
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
 contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions

@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.0.6
+# CAB 3.0.7
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
@@ -56,3 +56,8 @@ avec request_id stable et from_coding_start=true. Pour une entrée tardive, fals
 La bascule entre changes du même SID ferme le contexte précédent en autonomie ;
 statistics_end pour la pause/fin, nouveau début pour reprendre. statistics_change
 agrège plusieurs RUN/SID du change et fournit les preuves SGS sans totaux partagés.
+
+Reprise Codex : l’index natif peut désigner un nouveau journal pour le même SID.
+Fermer la période ouverte puis native_bind(resume=true), sans effet en cours
+ni gel ; seule la source indexée vérifiée est admise, historique conservé.
+Ancien compteur non actualisé : N/A. Aucun arrêt de client ni rejeu de test.

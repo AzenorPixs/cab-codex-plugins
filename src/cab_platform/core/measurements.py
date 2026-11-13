@@ -11,7 +11,8 @@ from .monitor import ensure_records
 
 
 def period_data(period):
-    value={'id':period.pk,'project_id':period.run.project_id,'change':period.change.identifier,'run_id':period.run.run_id,'session_id':period.session.native_id,'agent':period.session.agent,'uid':period.session.uid,'started':period.started.isoformat(),'ended':period.ended.isoformat() if period.ended else None,'values':period.values,'coverage':period.coverage,'stop_reason':period.stop_reason,'start_snapshot':period.start_snapshot,'end_snapshot':period.end_snapshot}
+    values,coverage=difference(period.start_snapshot,period.end_snapshot) if period.ended else (period.values,period.coverage)
+    value={'id':period.pk,'project_id':period.run.project_id,'change':period.change.identifier,'run_id':period.run.run_id,'session_id':period.session.native_id,'agent':period.session.agent,'uid':period.session.uid,'started':period.started.isoformat(),'ended':period.ended.isoformat() if period.ended else None,'values':values,'coverage':coverage,'stop_reason':period.stop_reason,'start_snapshot':period.start_snapshot,'end_snapshot':period.end_snapshot}
     return {**value,'sha256':commands.digest(value)}
 
 def finish(period,at,sample,reason):
@@ -62,16 +63,19 @@ def union_seconds(periods):
     return str(total)
 
 def aggregate(periods):
-    rows=list(periods);keys=set(TOKEN_FIELDS.values())|{key for period in rows for key in period.values};metrics={};complete=bool(rows) and all(period.ended is not None for period in rows)
+    rows=list(periods);effective={period.pk:period_data(period) for period in rows};keys=set(TOKEN_FIELDS.values())|{key for value in effective.values() for key in value['values']};metrics={};complete=bool(rows) and all(period.ended is not None for period in rows)
     for key in keys:
-        eligible=complete and all(period.coverage.get('state')=='bounded' and key in period.values for period in rows)
-        parts=[int(period.values[key]) for period in rows if key in period.values];observed=str(sum(parts)) if parts else None
+        eligible=complete and all(value['coverage'].get('state')=='bounded' and key in value['values'] for value in effective.values())
+        parts=[int(value['values'][key]) for value in effective.values() if key in value['values']];observed=str(sum(parts)) if parts else None
         metrics[key]={'state':'known' if eligible else 'unavailable','value':observed if eligible else None,'observed_partial':observed,'reason':None if eligible else 'Une période ouverte, indisponible ou un champ absent empêche un total complet.'}
-    return {'periods':[period_data(period) for period in rows],'metrics':metrics,'complete':complete,'active_seconds':union_seconds(rows) if complete else None,'started':min((p.started for p in rows),default=None),'ended':max((p.ended for p in rows if p.ended),default=None),'sessions':sorted({p.session.native_id for p in rows}),'runs':sorted({p.run.run_id for p in rows})}
+    return {'periods':list(effective.values()),'metrics':metrics,'complete':complete,'active_seconds':union_seconds(rows) if complete else None,'started':min((p.started for p in rows),default=None),'ended':max((p.ended for p in rows if p.ended),default=None),'sessions':sorted({p.session.native_id for p in rows}),'runs':sorted({p.run.run_id for p in rows})}
 
 def run_statistics(actor,run,after=0):
     rows=list(MeasurementPeriod.objects.filter(run=run,pk__gt=max(0,after)).select_related('run','change','session').order_by('pk')[:200]);bounded=aggregate(rows)
-    streams=[{'id':p.pk,'source':'cab-change-period','stream':str(p.pk),'sequence':int((p.ended or p.started).timestamp()*1000),'values':p.values,'coverage':p.coverage,'model':{},'scope':'change-period'} for p in rows]
+    streams=[]
+    for period in rows:
+        effective=period_data(period)
+        streams.append({'id':period.pk,'source':'cab-change-period','stream':str(period.pk),'sequence':int((period.ended or period.started).timestamp()*1000),'values':effective['values'],'coverage':effective['coverage'],'model':{},'scope':'change-period'})
     return {'run_id':run.run_id,'scope':'change-periods-only','streams':streams,'next_after':rows[-1].pk if len(rows)==200 else None,'bounded':bounded,'legacy_session_totals_excluded':True}
 
 def change_statistics(actor,data):

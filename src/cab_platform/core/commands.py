@@ -96,6 +96,7 @@ def resolve_native(actor,project,session_id,data):
     from cab_platform.native_sources import inspect,locate,NativeSourceError
     require(actor.agent=='codex','native-source-agent-unsupported',400)
     require(isinstance(data.get('source_file',''),str) and isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
+    require(not data.get('codex_home') or Path(data['codex_home']).is_absolute() and '..' not in Path(data['codex_home']).parts,'native-source-path-invalid',400)
     try:
         return inspect(actor.uid,session_id,project.root,data['source_file']) if data.get('source_file') else locate(actor.uid,session_id,project.root,data.get('codex_home',''))
     except NativeSourceError as error:raise Refused(str(error),400) from None
@@ -108,10 +109,30 @@ def locate_native(actor,data):
 @transaction.atomic
 def bind_native(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    require(type(data.get('resume',False)) is bool,'native-source-resume-invalid',400)
+    require(isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
+    if not data.get('codex_home') and r.mandate.get('native_source_home'):data={**data,'codex_home':r.mandate['native_source_home']}
     source=resolve_native(actor,r.project,r.session_id,data)
-    previous=r.mandate.get('native_source');require(previous is None or previous==source,'native-source-replacement-refused')
-    if previous is None:
+    previous=r.mandate.get('native_source')
+    if previous is not None and previous!=source:
+        require(data.get('resume') is True,'native-source-replacement-refused')
+        require(r.state=='WORKING' and not r.mandate.get('native_frozen_at'),'native-source-resume-state-invalid')
+        require(no_pending(r),'native-source-effects-protected')
+        from .models import MeasurementPeriod
+        require(not MeasurementPeriod.objects.filter(session_id=r.coding_session_id,ended__isnull=True).exists(),'native-source-measurement-active')
+        from cab_platform.native_sources import indexed_path,inspect,NativeSourceError
+        try:
+            indexed=indexed_path(actor.uid,r.session_id,data.get('codex_home',''))
+            require(indexed==source['source_file'],'native-source-index-authority-required')
+            require(inspect(actor.uid,r.session_id,r.project.root,previous['source_file'])==previous,'native-source-previous-divergent')
+        except NativeSourceError as error:raise Refused(str(error),400) from None
+        history=r.mandate.get('native_source_history',[]);require(isinstance(history,list) and len(history)<128,'native-source-history-limit')
+        r.mandate['native_source_history']=[*history,{'previous':previous,'current':source,'at':timezone.now().isoformat(),'authority':'exact-native-index','actor':actor.pk}]
+    if previous!=source:
         r.mandate['native_source']=source;r.save();event(r,'native-source-bound',{'agent':actor.agent})
+    if data.get('codex_home') and r.mandate.get('native_source_home')!=data['codex_home']:
+        require(r.state=='WORKING' and not r.mandate.get('native_frozen_at'),'native-source-resume-state-invalid')
+        r.mandate['native_source_home']=data['codex_home'];r.save(update_fields=['mandate'])
     return {'bound':True,'run_id':r.run_id,'session_id':r.session_id}
 
 def working(run):
@@ -195,7 +216,7 @@ def reconcile_archive(actor,data):
     updated={**r.mandate,'paths':[replacements.get(path,path) for path in paths]}
     require(len(set(updated['paths']))==len(updated['paths']),'archive-path-conflict')
     current=revision(SimpleNamespace(project=r.project,mandate=updated))
-    updated['framing_digest']=digest({key:value for key,value in updated.items() if key not in ('framing_digest','native_source','native_frozen_at')})
+    updated['framing_digest']=digest({key:value for key,value in updated.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
     record={'archive_path':archive,'previous_framing_digest':expected,'framing_digest':updated['framing_digest'],'source_revision':current,'paths':replacements,'at':timezone.now().isoformat()}
     updated['archive_reconciliations']=[record]
     r.mandate=updated;r.source_revision=current;r.stage=9;r.save()

@@ -54,10 +54,10 @@ async def wait_for_handoff(project_id:str,run_id:str,after:int=0,timeout_ms:int=
         await asyncio.sleep(1)
     return {'run_id':run_id,'state':'WAIT_TIMEOUT','after':after,'effects_issued':False}
 @server.tool()
-def native_bind(project_id:str,run_id:str,source_file:str='',codex_home:str='')->dict:
+def native_bind(project_id:str,run_id:str,source_file:str='',codex_home:str='',resume:bool=False)->dict:
     """Rattache le journal du RUN ; source omise : résolution ciblée au SID, aucun contenu exporté."""
     import os
-    return client().command('native.bind',{'project_id':project_id,'run_id':run_id,'source_file':source_file,'codex_home':codex_home or os.environ.get('CODEX_HOME','')})
+    return client().command('native.bind',{'project_id':project_id,'run_id':run_id,'source_file':source_file,'codex_home':codex_home or os.environ.get('CODEX_HOME',''),'resume':resume})
 @server.tool()
 def native_locate(project_id:str,session_id:str,codex_home:str='')->dict:
     """Prévol en lecture seule du seul SID Codex demandé ; ne crée aucun RUN."""

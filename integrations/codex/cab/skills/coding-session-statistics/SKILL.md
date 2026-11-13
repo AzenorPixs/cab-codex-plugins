@@ -3,7 +3,7 @@ name: coding-session-statistics
 description: Produire un bilan quantifié de session à partir de la télémétrie native CAB.
 ---
 
-# Statistiques de session CAB 3.0.6
+# Statistiques de session CAB 3.0.7
 
 Consulter `statistics` dans le MCP CAB et les preuves natives rattachées au RUN.
 Identifier codeur et orchestrateur séparément ; aucun orchestrateur fictif en

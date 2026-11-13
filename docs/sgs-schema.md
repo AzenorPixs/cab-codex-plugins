@@ -234,3 +234,6 @@ attesté pour chaque RUN. Sinon les mesures natives/durées du change restent
 indisponibles dans SGS ; les seuls écarts observés sont conservés dans l’export
 comme mesures partielles. Les preuves de tests et tâches restent indépendantes.
 Les anciens totaux session-wide n’alimentent jamais cette contribution.
+
+CAB3.0.7 exclut aussi les compteurs non actualisés et les bornes temporelles
+manquantes ; une valeur inchangée dans un vieux journal ne prouve pas zéro token.

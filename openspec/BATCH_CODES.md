@@ -635,4 +635,4 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 
 [resolve-native-session-source](changes/archive/2026-11-13-resolve-native-session-source/), code non attribué : SCM3.0.5 qualifié et archivé ; découverte native publique ciblée ; livraison/activation à vérifier, aucun test DIU.
 
-[attribute-statistics-to-change-intervals](changes/archive/2026-11-13-attribute-statistics-to-change-intervals/), code non attribué : SCM3.0.6 qualifié et archivé, périodes par change/RUN/SID ; livraison et activation à vérifier.
+[attribute-statistics-to-change-intervals](changes/archive/2026-11-13-attribute-statistics-to-change-intervals/), code non attribué : SCM3.0.6 livrée/active ; correctif de qualification3.0.7 en cours : index du journal repris et gardes de fraîcheur, même change.

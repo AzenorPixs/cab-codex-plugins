@@ -3,14 +3,17 @@ import json
 import os
 from pathlib import Path
 import stat
+from datetime import datetime,timezone as datetime_timezone
 from django.utils import timezone
-from .native_sources import inspect,NativeSourceError
+from .native_sources import inspect,indexed_path,NativeSourceError
 
 TOKEN_FIELDS={'input_tokens':'tokens_input','output_tokens':'tokens_output','cached_input_tokens':'tokens_cache_read','cache_write_input_tokens':'tokens_cache_write','reasoning_output_tokens':'tokens_reasoning','total_tokens':'tokens_total'}
 
 def codex_snapshot(run):
     source=run.mandate.get('native_source',{});path=source.get('source_file')
     if not path:return {'status':'unavailable','reason':'native-source-not-bound'}
+    indexed=indexed_path(run.actor.uid,run.session_id,run.mandate.get('native_source_home',''),strict=False)
+    if indexed and indexed!=path:raise NativeSourceError('native-source-resume-required')
     checked=inspect(run.actor.uid,run.session_id,run.project.root,path)
     if checked!=source:raise NativeSourceError('native-source-replaced')
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
@@ -36,7 +39,11 @@ def codex_snapshot(run):
                 totals=info_row.get('total_token_usage',{})
                 if not isinstance(totals,dict):continue
                 counters={target:str(totals[key]) for key,target in TOKEN_FIELDS.items() if type(totals.get(key)) is int and totals[key]>=0}
-                native_at=row.get('timestamp') if isinstance(row.get('timestamp'),str) else None
+                native_at=None
+                try:
+                    stamp=datetime.fromisoformat(row.get('timestamp',''))
+                    if stamp.tzinfo is not None:native_at=stamp.isoformat()
+                except (ValueError,TypeError):pass
     return {'status':'ok' if counters else 'unavailable','reason':None if counters else 'native-counters-absent','source':checked,'counters':counters,'native_at':native_at,'offset':offset,'size':info.st_size,'observed_at':captured_at}
 
 def opencode_snapshot(run):
@@ -75,6 +82,18 @@ def snapshot(run):
 def difference(start,end):
     if start.get('status')!='ok' or end.get('status')!='ok':return {},{'state':'unavailable','reason':start.get('reason') or end.get('reason') or 'native-snapshot-unavailable'}
     if start.get('source')!=end.get('source') or end.get('offset',0)<start.get('offset',0):return {},{'state':'unavailable','reason':'native-source-divergent'}
+    if not start.get('observed_at') or not end.get('observed_at'):return {},{'state':'unavailable','reason':'native-time-unavailable'}
+    try:
+        if start.get('observed_at') and end.get('observed_at'):
+            def timestamp(value):
+                if not isinstance(value,str):raise ValueError('missing-time')
+                result=datetime.fromtimestamp(float(value)/1000,datetime_timezone.utc) if value.replace('.', '',1).isdigit() else datetime.fromisoformat(value)
+                if result.tzinfo is None:raise ValueError('missing-zone')
+                return result
+            native_end=timestamp(end.get('native_at'));left=timestamp(start['observed_at']);right=timestamp(end['observed_at'])
+            if native_end<left:return {},{'state':'unavailable','reason':'native-counters-not-updated'}
+            if native_end>right:return {},{'state':'unavailable','reason':'native-clock-divergent'}
+    except (ValueError,TypeError,OverflowError,OSError):return {},{'state':'unavailable','reason':'native-time-unavailable'}
     values={};missing=[]
     for key in set(start.get('counters',{}))|set(end.get('counters',{})):
         if key not in start['counters'] or key not in end['counters']:missing.append(key);continue

@@ -2,6 +2,8 @@
 from datetime import datetime,timezone
 import json
 import os
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -56,5 +58,19 @@ class NativeSourceTests(unittest.TestCase):
             with self.assertRaises(native.NativeSourceError):native.inspect(os.getuid(),SID,self.root,str(self.path))
         self.write();link=self.home/'linked';link.symlink_to(self.folder,target_is_directory=True)
         with self.assertRaises(native.NativeSourceError):native.inspect(os.getuid(),SID,self.root,str(link/self.path.name))
+    def test_exact_index_selects_resumed_suffix_and_not_original_journal(self):
+        resumed=self.path.with_name('rollout-resumed-'+SID+'_resume.jsonl');resumed.write_bytes(self.path.read_bytes())
+        index=self.home/'.codex/state_5.sqlite'
+        with closing(sqlite3.connect(index)) as db, db:
+            db.execute('CREATE TABLE threads(id TEXT PRIMARY KEY,rollout_path TEXT)');db.execute('INSERT INTO threads VALUES(?,?)',(SID,str(resumed)))
+        before=index.read_bytes();found=native.locate(os.getuid(),SID,self.root,str(self.home/'.codex'))
+        self.assertEqual(found['source_file'],str(resumed));self.assertEqual(before,index.read_bytes())
+        with closing(sqlite3.connect(index)) as db, db:db.execute('UPDATE threads SET rollout_path=? WHERE id=?',(str(self.folder/'missing'),SID))
+        with self.assertRaisesRegex(native.NativeSourceError,'not-found'):native.locate(os.getuid(),SID,self.root,str(self.home/'.codex'))
+    def test_indexed_wrong_identity_is_refused_without_stale_fallback(self):
+        target=self.folder/'resumed.jsonl';target.write_text(json.dumps({'type':'session_meta','payload':{'id':'another','cwd':self.root}})+'\n')
+        with closing(sqlite3.connect(self.home/'.codex/state_5.sqlite')) as db, db:
+            db.execute('CREATE TABLE threads(id TEXT PRIMARY KEY,rollout_path TEXT)');db.execute('INSERT INTO threads VALUES(?,?)',(SID,str(target)))
+        with self.assertRaisesRegex(native.NativeSourceError,'identity-divergent'):native.locate(os.getuid(),SID,self.root,str(self.home/'.codex'))
 
 if __name__=='__main__':unittest.main()

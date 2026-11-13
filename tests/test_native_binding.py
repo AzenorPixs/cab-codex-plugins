@@ -43,5 +43,14 @@ class NativeBindingTests(unittest.TestCase):
         self.run.refresh_from_db();self.assertEqual(self.run.mandate,self.before)
         other=Actor.objects.create(pk=uuid.uuid4().hex,uid=os.getuid(),agent='codex',token_hash=uuid.uuid4().hex)
         with self.assertRaises(commands.Refused):commands.locate_native(other,{'project_id':self.project.pk,'session_id':self.run.session_id})
+    def test_indexed_resume_keeps_sid_run_and_source_history(self):
+        commands.bind_native(self.actor,{**self.query,'source_file':str(self.source)})
+        resumed=self.root/'resumed.jsonl';resumed.write_bytes(self.source.read_bytes())
+        with patch('cab_platform.native_sources.indexed_path',return_value=str(resumed)):
+            commands.bind_native(self.actor,{**self.query,'source_file':str(resumed),'resume':True})
+            commands.bind_native(self.actor,{**self.query,'source_file':str(resumed),'resume':True})
+        self.run.refresh_from_db();history=self.run.mandate['native_source_history'];self.assertEqual(len(history),1);self.assertEqual(history[0]['previous']['source_file'],str(self.source));self.assertEqual(self.run.session_id,'EXACT-SID');self.assertEqual(self.run.run_id,'NATIVE-FIXTURE');self.assertEqual(self.run.generation,1)
+        third=self.root/'third.jsonl';third.write_bytes(self.source.read_bytes());self.run.mandate['native_frozen_at']='2026-11-13T00:00:00Z';self.run.save()
+        with patch('cab_platform.native_sources.indexed_path',return_value=str(third)),self.assertRaisesRegex(commands.Refused,'resume-state-invalid'):commands.bind_native(self.actor,{**self.query,'source_file':str(third),'resume':True})
 
 if __name__=='__main__':unittest.main()

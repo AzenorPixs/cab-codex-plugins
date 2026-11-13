@@ -306,3 +306,37 @@ des périodes, sans addition des temps simultanés entre codeurs.
 
 Tables PostgreSQL measurement_periods et measurement_actions : bornes, instantanés
 numériques, affiliations et reçus ; aucune conversation n’est copiée en base.
+
+### Journal actif après reprise Codex —3.0.7
+
+Codex peut reprendre un SID dans un fichier suffixé. CAB consulte d’abord l’index
+natif state_*.sqlite compatible, avec une requête paramétrée sur le seul SID :
+SELECT rollout_path FROM threads WHERE id=?. Aucune conversation d’un autre SID
+n’est lue. L’index est ouvert en lecture seule sous l’UID du codeur, y compris
+lorsque le service est root ; les credentials du service ne sont pas transmis.
+La racine du compte ou CODEX_HOME reste agnostique. L’absence d’index conserve
+le repli borné au jour UUIDv7 ; un index présent mais incohérent ne sélectionne
+pas silencieusement l’ancien journal. Le chemin trouvé est vérifié par UID/SID/cwd.
+
+Si un RUN est déjà lié à l’ancien fichier : fermer sa mesure ouverte, puis :
+
+```sh
+printf '%s\n' '{"project_id":"<ID interne>","run_id":"<RUN>","resume":true}' | cab call native.bind
+```
+
+MCP : native_bind(..., resume=true). Le RUN doit être en travail, non gelé,
+sans effet en cours ni mesure ouverte sur son SID. Seule la source actuellement
+indexée est admissible, avec vérification de l’ancienne liaison. L’historique
+précédent/courant est conservé (128reprises maximum), sans changer SID, RUN,
+génération ou reçus. Les RUN clos/gelés ne sont pas réécrits. Ouvrir ensuite une
+nouvelle période ; ne jamais soustraire les compteurs de deux fichiers différents.
+
+Un compteur dont le dernier événement natif précède le début de période reste
+indisponible : ce n’est pas une consommation nulle. Ce garde est également appliqué
+à la lecture des périodes anciennes. Des bornes absentes ou une horloge native
+future ne produisent pas de total connu.
+
+Le même protocole statistique s’applique aux codeurs pilotés : ils ouvrent,
+ferment et basculent leurs périodes sans approbation d’orchestrateur. Pour les
+clients OpenCode déjà chargés, le CLI utilise CAB_AGENT=opencode et le profil
+privé du codeur ; aucun jeton root ni identité fictive n’est nécessaire.
