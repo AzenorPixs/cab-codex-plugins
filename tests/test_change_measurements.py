@@ -26,7 +26,7 @@ class ChangeMeasurementTests(unittest.TestCase):
     def new_run(self,name,change,sid):
         return commands.begin_run(self.actor,{'project_id':self.project.pk,'run_id':name,'session_id':sid,'mode':'direct','change':change,'paths':['source'],'criteria':['fixture'],'decisions_resolved':True})
     def transition(self,run,action,value,request_id=None,from_start=True):
-        self.count+=1;sample={'status':'ok','source':{'session_id':run.session_id},'counters':{'tokens_total':str(value)},'native_at':'native-'+str(value),'offset':self.count*1000}
+        self.count+=1;at=datetime.now(timezone.utc).isoformat();sample={'status':'ok','source':{'session_id':run.session_id},'counters':{'tokens_total':str(value)},'native_at':at,'observed_at':at,'offset':self.count*1000}
         data={'project_id':self.project.pk,'run_id':run.run_id,'request_id':request_id or 'REQ-'+str(self.count)}
         if action=='begin':data['from_coding_start']=from_start
         with patch.object(m,'snapshot',return_value=sample):return m.transition(self.actor,data,action)
@@ -69,5 +69,12 @@ class ChangeMeasurementTests(unittest.TestCase):
         self.transition(self.a,'begin',100);period=self.periods.first()
         with self.assertRaises(IntegrityError),transaction.atomic():MeasurementPeriod.objects.create(session=period.session,run=self.b,change_id=self.b.change_record_id,started=period.started)
         self.assertEqual(self.periods.count(),1)
+    def test_piloted_coder_measures_without_orchestrator_approval(self):
+        parent=Actor.objects.create(pk=uuid.uuid4().hex,uid=os.getuid(),agent='codex',role='orchestrator',token_hash=uuid.uuid4().hex);parent.projects.add(self.project)
+        self.actor.agent='opencode';self.actor.save(update_fields=['agent'])
+        run=commands.begin_run(parent,{'project_id':self.project.pk,'run_id':'PILOT','session_id':'PILOT-SID','mode':'piloted','change':'piloted-change','paths':['source'],'criteria':['fixture'],'decisions_resolved':True,'orchestrator_id':parent.pk,'coder_id':self.actor.pk})
+        self.transition(run,'begin',100);self.transition(run,'end',130)
+        value=self.change('piloted-change');self.assertEqual(value['metrics']['tokens_total']['value'],'30');self.assertEqual(value['periods'][0]['agent'],'opencode')
+        with self.assertRaises(commands.Refused):m.transition(parent,{'project_id':self.project.pk,'run_id':run.run_id,'request_id':'PARENT-NOT-CODER'},'begin')
 
 if __name__=='__main__':unittest.main()
