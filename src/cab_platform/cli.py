@@ -27,6 +27,7 @@ def main(argv=None):
     imp=sub.add_parser('import-legacy');imp.add_argument('manifest')
     backup=sub.add_parser('backup');backup.add_argument('--destination',required=True)
     sgs=sub.add_parser('sgs');sgs.add_argument('arguments',nargs=argparse.REMAINDER)
+    statistics=sub.add_parser('statistics');statistics.add_argument('arguments',nargs=argparse.REMAINDER)
     args=parser.parse_args(argv)
     try:
         if args.action=='status':result=Client().get('health')
@@ -75,9 +76,9 @@ def main(argv=None):
         elif args.action=='backup':
             from .maintenance import backup
             result=backup(Path(args.destination))
-        elif args.action=='sgs':
-            from . import sgs_engine
-            return sgs_engine.main(args.arguments)
+        elif args.action in ('sgs','statistics'):
+            from . import statistics_cli
+            return statistics_cli.main(args.arguments,legacy=args.action=='sgs')
         print(json.dumps(result,ensure_ascii=False,default=str));return 0
     except (ClientError,OSError,ValueError,KeyError) as error:
         from .logging import redact

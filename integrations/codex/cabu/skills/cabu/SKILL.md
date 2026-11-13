@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.0.7
+# CABU 3.1.0
 
 Sur demande explicite de mise à jour, exécuter `sudo cab update` jusqu’au reçu
 terminal. Une provenance locale explicitement autorisée peut utiliser

@@ -88,11 +88,13 @@ def run(port=8790):
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
+    statistics_watcher=None;statistics_future=None;statistics_project=None
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
     pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix='cab-worker')
     metadata_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-metadata')
+    statistics_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-statistics')
     try:
         while not stop.wait(0.2):
             if reload_requested.is_set():
@@ -119,6 +121,16 @@ def run(port=8790):
                         except Exception as error:log.error('worker failed',extra={'code':type(error).__name__})
                         del tasks[key]
                 if not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():
+                    from .statistics_watch import Watcher,synchronize
+                    if statistics_watcher is None:statistics_watcher=Watcher()
+                    if statistics_future is not None and statistics_future.done():
+                        try:statistics_future.result()
+                        except Exception as error:log.warning('statistics synchronization unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
+                        statistics_future=None
+                    due=statistics_watcher.tick()
+                    if statistics_future is None and due:
+                        statistics_project=due[0];statistics_watcher.dirty.pop(statistics_project,None)
+                        statistics_future=statistics_pool.submit(synchronize,statistics_project)
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:
                         if len(tasks)>=4:break
                         if op.pk not in tasks:tasks[op.pk]=pool.submit(execute_operation,op.pk)
@@ -143,6 +155,8 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        statistics_pool.shutdown(wait=True,cancel_futures=True)
+        if statistics_watcher is not None:statistics_watcher.close()
         pool.shutdown(wait=True,cancel_futures=True)
         metadata_pool.shutdown(wait=True,cancel_futures=True)
         if electric and electric.poll() is None:

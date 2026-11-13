@@ -73,6 +73,7 @@ def revision(run):
         files=sorted(p.rglob('*')) if p.is_dir() else [p]
         for f in files:
             rel=str(f.relative_to(run.project.root))
+            if f.name=='STATISTICS.md' and (rel=='STATISTICS.md' or rel.startswith('openspec/changes/')):continue
             if any(part in PROTECTED or part=='.cab-tests' for part in f.relative_to(run.project.root).parts):continue
             f=safe_path(Path(run.project.root),rel);info=f.stat()
             if f.is_file():

@@ -238,7 +238,16 @@ def command(request,body:Command):
     if name=='native.bind':return commands.bind_native(actor,data)
     if name in ('statistics.begin','statistics.end','statistics.change'):
         from . import measurements
-        return measurements.change_statistics(actor,data) if name=='statistics.change' else measurements.transition(actor,data,name.rsplit('.',1)[1])
+        if name=='statistics.change':
+            from .statistics_service import read_change
+            return read_change(actor,data)
+        return measurements.transition(actor,data,name.rsplit('.',1)[1])
+    if name in ('statistics.sync','statistics.project'):
+        from . import statistics_service
+        if name=='statistics.project':return statistics_service.project_status(actor,data)
+        project=Project.objects.get(pk=data['project_id']);commands.scope(actor,project)
+        request_id=commands.identifier(data['request_id'])
+        return statistics_service.sync(project,request_id,generate=data.get('change'),full=data.get('full') is True)
     if name=='operation.start':
         op,created=commands.start_operation(actor,data);return {**operation_data(op),'created':created}
     if name=='external.describe':
@@ -276,14 +285,24 @@ def command(request,body:Command):
     if name=='run.close':
         from .measurements import end_if_open
         candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
+        previous=candidate.review.get('closure')
+        if previous and previous.get('receipt_id')==data.get('receipt_id'):
+            commands.require(previous.get('branch')==data.get('branch'),'closure-receipt-conflict');return previous
         commands.require(commands.no_pending(candidate) and not Lease.objects.filter(run=candidate,state='HELD').exists(),'closure-effects-protected')
         commands.require(data['branch'] in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
         if data['branch']=='TERMINÉ':commands.require(candidate.state in ('ACCEPTED','CLOSED'),'final-acceptance-required')
+        end_if_open(actor,candidate)
+        from . import statistics_service
+        statistics_service.sync(candidate.project,'CLOSE-'+commands.identifier(data['receipt_id']),generate=candidate.change)
+        candidate.change_record.refresh_from_db()
+        source=candidate.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
+        commands.require(source is not None and (data['branch']!='TERMINÉ' or source.archived),'closure-archive-required')
+        data={**data,'report':source.path+'/STATISTICS.md'}
         candidate_report=commands.safe_path(Path(candidate.project.root),data['report'])
+        data['sha256']=hashlib.sha256(candidate_report.read_bytes()).hexdigest()
         commands.require(candidate_report.name=='STATISTICS.md' and candidate.change in candidate_report.parent.name,'closure-report-outside-change')
         commands.require(hashlib.sha256(candidate_report.read_bytes()).hexdigest()==data['sha256'],'closure-report-stale')
         if data['branch']=='BLOQUÉ':commands.require((candidate_report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
-        end_if_open(actor,candidate)
         with transaction.atomic():
             r=commands.run_scope(actor,data['run_id'],data['project_id'],lock=True)
             commands.require(commands.no_pending(r) and not Lease.objects.filter(run=r,state='HELD').exists(),'closure-effects-protected')

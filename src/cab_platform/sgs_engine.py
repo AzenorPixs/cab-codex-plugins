@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "3.0.7"
+VERSION = "3.1.0"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100
@@ -178,22 +178,8 @@ def fingerprint(path):
 
 @contextmanager
 def locked(root):
-    path = safe_path(root, LOCK)
-    try:
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
-        os.fchmod(fd,0o770)
-    except FileExistsError:fd=os.open(path,os.O_RDWR|os.O_NOFOLLOW)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            raise SGSError("Verrou non ordinaire")
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise SGSError("Verrou SGS occupé ; aucune mutation effectuée") from exc
-        yield
-    finally:
-        os.close(fd)
+    raise SGSError('Écriture SGS locale retirée : utiliser cab statistics, géré par cab.service et PostgreSQL.')
+    yield
 
 
 def durable_write(path, data, mode=0o770):
@@ -1521,14 +1507,8 @@ def report_target(root, relative, report=None):
 
 @contextmanager
 def report_locked(directory):
-    # A directory inode survives atomic replacement of its report; no lock file
-    # or shared project-level input is needed by a REPORT-only mandate.
-    fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
-    try:
-        try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError as exc:raise SGSError('Rapport SGS occupé ; aucune mutation effectuée') from exc
-        yield
-    finally:os.close(fd)
+    raise SGSError('Écriture de rapport locale retirée : la génération appartient à cab.service.')
+    yield
 
 
 def change_report(root, relative, evidence_path, state, maintain=False, contract=None, code_roots=None, cab_export=None, file_mode=None, report=None):
@@ -1979,7 +1959,7 @@ def query(root, contract, change=None, metric=None):
     finally:os.close(fd)
 
 
-def main(argv=None):
+def _legacy_main(argv=None):
     parser = argparse.ArgumentParser(description='CAB SGS : CHANGE, REBUILD, DELTA, INSPECT, QUERY, VERIFY, RECOVER. Sans réseau ni services.')
     parser.add_argument('mode',choices=['VERSION','INSPECT','QUERY','REBUILD','DELTA','CHANGE','VERIFY','RECOVER'])
     parser.add_argument('--project-root')
@@ -2055,3 +2035,8 @@ def main(argv=None):
         print(dumps(result).decode(),end=''); return 0
     except (SGSError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(json.dumps({'status':'error','cause':str(exc)},ensure_ascii=False),file=sys.stderr); return 1
+
+
+def main(argv=None):
+    from .statistics_cli import main as service_cli
+    return service_cli(argv,legacy=True)

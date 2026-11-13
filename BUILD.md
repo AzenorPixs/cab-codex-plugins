@@ -1,6 +1,13 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.0.7 — Debian et clients légers
+## Livraison CAB 3.1.0 — Debian et clients légers
+
+CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
+PG projection et historique, catalogue de tous les changes, inotify et rattrapage
+aléatoire12–24h. Rapports individuels/globaux générés par le service, sans LLM ni
+verrou fichier. Contrat et champs : docs/sgs-schema.md. Les descriptions2.x des
+moteurs SGS autonomes ci-dessous sont historiques et ne sont plus applicables.
+
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
 contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions
@@ -18,10 +25,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.0.7` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.1.0` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.0.7.
+prépaquet ne constitue pas la release 3.1.0.
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
 plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
