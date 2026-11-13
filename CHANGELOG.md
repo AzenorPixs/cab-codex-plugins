@@ -1,5 +1,14 @@
 # Historique des versions
 
+## Unreleased
+
+- Nouvel accueil `/projects/<ID>` : maison, nom, version, étiquettes PROJECT_TYPE
+  et cartes Forgejo/GitHub/GitLab ; Sessions utilise désormais `/sessions`.
+- Affichage immédiat depuis les métadonnées en base, puis relecture de
+  project.env en arrière-plan et mises à jour externes via Electric.
+- Lecture littérale filtrée, secrets exclus et projection publique dédiée ;
+  une absence ou erreur du fichier est signalée sans bloquer l’accueil.
+
 ## 3.1.4 — 2026-11-13
 
 - Réévaluation et clôture normales automatiques sur revue, archive et preuves

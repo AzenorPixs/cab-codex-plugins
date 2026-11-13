@@ -19,6 +19,14 @@ def installed():
     if cfg.get('initialized'):
         result=subprocess.run([sys.executable,'-m','django','migrate','--noinput'],env={**os.environ,'DJANGO_SETTINGS_MODULE':'cab_platform.settings','CAB_MIGRATE':'1'},capture_output=True,text=True,timeout=120)
         if result.returncode:raise RuntimeError('package-schema-migration-failed')
+        # La publication appartient à Electric, pas au rôle de migration.
+        # Seul l'installateur système administre sa liste de colonnes publiques.
+        from .bootstrap import _psql
+        _psql(cfg['database_port'],"""DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_metadata_projection') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE project_metadata_projection;
+            END IF;
+        END $$;""",cfg['database'])
     cfg['version']=__version__;atomic_json(CONFIG,cfg)
     return {'state':'CONFIGURED' if cfg.get('initialized') else 'BOOTSTRAP_ONLY'}
 

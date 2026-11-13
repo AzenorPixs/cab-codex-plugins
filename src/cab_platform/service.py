@@ -142,7 +142,12 @@ def run(port=8790):
                         except Exception as error:log.warning('statistics synchronization unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
                         statistics_future=None
                     due=statistics_watcher.tick()
-                    if statistics_future is None and due:
+                    env_due=[key for key,at in statistics_watcher.env_dirty.items() if time.monotonic()-at>=.3]
+                    if statistics_future is None and env_due:
+                        from .project_metadata import synchronize as synchronize_metadata
+                        project_id=env_due[0];statistics_watcher.env_dirty.pop(project_id,None)
+                        statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
+                    elif statistics_future is None and due:
                         statistics_project=due[0];statistics_watcher.dirty.pop(statistics_project,None)
                         statistics_future=statistics_pool.submit(synchronize,statistics_project)
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:

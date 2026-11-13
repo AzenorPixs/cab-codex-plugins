@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.1.4
+## CAB 3.2.0
 
 CAB réévalue et clôture automatiquement les RUN normalement acceptés et archivés
 sur preuves, sans rejeu. L'interface propose Réévaluer/clôturer, les diagnostics
@@ -204,3 +204,11 @@ Web propose les onze étapes et les tâches de chaque change, avec un détail pa
 La page /agents distingue les trois programmes et leurs transports MCP. Les
 projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
+
+
+L’accueil `/projects/<ID>` est la destination de la sélection d’un projet et
+de sa maison ; les sessions sont accessibles à `/projects/<ID>/sessions`.
+Les valeurs publiques de `project.env` sont mémorisées dans `projects` pour
+un premier affichage immédiat. La relecture à la sélection et la surveillance
+externe actualisent ensuite l’écran par Electric, sans bloquer l’affichage.
+Nom, version, types et cartes de forges sont filtrés ; aucun secret n’est exposé.
