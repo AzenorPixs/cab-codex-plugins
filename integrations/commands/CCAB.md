@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CCAB
-version: 3.1.0
+version: 3.1.1
 ---
 
 Répondre en français. Charger le skill CCAB distribué avec le plugin du même nom.
