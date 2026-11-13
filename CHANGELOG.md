@@ -1,5 +1,15 @@
 # Historique des versions
 
+## 3.0.7 — 2026-11-13
+
+- Résolution du journal actif par l’index natif Codex, SID exact, en lecture seule
+  sous le compte du codeur ; prise en charge des fichiers suffixés de reprise.
+- Reprise explicite et contrôlée de liaison, avec historique, même SID/RUN et
+  refus si période ouverte, effet en cours, gel ou source non indexée.
+- Compteurs anciens/non actualisés indisponibles plutôt que zéro ; garde appliqué
+  aussi à la lecture des périodes déjà enregistrées.
+- Segmentation pilotée OpenCode qualifiée sur fixture, sans aval d’orchestrateur.
+
 ## 3.0.6 — 2026-11-13
 
 - Périodes statistiques persistées par change/RUN/SID ; un contexte actif par

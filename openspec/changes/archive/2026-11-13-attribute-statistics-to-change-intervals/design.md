@@ -30,3 +30,12 @@ Un export fournit contribution SGS, périodes et empreintes vérifiables, sans
 prompt ni contenu de conversation. Les intégrations enseignent le parcours.
 
 Livraison3.0.6 par DIU/CABU, compatibilité des identités, reçus et sessions actives.
+
+## Correctif de qualification3.0.7
+L’essai réel3.0.6 a révélé un ancien journal du même SID : la reprise Codex utilise
+un chemin suffixé enregistré dans l’index natif. La résolution consulte ce seul
+SID dans le dernier index compatible, sous l’UID du codeur et en lecture seule.
+La reprise resume=true exige RUN en travail non gelé, aucun effet ni période
+ouverte ; index courant et ancienne liaison vérifiés, historique borné128, sans
+changer SID/RUN/génération. Les compteurs anciens et horloges natives non
+compatibles donnent N/A, y compris en lecture de périodes préexistantes.

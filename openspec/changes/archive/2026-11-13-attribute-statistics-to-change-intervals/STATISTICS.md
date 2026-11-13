@@ -12,6 +12,18 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 
+### Agents de codage — relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+| Modèle de LLM | Version | Fournisseur | Niveau de raisonnement | TTMT moyen | Tokens/seconde moyens | Temps de service (% total) |
+| --- | --- | --- | --- | --- | --- | --- |
+| N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+
+### Agents orchestrateurs — relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+| Modèle de LLM | Version | Fournisseur | Niveau de raisonnement | TTMT moyen | Tokens/seconde moyens | Temps de service (% total) |
+| --- | --- | --- | --- | --- | --- | --- |
+| N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+
 ## 1. Statistiques générales et décisions
 
 ### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9
@@ -41,9 +53,48 @@ Agent coder : codex, modèle N/A, raisonnement N/A.
 
 SCM-change-statistics-306 ; change multi-RUN/SID, contexte exclusif par SID validé.
 
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+Change archivé ; mesures limitées aux preuves de ce relevé.
+
+Portée : cumulative.
+
+Agent coder : codex, modèle N/A, raisonnement N/A.
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Tokens de sortie | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Tokens de raisonnement | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Tokens de cache lus | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Tokens de cache écrits | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Total natif des tokens | N/A | Couverture tardive ; total complet du change non mesuré, sans rétroactivité. |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+Identifiant de relevé qualification-307, même SID natif et même RUN SCM-change-statistics-306 ; le relevé précédent est conservé.
+
 ## 2. Types de messages et d’outils
 
 ### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
@@ -66,6 +117,15 @@ SCM-change-statistics-306 ; change multi-RUN/SID, contexte exclusif par SID vali
 
 Totaux natifs du présent change indisponibles : son codage précède activation3.0.6 ; aucun total partagé n’est repris.
 
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+Compteurs anciens exclus ; aucune consommation nulle déduite du vieux journal.
+
 ## 4. Commandes
 
 ### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9
@@ -85,9 +145,35 @@ Totaux natifs du présent change indisponibles : son codage précède activation
 | Validations OpenSpec strictes échouées | 0 | VALIDATION.md et journaux de qualification observés. |
 | Tâches OpenSpec prouvées et terminées | 4 | VALIDATION.md et journaux de qualification observés. |
 
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 30 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Tests finaux réussis | 30 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Tests finaux échoués | 0 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Fichiers ayant passé un contrôle syntaxique | 19 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | 27 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Validations OpenSpec strictes échouées | 0 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+| Tâches OpenSpec prouvées et terminées | 4 | VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7. |
+
 ## 5. Accès web
 
 ### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
@@ -109,6 +195,18 @@ Totaux natifs du présent change indisponibles : son codage précède activation
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 25tests de fixture et parcours public observés ; livraison/activation qualifiées séparément.
+
+### Relevé 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+30tests réussis et19fichiers contrôlés ; correction du journal repris avant qualification réelle finale.
 
 
 <!-- CAB_SGS_SESSIONS_V1
@@ -450,6 +548,346 @@ Totaux natifs du présent change indisponibles : son codage précède activation
         ],
         "6": [
           "25tests de fixture et parcours public observés ; livraison/activation qualifiées séparément."
+        ]
+      },
+      "scope": "cumulative",
+      "state": "archived"
+    },
+    {
+      "contribution": {
+        "agents": [
+          {
+            "agent": "codex",
+            "model": "N/A",
+            "reasoning": "N/A",
+            "role": "coder"
+          }
+        ],
+        "bounds": {
+          "end": null,
+          "start": null
+        },
+        "breakdowns": {},
+        "costs": {},
+        "metrics": {
+          "commands": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "commands_failure": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "commands_success": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "compactions": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "domain_command": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "domain_other": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "domain_total": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "domain_web": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "domain_write": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "duration": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "files_touched": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "messages": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "messages_assistant": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "messages_user": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "net_duration": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "openspec_standard_failure": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "openspec_standard_success": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "openspec_strict_failure": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "0"
+          },
+          "openspec_strict_success": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "27"
+          },
+          "permissions": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "permissions_approved": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "permissions_cancelled": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "permissions_expired": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "permissions_rejected": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "syntax_files": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "19"
+          },
+          "tasks": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "4"
+          },
+          "tests": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "30"
+          },
+          "tests_failure": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "0"
+          },
+          "tests_success": {
+            "evidence": [
+              {
+                "line": 13,
+                "note": "VALIDATION.md et journaux de qualification du même change3.0.6/3.0.7."
+              }
+            ],
+            "reason": null,
+            "state": "known",
+            "value": "30"
+          },
+          "tokens_cache_read": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tokens_cache_write": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tokens_input": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tokens_output": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tokens_reasoning": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tokens_total": {
+            "evidence": [],
+            "reason": "Couverture tardive ; total complet du change non mesuré, sans rétroactivité.",
+            "state": "unavailable",
+            "value": null
+          },
+          "tools": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "tools_completed": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "tools_error": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "tools_running": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "web": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "web_open": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "web_search": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "web_success": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          },
+          "writes": {
+            "evidence": [],
+            "reason": "Mesure absente ou périmètre exhaustif non identifiable",
+            "state": "unavailable",
+            "value": null
+          }
+        },
+        "performance": [],
+        "proof_ids": [],
+        "sessions": [
+          "01a1c9e3-bed3-7a52-abca-0ea08eaa71d9"
+        ],
+        "web_calls": []
+      },
+      "id": "01a1c9e3-bed3-7a52-abca-0ea08eaa71d9:qualification-307",
+      "input_sha256": "8588c42bfe7d8745b67a48773d24e97fcd8614f3b9dd6dbfbd6ea1f461a0c5dc",
+      "notes": {
+        "1": [
+          "Identifiant de relevé qualification-307, même SID natif et même RUN SCM-change-statistics-306 ; le relevé précédent est conservé."
+        ],
+        "3": [
+          "Compteurs anciens exclus ; aucune consommation nulle déduite du vieux journal."
+        ],
+        "6": [
+          "30tests réussis et19fichiers contrôlés ; correction du journal repris avant qualification réelle finale."
         ]
       },
       "scope": "cumulative",

@@ -63,3 +63,23 @@ synthétique du test ; aucun état tiers n’est utilisé ou modifié par ces as
 
 Rapport individuel SGS généré et vérifié, six sections UTF-8/LF. DELTA global
 refusé pour contrat historique incompatible : agrégat préservé sans reconstruction.
+
+## Qualification réelle et correctif3.0.7
+La3.0.6 a été publiée et installée (decd29a6), PostgreSQL23migrations et Electric
+vérifiés,28RUN et profils préservés. Sa période de qualification pointait un ancien
+journal, inchangé depuis11novembre. L’index natif du seul SID désigne un journal
+suffixé de reprise, même SID/UID/cwd, avec compteurs récents. Aucune consommation
+réelle nulle n’est déduite du compteur ancien ; les totaux du présent change
+restent N/A faute de couverture depuis l’entrée en codage.
+
+Le correctif3.0.7 appartient au même mandat/change : index lu sous l’UID réel et
+sans autre conversation, reprise contrôlée et historique de liaison ; gardes de
+fraîcheur à l’écriture et à la lecture des périodes. La résolution réelle sous
+UID codeur, exécutée depuis un processus root avec privilèges abaissés, a vérifié
+l’en-tête de la source indexée. Les identités et anciens reçus sont conservés.
+Les tests couvrent aussi un codeur OpenCode piloté, sans aval d’orchestrateur ;
+la recette réelle d’une session OpenCode pilotée reste distincte et non exécutée.
+
+Complément3.0.7 :30tests ciblés réussis, dont index SQLite synthétique et reprise,
+compteur ancien distinct de zéro et codeur OpenCode piloté sans aval du parent.
+Syntaxe :19fichiers du change complet contrôlés ; TypeScript/Vite réussi.

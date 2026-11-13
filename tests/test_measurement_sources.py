@@ -6,23 +6,26 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from datetime import datetime,timezone
 from cab_platform.measurement_sources import codex_snapshot,difference,opencode_snapshot
 from cab_platform.native_sources import inspect
 
 class MeasurementSourcesTests(unittest.TestCase):
+    def setUp(self):
+        reader=patch('cab_platform.measurement_sources.indexed_path',return_value=None);reader.start();self.addCleanup(reader.stop)
     def test_same_file_yields_only_delta_and_reset_is_unknown(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'native.jsonl';path.write_text(json.dumps({'type':'session_meta','payload':{'id':'SID','cwd':folder}})+'\n')
             run=SimpleNamespace(actor=SimpleNamespace(uid=os.getuid()),session_id='SID',project=SimpleNamespace(root=folder))
             run.mandate={'native_source':inspect(os.getuid(),'SID',folder,str(path))}
             def append(value):
-                with path.open('a') as f:f.write(json.dumps({'timestamp':'2026-11-13T10:00:00Z','type':'event_msg','payload':{'type':'token_count','info':{'total_token_usage':{'input_tokens':value,'total_tokens':value}}}})+'\n')
+                with path.open('a') as f:f.write(json.dumps({'timestamp':datetime.now(timezone.utc).isoformat(),'type':'event_msg','payload':{'type':'token_count','info':{'total_token_usage':{'input_tokens':value,'total_tokens':value}}}})+'\n')
             append(100);start=codex_snapshot(run);append(135);end=codex_snapshot(run)
             values,coverage=difference(start,end);self.assertEqual(values['tokens_total'],'35');self.assertEqual(coverage['state'],'bounded')
             append(4);self.assertEqual(difference(end,codex_snapshot(run))[1]['reason'],'native-counter-reset')
     def test_missing_fields_and_changed_source_are_not_zero(self):
-        start={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'100','tokens_input':'80'},'offset':10}
-        end={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'120'},'offset':20}
+        start={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'100','tokens_input':'80'},'offset':10,'native_at':'2026-11-13T00:00:00Z','observed_at':'2026-11-13T00:00:00Z'}
+        end={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'120'},'offset':20,'native_at':'2026-11-13T00:01:00Z','observed_at':'2026-11-13T00:02:00Z'}
         values,coverage=difference(start,end);self.assertNotIn('tokens_input',values);self.assertIn('tokens_input',coverage['missing'])
         end['source']={'inode':2};self.assertEqual(difference(start,end)[1]['state'],'unavailable')
         self.assertEqual(difference({'status':'unavailable'},end)[0],{})
@@ -36,5 +39,10 @@ class MeasurementSourcesTests(unittest.TestCase):
             end=opencode_snapshot(run);self.assertNotIn('tokens_total',end['counters']);self.assertEqual(end['counters']['tokens_input'],'15')
         second['time']={}
         with patch('cab_platform.opencode.messages',return_value=[row,second]):self.assertEqual(opencode_snapshot(run)['reason'],'native-records-pending')
+    def test_stale_counter_is_unknown_instead_of_zero(self):
+        start={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'100'},'native_at':'2026-11-11T00:00:00Z','observed_at':'2026-11-13T00:00:00+00:00'}
+        end={**start,'observed_at':'2026-11-13T00:01:00+00:00'}
+        self.assertEqual(difference(start,end),({}, {'state':'unavailable','reason':'native-counters-not-updated'}))
+        end['native_at']='2026-11-13T00:00:30Z';self.assertEqual(difference(start,end)[0]['tokens_total'],'0')
 
 if __name__=='__main__':unittest.main()
