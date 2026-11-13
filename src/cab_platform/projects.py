@@ -38,7 +38,7 @@ def settings_view():
     return {**values,'configured':configured,'error':error}
 
 def project_data(project):
-    return {'identifier':project.identifier,'id':project.pk,'name':project.name or Path(project.root).name,'root':project.root,'owner_uid':project.owner_uid,'owner_gid':project.owner_gid,'creation_state':project.creation_state}
+    return {'identifier':project.identifier,'id':project.pk,'name':project.name or Path(project.root).name,'root':project.root,'owner_uid':project.owner_uid,'owner_gid':project.owner_gid,'creation_state':project.creation_state,'public_metadata':project.public_metadata}
 
 def create_project(actor,name,folder,request_id):
     require(actor.role=='admin','administrator-required',403)

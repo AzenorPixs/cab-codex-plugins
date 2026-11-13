@@ -388,3 +388,23 @@ supprimée. GET /session-archives et /projects/<ID>/archives présentent les
 sessions archivées du seul projet autorisé. Electric les retire de la liste
 courante grâce à la projection archived. L'archivage d'une session ne déplace
 pas le change OpenSpec et ne clôture aucun pair.
+
+## Accueil des projets et project.env
+
+La sélection d’un projet et la maison ouvrent `/projects/<ID>`. Sessions ouvre
+`/projects/<ID>/sessions`. L’accueil affiche immédiatement l’instantané public
+stocké dans projects ; une relecture authentifiée s’effectue en arrière-plan.
+Electric répercute ensuite les changements externes, sans rechargement.
+
+Les seules variables retenues sont PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE
+(types séparés par des virgules), puis REMOTE_FORGEJO_, REMOTE_GITHUB_ et
+REMOTE_GITLAB_ avec BASE_URL, OWNER, REPOSITORY, NAME, BRANCH, SSL_VERIFY.
+Aucun jeton ni mot de passe n’est conservé ou affiché. Les URL authentifiées
+ou porteuses de requête/fragment sont refusées. Les cartes apparaissent si
+au moins une valeur publique valide de la forge existe. Une suppression ou
+une erreur de lecture retire les valeurs invérifiables et signale la cause ;
+le nom enregistré à la création sert alors de repli.
+
+Le watcher traite éditions, remplacements atomiques, suppressions et créations,
+avec rattrapage de60secondes. L’abonnement Electric est fermé à la sortie de
+l’accueil ; aucun fichier de configuration n’est écrit par ce parcours.

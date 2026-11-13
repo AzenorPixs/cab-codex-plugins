@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.1.4
+## Plateforme CAB 3.2.0
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -1375,3 +1375,11 @@ constituent pas des validations. Voir docs/platform-operations.md pour les contr
 La page /agents distingue les trois programmes et leurs transports MCP. Les
 projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
+
+
+L’accueil `/projects/<ID>` est la destination de la sélection d’un projet et
+de sa maison ; les sessions sont accessibles à `/projects/<ID>/sessions`.
+Les valeurs publiques de `project.env` sont mémorisées dans `projects` pour
+un premier affichage immédiat. La relecture à la sélection et la surveillance
+externe actualisent ensuite l’écran par Electric, sans bloquer l’affichage.
+Nom, version, types et cartes de forges sont filtrés ; aucun secret n’est exposé.

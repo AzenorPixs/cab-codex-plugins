@@ -15,11 +15,17 @@ class Project(models.Model):
     owner_uid=models.PositiveIntegerField()
     owner_gid=models.PositiveIntegerField(null=True,blank=True)
     configuration=models.JSONField(default=dict)
+    public_metadata=models.JSONField(default=dict)
     creation_state=models.CharField(max_length=16,default='READY')
     creation_request_id=models.CharField(max_length=36,blank=True,null=True,unique=True)
     created=models.DateTimeField(auto_now_add=True)
     class Meta:
         db_table='projects'
+
+class ProjectMetadataProjection(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    public_metadata=models.JSONField(default=dict)
+    class Meta:db_table='project_metadata_projection'
 
 class Actor(models.Model):
     id=models.CharField(primary_key=True,max_length=128)
