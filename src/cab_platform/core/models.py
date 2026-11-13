@@ -59,6 +59,30 @@ class UpdateAvailability(models.Model):
     error=models.CharField(max_length=100,blank=True)
     class Meta:db_table='update_availability'
 
+class McpConnector(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
+    agent=models.CharField(max_length=24)
+    process=models.JSONField()
+    worker=models.JSONField(default=dict)
+    loaded_version=models.CharField(max_length=100,blank=True)
+    catalog_version=models.CharField(max_length=100,blank=True)
+    generation=models.PositiveBigIntegerField(default=0)
+    pending=models.PositiveIntegerField(default=0)
+    state=models.CharField(max_length=40,default='STARTING')
+    error=models.CharField(max_length=100,blank=True)
+    seen=models.DateTimeField(auto_now=True)
+    class Meta:db_table='mcp_connectors'
+
+class ConnectorReload(models.Model):
+    update=models.OneToOneField(SystemUpdate,on_delete=models.PROTECT,primary_key=True,related_name='connector_reload')
+    targets=models.JSONField(default=list)
+    version=models.CharField(max_length=100,blank=True)
+    state=models.CharField(max_length=24,default='RECONNECTING')
+    observations=models.JSONField(default=list)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='connector_reloads'
+
 class CodingSession(models.Model):
     id=models.CharField(primary_key=True,max_length=64)
     project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='coding_sessions')

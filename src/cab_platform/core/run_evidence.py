@@ -95,6 +95,11 @@ def capture_update(plan):
     if not policy.get('update_request_id'):return
     run=plan.run;job=SystemUpdate.objects.filter(pk=policy['update_request_id'],state='OK').first()
     if not job or job.actor_id not in (run.actor_id,run.mandate.get('orchestrator_id')):return
+    from .models import ConnectorReload
+    if ConnectorReload.objects.filter(update=job).exists():
+        from cab_platform.system_updates import refresh_connectors
+        if refresh_connectors(job.pk)['state']!='OK':return
+        job.refresh_from_db()
     if job.result.get('verified') is not True or job.result.get('version')!=policy.get('target_version'):return
     artifact=job.result.get('package_sha256')
     if not isinstance(artifact,str) or not re.fullmatch('[a-f0-9]{64}',artifact):return
