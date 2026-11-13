@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.2.0
+## CAB 3.2.1
 
 CAB réévalue et clôture automatiquement les RUN normalement acceptés et archivés
 sur preuves, sans rejeu. L'interface propose Réévaluer/clôturer, les diagnostics
@@ -212,3 +212,20 @@ Les valeurs publiques de `project.env` sont mémorisées dans `projects` pour
 un premier affichage immédiat. La relecture à la sélection et la surveillance
 externe actualisent ensuite l’écran par Electric, sans bloquer l’affichage.
 Nom, version, types et cartes de forges sont filtrés ; aucun secret n’est exposé.
+
+La mise à jour CAB peut être demandée par le MCP cab_update ou par le bouton
+permanent de /administration/update. CAB conduit seul le job durable via
+cab-update.service, hors du groupe du service actualisé, et retourne OK avec
+la version uniquement après vérifications Debian, READY et finalisation.
+Tout client CAB actif authentifié est admis pour cette seule opération officielle,
+sans liste de comptes, commande arbitraire ou sudo client. Les reçus inconnus
+restent protégés et ne provoquent aucune réinstallation automatique.
+
+L’accueil vérifie la disponibilité GitHub en arrière-plan à partir d’un cache
+partagé. Aucun contrôle automatique n’est rejoué dans les24h suivant le précédent ;
+le prochain est tiré au sort dans les24h après expiration. Une version plus
+récente confirmée affiche l’étiquette Mise à jour près de la version locale.
+La page /administration/update montre les deux versions, force un contrôle
+asynchrone à chaque ouverture et propose le bouton manuel permanent.
+
+Le contrôle forcé administratif est l’exception explicite au cache automatique24h.

@@ -3,7 +3,7 @@ name: CCAB
 description: Déclarer et traiter les incidents CAB avec preuves et claim durable.
 ---
 
-# CCAB 3.1.4
+# CCAB 3.2.1
 
 Utiliser le serveur MCP `cab` ou `/usr/bin/cab call` ; le service porte le registre.
 Déclarer par `incident_report` avec projet, résumé et empreintes de preuves.

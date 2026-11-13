@@ -223,9 +223,23 @@ def incidents(request,project_id:str|None=None):
         project=Project.objects.get(pk=project_id);commands.scope(actor,project);rows=rows.filter(project=project)
     return {'incidents':list(rows.order_by('created').values('incident_id','category','summary','evidence','state','claim','resolution')[:200])}
 
+@api.get('/updates/availability',auth=None)
+def update_availability(request):
+    from cab_platform.update_availability import view
+    return view()
+
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    if name=='system.update.check':
+        commands.require(set(data)<={'force'} and type(data.get('force',False)) is bool,'update-fields-invalid',400)
+        if data.get('force'):principal(request,admin=True)
+        from cab_platform.update_availability import request_check
+        return request_check(data.get('force',False))
+    if name in ('system.update','system.update.status'):
+        commands.require(set(data)<=({'request_id','version'} if name=='system.update' else {'request_id'}),'update-fields-invalid',400)
+        from cab_platform import system_updates
+        return system_updates.request(actor,data.get('request_id'),data.get('version','')) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
     if name in ('run.reevaluate','session.archive'):
         from . import run_lifecycle
         return run_lifecycle.recheck(actor,data) if name=='run.reevaluate' else run_lifecycle.archive_session(actor,data)
