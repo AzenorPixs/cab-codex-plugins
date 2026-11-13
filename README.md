@@ -1,6 +1,10 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.1.2
+## CAB 3.1.3
+
+Les RUN directs historiques archivés disposent d'une régularisation explicite
+sur preuves, sans réexécution ni reçus de tests reconstruits. Procédure et
+protections : [opérations](docs/platform-operations.md).
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

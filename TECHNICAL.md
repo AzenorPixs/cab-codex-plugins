@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.1.2
+## Architecture CAB 3.1.3
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage

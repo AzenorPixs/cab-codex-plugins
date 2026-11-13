@@ -3,7 +3,7 @@ name: coding-session-statistics
 description: Produire un bilan quantifié de session à partir de la télémétrie native CAB.
 ---
 
-# Statistiques de session CAB3.1.2
+# Statistiques de session CAB3.1.3
 
 Les statistiques sont gérées par cab.service. Consulter statistics_change pour
 la projection du STATISTICS.md local (source unique), statistics_project pour

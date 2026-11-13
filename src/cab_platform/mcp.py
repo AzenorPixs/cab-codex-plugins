@@ -41,6 +41,14 @@ def run_reconcile_archive(project_id:str,run_id:str,archive_path:str,expected_fr
     """Relocalise le seul change archivé du RUN direct propriétaire, sans rejeu."""
     return client().command('run.reconcile_archive',locals())
 @server.tool()
+def run_inspect_historical(project_id:str,run_id:str,archive_path:str)->dict:
+    """Inspecte les preuves locales pour une régularisation historique explicite."""
+    return client().command('run.inspect_historical',locals())
+@server.tool()
+def run_close_historical(project_id:str,run_id:str,archive_path:str,evidence_digest:str,receipt_id:str,authorization:str,reason:str,developer_authorized:bool)->dict:
+    """Clôture historique autorisée ; aucun test rejoué ni acceptation reconstruite."""
+    return client().command('run.close_historical',locals())
+@server.tool()
 async def wait_for_handoff(project_id:str,run_id:str,after:int=0,timeout_ms:int=86400000)->dict:
     """Attend mécaniquement exception ou revue finale sans tours LLM de suivi. Lectures seulement ; aucune décision ou exécution implicite."""
     if not 1<=timeout_ms<=86400000:raise ValueError('handoff-timeout-invalid')

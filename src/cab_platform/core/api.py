@@ -205,6 +205,9 @@ def incidents(request,project_id:str|None=None):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    if name in ('run.inspect_historical','run.close_historical'):
+        from . import historical
+        return historical.inspect(actor,data) if name=='run.inspect_historical' else historical.close(actor,data)
     if name=='project.register':
         p=commands.register_project(actor,data['root']);return {'project_id':p.pk,'root':p.root}
     if name=='actor.enroll':

@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — clôture historique, 13 novembre 2026
+
+`regularize-historical-archived-runs`, code non attribué : mécanisme explicite
+sur preuves locales pour les RUN directs anciens. Source : change OpenSpec
+archivé `2026-11-13-regularize-historical-archived-runs` ; 6 tests métier, 7 régressions et parcours public isolé réussis. Livraison3.1.3 et activation à constater séparément.
+Régularisation ciblée des deux RUN Zsh DIU après activation, sans rejeu.
+
 ## SCM — permissions CAB, 11 novembre 2026
 
 `support-reporting-external-group-mode` : lot reporting et exécution externe

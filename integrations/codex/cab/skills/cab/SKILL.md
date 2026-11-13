@@ -3,7 +3,13 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.1.2
+# CAB 3.1.3
+
+Historique : sur autorisation développeur explicite, `run_inspect_historical`
+puis `run_close_historical` pour un RUN direct ancien archivé. Conserver digest,
+receipt_id, référence d'autorisation et justification. Lire le reçu après une
+réponse perdue ; aucun test inventé ou rejoué. CLOSED historique ne vaut pas
+acceptation normale ni qualification courante de la livraison.
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
