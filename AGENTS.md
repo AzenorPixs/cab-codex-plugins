@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 1.2
+Version : 1.3
 
 ## 1. Contexte
 
@@ -187,13 +187,12 @@ les [règles d'intégration](AGENT_INTEGRATIONS.md). Toute modification
 de sa configuration ou modification manuelle de ses fichiers générés
 nécessite une validation explicite.
 
-Après chaque archivage OpenSpec autorisé et réussi, produire
-`openspec/changes/archive/<archive>/STATISTICS.md`.
-Appliquer le format statistique référencé depuis `DEVOPS.md` :
-six sections, UTF-8/LF, totaux vérifiés et mesures absentes justifiées par `N/A`.
-Résoudre ce format par l'entrée `SGS` de l'index des prompts indiqué
-dans `DEVOPS.md`. Ne pas déclarer `TERMINÉ` sans preuve du rapport.
-En cas d'échec du rapport, reprendre uniquement celui-ci, sans réarchiver.
+Après chaque archivage OpenSpec autorisé et réussi, le processus CAB génère
+ou amende STATISTICS.md dans le change, puis le global du projet. Le LLM ne
+calcule ni ne rédige ces rapports. Les fichiers locaux des changes restent la
+seule source de vérité ; PG est leur projection. Consulter le contrat installé
+CAB et vérifier les reçus, sans reconstruire de preuve absente. Un échec reprend
+seulement la génération, sans réarchiver ni perdre l’historique.
 
 ## 8. Arborescence et fichiers
 

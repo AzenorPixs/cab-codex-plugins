@@ -3,17 +3,15 @@ name: sgs
 description: Produire ou consulter les rapports SGS des changes sans reconstruire implicitement le global.
 ---
 
-# SGS 3.0.7
+# SGS CAB3.1.0
 
-Résoudre SGS.md depuis DEVOPS.md et appliquer son contrat. Le moteur commun
-est `/usr/bin/cab sgs` ; VERSION est sans effet. En session, utiliser CHANGE
-avec preuves sur stdin, puis DELTA pour le global existant. Conserver les six
-sections et les N/A motivés ; distinguer les métriques natives des déclarations.
-Ne lancer REBUILD que pour une demande manuelle explicite SGS. Un registre
-incompatible est conservé ; ne pas le reconstruire pour terminer un change.
-Le moteur et le schéma sont fournis par le paquet, sans copie dans le skill.
+Les statistiques sont gérées par cab.service. Consulter statistics_change pour
+la projection du STATISTICS.md local (source unique), statistics_project pour
+le global et les jobs. statistics_sync demande le rattrapage au service, sans
+calcul ni rédaction par le LLM. Le service génère/amende les rapports après
+archive et maintient le global automatiquement, sous réservation PostgreSQL.
 
-Pour un change CAB3.0.7, consulter statistics_change : sgs_evidence porte les
-seuls écarts bornés, les identités RUN/SID et la couverture. Ne pas reprendre
-les diagnostics session-wide comme métriques du change. Une couverture incomplète
-reste N/A dans SGS ; aucune somme arbitraire des sessions ou des périodes ouvertes.
+Le codeur ouvre/ferme ses périodes en autonomie. Les données absentes restent
+N/A, les amendements manuels et historiques sont préservés. Un change ouvert
+sans session de codage n’exige pas de rapport. Aucun prompt SGS externe, aucun
+registre JSON global ni moteur local d’écriture ne sont nécessaires.

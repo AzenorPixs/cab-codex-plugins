@@ -150,7 +150,15 @@ def statistics_end(project_id:str,run_id:str,request_id:str)->dict:
     return client().command('statistics.end',locals())
 @server.tool()
 def statistics_change(project_id:str,change:str,after:int=0)->dict:
-    """Agrège les périodes du change sur ses RUN/SID et fournit les preuves SGS."""
+    """Projection du STATISTICS.md local, seul maître, avec historique et champs structurés."""
     return client().command('statistics.change',locals())
+@server.tool()
+def statistics_sync(project_id:str,request_id:str,change:str='',full:bool=False)->dict:
+    """Demande la synchronisation CAB ; génération automatique, aucune rédaction statistique LLM."""
+    return client().command('statistics.sync',locals())
+@server.tool()
+def statistics_project(project_id:str)->dict:
+    """État du catalogue, du global dérivé et des jobs PostgreSQL du projet."""
+    return client().command('statistics.project',locals())
 
 def run():server.run(transport='stdio')

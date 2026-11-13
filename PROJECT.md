@@ -1,6 +1,13 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.7
+## Plateforme CAB 3.1.0
+
+CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
+PG projection et historique, catalogue de tous les changes, inotify et rattrapage
+aléatoire12–24h. Rapports individuels/globaux générés par le service, sans LLM ni
+verrou fichier. Contrat et champs : docs/sgs-schema.md. Les descriptions2.x des
+moteurs SGS autonomes ci-dessous sont historiques et ne sont plus applicables.
+
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
 contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions

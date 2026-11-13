@@ -1,6 +1,5 @@
-# Schéma SGS
+# Schéma statistique CAB3.1.0
 
-Le schéma complet du moteur commun est installé dans
-`/usr/share/doc/cab/sgs-schema.md`. Le format est cab-sgs-1 ; moteur3.0.7.
-Les commandes VERSION, INSPECT, CHANGE, DELTA, QUERY, VERIFY, REBUILD et RECOVER
-sont accessibles par `/usr/bin/cab sgs`. Respecter le prompt SGS.md du projet.
+Contrat : /usr/share/doc/cab/sgs-schema.md. Fichiers locaux maîtres, PG projection.
+Les écritures passent exclusivement par le service, via CLI cab statistics ou
+MCP statistics_sync ; statistiques de change et global accessibles en lecture.

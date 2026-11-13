@@ -3,10 +3,15 @@ name: coding-session-statistics
 description: Produire un bilan quantifié de session à partir de la télémétrie native CAB.
 ---
 
-# Statistiques de session CAB 3.0.7
+# Statistiques de session CAB3.1.0
 
-Consulter `statistics` dans le MCP CAB et les preuves natives rattachées au RUN.
-Identifier codeur et orchestrateur séparément ; aucun orchestrateur fictif en
-direct. Fournir les mesures observées, les bornes et les lacunes explicites,
-sans estimation des tokens, coûts ou quotas absents. Pour le rapport d’un change,
-appliquer SGS.md depuis DEVOPS.md et utiliser `/usr/bin/cab sgs CHANGE`.
+Les statistiques sont gérées par cab.service. Consulter statistics_change pour
+la projection du STATISTICS.md local (source unique), statistics_project pour
+le global et les jobs. statistics_sync demande le rattrapage au service, sans
+calcul ni rédaction par le LLM. Le service génère/amende les rapports après
+archive et maintient le global automatiquement, sous réservation PostgreSQL.
+
+Le codeur ouvre/ferme ses périodes en autonomie. Les données absentes restent
+N/A, les amendements manuels et historiques sont préservés. Un change ouvert
+sans session de codage n’exige pas de rapport. Aucun prompt SGS externe, aucun
+registre JSON global ni moteur local d’écriture ne sont nécessaires.
