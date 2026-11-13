@@ -18,20 +18,25 @@ const oldProject=execFileSync('docker',['exec','cab-300-package-test','cat','/tm
 try{
   for(const factory of [chromium,firefox]){
     const browser=await factory();try{
-      await browser.viewport(1440,1000);await browser.navigate('http://127.0.0.1:18092/administration/agents');
+      await browser.viewport(1440,1000);await browser.navigate('http://127.0.0.1:18092/agents');
       await wait(()=>browser.evaluate('Boolean(document.querySelector("input[name=username]"))'),'login');
       await browser.evaluate('(()=>{document.querySelector("input[name=username]").value="fixture-admin";document.querySelector("input[name=password]").value="synthetic-fixture-password";document.querySelector("form").requestSubmit();return true})()');
-      await wait(()=>browser.evaluate('document.querySelectorAll(".agents-grid .agent-card").length===2'),'agent cards');
+      await wait(()=>browser.evaluate('document.querySelectorAll(".agents-grid .agent-card").length===3'),'agent cards');
       assert(await browser.evaluate('(()=>{const cards=[...document.querySelectorAll(".agents-grid .agent-card")].map(e=>e.getBoundingClientRect());return cards[1].x>cards[0].x && Math.abs(cards[1].y-cards[0].y)<2})()'));
-      assert(await browser.evaluate('document.querySelectorAll(".agent-installed").length===2 && document.querySelectorAll(".available-version").length===2 && document.querySelectorAll(".agents-grid input").length===0'));
+      assert(await browser.evaluate('document.querySelectorAll(".agent-installed").length===3 && document.querySelectorAll(".available-version").length===3 && document.querySelectorAll(".agents-grid input").length===0'));
       assert(await browser.evaluate('document.querySelector(".agents-grid").innerText.includes("0.167.2") && document.querySelector(".agents-grid").innerText.includes("2.2.7")'));
+      assert(await browser.evaluate('Array.from(document.querySelectorAll(".primary-links a")).map(a=>a.getAttribute("href")).join(",")=="/,/administration,/agents,/projects"'));
+      assert(await browser.evaluate('!document.querySelector(".administration-sidebar a[href$=agents]")'));
       await browser.screenshot();await copyFile(join(root,browser.name.toLowerCase()+'.png'),join(root,browser.name.toLowerCase()+'-agents.png'));
-      for(const page of ['agents','database','interface','projects','web-server']){
+      for(const page of ['database','interface','projects','web-server']){
         await browser.navigate('http://127.0.0.1:18092/administration/'+page);await wait(()=>browser.evaluate('Boolean(document.querySelector(".administration h1"))'),'admin '+page);
-        assert(await browser.evaluate('!document.body.innerText.includes("/etc/cab/cab.json")'));
+        assert(await browser.evaluate('!document.body.innerText.includes("/etc/cab/cab.json") && !document.querySelector(".administration-sidebar a[href$=agents]")'));
       }
+      await browser.navigate('http://127.0.0.1:18092/administration/agents');
+      await wait(()=>browser.evaluate('location.pathname==="/agents"'),'legacy agents redirect');
       await browser.navigate('http://127.0.0.1:18092/projects/'+projectId);
       await wait(()=>browser.evaluate('document.querySelector("table")?.innerText.includes("3/11 Analyse") && document.querySelector("table").innerText.includes("3/6")'),'Electric stage and task counts');
+      assert(await browser.evaluate('!location.pathname.endsWith("/'+projectId+'")'));
       assert(await browser.evaluate('document.querySelector("thead").innerText.includes("Étape") && document.querySelector("thead").innerText.includes("Tâches réalisées")'));
       await browser.evaluate('(()=>{document.querySelector(".table-wrap a.text-button").click();return true})()');
       await wait(()=>browser.evaluate('Boolean(document.querySelector(".run-view"))'),'run route');
@@ -43,8 +48,8 @@ try{
       await browser.screenshot();await copyFile(join(root,browser.name.toLowerCase()+'.png'),join(root,browser.name.toLowerCase()+'-mobile.png'));
       await browser.viewport(1440,1000);await browser.navigate('http://127.0.0.1:18092/projects/'+oldProject);
       await wait(()=>browser.evaluate('document.querySelector("table")?.innerText.includes("7/11 Vérifications")'),'existing Electric shape with added columns');
-      results.push({browser:browser.name,version:browser.version,agent_columns:true,read_only_binary:true,cached_release:true,configuration_path_hidden:true,electric_stage_and_tasks:true,run_route:true,eleven_stages:true,task_rows:true,unknowns_explicit:true,mobile:true,existing_electric_shape:true});
+      results.push({browser:browser.name,version:browser.version,agent_columns:true,read_only_binary:true,cached_release:true,configuration_path_hidden:true,electric_stage_and_tasks:true,run_route:true,eleven_stages:true,task_rows:true,unknowns_explicit:true,mobile:true,existing_electric_shape:true,three_programs:true,public_project_identifier:true});
     }catch(error){await browser.screenshot();console.error('DOM',await browser.evaluate('document.body.innerText'));throw error}finally{await browser.close()}
   }
-  await writeFile(resolve('output/scm/cab-3.0.0/monitor-303-browser-proof.json'),JSON.stringify({results,screenshots:root},null,2)+'\n');console.log(JSON.stringify(results));
+  await writeFile(resolve('output/scm/cab-3.0.0/monitor-304-browser-proof.json'),JSON.stringify({results,screenshots:root},null,2)+'\n');console.log(JSON.stringify(results));
 }finally{for(const p of children)if(p.exitCode===null)p.kill('SIGTERM')}

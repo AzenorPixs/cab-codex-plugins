@@ -1,6 +1,6 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.0.3
+## Architecture CAB 3.0.4
 
 Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
 PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et
@@ -2278,3 +2278,7 @@ par profil. Elle publie les extensions CAB pour les UID configurés après valid
 Web initiale, sans relancer les sessions. Les entités projets/RUN/sessions/changes
 et leurs tâches sont persistantes ; étapes déclarées et tâches observées ne
 constituent pas des validations. Voir docs/platform-operations.md pour les contrats.
+
+La page /agents distingue les trois programmes et leurs transports MCP. Les
+projets utilisent leur identifiant métier dans les URL, sans modifier leurs
+identités internes ; voir docs/platform-operations.md pour la compatibilité.

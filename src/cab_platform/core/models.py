@@ -8,6 +8,7 @@ class Configuration(models.Model):
         db_table='configuration'
 
 class Project(models.Model):
+    identifier=models.CharField(max_length=100,unique=True,null=True,blank=True)
     id=models.CharField(primary_key=True,max_length=64)
     name=models.CharField(max_length=120,blank=True,default='')
     root=models.CharField(max_length=1500,unique=True)

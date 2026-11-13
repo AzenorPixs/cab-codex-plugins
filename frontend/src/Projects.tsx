@@ -3,15 +3,15 @@ import {Link,useNavigate} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
-export type Project={id:string;name:string;root:string;owner_uid:number;owner_gid:number|null;creation_state:string}
+export type Project={id:string;identifier:string|null;name:string;root:string;owner_uid:number;owner_gid:number|null;creation_state:string}
 type Settings={projects_root:string;projects_user:string;projects_group:string;configured:boolean;error:string|null}
 export function ProjectSidebar({projects,selected}:{projects:Project[];selected?:string}){
-  return <aside className="project-sidebar"><div className="project-sidebar-heading"><h2>Projets</h2><Link to="/projects/new" className="add-project" aria-label="Créer un projet" title="Créer un projet">+</Link></div><nav aria-label="Liste des projets">{projects.map(project=><Link key={project.id} to="/projects/$projectId" params={{projectId:project.id}} className={selected===project.id?'project-link selected':'project-link'} title={project.root}><span>{project.name||project.root.split('/').pop()}</span>{project.creation_state!=='READY'&&<small>Création à vérifier</small>}</Link>)}{!projects.length&&<p>Aucun projet.</p>}</nav></aside>
+  return <aside className="project-sidebar"><div className="project-sidebar-heading"><h2>Projets</h2><Link to="/projects/new" className="add-project" aria-label="Créer un projet" title="Créer un projet">+</Link></div><nav aria-label="Liste des projets">{projects.map(project=><Link key={project.id} to="/projects/$projectId" params={{projectId:project.identifier||project.id}} className={selected===project.id?'project-link selected':'project-link'} title={project.root}><span>{project.name||project.root.split('/').pop()}</span>{project.creation_state!=='READY'&&<small>Création à vérifier</small>}</Link>)}{!projects.length&&<p>Aucun projet.</p>}</nav></aside>
 }
 export function CreateProjectForm(){
   const client=useQueryClient();const navigate=useNavigate();const request=useRef(crypto.randomUUID());const [name,setName]=useState('');const [folder,setFolder]=useState('');const [edited,setEdited]=useState(false)
   const settings=useQuery({queryKey:['projects-settings'],queryFn:()=>api<Settings>('projects/settings')})
-  const create=useMutation({mutationFn:()=>api<Project>('projects',{name:name.trim(),folder,request_id:request.current}),onSuccess:async project=>{await client.invalidateQueries({queryKey:['projects']});await navigate({to:'/projects/$projectId',params:{projectId:project.id}})}})
+  const create=useMutation({mutationFn:()=>api<Project>('projects',{name:name.trim(),folder,request_id:request.current}),onSuccess:async project=>{await client.invalidateQueries({queryKey:['projects']});await navigate({to:'/projects/$projectId',params:{projectId:project.identifier||project.id}})}})
   function newName(value:string){setName(value);if(!edited)setFolder(value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9_.-]+/g,'-').replace(/^[^a-z0-9]+|[-.]+$/g,'').slice(0,100));request.current=crypto.randomUUID()}
   if(settings.isPending)return <p role="status">Chargement des réglages des projets…</p>
   if(settings.error)return <p role="alert">{settings.error.message}</p>

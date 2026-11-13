@@ -35,6 +35,6 @@ try:
   raise RuntimeError('MCP timeout')
  rpc('initialize',{'protocolVersion':'2025-11-25','capabilities':{},'clientInfo':{'name':'cab-fixture-finalize','version':'1'}});rpc('notifications/initialized',{},True)
  tools=rpc('tools/list',{})['tools'];assert any(tool['name']=='run_progress' for tool in tools)
- agents=Client(admin=True).get('administration/agents')['agents'];codex=next(agent for agent in agents if agent['agent']=='codex');assert codex['runtime']['mcp_connected']
+ agents=Client(admin=True).get('administration/agents')['agents'];codex=next(agent for agent in agents if agent['agent']=='codex');assert codex['runtime']['mcp_transport_connected']
 finally:selector.close();p.terminate();p.wait(timeout=10)
 print(json.dumps({'version':__version__,'postinst_receipt_verified':True,'native_codex_plugins_skills_commands':True,'third_party_preserved':True,'repeated_finalize_has_no_profile_writes':True,'dpkg_status_unchanged':True,'real_mcp_transport_detected':True,'progress_tool_exposed':True}))

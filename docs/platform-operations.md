@@ -190,3 +190,34 @@ Les comptes configurés incluent aussi les agents enrôlés dans CAB dont le pro
 privé local correspond à l’acteur et à son jeton, sans parcourir les HOME non
 enrôlés. Cela couvre les comptes installés auparavant par cab enroll/integrate.
 Les plans préconfigurés avant bootstrap conservent leur champ role explicite.
+
+## Agents et adresses 3.0.4
+
+Agents est disponible à /agents dans le bandeau après Administration ; l’ancien
+lien /administration/agents redirige vers cette adresse. Administration ouvre
+la section Base de données. Les trois blocs distinguent OpenCode, Codex CLI et
+le moteur Codex intégré au bureau, dont le chemin peut être configuré par
+codex_desktop_binary. Le connecteur des deux Codex reste --agent codex et leurs
+profils restent partagés ; les activités et versions installées sont distinctes.
+
+L’ascendance des processus rattache les connecteurs à leur client. Pour les
+sockets Unix, le noyau fournit les inodes pairs via UNIX_DIAG_PEER ; les flux
+ne sont pas lus et les clients ne sont pas reconnectés par le moniteur. Un
+contrôle inaccessible reste non vérifié. Le rafraîchissement visible reste
+périodique pendant l’ouverture de la page, sans sollicitation du LLM.
+
+Le cache GitHub OpenCode sélectionne le canal stable 2.x dans les releases,
+sans prendre Latest 1.x. Son cache ancien est invalidé par changement de canal ;
+le contrôle quotidien aléatoire et la conservation en cas d’erreur restent actifs.
+
+Les projets disposent d’un identifier métier unique. PROJECT_ID est lu localement
+comme affectation littérale unique, sans exécuter project.env ; une absence de
+fichier permet le nom de dossier initial des nouveaux projets. Les valeurs
+ambiguës, collisions ou noms réservés restent sans alias attribué automatiquement.
+Les liens lisibles ne changent pas les PK ou identifiants project_id des API,
+mandats, sessions et reçus. Les anciens liens par PK sont toujours résolus puis
+remplacés par l’adresse lisible lorsqu’elle est connue.
+
+La page Agents réinterroge les états visibles toutes les deux secondes. Les
+versions installées sont mises en cache selon l’identité et les dates du fichier
+binaire ; ce rythme ne relance pas les programmes à chaque interrogation.

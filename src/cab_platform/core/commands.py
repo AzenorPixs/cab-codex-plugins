@@ -9,6 +9,7 @@ import re
 import secrets
 import stat
 from django.db import transaction,connection
+from django.db.models import Q
 from django.utils import timezone
 from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Notice,Operation,Project,Resource,Run,SessionProjection,Subscription
 
@@ -101,6 +102,11 @@ def register_project(actor,root):
     key=hashlib.sha256(str(p).encode()).hexdigest()
     project,_=Project.objects.get_or_create(pk=key,defaults={'name':p.name[:120],'root':str(p),'owner_uid':p.stat().st_uid,'owner_gid':p.stat().st_gid})
     require(project.creation_state=='READY','project-creation-needs-reconciliation')
+    if not project.identifier:
+        from cab_platform.project_ids import identifier_for_root
+        identifier=identifier_for_root(p)
+        if identifier and not Project.objects.exclude(pk=project.pk).filter(Q(identifier=identifier)|Q(pk=identifier)).exists():
+            project.identifier=identifier;project.save(update_fields=['identifier'])
     actor.projects.add(project);return project
 
 @transaction.atomic

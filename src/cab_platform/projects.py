@@ -7,6 +7,7 @@ import grp
 import re
 import uuid
 from django.db import transaction
+from django.db.models import Q
 from .paths import config
 from .core.commands import require,Refused
 from .core.models import Project
@@ -37,7 +38,7 @@ def settings_view():
     return {**values,'configured':configured,'error':error}
 
 def project_data(project):
-    return {'id':project.pk,'name':project.name or Path(project.root).name,'root':project.root,'owner_uid':project.owner_uid,'owner_gid':project.owner_gid,'creation_state':project.creation_state}
+    return {'identifier':project.identifier,'id':project.pk,'name':project.name or Path(project.root).name,'root':project.root,'owner_uid':project.owner_uid,'owner_gid':project.owner_gid,'creation_state':project.creation_state}
 
 def create_project(actor,name,folder,request_id):
     require(actor.role=='admin','administrator-required',403)
@@ -54,7 +55,10 @@ def create_project(actor,name,folder,request_id):
             require(existing.creation_state=='READY','project-creation-needs-reconciliation')
             require(path.is_dir() and path.resolve()==path,'project-directory-missing')
             return existing,False
-        project=Project.objects.create(pk=identity,name=name,root=str(path),owner_uid=user.pw_uid,owner_gid=group.gr_gid,creation_state='CREATING',creation_request_id=request_id)
+        from .project_ids import valid
+        identifier=folder if valid(folder) else None
+        require(identifier is None or not Project.objects.filter(Q(identifier=identifier)|Q(pk=identifier)).exists(),'project-identifier-conflict')
+        project=Project.objects.create(identifier=identifier,pk=identity,name=name,root=str(path),owner_uid=user.pw_uid,owner_gid=group.gr_gid,creation_state='CREATING',creation_request_id=request_id)
     parent=None;directory=None
     try:
         parent=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
