@@ -3,7 +3,12 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.1.3
+# CAB 3.1.4
+
+Le service réévalue et clôture les RUN admissibles sur preuves, sans tour LLM.
+`run_reevaluate` expose les motifs ; services sans preuve et effets inconnus
+restent protégés. L'archivage de session `session_archive` exige CLOSED prouvé
+et conserve RUN/SID/liens. Il est distinct de l'archive OpenSpec du change.
 
 Historique : sur autorisation développeur explicite, `run_inspect_historical`
 puis `run_close_historical` pour un RUN direct ancien archivé. Conserver digest,

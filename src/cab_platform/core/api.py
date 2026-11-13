@@ -163,7 +163,19 @@ def new_project(request,body:NewProject):
 def sessions(request,project_id:str):
     actor=principal(request);p=Project.objects.get(pk=project_id)
     if actor.role!='admin':commands.scope(actor,p)
-    return {'sessions':[run_data(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
+    return {'sessions':[run_data(r) for r in Run.objects.filter(project=p,session_archive__isnull=True).order_by('-updated')[:500]]}
+
+@api.get('/closures')
+def closure_evaluations(request,project_id:str):
+    actor=principal(request);p=Project.objects.get(pk=project_id);commands.scope(actor,p)
+    from .run_lifecycle import evaluate
+    return {'evaluations':[evaluate(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
+
+@api.get('/session-archives')
+def session_archives(request,project_id:str):
+    actor=principal(request);p=Project.objects.get(pk=project_id);commands.scope(actor,p)
+    from .models import SessionArchive
+    return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in SessionArchive.objects.filter(run__project=p).select_related('run','run__change_record').order_by('-created')[:500]]}
 
 @api.get('/run')
 def run_status(request,project_id:str,run_id:str):
@@ -205,6 +217,9 @@ def incidents(request,project_id:str|None=None):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    if name in ('run.reevaluate','session.archive'):
+        from . import run_lifecycle
+        return run_lifecycle.recheck(actor,data) if name=='run.reevaluate' else run_lifecycle.archive_session(actor,data)
     if name in ('run.inspect_historical','run.close_historical'):
         from . import historical
         return historical.inspect(actor,data) if name=='run.inspect_historical' else historical.close(actor,data)
@@ -286,39 +301,8 @@ def command(request,body:Command):
         bounded=run_statistics(actor,r)
         return {'frozen_at':r.mandate['native_frozen_at'],'run_id':r.run_id,'metrics':bounded['streams'],'statistics':bounded}
     if name=='run.close':
-        from .measurements import end_if_open
-        candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
-        previous=candidate.review.get('closure')
-        if previous and previous.get('receipt_id')==data.get('receipt_id'):
-            commands.require(previous.get('branch')==data.get('branch'),'closure-receipt-conflict');return previous
-        commands.require(commands.no_pending(candidate) and not Lease.objects.filter(run=candidate,state='HELD').exists(),'closure-effects-protected')
-        commands.require(data['branch'] in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
-        if data['branch']=='TERMINÉ':commands.require(candidate.state in ('ACCEPTED','CLOSED'),'final-acceptance-required')
-        end_if_open(actor,candidate)
-        from . import statistics_service
-        statistics_service.sync(candidate.project,'CLOSE-'+commands.identifier(data['receipt_id']),generate=candidate.change)
-        candidate.change_record.refresh_from_db()
-        source=candidate.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
-        commands.require(source is not None and (data['branch']!='TERMINÉ' or source.archived),'closure-archive-required')
-        data={**data,'report':source.path+'/STATISTICS.md'}
-        candidate_report=commands.safe_path(Path(candidate.project.root),data['report'])
-        data['sha256']=hashlib.sha256(candidate_report.read_bytes()).hexdigest()
-        commands.require(candidate_report.name=='STATISTICS.md' and candidate.change in candidate_report.parent.name,'closure-report-outside-change')
-        commands.require(hashlib.sha256(candidate_report.read_bytes()).hexdigest()==data['sha256'],'closure-report-stale')
-        if data['branch']=='BLOQUÉ':commands.require((candidate_report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
-        with transaction.atomic():
-            r=commands.run_scope(actor,data['run_id'],data['project_id'],lock=True)
-            commands.require(commands.no_pending(r) and not Lease.objects.filter(run=r,state='HELD').exists(),'closure-effects-protected')
-            branch=data['branch'];commands.require(branch in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
-            if branch=='TERMINÉ':commands.require(r.state in ('ACCEPTED','CLOSED'),'final-acceptance-required')
-            report=commands.safe_path(Path(r.project.root),data['report'])
-            commands.require(report.name=='STATISTICS.md' and r.change in report.parent.name,'closure-report-outside-change')
-            if branch=='BLOQUÉ':commands.require((report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
-            sha=hashlib.sha256(report.read_bytes()).hexdigest();commands.require(sha==data['sha256'],'closure-report-stale')
-            receipt={'receipt_id':commands.identifier(data['receipt_id']),'branch':branch,'report':data['report'],'sha256':sha}
-            previous=r.review.get('closure');commands.require(previous is None or previous==receipt,'closure-receipt-conflict')
-            r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.stage=11 if branch=='TERMINÉ' else r.stage;r.suspension='';r.save();commands.event(r,'run-closed',receipt)
-            return receipt
+        from .run_closure import close_normal
+        return close_normal(actor,data)
     if name=='run.review':return commands.review(actor,data)
     if name=='run.suspend':return commands.suspend(actor,data)
     if name=='coordinate':return commands.coordinate(actor,data)

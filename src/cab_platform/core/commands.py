@@ -65,11 +65,15 @@ def safe_path(root,value,*,exists=True):
         info=p.lstat();require(not p.is_symlink() and (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode) and info.st_nlink==1),'path-unsafe',403)
     return p
 
-def revision(run):
+def revision(run,relocations=None):
     roots=run.mandate.get('paths',[]);require(roots,'mandate-paths-required',400)
     entries=[];total=0
     for name in sorted(roots):
-        p=safe_path(Path(run.project.root),name,exists=False)
+        start=len(entries)
+        actual=name
+        for old,new in (relocations or {}).items():
+            if name==old or name.startswith(old+'/'):actual=new+name[len(old):]
+        p=safe_path(Path(run.project.root),actual,exists=False)
         if not p.exists():
             entries.append([name,'missing']);continue
         files=sorted(p.rglob('*')) if p.is_dir() else [p]
@@ -80,14 +84,21 @@ def revision(run):
             f=safe_path(Path(run.project.root),rel);info=f.stat()
             if f.is_file():
                 total+=info.st_size;require(total<=512*1024*1024 and len(entries)<100000,'source-limit',400)
+                for old,new in (relocations or {}).items():
+                    if rel==new or rel.startswith(new+'/'):rel=old+rel[len(new):]
                 entries.append([rel,info.st_mode&0o777,hashlib.sha256(f.read_bytes()).hexdigest()])
+        if relocations:entries[start:]=sorted(entries[start:],key=lambda entry:entry[0])
     return digest(entries)
 
 def projection(run):
     from .monitor import ensure_records
     ensure_records(run)
     change=run.change_record
-    SessionProjection.objects.update_or_create(binding=run,defaults={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state if not run.suspension else run.suspension,'change':run.change,'generation':run.generation,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None})
+    from .models import SessionArchive
+    values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
+    existing=SessionProjection.objects.filter(binding=run).first()
+    if existing and all(getattr(existing,key)==value for key,value in values.items()):return
+    SessionProjection.objects.update_or_create(binding=run,defaults=values)
 
 def event(run,kind,data):
     Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)

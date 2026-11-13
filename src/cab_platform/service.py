@@ -76,6 +76,12 @@ def background_metadata():
         finalize()
     refresh()
 
+def background_closure():
+    from django.db import close_old_connections
+    from .core.run_lifecycle import sweep
+    try:sweep()
+    finally:close_old_connections()
+
 
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
@@ -89,12 +95,14 @@ def run(port=8790):
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
+    closure_future=None;next_closure=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
     pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix='cab-worker')
     metadata_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-metadata')
     statistics_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-statistics')
+    closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     try:
         while not stop.wait(0.2):
             if reload_requested.is_set():
@@ -121,6 +129,12 @@ def run(port=8790):
                         except Exception as error:log.error('worker failed',extra={'code':type(error).__name__})
                         del tasks[key]
                 if not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():
+                    if closure_future is not None and closure_future.done():
+                        try:closure_future.result()
+                        except Exception as error:log.warning('closure evaluation unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
+                        closure_future=None
+                    if closure_future is None and time.monotonic()>=next_closure:
+                        closure_future=closure_pool.submit(background_closure);next_closure=time.monotonic()+5
                     from .statistics_watch import Watcher,synchronize
                     if statistics_watcher is None:statistics_watcher=Watcher()
                     if statistics_future is not None and statistics_future.done():
@@ -155,6 +169,7 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        closure_pool.shutdown(wait=True,cancel_futures=True)
         statistics_pool.shutdown(wait=True,cancel_futures=True)
         if statistics_watcher is not None:statistics_watcher.close()
         pool.shutdown(wait=True,cancel_futures=True)

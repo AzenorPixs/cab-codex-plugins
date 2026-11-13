@@ -359,3 +359,32 @@ le cycle historique. Ni qualification actuelle des tests/livraison, ni reçu
 d'exécution n'est reconstruit. SID, RUN, génération, mandat, gel et reçus restent
 inchangés. Le service conserve la gestion statistique ; aucune opération DIU
 historique n'est rejouée. MCP expose les deux mêmes commandes sans autre logique.
+## Clôture automatique et archives des sessions
+
+Le worker CAB réévalue les RUN par lots bornés dès le démarrage puis toutes
+les cinq secondes, après les observations locales. Aucun tour LLM n'est requis.
+Une revue acceptée et encore valide, un change archivé avec toutes ses tâches
+et l'absence de période ouverte, effet indécis, exception ou bail permettent la
+clôture normale. Le service produit les statistiques et le reçu, sans rejeu.
+Un déplacement du dossier vers son archive conserve la validation si les
+contenus et modes restent identiques ; toute autre divergence bloque.
+
+`cab call run.reevaluate` prend project_id/run_id. La lecture GET /closures
+retourne action, motifs et admissibilité d'archivage. Les icônes de la liste
+utilisent ce diagnostic, puis le serveur revérifie les conditions au clic.
+Un historique sans acceptation suit la confirmation explicite3.1.3, avec
+justification et consentement ; les cases seules ne le ferment jamais.
+
+Les services sans tâches affichent « Sans objet » et exigent une preuve
+terminale. Un import est vérifié dans le snapshot SQLite chiffré authentifié,
+avec hash, identité exacte et enregistrement de clôture. Une preuve manquante
+ou un format inconnu reste protégé. L'état CLOSED et étape11 peuvent être
+réconciliés sans retirer IMPORT_PROTECTED, ni toucher aux anciens reçus.
+
+Le bouton Archiver appelle `session.archive` avec project_id, run_id,
+evaluation_digest et request_id stable. SessionArchive conserve une référence
+unique au RUN, l'identité, les preuves et le reçu ; aucune relation n'est
+supprimée. GET /session-archives et /projects/<ID>/archives présentent les
+sessions archivées du seul projet autorisé. Electric les retire de la liste
+courante grâce à la projection archived. L'archivage d'une session ne déplace
+pas le change OpenSpec et ne clôture aucun pair.
