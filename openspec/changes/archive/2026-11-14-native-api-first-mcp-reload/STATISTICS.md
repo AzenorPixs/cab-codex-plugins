@@ -59,8 +59,8 @@ Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 24 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 24 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -96,13 +96,13 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 48319232 | bounded |
+| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 55887232 | bounded |
 | SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 48559106 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 209878 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 153424 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 48768984 | bounded |
+| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 56163249 | bounded |
+| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 236981 | bounded |
+| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 168608 | bounded |
+| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 56400230 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "1bbc6d0888e32d4516a8aa65944304c36d405b1a2a95df9ec1da7062f6d612ec", "generated_at": "2026-11-14T10:24:07.481732+00:00", "revision": "1bbc6d0888e32d4516a8aa65944304c36d405b1a2a95df9ec1da7062f6d612ec", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "generated_at": "2026-11-14T10:41:03.372914+00:00", "revision": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "scope": "change"} -->

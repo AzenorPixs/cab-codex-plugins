@@ -1,5 +1,6 @@
 """Registre immutable ; seules les autorités déclarées attestent des faits."""
 import re
+import copy
 from django.db import transaction
 from cab_platform.finalization_contract import validate,replace_check_argv,ContractError,KINDS
 from . import commands as c
@@ -58,6 +59,47 @@ def revise_check(actor,data):
     plan.phase='WAITING';plan.missing=['evidence:'+check['id']+':check-revised'];plan.save()
     receipt={'request_id':key,'check_id':check['id'],'check_revision':version+1,'previous_policy_digest':old_digest,'policy_digest':plan.digest,'new_execution_required':True,'effects_issued':False}
     c.event(run,'finalization-check-revised',{'request_id':key,'input_digest':fingerprint,'actor':actor.pk,'reason':reason,'source_revision':current,'old_policy':old_policy,'new_policy':value,'receipt':receipt})
+    return receipt
+
+@transaction.atomic
+def retarget_release(actor,data):
+    """Corriger uniquement la cible de patch après un échec CABU avéré."""
+    c.require(set(data)=={'project_id','run_id','request_id','expected_policy_digest','target_version','update_request_id','reason'},'finalization-retarget-fields-invalid',400)
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    c.require(actor.role=='admin' or (run.actor_id==actor.pk if run.mode=='direct' else run.mandate.get('orchestrator_id')==actor.pk),'finalization-authority-required',403)
+    key=c.identifier(data['request_id']);fingerprint=c.digest(data)
+    previous=Event.objects.filter(run=run,kind='finalization-release-retargeted',data__request_id=key).first()
+    if previous:
+        c.require(previous.data['input_digest']==fingerprint,'finalization-retarget-request-conflict')
+        return previous.data['receipt']
+    c.working(run)
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'finalization-revision-protected')
+    plan=FinalizationPlan.objects.select_for_update().get(run=run)
+    c.require(not plan.receipt and plan.digest==data['expected_policy_digest'] and plan.digest==c.digest(plan.policy),'finalization-revision-stale')
+    old=plan.policy.get('target_version','');new=data['target_version']
+    c.require(isinstance(new,str) and bool(re.fullmatch(r'\d+\.\d+\.\d+',new)) and bool(re.fullmatch(r'\d+\.\d+\.\d+',old)),'finalization-patch-required',400)
+    before=tuple(map(int,old.split('.')));after=tuple(map(int,new.split('.')))
+    c.require(after[:2]==before[:2] and after[2]==before[2]+1,'finalization-patch-required',400)
+    failed=SystemUpdate.objects.select_for_update().filter(pk=plan.policy.get('update_request_id'),state='FAILED',target_version=old).first()
+    c.require(failed is not None and (failed.actor_id==run.actor_id or actor.role=='admin'),'finalization-failed-update-required')
+    c.require(not run.finalization_evidence.filter(source='cab-update',payload__result='passed').exists(),'finalization-release-already-proven')
+    update_key=c.identifier(data['update_request_id'])
+    c.require(update_key!=failed.pk and not SystemUpdate.objects.filter(pk=update_key).exists(),'finalization-new-update-required')
+    reason=data['reason'];c.require(isinstance(reason,str) and 10<=len(reason.strip())<=4000,'finalization-revision-reason-required',400)
+    old_policy=copy.deepcopy(plan.policy);old_mandate=copy.deepcopy(run.mandate)
+    # Seule la version littérale change dans les critères, jamais leur contenu métier.
+    replace=lambda value:re.sub(r'(?<![0-9.])'+re.escape(old)+r'(?![0-9.])',new,value)
+    run.mandate={**run.mandate,'criteria':[replace(value) for value in run.mandate['criteria']]}
+    value=copy.deepcopy(plan.policy);value['target_version']=new;value['update_request_id']=update_key
+    for rule in value['checks']+value['requirements']:rule['criteria']=[replace(item) for item in rule['criteria']]
+    value=validate_policy(run,value);plan.policy=value;plan.digest=c.digest(value);plan.phase='WAITING';plan.missing=['evidence:new-corrective-release-required'];plan.save()
+    run.mandate['finalization']=value
+    run.mandate['framing_digest']=c.digest({key:value for key,value in run.mandate.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
+    run.save(update_fields=['mandate','updated'])
+    receipt={'request_id':key,'previous_version':old,'target_version':new,'previous_update_request_id':failed.pk,'update_request_id':update_key,'policy_digest':plan.digest,'effects_issued':False}
+    c.event(run,'finalization-release-retargeted',{'request_id':key,'input_digest':fingerprint,'actor':actor.pk,'reason':reason,'old_policy':old_policy,'old_mandate':old_mandate,'failed_update':{'id':failed.pk,'state':failed.state,'result':failed.result},'new_policy':value,'receipt':receipt})
     return receipt
 
 @transaction.atomic

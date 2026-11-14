@@ -58,7 +58,16 @@ class NativeControlTests(unittest.TestCase):
         with patch.object(n,'endpoint',return_value=OWNER),patch.object(n,'boundary'),patch.object(n,'reload_codex',side_effect=NativeFailure('response-lost','UNKNOWN')) as api:
             n.work_one();n.work_one();api.assert_called_once()
         self.assertEqual(NativeReload.objects.get().state,'UNKNOWN')
+    def test_finalize_accepts_enrolled_codex_cli_profile(self):
+        import tempfile
+        from pathlib import Path
+        from cab_platform import finalization as f
+        with tempfile.TemporaryDirectory() as folder,patch.object(f,'STATE',Path(folder)),patch.object(f,'verify',return_value={'state':'READY'}),patch.object(f,'config',return_value={'initialized':True,'integrations':[]}),patch.object(f,'registered_profiles',return_value=[{'agent':'codex-cli','uid':os.getuid()}]),patch.object(f,'payload_digest',return_value='fixture'),patch.object(f,'integrate',return_value={'agent':'codex-cli'}) as integrate,patch('cab_platform.core.connectors.attach_active_updates'),patch('cab_platform.core.connectors.snapshot',return_value=[]),patch('cab_platform.core.connectors.assess',return_value=('OK',[])):
+            result=f.finalize(Path(folder))
+        self.assertTrue(result['verified']);self.assertEqual(integrate.call_args.args[0],'codex-cli')
     def test_owner_and_fields_are_not_arbitrary(self):
+        with patch.object(n,'endpoint',side_effect=NativeFailure('native-client-socket-attachment-required')):
+            with self.assertRaisesRegex(c.Refused,'socket-attachment-required'):n.request(self.actor,{'request_id':'NO-FRONTEND'})
         with self.assertRaisesRegex(c.Refused,'fields-invalid'):n.configure(self.actor,{'unexpected':'value'})
         with self.assertRaisesRegex(c.Refused,'owner-required'):n.target_actor(self.actor,{'actor_id':'someone-else'})
 

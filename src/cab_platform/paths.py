@@ -4,6 +4,7 @@ import os
 import secrets
 import stat
 import copy
+import shutil
 from pathlib import Path
 
 STATE = Path(os.environ.get('CAB_STATE_DIR', '/var/lib/cab'))
@@ -24,6 +25,7 @@ def atomic_json(path,value):
     fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     try:
         with os.fdopen(fd,'w',encoding='utf-8') as stream:
+            if path.exists():shutil.copystat(path,temporary,follow_symlinks=False)
             json.dump(value,stream,ensure_ascii=False,sort_keys=True);stream.write('\n');stream.flush();os.fsync(stream.fileno())
         os.replace(temporary,path)
         parent=os.open(path.parent,os.O_DIRECTORY)

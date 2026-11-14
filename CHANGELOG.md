@@ -1,5 +1,16 @@
 # Historique des versions
 
+## 3.2.7 — 2026-11-14
+
+- Correction du plan de finalisation Debian : le profil enrôlé codex-cli est
+  accepté et reçoit ses plugins, skills et commandes dans son compte dédié.
+- Reciblage tracé vers le patch immédiatement suivant après CABU FAILED,
+  avec contrat et reçu initiaux conservés, sans rejeu ni modification métier.
+  UNKNOWN, revue, gel, baux et livraison déjà prouvée restent protégés.
+- Les écritures atomiques conservent les modes existants et le postinst ne
+  normalise plus les répertoires de configuration/état déjà présents.
+- Le reçu de contrôle natif distingue l'attente initiale du dispatch effectif.
+
 ## 3.2.6 — 2026-11-14
 
 - Rechargement MCP par API native prioritaire : socket du véritable app-server

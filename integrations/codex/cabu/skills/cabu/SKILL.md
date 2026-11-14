@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.6
+# CABU 3.2.7
 
 Le reçu distingue paquet/service vérifiés et connecteurs MCP. RECONNECTING
 attend la frontière sûre ou le catalogue ; RELOAD_REQUIRED indique une reprise
@@ -47,7 +47,7 @@ est enregistré. Cette commande ne télécharge ni ne réinstalle le paquet. La 
 reprend les profils incomplets et vérifie les contenus déjà installés. Avant la
 validation Web initiale, les effets par compte restent différés.
 
-Depuis3.2.6, l'API native enregistrée est prioritaire sur l'arrêt du worker.
+Depuis3.2.7, l'API native enregistrée est prioritaire sur l'arrêt du worker.
 Un effet natif UNKNOWN conserve la protection sans rejeu ni escalade. L'état
 COMPLETED du contrôle technique ne suffit pas : CABU observe aussi moteur et
 catalogue cible. Les Codex déjà ouverts en stdio exigent une première adoption

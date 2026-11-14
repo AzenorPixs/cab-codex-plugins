@@ -277,9 +277,9 @@ def command(request,body:Command):
     if name=='connector.native_reload':
         from .native_control import request_connector
         return request_connector(actor,data,getattr(request,'cab_peer',None))
-    if name in ('finalization.configure','finalization.revise_check','evidence.producer.register','evidence.producer.disable','evidence.attest'):
+    if name in ('finalization.configure','finalization.revise_check','finalization.retarget_release','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
-        return {'finalization.configure':run_evidence.configure,'finalization.revise_check':run_evidence.revise_check,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
+        return {'finalization.configure':run_evidence.configure,'finalization.revise_check':run_evidence.revise_check,'finalization.retarget_release':run_evidence.retarget_release,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
     if name=='system.update.check':
         commands.require(set(data)<={'force'} and type(data.get('force',False)) is bool,'update-fields-invalid',400)
         if data.get('force'):principal(request,admin=True)

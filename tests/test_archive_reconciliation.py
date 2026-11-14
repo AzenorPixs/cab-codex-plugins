@@ -14,6 +14,7 @@ from cab_platform.core import commands
 from cab_platform.core.models import Actor,Project,Run,Operation,Event,Resource,Lease
 from cab_platform.client import ClientError
 from cab_platform import mcp
+from mcp.server.mcpserver.exceptions import ToolError
 
 class ArchiveTests(unittest.TestCase):
     def setUp(self):
@@ -76,6 +77,15 @@ class ArchiveTests(unittest.TestCase):
         self.run.refresh_from_db();self.assertEqual(self.run.mandate['framing_digest'],self.payload['expected_framing_digest'])
 
 class MCPDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_progress_and_archive_preserve_public_refusal(self):
+        for method,args,code in (
+            (mcp.run_progress,('project','run',1,'invalid phase'),'run-phase-invalid'),
+            (mcp.run_reconcile_archive,('project','run','archive','digest'),'archive-effects-protected'),
+        ):
+            client=Mock();client.command.side_effect=ClientError(code)
+            with patch.object(mcp,'client',return_value=client),self.assertRaisesRegex(ToolError,code):
+                method(*args)
+            client.command.assert_called_once()
     async def test_lost_admission_is_not_retried_or_declared_no_effect(self):
         client=Mock();client.command.side_effect=ClientError('cab-unavailable')
         with patch.object(mcp,'client',return_value=client):
