@@ -1,5 +1,19 @@
 # Historique des versions
 
+## 3.2.6 — 2026-11-14
+
+- Rechargement MCP par API native prioritaire : socket du véritable app-server
+  Codex/Codex CLI et API OpenCode V2 ; admission durable, identité d'instance,
+  frontière sûre et aucun rejeu après effet indécis. Migration additive0017.
+- Préparation du daemon natif par compte, lanceur Codex et vérification du
+  raccordement réel ; première adoption requise des clients déjà ouverts en stdio.
+- Connecteur `codex-cli` dédié, profil root distinct du Codex du compte ade.
+- Accès effectifs de l'OS sans refus ni normalisation des modes POSIX existants.
+  Les révisions de sources portent sur le contenu ; les anciens reçus restent intacts.
+- Agents : versions CLI depuis GitHub et version de l'application Codex depuis
+  le paquet chatgpt et son dépôt APT, avec cache quotidien aléatoire séparé.
+- git devient une dépendance du paquet Debian.
+
 ## 3.2.5 — 2026-11-13
 
 - Révision autonome et idempotente du seul argv d'un contrôle récupérable,

@@ -60,6 +60,14 @@ def finalization_revise_check(project_id:str,run_id:str,request_id:str,expected_
     """Codeur : corrige un contrôle récupérable, sans changer critères/reçus ni rejouer ; preuve nouvelle obligatoire."""
     return client().command('finalization.revise_check',locals())
 @server.tool()
+def native_mcp_reload(request_id:str,version:str='')->dict:
+    """Demande une fois le rechargement par l'API native enregistrée ; jamais de rejeu métier."""
+    return client().command('native.control.reload',{'request_id':request_id,**({'version':version} if version else {})})
+@server.tool()
+def native_mcp_reload_status(request_id:str)->dict:
+    """Relit le même contrôle natif ; UNKNOWN conserve ses protections."""
+    return client().command('native.control.status',locals())
+@server.tool()
 def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)

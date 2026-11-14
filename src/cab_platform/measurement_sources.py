@@ -74,7 +74,7 @@ def snapshot(run):
     from .core.commands import Refused
     import httpx
     try:
-        value=codex_snapshot(run) if run.actor.agent=='codex' else opencode_snapshot(run) if run.actor.agent=='opencode' else {'status':'unavailable','reason':'native-agent-unsupported'}
+        value=codex_snapshot(run) if run.actor.agent in ('codex','codex-cli') else opencode_snapshot(run) if run.actor.agent=='opencode' else {'status':'unavailable','reason':'native-agent-unsupported'}
     except (OSError,ValueError,KeyError,TypeError,Refused,httpx.HTTPError) as error:
         value={'status':'unavailable','reason':str(error) if isinstance(error,(NativeSourceError,Refused)) else type(error).__name__}
     return {'observed_at':timezone.now().isoformat(),**value}

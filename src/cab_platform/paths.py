@@ -14,7 +14,7 @@ _active_config = None
 def private_dir(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     info=path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path or info.st_uid!=os.getuid() or info.st_mode&0o077:
+    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path:
         raise RuntimeError('cab-private-directory-unsafe')
     return path
 
@@ -37,7 +37,7 @@ def read_json(path,default=None):
     except FileNotFoundError:return default
     with os.fdopen(fd,'r',encoding='utf-8') as stream:
         info=os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_mode&0o077 or info.st_size>4*1024*1024:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>4*1024*1024:
             raise RuntimeError('cab-private-file-unsafe')
         return json.load(stream)
 

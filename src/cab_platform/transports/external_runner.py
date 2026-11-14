@@ -43,7 +43,7 @@ def private_directory(path):
     try:path.mkdir(mode=0o770);set_new_directory_mode(path)
     except FileExistsError:pass
     info=path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path or info.st_uid!=os.getuid() or info.st_mode&0o007:raise ValueError('REMOTE_STATE_UNSAFE')
+    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path:raise ValueError('REMOTE_STATE_UNSAFE')
     return path
 
 def atomic(path,value):
@@ -60,7 +60,7 @@ def load(path):
     except FileNotFoundError:return None
     with os.fdopen(fd,'r',encoding='utf-8') as f:
         info=os.fstat(f.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_mode&0o007 or info.st_size>2*LIMIT:raise ValueError('REMOTE_RECEIPT_UNSAFE')
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>2*LIMIT:raise ValueError('REMOTE_RECEIPT_UNSAFE')
         return json.load(f)
 
 def handle(p,*,state_root=None,identity=None):
