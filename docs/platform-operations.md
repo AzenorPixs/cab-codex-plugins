@@ -474,3 +474,16 @@ Le pavé Codex utilise la version dpkg du paquet chatgpt et le dépôt APT offic
 ChatGPT ; aucun moteur DIU n'est invoqué à l'exécution. Les caches sont séparés,
 avec une vérification quotidienne à instant aléatoire. Le dépôt peut être adapté
 par codex_desktop_release_url (HTTPS sans credentials).
+
+## Livraison corrective après CABU FAILED
+
+Après échec avéré, finalization.retarget_release est une commande CAB bornée
+(sans téléchargement, APT ni rejeu). L'autorité directe, l'orchestrateur piloté ou
+l'administrateur transmet project_id, run_id, request_id, expected_policy_digest,
+target_version, update_request_id et reason. Seul le patch immédiatement suivant
+est admissible, avec nouvel identifiant CABU, aucune preuve d'installation déjà
+acceptée, aucun effet/bail/gel/import/revue. UNKNOWN ne peut pas être converti.
+Le service conserve intégralement l'ancien mandat, contrat et reçu d'échec dans
+l'événement. Seule la version littérale des critères change ; contrôles, critères
+métier, producteurs et revue restent identiques. La nouvelle livraison autorisée
+s'exécute ensuite normalement et doit produire ses propres preuves.

@@ -2,6 +2,13 @@
 
 `recover-finalization-checks-autonomously`, code non attribué : révision autonome des contrôles et actions de convergence, migration additive0016. Sources : change OpenSpec du même nom ; 13 tests PostgreSQL, 9 tests purs et parcours API réel réussis. Livraison/activation3.2.5 à vérifier séparément.
 
+## SCM — correction de finalisation CLI, 14 novembre2026
+
+`fix-cli-profile-cabu-finalization`, code non attribué : plan codex-cli accepté
+et reciblage de patch sur échec CABU connu, sans rejeu. Tests ciblés1+2 réussis ;
+source validée3.2.7. La publication et l'activation restent les reçus du RUN
+SCM-native-api-326, conservé avec son SID et son échec326.
+
 ## SCM — API natives MCP prioritaires, 14 novembre 2026
 
 `native-api-first-mcp-reload`, code non attribué : adaptateurs Codex/Codex CLI

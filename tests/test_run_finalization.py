@@ -83,6 +83,24 @@ class FinalizationTests(unittest.TestCase):
         before=list(self.run.operation_set.values('request_id','receipt_digest'))
         self.process();self.run.refresh_from_db();self.assertEqual(self.run.state,'CLOSED');self.assertEqual(before,list(self.run.operation_set.values('request_id','receipt_digest')))
 
+    def retarget_fixture(self):
+        self.configure(self.policy(target_version='3.2.6',update_request_id='FAILED-326',requirements=[{'id':'install','kind':'installation','producer':'cab-update','criteria':['historical']}]))
+        SystemUpdate.objects.create(pk='FAILED-326',actor=self.actor,target_version='3.2.6',state='FAILED',active_slot=None,result={'error':'fixture-postinst-failed'})
+        return {'project_id':self.project.pk,'run_id':self.run.run_id,'request_id':'PATCH-327','expected_policy_digest':FinalizationPlan.objects.get(run=self.run).digest,'target_version':'3.2.7','update_request_id':'UPDATE-327','reason':'Version corrective explicitement validée après échec postinst de fixture.'}
+    def test_corrective_patch_preserves_failed_receipt_and_same_run(self):
+        data=self.retarget_fixture();identity=(self.run.pk,self.run.session_id,self.run.generation);old=FinalizationPlan.objects.get(run=self.run).policy
+        result=e.retarget_release(self.actor,data);self.assertEqual(result,e.retarget_release(self.actor,data))
+        self.run.refresh_from_db();self.assertEqual((self.run.pk,self.run.session_id,self.run.generation),identity)
+        self.assertEqual(SystemUpdate.objects.get(pk='FAILED-326').result,{'error':'fixture-postinst-failed'})
+        self.assertEqual(FinalizationPlan.objects.get(run=self.run).policy['checks'],old['checks'])
+        self.assertEqual(self.run.event_set.get(kind='finalization-release-retargeted').data['old_policy'],old)
+        self.assertEqual(self.run.mandate['criteria'],['historical']);self.assertNotEqual(self.run.state,'CLOSED')
+    def test_corrective_patch_refuses_unknown_and_version_leap(self):
+        data=self.retarget_fixture()
+        with self.assertRaisesRegex(c.Refused,'patch-required'):e.retarget_release(self.actor,{**data,'target_version':'3.2.8'})
+        SystemUpdate.objects.filter(pk='FAILED-326').update(state='UNKNOWN')
+        with self.assertRaisesRegex(c.Refused,'failed-update-required'):e.retarget_release(self.actor,data)
+
     def revision(self,argv=None,key='FIX',check='unit'):
         plan=FinalizationPlan.objects.get(run=self.run)
         return {**{k:self.data[k] for k in ('project_id','run_id')},'request_id':key,'check_id':check,'expected_policy_digest':plan.digest,'argv':argv or ['/bin/true'],'reason':'Correction démontrée du cadrage du contrôle de fixture.'}

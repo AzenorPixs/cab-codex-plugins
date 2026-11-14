@@ -59,7 +59,7 @@ def finalize(package_root=Path('/usr/lib/cab')):
         configured=cfg.get('integrations',[])
         if not isinstance(configured,list):raise ClientError('integration-plan-invalid')
         for item in configured+registered_profiles():
-            if not isinstance(item,dict) or item.get('agent') not in ('codex','opencode') or type(item.get('uid')) is not int or item['uid']<0:raise ClientError('integration-plan-invalid')
+            if not isinstance(item,dict) or item.get('agent') not in ('codex','codex-cli','opencode') or type(item.get('uid')) is not int or item['uid']<0:raise ClientError('integration-plan-invalid')
             plan={'agent':item['agent'],'uid':item['uid']}
             if plan not in plans:plans.append(plan)
         plans.sort(key=lambda item:(item['agent'],item['uid']))

@@ -2,6 +2,7 @@
 import asyncio
 import json
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from .client import Client,ClientError
 from . import __version__
 
@@ -73,8 +74,9 @@ def run_status(project_id:str,run_id:str)->dict:
     return client().get('run',project_id=project_id,run_id=run_id)
 @server.tool()
 def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK')->dict:
-    """Déclare la position1–11 du cycle ; ne valide aucune étape ni gate."""
-    return client().command('run.progress',locals())
+    """Déclare la position 1–11 ; phase : 0 à 32 caractères A-Z, 0-9, _ ou - ; ne valide aucune étape."""
+    try:return client().command('run.progress',locals())
+    except ClientError as error:raise ToolError(str(error)) from error
 @server.tool()
 def run_reevaluate(project_id:str,run_id:str)->dict:
     """Réévalue et clôture seulement sur preuves ; aucun rejeu ni levée de protection."""
@@ -86,7 +88,8 @@ def session_archive(project_id:str,run_id:str,evaluation_digest:str,request_id:s
 @server.tool()
 def run_reconcile_archive(project_id:str,run_id:str,archive_path:str,expected_framing_digest:str)->dict:
     """Relocalise le seul change archivé du RUN direct propriétaire, sans rejeu."""
-    return client().command('run.reconcile_archive',locals())
+    try:return client().command('run.reconcile_archive',locals())
+    except ClientError as error:raise ToolError(str(error)) from error
 @server.tool()
 def run_inspect_historical(project_id:str,run_id:str,archive_path:str)->dict:
     """Inspecte les preuves locales pour une régularisation historique explicite."""
