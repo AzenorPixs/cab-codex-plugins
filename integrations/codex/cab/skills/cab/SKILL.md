@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.5
+# CAB 3.2.6
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -97,3 +97,12 @@ Reprise Codex : l’index natif peut désigner un nouveau journal pour le même 
 Fermer la période ouverte puis native_bind(resume=true), sans effet en cours
 ni gel ; seule la source indexée vérifiée est admise, historique conservé.
 Ancien compteur non actualisé : N/A. Aucun arrêt de client ni rejeu de test.
+
+MCP : Codex utilise --agent codex ; Codex CLI utilise --agent codex-cli avec son
+propre profil par compte. La présence d'un catalogue dans /mcp ne prouve pas un
+heartbeat vivant. native_mcp_reload et native_mcp_reload_status conservent le même
+request_id ; UNKNOWN interdit tout rejeu. CAB privilégie les API de l'instance
+réelle avant les replis possédés. cab native-prepare prépare un socket fournisseur,
+mais adoption_required exige encore un frontend réellement raccordé ; ne pas
+présenter un daemon isolé comme la connexion de la session existante. Les accès
+sont accordés par l'OS sans contrôle ni normalisation de modes POSIX existants.

@@ -75,7 +75,7 @@ def connection(directory,profile):
         fd=os.open(known,os.O_RDONLY|os.O_NOFOLLOW)
         with os.fdopen(fd,'rb') as f:
             info=os.fstat(f.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0,os.getuid()) or info.st_mode&0o002 or info.st_size>1024*1024 or info.st_nlink!=1:fail('external-known-hosts-unsafe')
+            if not stat.S_ISREG(info.st_mode) or info.st_size>1024*1024 or info.st_nlink!=1:fail('external-known-hosts-unsafe')
             data=f.read()
     except OSError:fail('external-known-hosts-unavailable')
     try:lines=[l.split() for l in data.decode('utf-8',errors='strict').splitlines() if l.strip() and not l.lstrip().startswith('#')]
@@ -98,7 +98,7 @@ def connection(directory,profile):
     for binary in ('/usr/bin/ssh','/usr/bin/sshpass'):
         try:info=os.stat(binary)
         except OSError:fail('external-tool-unavailable')
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o002 or not os.access(binary,os.X_OK):fail('external-tool-unavailable')
+        if not stat.S_ISREG(info.st_mode) or not os.access(binary,os.X_OK):fail('external-tool-unavailable')
     return {'host':host,'user':user,'password':password,'port':int(port),'known':str(known),'fingerprint':fp,'known_data':public_data}
 
 def describe(args,authorize):

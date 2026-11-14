@@ -25,7 +25,7 @@ export function McpConnectionsProvider({children}:{children:ReactNode}){
   },[epoch])
   return <Connections.Provider value={rows}>{children}</Connections.Provider>
 }
-function label(agent:string){return agent==='codex'?'Codex':agent==='opencode'?'OpenCode':agent}
+function label(agent:string){return agent==='codex'?'Codex':agent==='codex-cli'?'Codex CLI':agent==='opencode'?'OpenCode':agent}
 export function McpVersions({agent,header=false}:{agent?:string;header?:boolean}){
   const rows=useContext(Connections).filter(row=>row.connected&&row.version&&(!agent||row.agent===agent))
   const groups=new Map<string,Connector[]>()

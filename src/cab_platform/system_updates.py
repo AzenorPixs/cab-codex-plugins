@@ -70,6 +70,8 @@ def finish(job,state,result):
 
 def refresh_connectors(request_id):
     from .core.connectors import assess
+    from .core.native_control import ensure_update
+    ensure_update(SystemUpdate.objects.get(pk=request_id))
     with transaction.atomic():
         job=SystemUpdate.objects.select_for_update().get(pk=request_id)
         if job.state not in ('OK','RECONNECTING','RELOAD_REQUIRED') or job.result.get('verified') is not True:return data(job)

@@ -24,7 +24,7 @@ def registered_profiles():
     from .core.models import Actor
     from django.db import DatabaseError
     plans=[]
-    try:actors=list(Actor.objects.filter(active=True,agent__in=['codex','opencode']).only('id','uid','agent','token_hash'))
+    try:actors=list(Actor.objects.filter(active=True,agent__in=['codex','codex-cli','opencode']).only('id','uid','agent','token_hash'))
     except DatabaseError:raise ClientError('integration-profile-inventory-unavailable') from None
     for actor in actors:
         try:
@@ -33,7 +33,7 @@ def registered_profiles():
             path=home/'.config/cab'/(actor.agent+'.json')
             if actor.agent=='codex' and not path.exists():path=home/'.config/cab/client.json'
             info=path.stat()
-            if info.st_mode&0o077 or info.st_size>65536:continue
+            if info.st_size>65536:continue
             profile=json.loads(read_user_file(path,actor.uid))
             if not isinstance(profile,dict):continue
             if profile.get('actor_id')!=actor.pk or not isinstance(profile.get('token'),str):continue

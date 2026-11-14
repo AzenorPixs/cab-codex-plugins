@@ -25,16 +25,16 @@ class WorkshopParentTests(unittest.TestCase):
         self.assertEqual(parent.stat().st_gid,self.project.stat().st_gid)
         target=parent/'RUN-ONE';target.mkdir(mode=0o700);(target/'evidence').write_text('preserved');before=target.stat()
         parent.chmod(0o2700);_direct_parents(self.run)
-        self.assertEqual(parent.stat().st_mode&0o777,0o770)
+        self.assertEqual(parent.stat().st_mode&0o777,0o700)
         self.assertEqual(target.stat().st_ino,before.st_ino);self.assertEqual(target.stat().st_mode,before.st_mode)
         self.assertEqual((target/'evidence').read_text(),'preserved')
-    def test_symlink_and_world_writable_parent_refused(self):
+    def test_symlink_refused_but_existing_modes_preserved(self):
         elsewhere=self.root/'elsewhere';elsewhere.mkdir();before=elsewhere.stat().st_mode
         (self.project/'.cab-tests').symlink_to(elsewhere)
         with self.assertRaises(Refused):_direct_parents(self.run)
         self.assertEqual(elsewhere.stat().st_mode,before)
         (self.project/'.cab-tests').unlink();(self.project/'.cab-tests').mkdir();(self.project/'.cab-tests').chmod(0o777)
-        with self.assertRaises(Refused):_direct_parents(self.run)
+        _direct_parents(self.run)
         self.assertEqual((self.project/'.cab-tests').stat().st_mode&0o777,0o777)
     def test_shared_tmp_prefix_is_traversable_under_umask(self):
         path=self.root/'prefix';old=os.umask(0o077)

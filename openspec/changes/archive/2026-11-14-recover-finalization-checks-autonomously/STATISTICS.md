@@ -29,7 +29,7 @@ Change : `recover-finalization-checks-autonomously` · état local : `archived`.
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:0f1b4c7a6e1be664338322fe39ba071f910be529e6b5feddce02bccf531e10bb
+Provenance : change-periods:3b8945cf545c8fc3b4f610bc8c216b48f8acdb45e984f29aa21ae956083c5a1c
 
 ## 2. Messages et outils
 
@@ -59,9 +59,9 @@ Provenance : change-periods:0f1b4c7a6e1be664338322fe39ba071f910be529e6b5feddce02
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 9 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 9 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,18 +91,5 @@ Provenance : change-periods:0f1b4c7a6e1be664338322fe39ba071f910be529e6b5feddce02
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 13368832 | bounded |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 13762993 | bounded |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 39776 | bounded |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 18579 | bounded |
-| SCM-autonomous-finalization-325 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 13802769 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6cebe5511b346fc02c29c931896f180affe855d08edc9964c795a89a18611451", "generated_at": "2026-11-13T23:07:57.421196+00:00", "revision": "6cebe5511b346fc02c29c931896f180affe855d08edc9964c795a89a18611451", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6247403c1246907bc0ab3db5567e94ed8a497fe5b0bf03d4677ced20ea4a4097", "generated_at": "2026-11-13T23:42:27.121737+00:00", "revision": "6247403c1246907bc0ab3db5567e94ed8a497fe5b0bf03d4677ced20ea4a4097", "scope": "change"} -->
