@@ -15,7 +15,7 @@ def connection(actor):
     require(process.stat().st_uid==actor.uid and process.joinpath('stat').read_text().split(') ',1)[1].split()[19]==str(profile['start_time']),'native-process-divergent')
     path=Path(profile['password_file']);fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
     with os.fdopen(fd,'r') as stream:
-        info=os.fstat(stream.fileno());require(stat.S_ISREG(info.st_mode) and info.st_uid==actor.uid and info.st_nlink==1 and not info.st_mode&0o007 and info.st_size<65536,'native-credential-unsafe')
+        info=os.fstat(stream.fileno());require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_size<65536,'native-credential-unsafe')
         password=stream.read().strip()
     return httpx.Client(base_url=url,auth=(profile.get('username','opencode'),password),timeout=30,follow_redirects=False)
 

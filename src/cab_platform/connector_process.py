@@ -16,7 +16,7 @@ def cab_process(pid,mode):
         at=args.index('cab_platform.cli')
         if at==0 or args[at-1]!='-m' or args[at+1]!=mode:return None
         rest=args[at+2:]
-        if rest not in ([],['--agent','codex'],['--agent','opencode']):return None
+        if rest not in ([],['--agent','codex'],['--agent','codex-cli'],['--agent','opencode']):return None
         return rest[-1] if rest else 'codex'
     except (OSError,ValueError,IndexError,UnicodeError):return None
 

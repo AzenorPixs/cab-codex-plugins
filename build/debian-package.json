@@ -3,7 +3,7 @@
   "architecture":"amd64",
   "maintainer":"Anthony DEMARD <postmaster@pixs.fr>",
   "description":"Codex Approval Bridge - plateforme autonome Django et Electric",
-  "depends":["python3.13","postgresql-17","postgresql-client-17","postgresql-common","bubblewrap","openssh-client","sshpass","libtinfo6","libstdc++6","libgcc-s1","ca-certificates"],
+  "depends":["python3.13","postgresql-17","postgresql-client-17","postgresql-common","bubblewrap","openssh-client","sshpass","libtinfo6","libstdc++6","libgcc-s1","ca-certificates","git"],
   "maintainer_scripts":{"preinst":"packaging/preinst","postinst":"packaging/postinst","prerm":"packaging/prerm","postrm":"packaging/postrm"},
   "files":[
     {"source":"output/package/python","destination":"/usr/lib/cab/python"},

@@ -70,6 +70,7 @@ class McpConnector(models.Model):
     relay_version=models.CharField(max_length=100,blank=True)
     generation=models.PositiveBigIntegerField(default=0)
     pending=models.PositiveIntegerField(default=0)
+    uncertain=models.BooleanField(default=False)
     state=models.CharField(max_length=40,default='STARTING')
     error=models.CharField(max_length=100,blank=True)
     seen=models.DateTimeField(auto_now=True)
@@ -93,6 +94,19 @@ class McpStopAttempt(models.Model):
     report=models.JSONField()
     created=models.DateTimeField(auto_now_add=True)
     class Meta:db_table='mcp_stop_attempts'
+
+class NativeReload(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    actor=models.ForeignKey(Actor,on_delete=models.PROTECT)
+    target_version=models.CharField(max_length=100)
+    owner=models.JSONField(default=dict)
+    input_digest=models.CharField(max_length=64)
+    state=models.CharField(max_length=24,default='QUEUED')
+    dispatcher=models.JSONField(default=dict)
+    result=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='native_mcp_reloads'
 
 class ConnectorReload(models.Model):
     update=models.OneToOneField(SystemUpdate,on_delete=models.PROTECT,primary_key=True,related_name='connector_reload')

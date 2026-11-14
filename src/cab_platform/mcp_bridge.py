@@ -147,7 +147,7 @@ class Bridge:
         if not self.child or not self.version or self.child.returncode is not None:return
         state='BUSY' if self.pending or self.server_pending else 'READY' if self.catalog==self.version else 'CATALOG_PENDING'
         if self.state=='FAILED':state='FAILED'
-        body={'connector_id':self.connector_id,'worker_pid':self.child.pid,'loaded_version':self.version,'catalog_version':self.catalog,'relay_version':__version__,'pending':len(self.pending)+len(self.server_pending),'state':state,'error':self.error}
+        body={'connector_id':self.connector_id,'worker_pid':self.child.pid,'loaded_version':self.version,'catalog_version':self.catalog,'relay_version':__version__,'pending':len(self.pending)+len(self.server_pending),'uncertain':bool(self.uncertain or self.write_uncertain),'state':state,'error':self.error}
         try:
             self.client=self.client_factory()
             await self.flush_reports()
@@ -161,10 +161,17 @@ class Bridge:
         while not self.stopped:
             try:
                 target=await asyncio.to_thread(installed_version)
-                if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
+                if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target or self.catalog!=target):
                     try:health=await asyncio.to_thread(self.client.get,'health')
                     except ClientError:health={}
-                    if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):await self.reload()
+                    if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):
+                        try:
+                            policy=await asyncio.to_thread(self.client.get,'connectors/policy',connector_id=self.connector_id,version=target)
+                            native=policy.get('native_control',{'mode':'fallback'})
+                            if native['mode']=='request-native':
+                                await asyncio.to_thread(self.client.command,'connector.native_reload',{'connector_id':self.connector_id,'version':target})
+                            elif native['mode']=='fallback' and policy.get('stop_allowed',False):await self.reload()
+                        except ClientError:self.error='native-control-waiting'
                 await self.heartbeat()
             except (OSError,ValueError,ConnectionError,asyncio.TimeoutError):self.state='FAILED';self.error='connector-reload-failed'
             await asyncio.sleep(1)

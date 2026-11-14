@@ -21,15 +21,16 @@ def read_user_file(path,uid):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
     with os.fdopen(fd,'rb') as stream:
         info=os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=uid or info.st_nlink!=1 or info.st_size>16*1024*1024:raise ClientError('integration-file-owner-invalid')
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>16*1024*1024:raise ClientError('integration-file-owner-invalid')
         return stream.read()
 
 def write_user_file(path,content,env,options):
-    script='''import os,secrets,sys
+    script='''import os,secrets,sys,shutil
 from pathlib import Path
 path=Path(sys.argv[1]);path.parent.mkdir(parents=True,exist_ok=True)
 temporary=path.with_name('.cab-'+secrets.token_hex(8))
 fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+if path.exists():shutil.copystat(path,temporary,follow_symlinks=False)
 with os.fdopen(fd,'wb') as stream:stream.write(sys.stdin.buffer.read());stream.flush();os.fsync(stream.fileno())
 os.replace(temporary,path)
 '''
@@ -46,10 +47,11 @@ def write_profile(user,agent,payload):
             except FileExistsError:created=False
             child=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
             if created:os.fchown(child,user.pw_uid,user.pw_gid)
-            if os.fstat(child).st_uid!=user.pw_uid:os.close(child);raise ClientError('client-directory-owner-invalid')
             os.close(fd);fd=child
-        os.fchmod(fd,0o700);temporary='.'+agent+'-'+secrets.token_hex(8)
+        temporary='.'+agent+'-'+secrets.token_hex(8)
         file=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
+        previous=Path(user.pw_dir)/'.config/cab'/(agent+'.json')
+        if previous.exists():shutil.copystat(previous,Path(user.pw_dir)/'.config/cab'/temporary,follow_symlinks=False)
         with os.fdopen(file,'w') as stream:
             json.dump(payload,stream);stream.write('\n');stream.flush();os.fsync(stream.fileno());os.fchown(stream.fileno(),user.pw_uid,user.pw_gid)
         os.replace(temporary,agent+'.json',src_dir_fd=fd,dst_dir_fd=fd);os.fsync(fd)
@@ -84,9 +86,9 @@ def payload_digest(package_root):
 
 
 def integration_files(user,agent,package_root):
-    home=Path(user.pw_dir);target=home/('.codex/config.toml' if agent=='codex' else '.config/opencode/opencode.json')
+    home=Path(user.pw_dir);target=home/('.codex/config.toml' if agent in ('codex','codex-cli') else '.config/opencode/opencode.json')
     values={'configuration':hashlib.sha256(read_user_file(target,user.pw_uid)).hexdigest()}
-    if agent=='codex':
+    if agent in ('codex','codex-cli'):
         for name in ('CAB.md','CCAB.md','CABU.md'):
             values[name]=hashlib.sha256(read_user_file(home/'.codex/commands'/name,user.pw_uid)).hexdigest()
         for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu')]:
@@ -103,14 +105,14 @@ def integration_files(user,agent,package_root):
 
 def integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
     user=pwd.getpwnam(username)
-    if agent not in ('codex','opencode'):raise ClientError('integration-agent-invalid')
+    if agent not in ('codex','codex-cli','opencode'):raise ClientError('integration-agent-invalid')
     if os.getuid() not in (0,user.pw_uid):raise ClientError('integration-user-required')
     directory=private_dir(STATE/'integration-status');marker=directory/(agent+'-'+str(user.pw_uid)+'.json')
     fd=os.open(marker.with_suffix('.lock'),os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
     try:
         fcntl.flock(fd,fcntl.LOCK_EX)
         stamp=payload_digest(package_root);saved=read_json(marker,{})
-        target=Path(user.pw_dir)/('.codex/config.toml' if agent=='codex' else '.config/opencode/opencode.json')
+        target=Path(user.pw_dir)/('.codex/config.toml' if agent in ('codex','codex-cli') else '.config/opencode/opencode.json')
         try:actual=integration_files(user,agent,package_root)
         except (FileNotFoundError,ClientError):actual={}
         if saved.get('payload_digest')==stamp and saved.get('files')==actual and actual:
@@ -134,7 +136,7 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
     if os.getuid() not in (0,user.pw_uid):raise ClientError('integration-user-required')
     home=Path(user.pw_dir)
     if home.resolve()!=home:raise ClientError('integration-home-unsafe')
-    target=home/('.codex/config.toml' if agent=='codex' else '.config/opencode/opencode.json')
+    target=home/('.codex/config.toml' if agent in ('codex','codex-cli') else '.config/opencode/opencode.json')
     if target.exists() and (target.resolve()!=target or not target.is_file() or target.stat().st_nlink!=1):raise ClientError('integration-target-unsafe')
     backup=None;original=read_user_file(target,user.pw_uid) if target.exists() else None
     if target.exists():
@@ -145,7 +147,7 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
     env=user_environment(user)
     options={'user':user.pw_uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)} if os.getuid()==0 else {}
     catalog_refresh='protocol-notification'
-    if agent=='codex':
+    if agent in ('codex','codex-cli'):
         configured=config().get('codex_binary') if os.getuid()==0 else None
         if configured and (not Path(configured).is_absolute() or not Path(configured).is_file() or not os.access(configured,os.X_OK)):raise ClientError('codex-cli-unavailable')
         executable=configured or shutil.which('codex',path=os.pathsep.join([os.environ.get('PATH',''),'/usr/local/bin',str(home/'.local/bin')]))
@@ -158,7 +160,7 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if any(str(value).endswith(('/cgpt-approval-bridge-broker.mjs','/cgpt_approval_bridge_server.py')) for value in literals):
                 removed=subprocess.run([executable,'mcp','remove',name],env=env,capture_output=True,text=True,timeout=30,**options)
                 if removed.returncode:raise ClientError('codex-legacy-mcp-removal-failed')
-        result=subprocess.run([executable,'mcp','add','cab','--','/usr/bin/cab','mcp','--agent','codex'],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
+        result=subprocess.run([executable,'mcp','add','cab','--','/usr/bin/cab','mcp','--agent',agent],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
         if result.returncode:raise ClientError('codex-mcp-registration-failed')
         text=read_user_file(target,user.pw_uid).decode()
         match=re.search(r'(?m)^\[mcp_servers\.cab\]\s*$',text)

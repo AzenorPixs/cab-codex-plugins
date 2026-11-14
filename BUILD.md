@@ -1,11 +1,11 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.2.5 — Debian et clients légers
+## Livraison CAB 3.2.6 — Debian et clients légers
 
-La migration additive0016 ajoute les révisions de contrôles sans convertir les
-anciens RUN. Les reçus antérieurs restent en révision1 ; une correction impose
-une nouvelle preuve. Qualification ciblée : contrats purs, domaine PostgreSQL
-et parcours public échec/correction/clôture, sans changement du frontend.
+La migration additive0017 ajoute les contrôles natifs durables et l'incertitude
+explicite des relais. Le daemon Codex reste supervisé par son fournisseur ;
+`cab native-prepare` prépare son endpoint par compte sans déclarer un client
+stdio raccordé. Reprise initiale et limites : docs/platform-operations.md.
 
 CAB porte désormais le cycle statistique complet : STATISTICS.md locaux maîtres,
 PG projection et historique, catalogue de tous les changes, inotify et rattrapage
@@ -30,10 +30,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.5` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.6` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.2.5.
+prépaquet ne constitue pas la release 3.2.6.
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
 plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une

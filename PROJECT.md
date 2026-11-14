@@ -1,6 +1,12 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.2.5
+## Plateforme CAB 3.2.6
+
+Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
+avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
+les versions CLI GitHub et Desktop ChatGPT/APT sont séparées. CAB utilise les
+accès OS effectifs sans imposer ni normaliser les modes POSIX existants.
+Voir docs/platform-operations.md pour la première adoption des sockets.
 
 La finalisation expose ses actions manquantes et permet au codeur de corriger
 en autonomie le seul argv d'un contrôle récupérable. Versions et échecs restent

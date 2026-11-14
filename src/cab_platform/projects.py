@@ -23,11 +23,8 @@ def project_settings(cfg=None):
     except KeyError:raise Refused('projects-user-not-found',400) from None
     try:group=grp.getgrnam(cfg['projects_group'])
     except KeyError:raise Refused('projects-group-not-found',400) from None
-    if user.pw_uid!=0:
-        groups=set(os.getgrouplist(user.pw_name,user.pw_gid))
-        for parent in [root,*root.parents]:
-            info=parent.stat();bit=0o100 if info.st_uid==user.pw_uid else 0o010 if info.st_gid in groups else 0o001
-            require(bool(info.st_mode&bit),'projects-root-not-accessible',400)
+    from .os_access import accessible
+    require(accessible(root,user.pw_uid,os.X_OK),'projects-root-not-accessible',400)
     return root,user,group
 
 def settings_view():

@@ -9,7 +9,7 @@ from .models import Actor,McpConnector,ConnectorReload,SystemUpdate,McpConnector
 
 @transaction.atomic
 def heartbeat(actor,data,peer):
-    c.require(actor.active and actor.agent in ('codex','opencode'),'connector-actor-invalid',403)
+    c.require(actor.active and actor.agent in ('codex','codex-cli','opencode'),'connector-actor-invalid',403)
     c.require(peer and peer['uid']==actor.uid,'connector-peer-required',403)
     process=identity(peer['pid']);c.require(process and cab_process(peer['pid'],'mcp')==actor.agent,'connector-process-invalid',403)
     key=data.get('connector_id');c.require(isinstance(key,str) and re.fullmatch('[a-f0-9]{32}',key),'connector-id-invalid',400)
@@ -23,6 +23,7 @@ def heartbeat(actor,data,peer):
     if changed:row.generation+=1;row.catalog_version=''
     else:c.require(row.loaded_version in ('',version),'connector-version-without-restart')
     row.worker=worker;row.loaded_version=version;row.pending=data['pending'];row.state=state
+    uncertain=data.get('uncertain',state=='FAILED');c.require(type(uncertain) is bool,'connector-uncertainty-invalid',400);row.uncertain=uncertain
     relay=data.get('relay_version','')
     c.require(relay=='' or isinstance(relay,str) and re.fullmatch(r'\d+\.\d+\.\d+',relay),'connector-relay-version-invalid',400)
     row.relay_version=relay
@@ -77,7 +78,7 @@ def snapshot():
     for row in McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)):
         if not alive(row.process):continue
         managed.append(row.process);rows.append({'kind':'managed','connector_id':row.pk,'agent':row.agent,'process':row.process,'owner':identity(row.process['parent_pid']),'generation':row.generation,'loaded_version':row.loaded_version})
-    allowed=set(Actor.objects.filter(active=True,agent__in=['codex','opencode']).values_list('uid','agent'))
+    allowed=set(Actor.objects.filter(active=True,agent__in=['codex','codex-cli','opencode']).values_list('uid','agent'))
     rows.extend(legacy_processes(allowed,managed))
     return rows
 
@@ -88,7 +89,12 @@ def assess(targets,version):
         if target['kind']=='managed':
             row=next((r for r in current if r.pk==target['connector_id'] and alive(r.process)),None)
             if row is None:
-                state='DISCONNECTED' if not alive(target['process']) else 'RECONNECTING';detail='connector-heartbeat-missing'
+                if not alive(target['process']) and alive(target.get('owner')):
+                    from cab_platform.native_api import same_instance
+                    candidates=[r for r in current if r.agent==target['agent'] and r.process['uid']==target['process']['uid'] and alive(r.process) and same_instance(identity(r.process['parent_pid']),target['owner'])]
+                    row=next((r for r in candidates if r.loaded_version==version and r.catalog_version==version),candidates[0] if candidates else None)
+                    state='RELOAD_REQUIRED' if row is None else 'RECONNECTING';detail='native-replacement-not-observed'
+                else:state='DISCONNECTED' if not alive(target['process']) else 'RECONNECTING';detail='connector-heartbeat-missing'
         elif alive(target['process']):
             row=next((r for r in current if r.process==target['process'] and r.agent==target['agent']),None)
             if row is None:state='RELOAD_REQUIRED';detail='legacy-native-reload-required'
@@ -98,7 +104,7 @@ def assess(targets,version):
             row=ready[0] if ready else candidates[0] if candidates else None
             if row is None:state='DISCONNECTED' if not alive(target['owner']) else 'RELOAD_REQUIRED';detail='native-replacement-not-observed'
         if row:
-            ready=row.loaded_version==version and row.catalog_version==version and row.state in ('READY','BUSY') and alive(row.worker)
+            ready=row.loaded_version==version and row.catalog_version==version and row.state in ('READY','BUSY') and not row.uncertain and alive(row.worker)
             state='READY' if ready else 'RECONNECTING'
             detail='' if ready else row.error if row.state=='FAILED' and row.error else 'business-request-in-flight' if row.pending else 'catalog-refresh-required' if row.loaded_version==version else 'worker-reload-pending'
         outcomes.append({'kind':target['kind'],'agent':target['agent'],'uid':target['process']['uid'],'original_pid':target['process']['pid'],'state':state,'reason':detail,'connector_id':row.pk if row else None,'loaded_version':row.loaded_version if row else None,'catalog_version':row.catalog_version if row else None,'generation':row.generation if row else None})

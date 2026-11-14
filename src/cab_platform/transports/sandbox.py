@@ -186,12 +186,12 @@ def sandbox_command(args,grant):
         raise AtelierError("atelier-grant-divergent")
     if expected.resolve()!=expected or not expected.is_dir() or not (expected.is_relative_to(workspace/".cab-tests") or expected.is_relative_to(Path("/tmp/cab"))):raise AtelierError("atelier-path-unsafe")
     binary=Path("/usr/bin/bwrap")
-    if not binary.is_file() or binary.stat().st_uid!=0 or binary.stat().st_mode&0o002:
+    if not binary.is_file() or not os.access(binary,os.X_OK):
         raise AtelierError("atelier-isolation-unavailable")
     command=[str(binary),"--unshare-all","--die-with-parent","--new-session","--clearenv"]
     for source in ("/usr","/bin","/lib","/lib64"):
         if Path(source).exists():command += ["--ro-bind",source,source]
-    command += ["--proc","/proc","--dev","/dev","--dir","/etc"]
+    command += ["--proc","/proc","--dev","/dev","--dir","/etc","--tmpfs","/tmp"]
     if Path('/etc/ld.so.cache').is_file():command += ["--ro-bind","/etc/ld.so.cache","/etc/ld.so.cache"]
     if Path('/etc/alternatives').is_dir():command += ['--ro-bind','/etc/alternatives','/etc/alternatives']
     runtime_roots=grant["runtimeRoots"]
@@ -264,13 +264,12 @@ def sandbox_command(args,grant):
         path=expected/name
         path.mkdir(mode=0o770,exist_ok=True)
         if path.resolve()!=path or not path.is_dir():raise AtelierError("atelier-scratch-unsafe")
-        path.chmod(0o770)
     sandbox_identity(command,expected/'.home')
     # Les sockets Unix des navigateurs ont une limite de chemin courte. Cette
     # vue privée pointe uniquement vers le temporaire du RUN, jamais l'hôte.
     command += ['--bind',str(expected/'.tmp'),'/cab-tmp']
     fonts=Path('/etc/fonts')
-    if fonts.is_dir() and fonts.stat().st_uid==0 and not fonts.stat().st_mode&0o002:
+    if fonts.is_dir() and os.access(fonts,os.R_OK|os.X_OK):
         command += ['--ro-bind',str(fonts),str(fonts)]
     search=":".join(dict.fromkeys([*resources['binPaths'],*(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)]))
     command += ["--setenv","PATH",(search+":" if search else "")+"/usr/bin:/bin",

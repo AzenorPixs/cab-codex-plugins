@@ -37,11 +37,8 @@ def project_path(value):
     return p
 
 def writable(actor,p):
-    info=p.stat()
-    if actor.uid==0 or info.st_uid==actor.uid:return True
-    try:user=pwd.getpwuid(actor.uid);groups=os.getgrouplist(user.pw_name,user.pw_gid)
-    except KeyError:return False
-    return bool(info.st_gid in groups and info.st_mode&0o020)
+    from cab_platform.os_access import accessible
+    return accessible(p,actor.uid,os.W_OK|os.X_OK)
 
 def scope(actor,project):
     require(actor.active and (actor.role=='admin' or actor.projects.filter(pk=project.pk).exists()),'project-not-authorized',403)
@@ -86,7 +83,7 @@ def revision(run,relocations=None):
                 total+=info.st_size;require(total<=512*1024*1024 and len(entries)<100000,'source-limit',400)
                 for old,new in (relocations or {}).items():
                     if rel==new or rel.startswith(new+'/'):rel=old+rel[len(new):]
-                entries.append([rel,info.st_mode&0o777,hashlib.sha256(f.read_bytes()).hexdigest()])
+                entries.append([rel,hashlib.sha256(f.read_bytes()).hexdigest()])
         if relocations:entries[start:]=sorted(entries[start:],key=lambda entry:entry[0])
     return digest(entries)
 
@@ -108,7 +105,7 @@ def no_pending(run):return not Operation.objects.filter(run=run).exclude(state__
 
 def resolve_native(actor,project,session_id,data):
     from cab_platform.native_sources import inspect,locate,NativeSourceError
-    require(actor.agent=='codex','native-source-agent-unsupported',400)
+    require(actor.agent in ('codex','codex-cli'),'native-source-agent-unsupported',400)
     require(isinstance(data.get('source_file',''),str) and isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
     require(not data.get('codex_home') or Path(data['codex_home']).is_absolute() and '..' not in Path(data['codex_home']).parts,'native-source-path-invalid',400)
     try:
@@ -152,6 +149,8 @@ def bind_native(actor,data):
 def working(run):
     require(run.state in ('WORKING','FINALIZATION_PENDING') and not run.suspension,'run-not-working')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
+    from .models import NativeReload
+    require(not NativeReload.objects.filter(actor=run.actor,state='DISPATCHED').exists(),'native-control-in-progress',503)
 
 @transaction.atomic
 def register_project(actor,root):

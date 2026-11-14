@@ -1,6 +1,12 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.2.5
+## Architecture CAB 3.2.6
+
+Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
+avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
+les versions CLI GitHub et Desktop ChatGPT/APT sont séparées. CAB utilise les
+accès OS effectifs sans imposer ni normaliser les modes POSIX existants.
+Voir docs/platform-operations.md pour la première adoption des sockets.
 
 FinalizationPlan.check_revisions versionne les contrôles ; les preuves CAB
 portent leur révision. finalization.revise_check verrouille RUN/plan, contrôle
@@ -39,15 +45,14 @@ Les reçus sont fsync en spool privé avant réconciliation SQL. Les ateliers
 pilotés se créent à chaud dans /tmp/cab/<projet>/.cab-tests/<change>/<RUN>, les
 preuves durables restent hors /tmp. Le profil direct conserve .cab-tests local.
 
-Configuration /etc/cab/cab.json root0600, état /var/lib/cab root0700,
+Configuration /etc/cab/cab.json, état /var/lib/cab,
 socket /run/cab/cab.sock ; journald expurgé, niveaux configurables et SIGHUP
 sans interruption de session. Voir docs/platform-operations.md. Les contraintes
 2.x qui suivent restent des références historiques, pas des services à installer.
 
-Les nouveaux états, reçus, verrous et fichiers de CAB sont créés en 0770.
-Les anciens modes compatibles restent lisibles sans changement de droits ;
-les contrôles de type, propriétaire, liens, intégrité et accès effectif restent
-applicables. Les canaux inter-UID utilisent un groupe POSIX commun vérifié.
+Les modes de création ne constituent pas des conditions d'accès. Aucun contrôle
+numérique ni normalisation des modes existants n'est appliqué. L'OS décide les
+accès ; identités de processus, types, liens et intégrité restent contrôlés.
 
 ## Coordination et bancs autonomes CAB 2.7.0
 

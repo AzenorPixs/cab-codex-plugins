@@ -2,6 +2,14 @@
 
 `recover-finalization-checks-autonomously`, code non attribué : révision autonome des contrôles et actions de convergence, migration additive0016. Sources : change OpenSpec du même nom ; 13 tests PostgreSQL, 9 tests purs et parcours API réel réussis. Livraison/activation3.2.5 à vérifier séparément.
 
+## SCM — API natives MCP prioritaires, 14 novembre 2026
+
+`native-api-first-mcp-reload`, code non attribué : adaptateurs Codex/Codex CLI
+sur socket fournisseur et OpenCode V2, contrôles durables sans rejeu, profils
+CLI distincts et accès OS effectifs. Sources : change homonyme, tests ciblés
+et recette réelle des SDK. Livraison3.2.6 et première adoption des clients stdio
+sont contrôlées séparément par les reçus CAB ; aucune activation déduite du code.
+
 ## SCM — arrêt borné et versions en direct, 13 novembre 2026
 
 `bound-mcp-stop-escalation-and-live-versions`, code non attribué : politique

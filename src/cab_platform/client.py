@@ -25,7 +25,7 @@ class Client:
             fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
             with os.fdopen(fd,'r') as stream:
                 info=os.fstat(stream.fileno())
-                if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077 or info.st_nlink!=1:raise ClientError('client-profile-unsafe')
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:raise ClientError('client-profile-unsafe')
                 self.profile=json.load(stream)
         except FileNotFoundError:pass
     def call(self,path,body=None):

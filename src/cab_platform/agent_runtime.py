@@ -17,7 +17,7 @@ def processes(uids,proc=Path('/proc')):
             exe=os.readlink(entry/'exe').removesuffix(' (deleted)');args=(entry/'cmdline').read_bytes()[:16384].split(b'\0');mcp=None
             if b'cab_platform.cli' in args and b'mcp' in args:
                 mcp=next((args[i+1].decode() for i,value in enumerate(args[:-1]) if value==b'--agent'),None)
-                if mcp not in ('codex','opencode'):mcp=None
+                if mcp not in ('codex','codex-cli','opencode'):mcp=None
             name=Path(exe).name
             administrative=len(args)>1 and args[1] in (b'plugin',b'mcp',b'login',b'logout',b'auth',b'upgrade',b'update',b'completion',b'completions')
             agent=name if name in ('codex','opencode') and not administrative and b'--version' not in args and b'--help' not in args else None
@@ -75,7 +75,8 @@ def ancestry(process,rows):
 
 def observation(rows,agent,peers=None):
     family='codex' if agent=='codex_desktop' else agent
-    candidates=[row for row in rows if row['mcp']==family];connected=False;transport=False;unknown=False;relevant=False
+    families=(family,'codex-cli') if agent=='codex' else (family,)
+    candidates=[row for row in rows if row['mcp'] in families];connected=False;transport=False;unknown=False;relevant=False
     for candidate in candidates:
         parents=ancestry(candidate,rows);kind=next((row['agent'] for row in parents if row['agent']),None)
         if kind is not None and kind!=agent:continue

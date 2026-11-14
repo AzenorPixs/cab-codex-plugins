@@ -27,7 +27,7 @@ def import_manifest(path):
         commands.require(source.resolve()==source and source.name=='controller-runs.json','legacy-source-invalid')
         fd=os.open(source,os.O_RDONLY|os.O_NOFOLLOW)
         with os.fdopen(fd,'rb') as stream:
-            info=os.fstat(stream.fileno());commands.require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and not info.st_mode&0o007 and info.st_size<=64*1024*1024,'legacy-source-unsafe');raw=stream.read()
+            info=os.fstat(stream.fileno());commands.require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_size<=64*1024*1024,'legacy-source-unsafe');raw=stream.read()
         sha=hashlib.sha256(raw).hexdigest();payload=json.loads(raw)
         commands.require(item.get('sha256',sha)==sha,'legacy-snapshot-divergent')
         commands.require(payload.get('project')==str(root),'legacy-project-divergent')

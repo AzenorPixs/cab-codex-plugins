@@ -82,13 +82,22 @@ def background_closure():
     try:sweep()
     finally:close_old_connections()
 
+def background_native():
+    from django.db import close_old_connections
+    from .core.native_control import recover,queue_mismatched,work_one
+    try:recover();queue_mismatched();work_one()
+    finally:close_old_connections()
+
 
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
     # Le parent des sockets est traversable ; les requêtes exigent ensuite
     # l’identité du pair et son jeton. Les autres états restent0700.
-    RUNTIME.mkdir(mode=0o711,parents=True,exist_ok=True);os.chmod(RUNTIME,0o711)
+    created=False
+    try:RUNTIME.mkdir(mode=0o711,parents=True);created=True
+    except FileExistsError:pass
+    if created:os.chmod(RUNTIME,0o711)
     import django;django.setup();configure()
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
@@ -96,7 +105,7 @@ def run(port=8790):
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
-    update_future=None;availability_future=None
+    update_future=None;availability_future=None;native_future=None;next_native=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -105,8 +114,15 @@ def run(port=8790):
     statistics_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-statistics')
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
+    native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
     try:
         while not stop.wait(0.2):
+            if native_future is not None and native_future.done():
+                try:native_future.result()
+                except Exception as error:log.warning('native control unavailable',extra={'code':type(error).__name__})
+                native_future=None
+            if native_future is None and time.monotonic()>=next_native:
+                native_future=native_pool.submit(background_native);next_native=time.monotonic()+1
             if reload_requested.is_set():
                 try:
                     level=configure();os.kill(api.pid,signal.SIGHUP);log.info('configuration reloaded: %s',level)
@@ -189,6 +205,7 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        native_pool.shutdown(wait=True,cancel_futures=True)
         update_pool.shutdown(wait=True,cancel_futures=True)
         closure_pool.shutdown(wait=True,cancel_futures=True)
         statistics_pool.shutdown(wait=True,cancel_futures=True)

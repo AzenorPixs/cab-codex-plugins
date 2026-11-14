@@ -26,8 +26,7 @@ sans réécrire leurs reçus. CAB clôture automatiquement après preuves requis
 Le service système unique `cab.service` utilise les droits root et démarre avec
 la machine. PostgreSQL reste indépendant. L’installation neuve expose uniquement
 le parcours Web d’initialisation sur le port 8790 ; le démarrage du service ne
-crée pas la base CAB. La configuration privée est `/etc/cab/cab.json` (root, 0600,
-répertoire 0700). Les configurations existantes doivent être conservées.
+crée pas la base CAB. La configuration est `/etc/cab/cab.json`, protégée par les accès de la machine. Les configurations existantes doivent être conservées.
 
 ## Journal système
 
@@ -65,7 +64,8 @@ message SQL. Le stockage et la rétention des journaux suivent la politique
 ## Comptes et reprise historique
 
 Les profils des clients sont séparés par agent dans ~/.config/cab/codex.json
-et opencode.json, privés0600. Le compte est résolu par UID, y compris root ;
+codex-cli.json et opencode.json. CAB utilise les accès effectifs de l’OS sans
+contrôler ni normaliser leurs modes POSIX existants. Le compte est résolu par UID, y compris root ;
 les identités d’agents ne donnent pas de privilège système. Les intégrations
 préparées par CABU sont enrôlées lors du premier parcours Web, après migration,
 sans collecte ou RUN avant cette validation. Les intégrations natives se
@@ -431,3 +431,46 @@ le nom enregistré à la création sert alors de repli.
 Le watcher traite éditions, remplacements atomiques, suppressions et créations,
 avec rattrapage de60secondes. L’abonnement Electric est fermé à la sortie de
 l’accueil ; aucun fichier de configuration n’est écrit par ce parcours.
+
+## Rechargement MCP natif (3.2.6)
+
+Les profils Codex et Codex CLI sont distincts, y compris lorsque les comptes
+sont différents : `/usr/bin/cab mcp --agent codex` et
+`/usr/bin/cab mcp --agent codex-cli`. OpenCode utilise `--agent opencode`.
+Le service admet un contrôle technique par instance/version/configuration.
+`native.control.configure`, `native.control.reload` et `native.control.status`
+sont accessibles par `cab call`; seuls le propriétaire et l'administrateur local
+peuvent agir. Les credentials restent dans le profil local.
+
+Préparer un socket avec `sudo cab native-prepare --agent codex-cli --user <compte>
+--binary <chemin-absolu-codex>` (ou agent codex pour l'application). Le fournisseur
+supervise son daemon ; CAB configure son endpoint et, pour Codex, le lanceur
+utilisateur avec CODEX_APP_SERVER_USE_LOCAL_DAEMON=1. La préparation n'atteste
+pas le rattachement : les clients déjà ouverts en stdio exigent une première
+reprise native. Codex se relance via le lanceur ; la CLI reprend son même SID
+avec `codex resume <SID> --remote unix://<socket>`, sans nouveau prompt.
+CAB ne tue pas les applications pour fabriquer ce raccordement.
+
+La vérification du pair Unix et de la liaison IPC avec le frontend interdit
+qu'un second backend isolé serve de preuve. CAB écrit un marqueur de génération
+non secret dans mcp_servers.cab.env.CAB_MCP_RELOAD_ID avant l'appel officiel
+config/mcpServer/reload : une configuration inchangée conserverait l'ancien MCP.
+OpenCode V2 utilise disconnect/connect sur l'instance et le répertoire vérifiés.
+Le reçu natif COMPLETED atteste l'appel confirmé ; la reprise complète exige en
+plus un heartbeat frais et un vrai tools/list du moteur et du catalogue cible.
+L'indisponibilité explicite autorise le repli existant du seul worker possédé ;
+QUEUED/DISPATCHED/UNKNOWN attendent et interdisent rejeu et escalade.
+Une erreur après émission reste UNKNOWN et peut être réconciliée uniquement par
+une nouvelle génération/catalogue réellement observés. SID/RUN et reçus restent.
+
+Les anciennes empreintes de sources contenant les modes ne sont pas réécrites.
+Les qualifications antérieures qui ne correspondent plus à une révision courante
+exigent une qualification nouvelle ; chmod n'est plus une modification de source.
+Les contrôles d'identité de processus, d'authentification, de fichier régulier,
+liens et canonicalisation ne constituent pas une politique de droits POSIX.
+
+Le pavé Codex CLI utilise les releases stables openai/codex (tag rust-v).
+Le pavé Codex utilise la version dpkg du paquet chatgpt et le dépôt APT officiel
+ChatGPT ; aucun moteur DIU n'est invoqué à l'exécution. Les caches sont séparés,
+avec une vérification quotidienne à instant aléatoire. Le dépôt peut être adapté
+par codex_desktop_release_url (HTTPS sans credentials).
