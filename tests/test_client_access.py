@@ -20,6 +20,13 @@ class ClientAccessTests(unittest.TestCase):
                         self.assertEqual(Client().profile,payload)
                         self.assertEqual(path.read_bytes(),before)
                         self.assertEqual(stat.S_IMODE(path.stat().st_mode),mode)
+    def test_atomic_state_rewrite_preserves_existing_mode(self):
+        from cab_platform.paths import atomic_json
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'state.json';path.write_text('{}');path.chmod(0o770)
+            atomic_json(path,{'updated':True})
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode),0o770)
+            self.assertEqual(json.loads(path.read_text()),{'updated':True})
     def test_object_integrity_remains_distinct_from_permissions(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'profile.json';path.write_text('{}');other=Path(folder)/'linked.json';os.link(path,other)

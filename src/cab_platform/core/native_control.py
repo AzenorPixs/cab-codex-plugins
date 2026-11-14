@@ -70,7 +70,8 @@ def request(caller,data,expected=None):
         return public(previous)
     # Le verrou du compte sérialise l'admission de contrôles concurrents.
     Actor.objects.select_for_update().get(pk=actor.pk)
-    owner=endpoint(actor,expected)
+    try:owner=endpoint(actor,expected)
+    except NativeFailure as error:raise c.Refused(error.code,409) from error
     c.require(not NativeReload.objects.filter(actor=actor,owner__pid=owner['pid'],owner__uid=owner['uid'],owner__start=owner['start'],owner__boot=owner['boot'],state__in=PENDING).exists(),'native-control-pending')
     # L'admission peut être en attente ; la frontière est revérifiée au dispatch.
     before=[{'id':r.pk,'generation':r.generation,'worker':r.worker} for r in McpConnector.objects.filter(actor=actor) if r.process.get('parent_pid')==owner['pid'] and alive(r.process)]
@@ -93,7 +94,7 @@ def work_one():
             row.result={**row.result,'waiting_reason':error.code,'mutation_dispatched':False};row.save();return
         except NativeFailure as error:
             row.state='UNAVAILABLE';row.result={**row.result,'error':getattr(error,'code',str(error)),'mutation_dispatched':False};row.save();return
-        row.state='DISPATCHED';row.dispatcher=identity(os.getpid());row.save()
+        row.state='DISPATCHED';row.dispatcher=identity(os.getpid());row.result={**row.result,'mutation_dispatched':True};row.result.pop('waiting_reason',None);row.save()
     # L'intention est commitée avant le premier appel pouvant modifier le client.
     try:
         result=reload_opencode(row.actor) if row.actor.agent=='opencode' else reload_codex({**row.actor.native,'control_process':row.owner},row.actor.uid,row.pk)

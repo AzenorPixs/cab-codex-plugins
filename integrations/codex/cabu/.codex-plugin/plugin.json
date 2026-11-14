@@ -1,6 +1,6 @@
 {
   "name": "CABU",
-  "version": "3.2.6",
+  "version": "3.2.7",
   "description": "Actualiser le paquet Debian CAB et v\u00e9rifier le service sur le m\u00eame re\u00e7u.",
   "author": {
     "name": "CAB"

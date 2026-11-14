@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.2.6
+## Plateforme CAB 3.2.7
 
 Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
 avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
