@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+`support-postgresql-17-18-migration`, code non attribué : métapaquets Debian,
+référence /etc/cab et migration protégée ; sources dans openspec/changes/archive/2026-11-15-support-postgresql-17-18-migration.
+Qualification Docker17→18 réussie le 15 novembre2026 : 52 tables, 30 séquences
+et reprise Electric. Preuve : output/scm/pg328/migration-v4.log. Livraison3.2.8
+et CABU sont vérifiables séparément par leurs reçus dans SCM-PG17-PG18-328.
+
 `recover-finalization-checks-autonomously`, code non attribué : révision autonome des contrôles et actions de convergence, migration additive0016. Sources : change OpenSpec du même nom ; 13 tests PostgreSQL, 9 tests purs et parcours API réel réussis. Livraison/activation3.2.5 à vérifier séparément.
 
 ## SCM — correction de finalisation CLI, 14 novembre2026

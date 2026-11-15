@@ -1,6 +1,8 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.2.7
+## Plateforme CAB 3.2.8
+
+La page Agents présente un catalogue latéral issu de PostgreSQL ; les états des agents et de leurs connexions restent des observations courantes.
 
 Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
 avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
@@ -29,6 +31,12 @@ CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.
 Le Web TanStack sur 8790 utilise Electric pour le suivi temps réel autorisé.
 Les clients MCP/CLI et les plugins minimes partagent le moteur du paquet.
+
+CAB déclare officiellement la compatibilité avec PostgreSQL 17 et PostgreSQL 18,
+respectivement pour Debian Trixie et Debian Forky. La version PostgreSQL de
+référence est conservée dans la configuration CAB sous `/etc/cab`, indépendamment
+de DIU. La qualification et les preuves de migration entre versions majeures
+restent distinctes de cette déclaration de compatibilité.
 
 Les sessions pilotées sont autonomes après cadrage : choix tranchés avant
 codage, réalisation/tests/coordination par le codeur, quatre exceptions et revue

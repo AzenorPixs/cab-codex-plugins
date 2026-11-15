@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 import httpx
-from django.db import connections
+from django.db import connections,DatabaseError
 from django.utils import timezone
 from .core import commands
 from .core.models import Lease,Operation,Run
@@ -44,23 +44,43 @@ def _local_prepare(op):
     result=child({'action':'sandbox','args':args,'grant':grant},r.actor.uid)
     return result['argv'],p
 
-def _bounded_process(argv,uid,timeout_ms):
+def _bounded_process(argv,uid,timeout_ms,on_start=None):
     user=pwd.getpwuid(uid);options={}
     if os.getuid()==0:options={'user':uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)}
     env={'PATH':'/usr/bin:/bin','HOME':user.pw_dir,'LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1'}
     process=subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=env,start_new_session=True,**options)
     data=bytearray();deadline=time.monotonic()+timeout_ms/1000;state='COMPLETED';selector=selectors.DefaultSelector();selector.register(process.stdout,selectors.EVENT_READ)
+    stopped=False;drain_deadline=None
+    def stop_once():
+        nonlocal stopped,drain_deadline
+        if stopped:return
+        if process.poll() is None:
+            try:os.killpg(process.pid,signal.SIGKILL)
+            except ProcessLookupError:
+                if process.poll() is None:raise
+        stopped=True;drain_deadline=time.monotonic()+5
     try:
+        if on_start:on_start(process)
         while selector.get_map():
-            if time.monotonic()>deadline:state='TIMED_OUT';os.killpg(process.pid,signal.SIGKILL)
-            for key,_ in selector.select(0.1):
+            now=time.monotonic()
+            if not stopped and now>deadline:state='TIMED_OUT';stop_once()
+            if stopped and now>drain_deadline:state='UNKNOWN';break
+            for key,_ in selector.select(.1):
                 part=os.read(key.fd,65536)
                 if not part:selector.unregister(key.fileobj);continue
-                data.extend(part)
-                if len(data)>1024*1024:state='TIMED_OUT';os.killpg(process.pid,signal.SIGKILL);del data[1024*1024:]
-            if state=='TIMED_OUT':process.wait(timeout=5)
-        return state,process.wait(timeout=5),redact(data.decode('utf-8',errors='replace'),limit=1024*1024)
+                if len(data)+len(part)>1024*1024:
+                    data.extend(part[:max(0,1024*1024-len(data))]);state='TIMED_OUT';stop_once()
+                else:data.extend(part)
+        try:exit_code=process.wait(timeout=5)
+        except subprocess.TimeoutExpired:state='UNKNOWN';exit_code=None
+        return state,exit_code,redact(data.decode('utf-8',errors='replace'),limit=1024*1024)
+    except BaseException:
+        stop_once()
+        try:process.wait(timeout=5)
+        except subprocess.TimeoutExpired:log.warning('execution stop not confirmed',extra={'code':'executor-stop-unconfirmed'})
+        raise
     finally:selector.close();process.stdout.close()
+
 
 def _external_prepare(op,status=False):
     r=op.run;profile=dict(r.mandate['external_adapters'][op.request['adapter_id']]);target=profile.pop('target_fingerprint',None)
@@ -81,7 +101,16 @@ def execute_operation(operation_id):
     receipt={'request_id':op.request_id,'input_digest':op.input_digest,'source_revision':op.source_revision,'state':'FAILED_TO_START','exit_code':None,'output':'','started':timezone.now().isoformat(),'dispatched':False}
     issued=False
     try:
-        if op.request['kind']=='local':prepared,_=_local_prepare(op)
+        if op.request['kind']=='local':
+            authorization=op.request.get('host_authorization')
+            if authorization:
+                from .core.models import Event,FinalizationPlan
+                plan=FinalizationPlan.objects.get(run=op.run)
+                check=next((item for item in plan.policy.get('checks',[]) if item['id']==authorization.get('check_id')),None)
+                commands.require(plan.digest==authorization.get('policy_digest') and plan.digest==commands.digest(plan.policy) and check and check['executor']=='local' and check['argv']==op.request['argv'] and plan.check_revisions.get(check['id'],1)==authorization.get('check_revision'),'host-check-authorization-stale')
+                commands.require(Event.objects.filter(run=op.run,kind='host-check-authorized',data__request_id=op.request_id,data__input_digest=op.input_digest,data__administrator=authorization.get('administrator')).exists(),'host-check-authorization-missing')
+                prepared=op.request['argv'];receipt['execution_environment']='host-authorized'
+            else:prepared,_=_local_prepare(op)
         elif op.request['kind']=='external':prepared,bank=_external_prepare(op)
         elif op.request['kind']=='native':
             from .opencode import connection,session
@@ -90,7 +119,12 @@ def execute_operation(operation_id):
         commands.require(commands.revision(op.run)==op.source_revision,'source-changed-before-effect')
         commands.dispatched(op.pk,op.dispatch_nonce);issued=True;receipt['dispatched']=True
         if op.request['kind']=='local':
-            state,exit_code,output=_bounded_process(prepared,op.run.actor.uid,op.request.get('timeout_ms',120000));receipt.update(state=state,exit_code=exit_code,output=output)
+            def process_started(process):
+                from .connector_process import identity
+                receipt['executor']=identity(process.pid) or {'pid':process.pid,'exited_before_identity':True}
+                receipt.setdefault('execution_environment','sandbox')
+                commands.event(op.run,'operation-process-started',{'operation_id':op.pk,'request_id':op.request_id,'executor':receipt['executor'],'environment':receipt['execution_environment']})
+            state,exit_code,output=_bounded_process(prepared,op.run.actor.uid,op.request.get('timeout_ms',120000),on_start=process_started);receipt.update(state=state,exit_code=exit_code,output=output)
         elif op.request['kind']=='native':
             from .opencode import control
             result=control(op.run,op.request);receipt.update(state='COMPLETED',exit_code=0,native=result)
@@ -108,7 +142,7 @@ def execute_operation(operation_id):
                     old=adapter.get('target_fingerprint');commands.require(old in (None,result.get('target_fingerprint')),'external-target-divergent')
                     adapter['target_fingerprint']=result.get('target_fingerprint');r.save()
             else:receipt.update(state='UNKNOWN',error='remote-result-unavailable')
-    except (BeforeEffect,commands.Refused,OSError,subprocess.SubprocessError,ValueError,httpx.HTTPError) as error:
+    except (BeforeEffect,commands.Refused,DatabaseError,OSError,subprocess.SubprocessError,ValueError,httpx.HTTPError) as error:
         code=error.code if isinstance(error,commands.Refused) else str(error) if isinstance(error,BeforeEffect) else type(error).__name__
         receipt.update(state='UNKNOWN' if issued else 'FAILED_TO_START',error=code)
         log.warning('execution stopped',extra={'request_id':op.request_id,'run_id':op.run.run_id,'code':code})

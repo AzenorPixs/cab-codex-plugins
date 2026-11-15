@@ -29,7 +29,7 @@ Change : `native-api-first-mcp-reload` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d4938d4efb408
+Provenance : change-periods:e90497d4ac48ac126d393889c3da91416725ecaa735b01b8808257de50f6f869
 
 ## 2. Messages et outils
 
@@ -59,8 +59,8 @@ Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 75 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 75 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,18 +91,5 @@ Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 55887232 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 56163249 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 236981 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 168608 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 56400230 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "generated_at": "2026-11-14T10:41:03.372914+00:00", "revision": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "902dfc0014a20b9885ceb39b67c5eb41cd9ab7ffb3340f9c200a8bb5816e1aae", "generated_at": "2026-11-14T10:56:44.435363+00:00", "revision": "902dfc0014a20b9885ceb39b67c5eb41cd9ab7ffb3340f9c200a8bb5816e1aae", "scope": "change"} -->

@@ -58,16 +58,19 @@ def initialize(data,token):
             admin=psycopg.connect(admin_dsn,autocommit=True,connect_timeout=5)
             info=admin.info;host=info.host;port=info.port
         else:
+            from .postgresql import default_major,reference
+            major=str(default_major())
             rows=subprocess.run(['/usr/bin/pg_lsclusters','--no-header'],text=True,capture_output=True,check=True).stdout.splitlines()
-            found=next((line.split() for line in rows if line.split()[:2]==['17','cab']),None)
+            found=next((line.split() for line in rows if line.split()[:2]==[major,'cab']),None)
+            if any(line.split()[1:2]==['cab'] and line.split()[0]!=major for line in rows):raise BootstrapError('existing-cab-cluster-requires-reconciliation')
             if not found:
-                p=subprocess.run(['/usr/bin/pg_createcluster','17','cab','--port',str(port),'--start'],text=True,capture_output=True,timeout=120)
+                p=subprocess.run(['/usr/bin/pg_createcluster',major,'cab','--port',str(port),'--start'],text=True,capture_output=True,timeout=120)
                 if p.returncode:raise BootstrapError('postgres-cluster-creation-failed')
             else:
                 port=int(found[2])
-                subprocess.run(['/usr/bin/pg_ctlcluster','17','cab','start'],capture_output=True,timeout=60)
+                if found[3]=='down':subprocess.run(['/usr/bin/pg_ctlcluster',major,'cab','start'],capture_output=True,check=True,timeout=60)
             _psql(port,"ALTER SYSTEM SET wal_level='logical';\n")
-            subprocess.run(['/usr/bin/pg_ctlcluster','17','cab','restart'],capture_output=True,check=True,timeout=60)
+            subprocess.run(['/usr/bin/pg_ctlcluster',major,'cab','restart'],capture_output=True,check=True,timeout=60)
             admin=_LocalAdmin(port)
             host='127.0.0.1'
         try:
@@ -84,6 +87,7 @@ def initialize(data,token):
                 cursor.execute('ALTER ROLE cab_electric REPLICATION')
                 if not exists:cursor.execute('CREATE DATABASE cab OWNER cab_owner')
             cfg.update(initializing=True,database='cab',database_host=host,database_port=port,database_user='cab_app',database_password=passwords['cab_app'],migrator_user='cab_migrate',migrator_password=passwords['cab_migrate'],electric_user='cab_electric',electric_password=passwords['cab_electric'],electric_secret=secrets.token_urlsafe(48),schema_version=1,version=__version__)
+            if not admin_dsn:cfg['postgresql']=reference(int(major),port)
             atomic_json(CONFIG,cfg)
             db_admin=psycopg.connect(dbname='cab',user=admin.info.user,password=admin.info.password,host=host,port=port,autocommit=True) if admin_dsn else _LocalAdmin(port,'cab')
             try:
@@ -101,7 +105,11 @@ def initialize(data,token):
                     cursor.execute('GRANT SELECT ON cab_core_sessionprojection TO cab_electric')
                     cursor.execute('GRANT SELECT ON project_metadata_projection TO cab_electric')
                     cursor.execute('GRANT SELECT ON mcp_connector_projection TO cab_electric')
+                    cursor.execute('GRANT SELECT ON agents TO cab_electric')
+                    cursor.execute('GRANT SELECT ON agent_users TO cab_electric')
                     cursor.execute('ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL')
+                    cursor.execute('ALTER TABLE agents REPLICA IDENTITY FULL')
+                    cursor.execute('ALTER TABLE agent_users REPLICA IDENTITY FULL')
                     cursor.execute('REVOKE cab_migrate FROM cab_electric')
                     cursor.execute('ALTER TABLE cab_core_sessionprojection REPLICA IDENTITY FULL')
                     cursor.execute("SELECT 1 FROM pg_publication WHERE pubname='electric_publication_default'")
@@ -111,6 +119,10 @@ def initialize(data,token):
                     cursor.execute('GRANT CREATE ON DATABASE cab TO cab_electric')
                     cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='mcp_connector_projection'")
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE mcp_connector_projection')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agents'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE agents')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agent_users'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE agent_users')
                     cursor.execute('ALTER PUBLICATION electric_publication_default OWNER TO cab_electric')
                     cursor.execute('REVOKE CREATE ON DATABASE cab FROM cab_electric')
             finally:db_admin.close()

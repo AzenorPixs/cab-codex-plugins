@@ -79,7 +79,8 @@ def background_metadata():
 def background_closure():
     from django.db import close_old_connections
     from .core.run_lifecycle import sweep
-    try:sweep()
+    from .core.operation_recovery import sweep as recover_stopped
+    try:recover_stopped();sweep()
     finally:close_old_connections()
 
 def background_native():
@@ -88,10 +89,44 @@ def background_native():
     try:recover();queue_mismatched();work_one()
     finally:close_old_connections()
 
+def background_agents():
+    from django.db import close_old_connections,transaction
+    from .agent_binaries import inventory
+    from .core.models import Agent
+    try:
+        observed=inventory()['agents']
+        with transaction.atomic():
+            for item in observed:
+                installed=item['state']=='available'
+                values={'installed':installed,'running':bool(item['runtime']['running']),'local_version':item['version'] if installed else None}
+                row=Agent.objects.select_for_update().get(pk=item['agent'])
+                changed=[key for key,value in values.items() if getattr(row,key)!=value]
+                if changed:
+                    for key in changed:setattr(row,key,values[key])
+                    row.save(update_fields=changed)
+    finally:close_old_connections()
+
+def update_agent_mcp():
+    from django.db import transaction
+    from .core.models import Agent,McpConnectorProjection
+    mapping={'codex_desktop':'codex','codex':'codex-cli','opencode':'opencode'}
+    rows=list(McpConnectorProjection.objects.filter(connected=True).values_list('agent','loaded_version'))
+    with transaction.atomic():
+        for row in Agent.objects.select_for_update().filter(pk__in=mapping):
+            connections=[version for agent,version in rows if agent==mapping[row.pk]]
+            connected=bool(connections)
+            versions=sorted({version for version in connections if version}) if connected else row.mcp_versions
+            changed=[]
+            if row.mcp_connected!=connected:row.mcp_connected=connected;changed.append('mcp_connected')
+            if row.mcp_versions!=versions:row.mcp_versions=versions;changed.append('mcp_versions')
+            if changed:row.save(update_fields=changed)
+
 
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
+    from .postgresql import ensure as ensure_postgresql
+    log.info('PostgreSQL qualification: %s',ensure_postgresql())
     # Le parent des sockets est traversable ; les requêtes exigent ensuite
     # l’identité du pair et son jeton. Les autres états restent0700.
     created=False
@@ -106,6 +141,8 @@ def run(port=8790):
     statistics_watcher=None;statistics_future=None;statistics_project=None
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
     update_future=None;availability_future=None;native_future=None;next_native=0
+    agents_future=None;next_agents=0
+    agent_config_future=None;next_agent_config=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -115,6 +152,8 @@ def run(port=8790):
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
+    agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
+    agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
     try:
         while not stop.wait(0.2):
             if native_future is not None and native_future.done():
@@ -132,11 +171,17 @@ def run(port=8790):
                 finally:reload_requested.clear()
             if not api.is_alive():raise RuntimeError('cab-api-process-exited')
             if not config().get('initialized'):continue
+            if agents_future is not None and agents_future.done():
+                try:agents_future.result()
+                except Exception as error:log.warning('agent observation unavailable',extra={'code':type(error).__name__})
+                agents_future=None
+            if agents_future is None and time.monotonic()>=next_agents:
+                agents_future=agents_pool.submit(background_agents);next_agents=time.monotonic()+2
             try:
                 refresh_database()
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
-                    refresh_projection();next_connectors=time.monotonic()+1
+                    refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1
                 if time.monotonic()>=next_update:
                     from .system_updates import dispatch
                     from .update_availability import check as check_update
@@ -153,6 +198,8 @@ def run(port=8790):
                     # Les opérations engagées ne sont jamais réémises après crash.
                     for op in Operation.objects.filter(state__in=['INTENT','RUNNING']):
                         op.state='UNKNOWN';op.save(update_fields=['state','updated']);commands.event(op.run,'operation-recovery-protected',{'request_id':op.request_id})
+                    from .agent_config_reconcile import recover_interrupted
+                    recover_interrupted()
                     recovered=True
                 for key,future in list(tasks.items()):
                     if future.done():
@@ -160,6 +207,13 @@ def run(port=8790):
                         except Exception as error:log.error('worker failed',extra={'code':type(error).__name__})
                         del tasks[key]
                 if not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():
+                    if agent_config_future is not None and agent_config_future.done():
+                        try:agent_config_future.result()
+                        except Exception as error:log.warning('agent configuration reconciliation unavailable',extra={'code':type(error).__name__})
+                        agent_config_future=None
+                    if agent_config_future is None and time.monotonic()>=next_agent_config:
+                        from .agent_config_reconcile import work_one
+                        agent_config_future=agent_config_pool.submit(work_one);next_agent_config=time.monotonic()+1
                     if closure_future is not None and closure_future.done():
                         try:closure_future.result()
                         except Exception as error:log.warning('closure evaluation unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
@@ -205,6 +259,8 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        agent_config_pool.shutdown(wait=True,cancel_futures=True)
+        agents_pool.shutdown(wait=True,cancel_futures=True)
         native_pool.shutdown(wait=True,cancel_futures=True)
         update_pool.shutdown(wait=True,cancel_futures=True)
         closure_pool.shutdown(wait=True,cancel_futures=True)

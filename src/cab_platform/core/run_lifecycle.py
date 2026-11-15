@@ -52,6 +52,10 @@ def normal_valid(run):
 def terminal_proof(run):
     guard(run)
     if run.mandate.get('legacy_snapshot_id'):
+        if run.review.get('closure',{}).get('kind') in ('legacy-service-retirement','legacy-technical-retirement'):
+            c.require(run.suspension=='IMPORT_PROTECTED','legacy-protection-divergent')
+            from .session_cleanup import retirement_proof
+            return retirement_proof(run)
         from cab_platform.legacy_closure import proof
         c.require(run.suspension=='IMPORT_PROTECTED','legacy-protection-divergent')
         return {'kind':'legacy','proof':proof(run)}
@@ -82,11 +86,19 @@ def evaluate(run):
             try:
                 proof=terminal_proof(run)
                 result.update(action='normalize' if run.state!='CLOSED' or run.stage!=11 else 'closed',terminal=proof,archive_allowed=run.state=='CLOSED')
-            except c.Refused as error:result.update(action='service',reasons=['service-terminal-proof-required',error.code])
+            except c.Refused as error:
+                result.update(action='service',reasons=['service-terminal-proof-required',error.code])
+                if error.code=='legacy-terminal-proof-missing':
+                    try:
+                        from .session_cleanup import retirement_facts
+                        facts=retirement_facts(run);result.update(action='retire-service',reasons=[],retirement=facts)
+                    except (c.Refused,OSError,ValueError) as refused:result['reasons'].append(getattr(refused,'code','legacy-service-observation-unavailable'))
             result['evaluation_digest']=c.digest(result);return result
         if run.state=='CLOSED':
             proof=terminal_proof(run)
             result.update(action='normalize' if run.stage!=11 else 'closed',terminal=proof)
+            if proof['kind']=='legacy-technical-retirement':
+                result['archive_allowed']=True;result['evaluation_digest']=c.digest(result);return result
             if plan and plan.receipt and plan.policy['nature']!='development':
                 result['archive_allowed']=True;result['evaluation_digest']=c.digest(result);return result
             try:
@@ -117,6 +129,9 @@ def scoped(actor,data,*,lock=False):
 def recheck(actor,data,*,automatic=False):
     run=Run.objects.get(project_id=data['project_id'],run_id=data['run_id']) if automatic else scoped(actor,data)
     evaluation=evaluate(run)
+    if evaluation['action']=='retire-service':
+        from .session_cleanup import retire
+        retire(run,'cab-policy' if automatic else actor.pk);run.refresh_from_db();return evaluate(run)
     if evaluation['action'] in ('waiting','finalize'):
         from .run_finalization import process
         process(run.pk);run.refresh_from_db();return evaluate(run)
@@ -166,7 +181,7 @@ def sweep():
                 except (c.Refused,OSError,ValueError):continue
                 run.refresh_from_db()
             evaluation=evaluate(run)
-            if evaluation['action'] in ('close','normalize'):
+            if evaluation['action'] in ('close','normalize','retire-service'):
                 try:recheck(None,{'project_id':run.project_id,'run_id':run.run_id},automatic=True)
                 except (c.Refused,OSError,ValueError):continue
             # La projection corrige aussi les anciens états masqués, sans levée de protection.

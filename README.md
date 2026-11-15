@@ -1,6 +1,10 @@
 # Codex Approval Bridge — CAB
 
-## CAB 3.2.7
+
+CAB prend officiellement en charge PostgreSQL17 et18 (Debian Trixie/Forky).
+La référence est conservée sous /etc/cab ; voir [le parcours PostgreSQL](docs/postgresql.md).
+
+## CAB 3.2.8
 
 Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
 avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
@@ -228,7 +232,10 @@ Une mise à jour du paquet par DIU/APT finalise aussi les plugins, skills et com
 CAB des comptes configurés, sans second téléchargement ou réinstallation. Le suivi
 Web propose les onze étapes et les tâches de chaque change, avec un détail par RUN.
 
-La page /agents distingue les trois programmes et leurs transports MCP. Les
+La page /agents distingue les trois programmes et leurs transports MCP. Son
+menu latéral utilise le catalogue PostgreSQL des agents et ouvre une page pour
+chaque agent ; /agents conserve la vue d'ensemble. Les états d'exécution
+restent observés en direct. Les
 projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
 

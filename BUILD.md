@@ -1,6 +1,8 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.2.7 — Debian et clients légers
+## Livraison CAB 3.2.8 — Debian et clients légers
+
+La migration additive 0018 crée le catalogue `agents` et initialise les trois agents existants. Sauvegarder la base avant migration ; le retour de migration supprime cette table et ses entrées.
 
 La migration additive0017 ajoute les contrôles natifs durables et l'incertitude
 explicite des relais. Le daemon Codex reste supervisé par son fournisseur ;
@@ -30,14 +32,16 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.7` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.8` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.2.7.
+prépaquet ne constitue pas la release 3.2.8.
+
+Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
-plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
-dépendance indépendante ; les runtimes publics sont vérifiés et extraits hors
+plugins), l’unique unité cab.service et la documentation. PostgreSQL est une
+dépendance indépendante (métapaquets postgresql et postgresql-common) ; les runtimes publics sont vérifiés et extraits hors
 réseau à l’installation. Les scripts de maintenance arrêtent à frontière sûre,
 migrent uniquement une base déjà initialisée, redémarrent et vérifient le même
 reçu. Un effet incertain n’est pas réémis. Une première installation reste en
