@@ -93,6 +93,7 @@ def binary_path(configuration,users,agent,rows):
 
 def inventory():
     configuration=config();users=accounts(configuration);result=[]
+    from .core.models import Agent
     from .agent_runtime import processes,observation
     from .agent_releases import cached
     rows=processes({user.pw_uid for user in users});releases=cached()
@@ -100,7 +101,9 @@ def inventory():
     for row in rows:
         if row['agent']=='codex':
             row['agent']='codex_desktop' if ('resources' in Path(row['exe']).parts or binaries['codex_desktop'] and Path(row['exe']).resolve()==binaries['codex_desktop'].resolve()) else 'codex'
-    for agent,label in [('opencode','OpenCode'),('codex','Codex CLI'),('codex_desktop','Codex')]:
+    for entry in Agent.objects.order_by('position','id'):
+        agent=entry.id;label=entry.label
+        if agent not in binaries:continue
         family='codex' if agent=='codex_desktop' else agent;path=binaries[agent]
         executable=bool(path and path.is_file() and os.access(path,os.X_OK))
         user=next((user for user in users if path and path.is_relative_to(user.pw_dir) and user.pw_uid!=0),None)

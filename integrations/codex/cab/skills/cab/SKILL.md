@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.7
+# CAB 3.2.8
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -14,8 +14,8 @@ et CLOSED11 sans submit, statistics_end ou run.close du LLM en fin de session.
 Les pauses explicites gardent leur parcours. En piloté le parent décide la revue.
 Un outil natif hors CAB exige un producteur attestant explicitement autorisé ;
 un journal de tokens ou une déclaration de l'agent ne prouve pas son exécution.
-finalization_status expose les manques. finalization_configure permet une seule
-adoption avant opération/revue/gel ; aucun RUN ancien/importé migré implicitement.
+finalization_status expose les manques. finalization_configure autorise
+l’adoption et la correction de prévol avant opération/preuve/modification de source/revue/gel ; aucun RUN ancien/importé migré implicitement.
 Contrat et API indépendants des outils de publication, sans rejeu de travaux.
 
 Le codeur direct ou piloté corrige seul un contrôle récupérable par
@@ -106,3 +106,21 @@ réelle avant les replis possédés. cab native-prepare prépare un socket fourn
 mais adoption_required exige encore un frontend réellement raccordé ; ne pas
 présenter un daemon isolé comme la connexion de la session existante. Les accès
 sont accordés par l'OS sans contrôle ni normalisation de modes POSIX existants.
+
+Avant run_begin, lire [le contrat de finalisation](references/finalization.md).
+Il donne les champs admis, les natures, la validation pure, les IDs canoniques,
+les refus explicites et le parcours de publication native hors atelier.
+Ne pas inventer de champ ou de commande de revue. Un refus de schéma sans RUN
+créé n'est pas un effet UNKNOWN. Un mauvais ID ne prouve pas une panne de CAB.
+
+Utiliser finalization_validate avant admission ; cab_contract expose le schéma
+strict et les types de preuves. La validation du schéma ne valide pas les accès
+d’un atelier ni l’exécutabilité d’une commande.
+
+Le superviseur réconcilie seul les tests locaux sandbox UNKNOWN/ProcessLookupError
+admissibles quand leur arrêt est prouvé. Le statut CANCELLED et le constat séparé
+stopped-result-unavailable ne valident pas le test : son reçu UNKNOWN et son hash
+restent intacts. Attendre/consulter le même état ; aucun rejeu ni demande systématique
+au parent. autonomous_recovery expose le motif si une preuve manque. Un processus
+vivant, un atelier invérifiable, un test externe ou host_authorization garde ses
+protections. La validation des sources actuelles reste distincte du résultat perdu.

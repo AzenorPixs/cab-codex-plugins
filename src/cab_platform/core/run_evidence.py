@@ -15,18 +15,48 @@ def initialize(run,policy=None):
     return FinalizationPlan.objects.create(run=run,policy=value,digest=c.digest(value) if value else '',missing=[] if value else ['finalization-contract-required'])
 
 @transaction.atomic
+def host_check(actor,data):
+    c.require(actor.active and actor.role=='admin','administrator-required',403)
+    c.require(set(data)=={'project_id','run_id','request_id','check_id','expected_policy_digest','reason'},'host-check-fields-invalid',400)
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    c.working(run)
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(run.mode=='direct' and not run.suspension and not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'host-check-protected')
+    plan=FinalizationPlan.objects.select_for_update().get(run=run)
+    c.require(not plan.receipt and plan.digest==data['expected_policy_digest'] and plan.digest==c.digest(plan.policy),'finalization-revision-stale')
+    reason=data['reason'];c.require(isinstance(reason,str) and 10<=len(reason.strip())<=4000,'host-check-reason-required',400)
+    check=next((item for item in plan.policy['checks'] if item['id']==data['check_id']),None)
+    c.require(check and check['executor']=='local','host-check-invalid',400)
+    key=c.identifier(data['request_id'])
+    payload={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'generation':run.generation,'request_id':key,'kind':'local','argv':check['argv'],'timeout_ms':120000,'host_authorization':{'check_id':check['id'],'policy_digest':plan.digest,'check_revision':plan.check_revisions.get(check['id'],1),'administrator':actor.pk,'reason':reason}}
+    op,created=c.start_operation(run.actor,payload,host_authorized=True)
+    if created:c.event(run,'host-check-authorized',{'request_id':key,'administrator':actor.pk,'check_id':check['id'],'policy_digest':plan.digest,'input_digest':op.input_digest,'reason':reason})
+    return op,created
+
+@transaction.atomic
 def configure(actor,data):
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
     c.require(run.actor_id==actor.pk if run.mode=='direct' else run.mandate.get('orchestrator_id')==actor.pk,'finalization-authority-required',403)
     value=validate_policy(run,data['policy'])
     plan=FinalizationPlan.objects.filter(run=run).first()
-    if plan and plan.policy:
-        c.require(plan.policy==value,'finalization-contract-immutable');return {'policy':plan.policy,'digest':plan.digest}
+    if plan and plan.policy==value:return {'policy':plan.policy,'digest':plan.digest}
     c.working(run)
-    c.require(not run.operation_set.exists() and not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'finalization-adoption-not-safe')
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(not run.operation_set.exists() and not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id') and not run.finalization_evidence.exists(),'finalization-adoption-not-safe')
+    c.require(not plan or not plan.receipt,'finalization-adoption-not-safe')
+    old_policy=copy.deepcopy(plan.policy) if plan else {};old_digest=plan.digest if plan else ''
+    if old_policy:
+        c.require(run.source_revision==c.revision(run),'finalization-preflight-source-changed')
+        c.require(value['nature']==old_policy['nature'] and (not old_policy['review_required'] or value['review_required']),'finalization-reserved-policy-changed')
     if plan is None:plan=initialize(run,value)
     else:plan.policy=value;plan.digest=c.digest(value);plan.missing=[];plan.save()
-    c.event(run,'finalization-configured',{'policy_digest':plan.digest,'authorizer':actor.pk})
+    previous_framing=run.mandate.get('framing_digest')
+    run.mandate={**run.mandate,'finalization':value}
+    run.mandate['framing_digest']=c.digest({key:item for key,item in run.mandate.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
+    run.save(update_fields=['mandate','updated'])
+    c.event(run,'finalization-configured',{'policy_digest':plan.digest,'authorizer':actor.pk,'old_policy':old_policy,'old_digest':old_digest,'policy':value,'previous_framing_digest':previous_framing,'framing_digest':run.mandate['framing_digest'],'preflight_correction':bool(old_policy)})
     return {'policy':plan.policy,'digest':plan.digest}
 
 @transaction.atomic

@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-14T10:03:42Z
+Début du relevé (UTC) : 2026-11-15T08:05:07Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -26,7 +26,7 @@ affiché, journalisé ou transmis au modèle.
 Les mentions de chargement de variables dans cet inventaire décrivent
 leur utilisation par les outils locaux. Elles n’accordent aucun droit
 supplémentaire de consultation à l’agent, notamment pour les variables
-d’authentification SSH, OpenCode ou PostgreSQL.
+d’authentification SSH ou PostgreSQL.
 
 Les sondes système concernent le contexte d'exécution DIU.
 Les outils DevOps sont interrogés avec les binaires indiqués dans leurs rubriques.
@@ -34,9 +34,8 @@ Les dépendances Python sont recherchées en priorité dans les venv du projet, 
 Dans l’inventaire Python, la flèche indique le Python sondé ; Installation indique le chemin observé dans les métadonnées.
 Les dépendances Python attendues proviennent de [project].dependencies dans pyproject.toml.
 Les outils de compilation Python éventuellement affichés proviennent de [build-system].requires et sont recherchés uniquement dans les venv du projet.
-Les dépendances JavaScript sont regroupées par manifeste et catégorie sous NPM et OpenCode.
+Les dépendances JavaScript sont regroupées par manifeste et catégorie.
 Leurs déclarations, versions verrouillées npm et métadonnées locales sont distinctes ; un verrou ne prouve pas une installation.
-Les contraintes JavaScript ne sont pas résolues et cet inventaire ne prouve pas le chargement de plugins OpenCode.
 Un inventaire multi-environnements ne valide pas un environnement Python unique.
 Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de réussite des tests du projet.
 
@@ -118,13 +117,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 ## Dépendances JavaScript du projet
 
   * Inventaire incomplet : limite d'entrées de découverte atteinte
-
-# OpenCode
-
-  * 2.3.0
-  * /home/devops/.opencode/bin/opencode
-  * La variable OPENCODE_PASSWORD pour l'API est chargée depuis project.env
-
+  * Inventaire incomplet : sous-dossier inaccessible ou modifié pendant la découverte
 
 ## Dépendances OpenCode du projet
 
@@ -137,9 +130,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 #### dependencies
 
   * @opencode-ai/plugin : déclarée 1.19.3 ; verrouillée (npm) 1.19.3 ; observée 1.19.3
-    * Installation : /home/devops/datas/cab/.opencode/node\_modules/@opencode-ai/plugin
-
-# OpenSpec
+    * Installation : /home/devops/datas/cab/.opencode/node\_modules/@opencode-ai/plugin# OpenSpec
 
   * 2.0.0
   * /home/devops/.local/npm/bin/openspec
@@ -174,36 +165,37 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Dépendances du projet - Source de vérité `pyproject.toml`
 
-  * Django ==6.1.3 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * django-ninja ==1.7.1 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * uvicorn ==0.54.0 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * mcp ==2.3.0 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * httpx ==0.28.1 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * psycopg [binary]==3.3.6 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * asgiref ==3.12.1 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * sqlparse ==0.6.0 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * argon2-cffi ==25.1.0 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
-  * cryptography ==50.0.2 : non installé --> /home/devops/python/current/bin/python3
-    * Environnement : Python DevOps (repli)
-    * Installation : non observée
+  * Recherche ou sonde des venv du projet non vérifiable : inventaire partiel.
+  * Django ==6.1.3 : 6.1.3 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * django-ninja ==1.7.1 : 1.7.1 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * uvicorn ==0.54.0 : 0.54.0 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * mcp ==2.3.0 : 2.3.0 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * httpx ==0.28.1 : 0.28.1 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * psycopg [binary]==3.3.6 : 3.3.6 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * asgiref ==3.12.1 : 3.12.1 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * sqlparse ==0.6.0 : 0.6.0 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * argon2-cffi ==25.1.0 : 25.1.0 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
+  * cryptography ==50.0.2 : 50.0.2 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
+    * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
+    * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
 
 
 # Python - Gestionnaire de paquets
@@ -215,13 +207,14 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 # Python - Outils de compilation
 
   * Cython : installation non vérifiable
-    * Diagnostic : aucun venv du projet détecté
+    * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
     * Déclaration : Cython ==3.3.0
     * Source : pyproject.toml — [build-system].requires
   * Nuitka : installation non vérifiable
-    * Diagnostic : aucun venv du projet détecté
+    * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
     * Déclaration : Nuitka ==4.3.1
     * Source : pyproject.toml — [build-system].requires
+    * Diagnostic : recherche ou sonde des venv non vérifiable, inventaire partiel
 
 
 # Prompts

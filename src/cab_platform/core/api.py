@@ -55,6 +55,14 @@ class NewProject(Schema):
     folder:str
     request_id:str
 
+class AgentUserRequest(Schema):
+    agent:str
+    username:str
+
+class AgentUserRemove(Schema):
+    agent:str
+    id:int
+
 @api.exception_handler(commands.Refused)
 def refused(request,error):return api.create_response(request,{'error':error.code},status=error.status)
 
@@ -103,6 +111,49 @@ def administration_agents(request):
     from cab_platform.agent_binaries import inventory
     return inventory()
 
+@api.get('/administration/agent-status')
+def administration_agent_status(request):
+    principal(request,admin=True)
+    from .models import Agent
+    return {'agents':list(Agent.objects.order_by('position','id').values('id','label','position','installed','running','local_version','mcp_connected','mcp_versions'))}
+
+@api.get('/administration/agent-users')
+def administration_agent_users(request,agent:str):
+    principal(request,admin=True)
+    from cab_platform.agent_users import list_users
+    return list_users(agent)
+
+@api.post('/administration/agent-users')
+def administration_agent_user_add(request,body:AgentUserRequest):
+    principal(request,admin=True)
+    from cab_platform.agent_users import register_user
+    return register_user(body.agent,body.username)
+
+@api.post('/administration/agent-users/remove')
+def administration_agent_user_remove(request,body:AgentUserRemove):
+    principal(request,admin=True)
+    from cab_platform.agent_users import remove_user
+    return remove_user(body.agent,body.id)
+
+class AgentReconcileRequest(Schema):
+    agent:str
+
+@api.post('/administration/agent-users/reconcile')
+def administration_agent_users_reconcile(request,body:AgentReconcileRequest):
+    principal(request,admin=True)
+    from cab_platform.agent_users import request_reconciliation
+    return request_reconciliation(body.agent)
+
+@api.get('/administration/agent-config-preview')
+def administration_agent_config_preview(request,agent:str,id:int):
+    principal(request,admin=True)
+    from django.http import JsonResponse
+    from cab_platform.agent_config_view import read_configuration
+    response=JsonResponse({'content':read_configuration(agent,id)})
+    response['Cache-Control']='private, no-store'
+    response['X-Content-Type-Options']='nosniff'
+    return response
+
 @api.get('/administration/configuration')
 def administration_configuration(request):
     principal(request,admin=True)
@@ -139,7 +190,8 @@ def run_data(run):
     return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':run.change_record.tasks_done if run.change_record else None,'tasks_total':run.change_record.tasks_total if run.change_record else None,'updated':run.updated.isoformat()}
 
 def operation_data(op):
-    return {'id':op.pk,'request_id':op.request_id,'state':op.state,'receipt':op.receipt or None,'receipt_digest':op.receipt_digest or None,'source_revision':op.source_revision}
+    resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
+    return {'id':op.pk,'request_id':op.request_id,'state':op.state,'receipt':op.receipt or None,'receipt_digest':op.receipt_digest or None,'source_revision':op.source_revision,'reconciliation':resolution.data['receipt'] if resolution else None}
 
 @api.get('/projects')
 def projects(request):
@@ -252,7 +304,8 @@ def incidents(request,project_id:str|None=None):
     actor=principal(request);rows=Incident.objects.all() if actor.role=='admin' else Incident.objects.filter(project__in=actor.projects.all())
     if project_id:
         project=Project.objects.get(pk=project_id);commands.scope(actor,project);rows=rows.filter(project=project)
-    return {'incidents':list(rows.order_by('created').values('incident_id','category','summary','evidence','state','claim','resolution')[:200])}
+    values=list(rows.order_by('created').values('incident_id','category','summary','evidence','state','claim','resolution')[:200])
+    return {'incidents':values,'snapshot_digest':commands.digest(values),'total':rows.count()}
 
 @api.get('/updates/availability',auth=None)
 def update_availability(request):
@@ -289,6 +342,15 @@ def command(request,body:Command):
         commands.require(set(data)<=({'request_id','version'} if name=='system.update' else {'request_id'}),'update-fields-invalid',400)
         from cab_platform import system_updates
         return system_updates.request(actor,data.get('request_id'),data.get('version','')) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
+    if name=='operation.reconcile_stopped':
+        from .operation_recovery import reconcile_stopped
+        return reconcile_stopped(actor,data)
+    if name=='session.retire_technical':
+        from .session_cleanup import retire_technical
+        return retire_technical(actor,data)
+    if name in ('session.delete_preview','session.delete'):
+        from .session_cleanup import deletion_preview,delete
+        return deletion_preview(actor,data) if name=='session.delete_preview' else delete(actor,data)
     if name in ('run.reevaluate','session.archive'):
         from . import run_lifecycle
         return run_lifecycle.recheck(actor,data) if name=='run.reevaluate' else run_lifecycle.archive_session(actor,data)
@@ -340,6 +402,12 @@ def command(request,body:Command):
         return statistics_service.sync(project,request_id,generate=data.get('change'),full=data.get('full') is True)
     if name=='operation.start':
         op,created=commands.start_operation(actor,data);return {**operation_data(op),'created':created}
+    if name=='finalization.host_check':
+        principal(request,admin=True)
+        commands.require(getattr(request,'cab_peer',None) and request.cab_peer['uid']==0,'host-check-local-root-required',403)
+        from . import run_evidence
+        op,created=run_evidence.host_check(actor,data)
+        return {**operation_data(op),'created':created}
     if name=='external.describe':
         r=commands.run_scope(actor,data['run_id'],data['project_id']);commands.working(r)
         commands.require(data['profile']['resource_key'] in r.mandate.get('resources',[]),'external-bank-outside-mandate',403)
@@ -412,12 +480,27 @@ def incident_command(actor,name,data):
         row,created=Incident.objects.get_or_create(pk=commands.identifier(data['incident_id']),defaults={'project':project,'category':data['category'],'summary':str(data['summary'])[:4000],'evidence':evidence})
         commands.require(created or row.project_id==project.pk and row.summary==data['summary'],'incident-conflict');return {'state':row.state}
     commands.require(actor.role in ('admin','orchestrator'),'incident-owner-required',403)
+    if name=='incident.purge_all':
+        commands.require(data.get('developer_authorized') is True,'incident-purge-authorization-required',403)
+        key=commands.identifier(data['request_id'])
+        rows=list(Incident.objects.select_for_update().order_by('created'))
+        commands.require(all(row.state=='RESOLVED' for row in rows),'incident-unresolved')
+        for row in rows:
+            if row.project:commands.scope(actor,row.project)
+            commands.require(row.claim.get('actor')==actor.pk and row.claim.get('until',0)>timezone.now().timestamp(),'incident-claim-expired')
+        fields=('incident_id','category','summary','evidence','state','claim','resolution')
+        values=[{field:getattr(row,field) for field in fields} for row in rows]
+        commands.require(commands.digest(values)==data.get('expected_snapshot_digest'),'incident-snapshot-stale')
+        identifiers=[row.pk for row in rows]
+        Incident.objects.filter(pk__in=identifiers).delete()
+        return {'request_id':key,'status':'PURGED_TREATED','purged':identifiers,'remaining':0}
     row=Incident.objects.select_for_update().get(pk=data['incident_id'])
     if row.project:commands.scope(actor,row.project)
     if name=='incident.claim':
         until=timezone.now().timestamp()+min(max(int(data.get('lease_seconds',900)),60),3600)
-        commands.require(row.state in ('OPEN','CLAIMED') and (row.state=='OPEN' or row.claim.get('actor')==actor.pk or row.claim.get('until',0)<timezone.now().timestamp()),'incident-claimed')
-        row.state='CLAIMED';row.claim={'actor':actor.pk,'until':until,'id':commands.identifier(data['claim_id'])};row.save();return {'claim':row.claim}
+        commands.require(row.state in ('OPEN','CLAIMED','RESOLVED') and (row.state=='OPEN' or row.claim.get('actor')==actor.pk or row.claim.get('until',0)<timezone.now().timestamp()),'incident-claimed')
+        if row.state!='RESOLVED':row.state='CLAIMED'
+        row.claim={'actor':actor.pk,'until':until,'id':commands.identifier(data['claim_id'])};row.save();return {'claim':row.claim}
     commands.require(row.claim.get('actor')==actor.pk and row.claim.get('until',0)>timezone.now().timestamp(),'incident-claim-expired')
     if name=='incident.resolve':
         commands.require(data.get('reporter_verified') is True and data.get('evidence'),'incident-return-not-proven')
@@ -434,6 +517,8 @@ def maintenance_command(actor,name,data):
         from django.db import connection
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         commands.require(not Operation.objects.filter(state__in=['RUNNING','INTENT']).exists(),'maintenance-boundary-busy')
+        from .models import AgentUser
+        commands.require(not AgentUser.objects.filter(reconcile_state='RUNNING').exists(),'maintenance-boundary-busy')
         commands.require(not Maintenance.objects.exclude(pk=key).filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-transaction-conflict')
         row,created=Maintenance.objects.get_or_create(pk=key,defaults={'state':'PREPARED','evidence':data.get('evidence',{})})
         return {'state':row.state,'transaction_id':key}

@@ -14,7 +14,7 @@ from .core.models import LegacySnapshot
 
 
 @lru_cache(maxsize=4)
-def terminal_index(snapshot_id: int,sha256: str,cipher_digest: str):
+def terminal_index(snapshot_id: int,sha256: str,cipher_digest: str,include_open=False):
     snapshot=LegacySnapshot.objects.get(pk=snapshot_id)
     c.require(snapshot.sha256==sha256 and hashlib.sha256(snapshot.payload['ciphertext'].encode()).hexdigest()==cipher_digest,'legacy-snapshot-divergent')
     try:
@@ -32,7 +32,7 @@ def terminal_index(snapshot_id: int,sha256: str,cipher_digest: str):
                 for binding,uid,text in db.execute('SELECT binding,uid,body FROM bindings'):
                     row=json.loads(text)
                     terminal=db.execute('SELECT ended_at FROM binding_closures WHERE binding=?',(binding,)).fetchone()
-                    if terminal and terminal[0]:matches.append(((row.get('project'),row.get('run'),row.get('session'),row.get('change'),row.get('mode','direct'),uid),{'snapshot_id':snapshot.pk,'snapshot_sha256':snapshot.sha256,'binding_sha256':hashlib.sha256(binding.encode()).hexdigest(),'ended_at':terminal[0]}))
+                    if include_open or terminal and terminal[0]:matches.append(((row.get('project'),row.get('run'),row.get('session'),row.get('change'),row.get('mode','direct'),uid),{'snapshot_id':snapshot.pk,'snapshot_sha256':snapshot.sha256,'binding_sha256':hashlib.sha256(binding.encode()).hexdigest(),'ended_at':terminal[0] if terminal else None}))
         return tuple(matches)
     except (OSError,ValueError,KeyError,TypeError,InvalidToken,sqlite3.Error,zlib.error) as error:
         raise c.Refused('legacy-terminal-proof-unavailable') from error
@@ -47,4 +47,16 @@ def proof(run) -> dict:
     identity=(run.project.root,run.run_id,run.session_id,run.change,run.mode,run.actor.uid)
     matches=[value for candidate,value in terminal_index(snapshot.pk,snapshot.sha256,cipher_digest) if candidate==identity]
     c.require(len(matches)==1,'legacy-terminal-proof-missing')
+    return dict(matches[0])
+
+
+def binding_proof(run):
+    reference=run.mandate.get('legacy_snapshot_id')
+    snapshot=LegacySnapshot.objects.filter(pk=reference).first() if isinstance(reference,int) else None
+    c.require(snapshot and snapshot.sha256==run.mandate.get('import_sha256'),'legacy-snapshot-divergent')
+    c.require(snapshot.payload.get('format')=='sqlite-zlib-fernet','legacy-terminal-format-unavailable')
+    cipher_digest=hashlib.sha256(snapshot.payload.get('ciphertext','').encode()).hexdigest()
+    identity=(run.project.root,run.run_id,run.session_id,run.change,run.mode,run.actor.uid)
+    matches=[value for candidate,value in terminal_index(snapshot.pk,snapshot.sha256,cipher_digest,True) if candidate==identity]
+    c.require(len(matches)==1,'legacy-binding-proof-missing')
     return dict(matches[0])

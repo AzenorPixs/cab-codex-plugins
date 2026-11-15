@@ -1,5 +1,30 @@
 from django.db import models
 
+class Agent(models.Model):
+    id=models.CharField(primary_key=True,max_length=40)
+    label=models.CharField(max_length=100)
+    position=models.PositiveSmallIntegerField()
+    installed=models.BooleanField(null=True,default=None)
+    running=models.BooleanField(null=True,default=None)
+    local_version=models.CharField(max_length=100,null=True,blank=True,default=None)
+    mcp_connected=models.BooleanField(null=True,default=None)
+    mcp_versions=models.JSONField(default=list)
+    class Meta:db_table='agents'
+
+class AgentUser(models.Model):
+    agent=models.ForeignKey(Agent,on_delete=models.PROTECT,related_name='users')
+    uid=models.PositiveBigIntegerField()
+    username=models.CharField(max_length=128)
+    home=models.CharField(max_length=1500)
+    config_present=models.BooleanField(null=True,default=None)
+    config_path=models.CharField(max_length=1500,blank=True,default='')
+    mcp_declared=models.BooleanField(null=True,default=None)
+    config_error=models.CharField(max_length=100,blank=True,default='')
+    reconcile_state=models.CharField(max_length=24,default='IDLE')
+    class Meta:
+        db_table='agent_users'
+        constraints=[models.UniqueConstraint(fields=['agent','uid'],name='agent_user_uid_unique'),models.UniqueConstraint(fields=['agent','username'],name='agent_user_name_unique')]
+
 class Configuration(models.Model):
     key=models.CharField(primary_key=True,max_length=100)
     value=models.JSONField(default=dict)

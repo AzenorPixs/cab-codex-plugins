@@ -6,6 +6,7 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'agent-config-busy':'La vérification de cet utilisateur doit être terminée avant son retrait.',
   'configuration-revision-stale':'La configuration a changé depuis son chargement. Rechargez-la avant de réessayer.',
   'configuration-fields-invalid':'Un paramètre non modifiable a été fourni.',
   'configuration-log-level-invalid':'Le niveau de journalisation est invalide.',
