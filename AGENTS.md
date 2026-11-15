@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 1.3
+Version : 1.4
 
 ## 1. Contexte
 
@@ -287,31 +287,32 @@ Les exclusions et inclusions propres aux intégrations d'agents DOIVENT
 
 ### Extraction filtrée de `project.env`
 
-Sauf interdiction explicite du développeur, une extraction locale filtrée
+Sauf interdiction explicite du développeur, l'extraction locale filtrée
 des variables utiles au travail autorisé est permise sans validation
-supplémentaire ni invocation d'un prompt. Elle concerne uniquement
-`project.env` à la racine et déroge à l'exclusion des `.env` pour ce traitement.
+supplémentaire ni prompt. Cette exception à l'exclusion des `.env`
+concerne uniquement `project.env` à la racine et ce seul traitement.
 
-Seul le processus local parcourt le fichier. L'agent reçoit uniquement
-les noms et valeurs établis comme non secrets et utiles. Cela peut inclure
-`PROJECT_*`, `LOCAL_DEFAULT_BRANCH`, `GIT_*`, `REMOTE_*` ou d'autres variables :
-aucun nom ni préfixe ne garantit l'absence de secret, notamment dans les URL.
+Seul le processus local parcourt le fichier ; l'agent reçoit uniquement
+les noms et valeurs établis comme utiles et non secrets, sans restriction
+de famille : notamment `PROJECT_*`, `LOCAL_DEFAULT_BRANCH`, `GIT_*`
+et `REMOTE_*`. Aucun nom ni préfixe ne garantit l'absence de secret,
+y compris dans les URL.
 
-Seules les affectations littérales sur une ligne sont acceptées.
-Les clés dupliquées et syntaxes nécessitant une interprétation sont ambiguës.
+Accepter uniquement les affectations littérales sur une ligne ; rejeter
+les clés dupliquées et syntaxes nécessitant une interprétation.
 Toute exécution ou tout chargement dans l'environnement est interdit :
 `source`, `eval`, substitutions de commandes et interpolations compris.
 
-Les valeurs secrètes ou incertaines sont exclues de toute restitution,
-journalisation, copie, indexation ou transmission au modèle.
+Les valeurs secrètes ou incertaines NE DOIVENT être ni restituées,
+journalisées, copiées, indexées ni transmises au modèle.
 Aucune ligne rejetée ni sortie brute ne DOIT être restituée.
 
 Si le fichier est absent ou inaccessible, ou une variable nécessaire
-absente, vide ou ambiguë, demander uniquement la valeur manquante
-ou non vérifiable au développeur.
+absente, vide ou ambiguë, demander uniquement la valeur non secrète
+manquante ou non vérifiable au développeur.
 
-L'agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
-Les autres accès sensibles relèvent de la section « Secrets ».
+Créer, modifier ou régénérer `project.env` reste interdit.
+Les autres accès sensibles relèvent de la section 10.
 
 ### Inclusions explicites
 
@@ -352,19 +353,14 @@ une demande explicite.
 
 L'ouverture locale des fichiers sensibles est autorisée uniquement pour
 les besoins du projet et du travail autorisé. Seuls leur nom ou chemin
-PEUVENT être signalés ; aucun contenu contenant des secrets ne DOIT être
-restitué.
+PEUVENT être signalés, sauf extraction filtrée de `project.env` selon
+la section 9. Aucun contenu contenant des secrets ne DOIT être restitué.
 
 Les secrets, notamment mots de passe, clés privées ou SSH, jetons d'API,
 certificats et identifiants de connexion, NE DOIVENT PAS être transmis
 au modèle, indexés, versionnés ni affichés dans les journaux ou sorties.
 
 Tout stockage local de secrets DOIT être exclu de Git et de l'indexation.
-
-Pour `project.env`, appliquer exclusivement les règles de la section
-« Sources du projet » : extraction locale filtrée des variables utiles
-établies comme non secrètes ; aucune restitution brute ni ligne rejetée ;
-création, modification et régénération interdites.
 
 ## 11. Sécurité
 

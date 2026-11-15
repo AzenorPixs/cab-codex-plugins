@@ -484,6 +484,106 @@ Agent coder : codex, modèle N/A, raisonnement N/A.
 -->
 
 
+## Change `add-agents-sidebar-postgresql` — openspec/changes/archive/2026-11-14-add-agents-sidebar-postgresql/STATISTICS.md
+
+
+# Statistiques du change — add-agents-sidebar-postgresql
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `add-agents-sidebar-postgresql` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | 1857.933985 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 1857.933985 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 19337654 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 35276 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 15024 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 19207808 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 19372930 | Périodes CAB : bornes et empreintes de l’export. |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:7824bd557491841db9143f2d2f4e42d4a5dc0a5636cc235477b15ba5a06efe2c
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 3 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 3 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "71bffc32d30272547f98b2ec8dc7160ec659239dd970419c71de4ec1f5305e94", "generated_at": "2026-11-14T12:20:09.069175+00:00", "revision": "71bffc32d30272547f98b2ec8dc7160ec659239dd970419c71de4ec1f5305e94", "scope": "change"} -->
+
+
 ## Change `add-cab-archive-statistics` — openspec/changes/archive/2026-10-13-add-cab-archive-statistics/STATISTICS.md
 
 
@@ -39529,7 +39629,7 @@ Change : `native-api-first-mcp-reload` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d4938d4efb408
+Provenance : change-periods:e90497d4ac48ac126d393889c3da91416725ecaa735b01b8808257de50f6f869
 
 ## 2. Messages et outils
 
@@ -39559,8 +39659,8 @@ Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 62 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 75 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 75 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -39591,21 +39691,8 @@ Provenance : change-periods:1789ecd94ad69be0f37eb93c29c80152f2c74f46839bb48f2b5d
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 55887232 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 56163249 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 236981 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 168608 | bounded |
-| SCM-native-api-326 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 56400230 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "generated_at": "2026-11-14T10:41:03.372914+00:00", "revision": "810122b04b0154ffb3942f1143cf8039c566e881d964070cfd6aa5ca407ddd3d", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "902dfc0014a20b9885ceb39b67c5eb41cd9ab7ffb3340f9c200a8bb5816e1aae", "generated_at": "2026-11-14T10:56:44.435363+00:00", "revision": "902dfc0014a20b9885ceb39b67c5eb41cd9ab7ffb3340f9c200a8bb5816e1aae", "scope": "change"} -->
 
 
 ## Change `normalize-literal-request-validation-codemode` — openspec/changes/archive/2026-11-01-normalize-literal-request-validation-codemode/STATISTICS.md
@@ -66101,6 +66188,119 @@ Source 2.1.4 qualifiée et change archivé. Un schéma 2 à six lignes et un sch
 Le correctif est prêt pour la publication et l’activation autorisées, puis le CAB test réel dans un nouveau RUN et une session persistante dédiés, sans purge ni modification des RUN antérieurs. Ces phases opérationnelles restent à prouver séparément. Aucun bilan de blocage n’est nécessaire pour cette qualification source achevée.
 
 
+## Change `support-postgresql-17-18-migration` — openspec/changes/archive/2026-11-15-support-postgresql-17-18-migration/STATISTICS.md
+
+
+# Statistiques du change — support-postgresql-17-18-migration
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `support-postgresql-17-18-migration` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:3de59707b47eb2b7a0b8813e224ed97c307853873a64179e83a88cdac31078ad
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+
+Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
+
+| RUN | SID | Compteur | Incrément observé | Couverture |
+| --- | --- | --- | --- | --- |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 6405504 | bounded |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 6440269 | bounded |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 31377 | bounded |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 13023 | bounded |
+| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 6471646 | bounded |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7ff9ab100bf77ab922c94ec133d84f9f2056592d31509d15d42e0b662a39b7dc", "generated_at": "2026-11-15T08:30:23.477608+00:00", "revision": "7ff9ab100bf77ab922c94ec133d84f9f2056592d31509d15d42e0b662a39b7dc", "scope": "change"} -->
+
+
 ## Change `support-readonly-broker-reuse` — openspec/changes/archive/2026-10-25-support-readonly-broker-reuse/STATISTICS.md
 
 
@@ -69169,4 +69369,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7179ad13dcd755741c008e786eebee1c61d5dd8b002c9543d736bf5356ac06c4", "generated_at": "2026-11-14T10:41:04.228628+00:00", "revision": "7179ad13dcd755741c008e786eebee1c61d5dd8b002c9543d736bf5356ac06c4", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0afc4d0bb263dda9c2ed54445a4ab6263dd3071226b1560f95f37842974d7a12", "generated_at": "2026-11-15T08:30:24.281158+00:00", "revision": "0afc4d0bb263dda9c2ed54445a4ab6263dd3071226b1560f95f37842974d7a12", "scope": "project"} -->

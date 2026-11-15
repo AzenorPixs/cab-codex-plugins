@@ -12,6 +12,10 @@ def require(value,code):
 
 def identifier(value):return isinstance(value,str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}',value) is not None
 
+def describe():
+    """Contrat public consultable sans RUN, effet ou heuristique métier."""
+    return {'nature':sorted(NATURES),'policy_fields':['nature','checks','requirements','review_required','update_request_id','target_version'],'check_fields':['id','argv','criteria','executor','adapter_id'],'requirement_fields':['id','kind','producer','criteria','artifact_group'],'requirement_kinds':sorted(KINDS),'criteria':'exact-run-criteria-full-coverage','check_purpose':'verification','native_publication':'authorized-collector-requirement','local_execution':'isolated-no-host-privileges','preflight_correction':'before-operation-proof-source-change-review-freeze-import'}
+
 def replace_check_argv(policy: dict,check_id: str,argv: list[str]) -> dict:
     """Le cadrage reste fixe : seule la commande du contrôle est révisable."""
     result=deepcopy(policy)

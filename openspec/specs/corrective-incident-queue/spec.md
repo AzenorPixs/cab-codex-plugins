@@ -35,6 +35,10 @@ CCAB SHALL permettre le nettoyage ciblé d'une entrée après résolution et ré
 - **WHEN** un nettoyage individuel cible une entrée non résolue
 - **THEN** il est refusé sans suppression
 
+#### Scenario: Claim expiré d'une entrée résolue
+- **WHEN** le responsable renouvelle une réservation expirée avant la purge
+- **THEN** l'état RESOLVED, la résolution et les preuves sont conservés ; aucun autre claim actif ne peut être dérobé
+
 ### Requirement: Traitement et nettoyage par lot
 Le correcteur MAY traiter ensemble des entrées dont les causes ou dépendances le justifient, puis les nettoyer séparément ou ensemble. Un lot de nettoyage SHALL être atomique et refuser toute suppression si une entrée ciblée n'est pas résolue.
 

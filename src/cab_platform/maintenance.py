@@ -17,19 +17,29 @@ def installed():
         atomic_json(CONFIG,{'logging':{'level':'INFO'},'initialized':False,'version':__version__})
         return {'state':'BOOTSTRAP_ONLY'}
     if cfg.get('initialized'):
+        from .postgresql import ensure as ensure_postgresql
+        ensure_postgresql();cfg=config()
         result=subprocess.run([sys.executable,'-m','django','migrate','--noinput'],env={**os.environ,'DJANGO_SETTINGS_MODULE':'cab_platform.settings','CAB_MIGRATE':'1'},capture_output=True,text=True,timeout=120)
         if result.returncode:raise RuntimeError('package-schema-migration-failed')
         # La publication appartient à Electric, pas au rôle de migration.
         # Seul l'installateur système administre sa liste de colonnes publiques.
         from .bootstrap import _psql
-        _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection TO cab_electric;
+        _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection, agents, agent_users TO cab_electric;
         ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL;
+        ALTER TABLE agents REPLICA IDENTITY FULL;
+        ALTER TABLE agent_users REPLICA IDENTITY FULL;
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_metadata_projection') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE project_metadata_projection;
             END IF;
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='mcp_connector_projection') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE mcp_connector_projection;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agents') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE agents;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agent_users') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE agent_users;
             END IF;
         END $$;""",cfg['database'])
     cfg['version']=__version__;atomic_json(CONFIG,cfg)

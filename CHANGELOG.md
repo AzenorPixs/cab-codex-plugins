@@ -1,5 +1,18 @@
 # Historique des versions
 
+## 3.2.8 — 2026-11-15
+
+- Compatibilité officielle PostgreSQL17/18 (Trixie/Forky), dépendances Debian
+  postgresql et postgresql-common ; référence de cluster dans /etc/cab.
+- Qualification au démarrage et migration logique du seul cluster CAB à frontière
+  sûre : sauvegarde, empreintes des tables/séquences, ancien cluster conservé,
+  reçu durable et absence de rejeu après interruption ; reprise Electric.
+- Delta indépendant déjà réalisé sur l’interface depuis3.2.7 : navigation et
+  catalogue latéral Agents, comptes/configurations MCP, réconciliation des
+  sessions techniques et corbeille avec confirmation irréversible et ressources
+  partagées explicites. Reprise autonome des tests arrêtés à résultat inconnu,
+  sans changer leurs reçus ni les déclarer réussis.
+
 ## 3.2.7 — 2026-11-14
 
 - Correction du plan de finalisation Debian : le profil enrôlé codex-cli est
@@ -53,6 +66,10 @@
   conservés. Activation native du rafraîchissement Codex sans écraser un false.
 
 ## Unreleased
+
+- Finalisation : autorisation administrative locale et traçable d'un contrôle existant sur l'hôte, sans modifier l'isolation des autres contrôles.
+
+- Agents : menu latéral alimenté par un catalogue PostgreSQL, avec sélection de la fiche de chaque agent.
 
 - CABU via MCP : job système autonome, agnostique aux comptes, sans sudo client ;
   OK et version après installation, santé et finalisation vérifiées.

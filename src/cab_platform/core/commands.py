@@ -239,7 +239,8 @@ def reconcile_archive(actor,data):
     return {'state':'RECONCILED','run_id':r.run_id,'session_id':r.session_id,'generation':r.generation,**record}
 
 @transaction.atomic
-def start_operation(actor,data):
+def start_operation(actor,data,*,host_authorized=False):
+    require(host_authorized or 'host_authorization' not in data,'host-authorization-required',403)
     native=data.get('kind')=='native'
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=not native)
     if native:
@@ -390,8 +391,28 @@ def exception_decision(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
     require(actor.role in ('admin','orchestrator') and (actor.role=='admin' or actor.pk==r.mandate.get('orchestrator_id')),'exception-authority-required',403)
     require(data['decision'] in ('approved','rejected'),'decision-invalid',400)
-    require(Event.objects.filter(run=r,kind='exception-requested',data__id=data['request_id']).exists(),'exception-not-found',404)
-    event(r,'exception-decided',{'id':data['request_id'],'decision':data['decision'],'scope':data.get('scope',{})});return {'decision':data['decision']}
+    requested=Event.objects.filter(run=r,kind='exception-requested',data__id=data['request_id']).first()
+    require(requested is not None,'exception-not-found',404)
+    scope=data.get('scope',{});require(isinstance(scope,dict),'exception-scope-invalid',400)
+    prior=Event.objects.filter(run=r,kind='exception-decided',data__id=data['request_id']).first()
+    if prior:
+        require(prior.data['decision']==data['decision'] and prior.data['scope']==scope,'exception-decision-conflict')
+        return prior.data.get('receipt',{'decision':data['decision']})
+    added=[];old_paths=list(r.mandate.get('paths',[]));old_digest=r.mandate.get('framing_digest')
+    if data['decision']=='approved' and 'paths' in scope:
+        require(requested.data['category']=='outside-framing','exception-paths-category-invalid',400)
+        working(r);require(no_pending(r) and not r.review and not r.mandate.get('native_frozen_at') and not r.mandate.get('legacy_snapshot_id'),'exception-paths-protected')
+        paths=scope['paths'];require(isinstance(paths,list) and paths and len(paths)<=128,'exception-paths-invalid',400)
+        for path in paths:
+            safe_path(Path(r.project.root),path,exists=False)
+            if path not in old_paths and path not in added:added.append(path)
+        require(len(old_paths)+len(added)<=128,'mandate-paths-required',400)
+        r.mandate={**r.mandate,'paths':old_paths+added}
+        r.mandate['framing_digest']=digest({key:value for key,value in r.mandate.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
+        r.save(update_fields=['mandate','updated'])
+    receipt={'decision':data['decision'],'added_paths':added,'framing_digest':r.mandate.get('framing_digest')}
+    event(r,'exception-decided',{'id':data['request_id'],'decision':data['decision'],'scope':scope,'old_paths':old_paths,'previous_framing_digest':old_digest,'receipt':receipt})
+    return receipt
 
 @transaction.atomic
 def suspend(actor,data):

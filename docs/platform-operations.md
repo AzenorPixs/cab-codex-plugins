@@ -487,3 +487,73 @@ Le service conserve intégralement l'ancien mandat, contrat et reçu d'échec da
 l'événement. Seule la version littérale des critères change ; contrôles, critères
 métier, producteurs et revue restent identiques. La nouvelle livraison autorisée
 s'exécute ensuite normalement et doit produire ses propres preuves.
+
+## Services historiques et corbeille
+
+Le moteur réévalue les composants internes importés service-ccab/service-sgs.
+Il peut constater leur retrait actuel si le snapshot est intègre, l'ancien acteur
+inactif, les processus/unités historiques absents et cab.service READY, sans
+opération, bail ou mesure ouverts. Le reçu legacy-service-retirement garde une
+date d'observation courante, historical_end_unknown=true et l'import protégé.
+Il ne constitue ni une date de fin passée, ni une acceptation normale reconstruite.
+
+session.delete_preview retourne l'admissibilité, les motifs, les liens partagés
+et deletion_digest. session.delete exige project_id, run_id, request_id,
+expected_deletion_digest, confirm_irreversible=true et confirm_shared=true si
+l'aperçu indique des ressources partagées. La corbeille est à droite de la ligne,
+y compris dans les archives. La fenêtre demande les deux confirmations utiles.
+Une référence de coordination encore utilisée ou un état protégé bloque l'action.
+
+Seul le RUN sélectionné et ses données propres sont supprimés ; une CodingSession
+orpheline peut l'être aussi. Les changes, imports historiques partagés, autres RUN,
+ressources globales et fichiers locaux demeurent. Un événement minimal sans lien
+au RUN supprimé conserve le reçu et l'idempotence de la demande.
+
+## Retrait administratif d'une ancienne session technique
+
+Sur classification explicitement validée par le développeur, l'administrateur
+utilise session.retire_technical avec project_id, run_id, request_id stable,
+expected_import_sha256, developer_authorized=true, authorization et reason.
+Le snapshot doit être intact, l'acteur importé inactif, sans opération, bail,
+mesure ouverte ni autre session active liée. Le reçu legacy-technical-retirement
+porte le constat actuel, historical_end_unknown=true et normal_acceptance=false.
+Il conserve IMPORT_PROTECTED, SID et génération ; le RUN CLOSED11 devient
+archivable sans déclarer un change livré ou inventer une archive OpenSpec.
+Une répétition identique rend le même reçu ; une demande divergente est refusée.
+
+## Test sandbox arrêté sans résultat récupérable
+
+operation.reconcile_stopped est réservé à l'administrateur avec une décision
+explicite du développeur. Champs : project_id, run_id, operation_request_id,
+request_id stable, expected_receipt_digest, developer_authorized=true et reason.
+Le parcours est borné aux tests locaux sandbox UNKNOWN/ProcessLookupError ;
+il refuse les exécutions host_authorization et les opérations externes.
+Le service vérifie l'atelier enregistré (chemin, device/inode), ses processus
+par arguments et montage privé /cab-tmp, l'absence de spool et le fencing des
+baux de fichiers. Une observation impossible conserve les protections.
+
+L'opération devient CANCELLED au sens opérationnel, mais receipt.state reste
+UNKNOWN et receipt_digest ne change pas. operation/status expose reconciliation,
+avec classification stopped-result-unavailable et l'audit distinct. Aucun code
+de sortie, succès de test ou effet historique n'est reconstruit. Les vérifications
+sur des sources modifiées restent à produire ; aucune commande n'est rejouée.
+Les opérations WAITING poursuivent leur prévol original et sont refusées avant
+émission si leur révision source est devenue obsolète.
+
+## Politique autonome d'arrêt sans résultat
+
+Le superviseur cab.service examine ces opérations en arrière-plan, par lots
+bornés et sans tour LLM. Seuls les RUN WORKING/FINALIZATION_PENDING non suspendus,
+avec acteur actif et décisions de cadrage résolues, sont admis. Le parcours garde
+les mêmes preuves de quiescence, d'intégrité et de fencing que le constat manuel.
+L'identité enregistrée d'un exécuteur vivant protège le test même si ses arguments
+ne mentionnent plus l'atelier. Les exécutions externes ou host_authorization,
+les observations impossibles, ateliers divergents et spools restent protégés.
+
+Le reçu distinct indique automatic=true, authority=cab-policy,
+authorization_kind=service-policy et policy=sandbox-test-stopped-v1. Il ne prétend
+pas qu'une nouvelle décision du développeur a été prise pour l'opération.
+Le reçu UNKNOWN et son hash restent intacts. Aucun résultat de test n'est validé,
+aucune commande n'est rejouée ; seuls les baux de l'opération prouvée arrêtée sont
+libérés. operation/status expose autonomous_recovery avec le motif si le cas
+reste protégé. Les motifs identiques ne produisent pas un événement à chaque tour.

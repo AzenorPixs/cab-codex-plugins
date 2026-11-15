@@ -774,6 +774,14 @@ ou en piloté, sans validation intermédiaire, avec justification et empreinte a
 - **WHEN** un contrat couvre les critères avec checks ou preuves attendues
 - **THEN** CAB le conserve et pilote sa finalisation sans soumission finale du codeur
 
+#### Scenario: Validation pure du cadrage
+- **WHEN** un agent consulte cab_contract ou finalization_validate avant admission
+- **THEN** il reçoit les champs stricts, les natures et types de preuves, puis le contrat validé ou le code de refus, sans création de RUN ni effet
+
+#### Scenario: Correction du contrat au prévol
+- **WHEN** l'autorité corrige le contrat avant toute opération, preuve, modification de source, revue, gel ou import
+- **THEN** finalization.configure accepte un contrat couvrant les mêmes critères, conserve l'ancien contrat et ses empreintes dans l'événement, et ne déclenche aucun travail
+
 #### Scenario: Correction autonome d'un contrôle
 - **WHEN** le propriétaire corrige un contrôle non exécuté, échoué ou périmé sans effet indécis, bail, gel, import, revue ou clôture
 - **THEN** CAB conserve ancien contrat et reçus, incrémente la révision du contrôle et exige une preuve nouvelle sans modifier les exigences métier
@@ -1006,3 +1014,209 @@ Seule la version littérale change ; une nouvelle preuve MUST être exigée.
 #### Scenario: Effet indécis ou saut de version
 - **WHEN** le CABU précédent est UNKNOWN ou la cible dépasse le patch immédiatement suivant
 - **THEN** CAB refuse la transition et conserve toutes les protections
+
+### Requirement: Catalogue et navigation des agents
+La page /agents MUST présenter les trois fiches et une colonne latérale listant les agents déclarés dans la table PostgreSQL `agents`, dans l'ordre Codex, Codex CLI, OpenCode. Les liens /agents/codex, /agents/codex-cli et /agents/opencode MUST afficher chacun la fiche correspondante sans recharger le document. Les états de processus, versions et connexions MUST rester issus des observations courantes et les secrets MUST NOT être stockés dans ce catalogue.
+
+#### Scenario: Sélection d'un agent
+- **WHEN** un administrateur sélectionne un agent dans la colonne
+- **THEN** sa fiche, son nom comme titre principal et une barre de navigation avec un lien vers /agents sont affichés ; les autres agents restent accessibles dans le menu.
+
+#### Scenario: Organisation d'une fiche agent
+- **WHEN** une fiche agent est ouverte
+- **THEN** les informations générales, les utilisateurs liés, les configurations MCP, la configuration générale et la configuration des plugins sont présentés dans cinq blocs distincts, adaptés à la largeur disponible.
+
+### Requirement: Utilisateurs déclarés par agent
+CAB MUST permettre à un administrateur de déclarer un compte présent dans `/etc/passwd` et doté d'un répertoire personnel existant. L'association à l'agent MUST être conservée dans `agent_users` et affichée par ordre alphabétique avec le chemin de configuration lorsqu'il existe, ou « Configuration non présente » sinon. Le retrait MUST supprimer seulement l'association. Cette opération MUST NOT modifier le compte système ni configurer le MCP.
+
+#### Scenario: Compte et Home valides
+- **WHEN** un administrateur déclare un compte local dont la Home existe
+- **THEN** CAB l'associe à l'agent sans créer de doublon et affiche son identifiant et l'état de son fichier de configuration.
+
+#### Scenario: Compte ou Home absent
+- **WHEN** le compte est inexistant ou sa Home absente
+- **THEN** CAB affiche respectivement « Compte inexistant » ou « Home inexistante pour le compte <USER> », sans créer d'association.
+
+#### Scenario: Retrait d'un utilisateur
+- **WHEN** l'administrateur utilise la corbeille d'un utilisateur
+- **THEN** seule l'association affichée à cet agent est retirée de `agent_users`.
+
+### Requirement: Réconciliation MCP des utilisateurs déclarés
+La fiche d'un agent MUST afficher dans le bloc utilisateurs l'état du fichier de configuration des seuls utilisateurs associés, depuis PostgreSQL puis actualisé par Electric. Le bloc MCP MUST afficher « MCP cab — Déclaré » lorsqu'au moins une déclaration est présente. À chaque ouverture, CAB MUST réconcilier les fichiers en arrière-plan sans créer un fichier absent ni modifier les autres entrées MCP. Un conflit ou un effet incertain MUST être signalé sans écrasement ni rejeu automatique.
+
+#### Scenario: Fichier Codex présent
+- **WHEN** le fichier `.codex/config.toml` d'un utilisateur déclaré est présent et compatible
+- **THEN** CAB assure de façon idempotente l'entrée MCP `cab`, affiche le chemin et indique « Déclaré ».
+
+#### Scenario: Compte partagé entre Codex et Codex CLI
+- **WHEN** le même compte est déclaré pour Codex et Codex CLI
+- **THEN** l'entrée `cab` commune cible Codex en priorité.
+
+#### Scenario: Fichier OpenCode présent ou absent
+- **WHEN** le fichier `.config/opencode/opencode.json` d'un utilisateur déclaré existe
+- **THEN** CAB assure de façon idempotente la déclaration du connecteur OpenCode ; sinon il affiche « Configuration non présente » sans créer le fichier.
+
+#### Scenario: Aucun utilisateur déclaré
+- **WHEN** aucun compte n'est associé à l'agent
+- **THEN** le bloc Configuration MCP n'affiche aucun profil.
+
+### Requirement: Consultation locale de la configuration d'un agent
+Un administrateur MUST pouvoir ouvrir en lecture seule le fichier de configuration associé à un utilisateur déclaré. Sur demande explicite, la fenêtre MUST afficher le contenu complet directement au navigateur, sans journalisation ni mise en cache. CAB MUST contrôler l'identité du compte, le propriétaire et le type du fichier, refuser les liens symboliques et limiter la taille lue.
+
+#### Scenario: Consultation autorisée
+- **WHEN** l'administrateur sélectionne le chemin d'un fichier accessible et sûr
+- **THEN** une fenêtre affiche son contenu complet en lecture seule, sans modifier le fichier.
+
+#### Scenario: Accès non autorisé ou fichier non sûr
+- **WHEN** le demandeur n'est pas administrateur ou que le fichier ne satisfait pas les contrôles de sécurité
+- **THEN** CAB refuse la lecture et n'affiche pas le contenu.
+
+#### Scenario: Base indisponible
+- **WHEN** le catalogue ne peut pas être lu
+- **THEN** l'interface signale l'indisponibilité sans inventer de données.
+
+### Requirement: Statut courant des agents
+La table `agents` MUST conserver l'installation, l'état du processus et la version locale observés, avec une valeur inconnue avant observation. CAB MUST actualiser ces valeurs en arrière-plan et les diffuser par Electric aux administrateurs. La fiche MUST afficher le dernier état enregistré dès son chargement, puis refléter les changements sans rechargement. Le titre MUST être vert et gras si l'agent est installé ; une pastille indique l'état du processus et la version locale suit le titre.
+
+#### Scenario: Changement de processus
+- **WHEN** l'observateur constate le démarrage ou l'arrêt d'un agent installé
+- **THEN** PostgreSQL et la pastille de sa fiche sont actualisés par Electric.
+
+#### Scenario: Première observation absente
+- **WHEN** aucun état fiable n'a été observé
+- **THEN** CAB conserve un état inconnu au lieu d'inventer une installation ou un arrêt.
+
+### Requirement: Statut MCP mémorisé par agent
+La table `agents` MUST conserver l'état MCP et les versions observées des connexions actives. CAB MUST actualiser ces données à partir des connexions authentifiées, les diffuser par Electric et afficher une pastille verte si au moins une connexion est active, rouge sinon. En l'absence d'observation, l'état MUST rester inconnu ; après déconnexion les dernières versions connues restent identifiées comme historiques.
+
+#### Scenario: Connexion ou déconnexion MCP
+- **WHEN** une connexion MCP authentifiée apparaît ou disparaît
+- **THEN** l'état enregistré et la fiche correspondante sont actualisés sans rechargement ; plusieurs versions actives restent visibles.
+
+#### Scenario: Binaire absent
+- **WHEN** le binaire d'un agent est absent
+- **THEN** sa fiche affiche la ligne « Binaire » avec « Non installé » à la place du chemin.
+
+### Requirement: Vérification sur l'hôte autorisée par l'administrateur
+Un administrateur local authentifié par le pair Unix root MUST pouvoir autoriser sur l'hôte un contrôle existant d'un RUN direct. CAB MUST vérifier la politique et la révision, exécuter les arguments exacts sous l'identité du propriétaire et conserver l'autorisation et un reçu `host-authorized`. Les contrôles ordinaires MUST rester isolés et les protections et reçus antérieurs MUST être préservés.
+
+#### Scenario: Contrôle autorisé
+- **WHEN** l'administrateur local autorise un contrôle existant et que sa politique reste courante
+- **THEN** CAB l'exécute une seule fois sur l'hôte sous l'identité du propriétaire et conserve son reçu corrélé.
+
+#### Scenario: Injection ou politique modifiée
+- **WHEN** un codeur tente d'injecter l'autorisation ou que la politique a changé
+- **THEN** CAB refuse l'exécution sur l'hôte.
+
+### Requirement: Retrait observé des anciens services importés
+CAB MUST pouvoir clôturer automatiquement un service interne CCAB ou SGS importé
+lorsque son identité est prouvée par le snapshot intact, son acteur composant est
+inactif, aucun effet, bail ou mesure n'est ouvert, aucun processus/unité historique
+n'est actif et cab.service est READY. Il MUST conserver IMPORT_PROTECTED et
+émettre un reçu du constat courant sans inventer de date historique de fin.
+
+#### Scenario: Ancien composant remplacé
+- **WHEN** toutes les preuves de retrait et de remplacement sont observées
+- **THEN** CAB conserve l'import, passe le RUN en CLOSED11 et le rend archivable sans rejeu
+
+#### Scenario: Service encore actif ou observation incomplète
+- **WHEN** le composant fonctionne encore ou une preuve ne peut pas être vérifiée
+- **THEN** CAB conserve le RUN et ses protections sans le clôturer
+
+### Requirement: Suppression explicite d'une session CAB
+CAB MUST proposer une corbeille à droite de la ligne et une prévisualisation de
+suppression transactionnelle du RUN sélectionné et de ses données propres.
+La confirmation irréversible et, en cas de transversalité, la confirmation des
+liens partagés MUST être exigées. SID, change et import partagés MUST être
+conservés. La suppression MUST refuser un effet, bail, reçu ou incident non résolu.
+Les fichiers de projet MUST NOT être supprimés et un reçu minimal MUST subsister.
+
+#### Scenario: Session partagée
+- **WHEN** le RUN partage son SID, son change, son import ou ses avis avec d'autres RUN
+- **THEN** la fenêtre affiche les liens et exige une confirmation supplémentaire ; toute référence de coordination encore utilisée empêche la suppression
+
+#### Scenario: Validation fraîche et suppression
+- **WHEN** une session CLOSED prouvée est confirmée sur un aperçu courant
+- **THEN** CAB supprime ses enregistrements propres atomiquement, conserve les ressources partagées et restitue le même reçu après une répétition de la même requête
+
+### Requirement: Retrait administratif explicite d'une session technique importée
+Sur décision explicite du développeur, un administrateur MUST pouvoir retirer
+une session technique directe importée sans preuve de fin historique. CAB MUST
+vérifier le snapshot, l'acteur inactif et l'absence d'opération, bail, mesure ou
+session active liée. Le reçu MUST dater le constat actuel, conserver les limites
+et IMPORT_PROTECTED, sans acceptation métier ni rejeu, puis autoriser l'archivage.
+
+#### Scenario: Retrait technique autorisé
+- **WHEN** la décision explicite, le motif et l'empreinte d'import concordent avec une session admissible
+- **THEN** CAB enregistre le reçu et son audit, conserve SID et génération, clôture CLOSED11 et permet l'archivage sans exiger une archive métier inexistante
+
+#### Scenario: Autorisation absente ou contexte protégé
+- **WHEN** une autorisation manque ou un effet, acteur actif ou snapshot divergent empêche le retrait
+- **THEN** CAB refuse sans modifier le RUN
+
+### Requirement: Constat d'arrêt sans résultat d'un test local
+CAB MUST réconcilier de façon autonome un test local sandbox UNKNOWN/ProcessLookupError
+selon sa politique de service. Un administrateur MAY aussi demander ce constat
+explicitement. CAB MUST vérifier l'intégrité
+du reçu, le même atelier, l'absence observée de processus et de spool, et les
+baux de fichiers du projet à la bonne génération. Le reçu UNKNOWN et son empreinte
+MUST rester intacts ; un constat distinct MUST tracer l'arrêt sans résultat.
+
+#### Scenario: Arrêt constaté et résultat indisponible
+- **WHEN** les vérifications passent et le retrait du blocage est autorisé
+- **THEN** l'état opérationnel devient CANCELLED, les seuls baux concernés sont libérés et l'audit conserve le reçu original sans déclarer de tests réussis ni rejouer la commande
+
+#### Scenario: Atelier actif ou effet hors sandbox
+- **WHEN** un processus utilise encore l'atelier, une observation manque ou le test était autorisé sur l'hôte hors sandbox
+- **THEN** CAB refuse cette réconciliation bornée et conserve les protections
+
+#### Scenario: Supervision autonome sans décision par opération
+- **WHEN** un RUN actif non suspendu possède un cadrage résolu, un acteur actif et un test sandbox admissible dont l'arrêt est prouvé
+- **THEN** le superviseur applique seul le constat avec authority=cab-policy, conserve le reçu et ne demande aucune validation humaine par opération
+
+#### Scenario: Identité d'exécuteur encore vivante ou preuve incomplète
+- **WHEN** le processus enregistré reste vivant, l'atelier ne peut pas être vérifié ou le test est externe ou autorisé sur l'hôte
+- **THEN** CAB conserve UNKNOWN et ses baux ; le statut expose le motif de protection sans effet ni rejeu
+
+### Requirement: Arrêt borné de l'exécuteur et conservation de sa sortie
+L'exécuteur MUST borner la sortie capturée et l'attente. Il MUST envoyer au plus
+une tentative d'arrêt au groupe vivant, tolérer sa disparition observée, garder
+la sortie partielle et enregistrer l'identité du processus. Un arrêt non confirmé
+MUST rester UNKNOWN ; une limite atteinte MUST NOT être assimilée à une réussite.
+
+#### Scenario: Sortie dépassant la limite
+- **WHEN** la capture atteint sa limite et le groupe se termine
+- **THEN** CAB conserve la sortie bornée et le résultat natif sans renvoyer de signaux répétés à un groupe disparu
+
+### Requirement: PostgreSQL multi-majeur
+CAB MUST prendre en charge PostgreSQL 17 et 18. Son paquet MUST dépendre de
+postgresql et postgresql-common. La référence de version et de cluster MUST
+être persistée sous /etc/cab indépendamment de DIU. L'amorçage Web MUST choisir
+la version supportée fournie par Debian sans créer de base avant validation.
+
+#### Scenario: Installation Forky
+- **WHEN** le premier parcours Web est validé sur une machine fournie en PG18
+- **THEN** le cluster CAB utilise PG18 et sa référence est enregistrée
+
+### Requirement: Migration majeure protégée
+CAB MUST comparer au démarrage la référence, le serveur réel et la cible Debian.
+Un écart MUST déclencher une qualification puis migration du seul cluster cab,
+avec sauvegarde et reçu durable. CAB MUST vérifier l'intégrité avant adoption
+et conserver l'ancien cluster, les SID/RUN et reçus, sans rejouer les opérations.
+
+#### Scenario: Passage de PG17 à PG18
+- **WHEN** la cible Debian installée devient PG18 et le cluster CAB est en PG17
+- **THEN** CAB sauvegarde et migre à frontière sûre, vérifie les données et reprend Electric
+
+#### Scenario: Migration interrompue
+- **WHEN** CAB retrouve un reçu de migration non terminal après dispatch
+- **THEN** les deux clusters et les preuves restent conservés et aucun effet n'est rejoué
+
+### Requirement: Frontière et reprise PostgreSQL
+Un effet indécis ou un client actif MUST interdire la bascule PostgreSQL.
+Une migration interrompue MUST NOT être réémise automatiquement. Electric MUST
+reconstruire son flux après une migration logique sans ancienne projection.
+
+#### Scenario: Opération protégée
+- **WHEN** une opération possède un reçu UNKNOWN non réconcilié
+- **THEN** la migration est refusée et ce reçu demeure intact

@@ -1,6 +1,13 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Architecture CAB 3.2.7
+## Architecture CAB 3.2.8
+
+Une autorisation administrative locale `finalization.host_check` permet de vérifier sur l'hôte une commande déjà cadrée dans un RUN direct. L'identité du propriétaire, l'empreinte de politique, les protections et un reçu explicite sont conservés ; l'exécution ordinaire reste isolée.
+
+Le parcours de versions et migrations PostgreSQL est décrit dans
+[docs/postgresql.md](docs/postgresql.md).
+
+La table PostgreSQL `agents` conserve les identités, libellés et ordre des agents affichés. L'inventaire y associe les observations courantes sans y enregistrer les secrets des profils.
 
 Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,
 avec reçu durable et blocage des effets indécis. Codex CLI a un profil distinct ;
@@ -26,8 +33,8 @@ sans totaux partagés. Couverture incomplète : N/A, pas de rétroactivité. Par
 et limites dans docs/platform-operations.md et docs/sgs-schema.md.
 
 
-Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
-PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et
+Cible Debian amd64, PostgreSQL17/Trixie ou18/Forky, Python3.13 système (contrat Python>=3.12), Django6.1.3,
+PostgreSQL17 et18, cluster local dédié. Les dépendances exactes sont dans pyproject.toml et
 packaging/python-lock.txt ; frontend React/TanStack/TypeScript et Electric
 sont verrouillés dans frontend/package-lock.json et le manifeste de runtime.
 

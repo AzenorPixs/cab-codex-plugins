@@ -6,7 +6,9 @@ Chaque nouveau RUN reçoit un emplacement de contrat. Transmettre `finalization`
 à `run.begin` / MCP run_begin. Sans contrat complet, CAB expose le manque et ne
 transforme pas une archive en validation. `finalization.configure` autorise une
 adoption explicite unique avant opération, revue ou gel ; les imports sont exclus.
-Le contrat reste ensuite immutable. Les anciens RUN gardent leur protocole.
+Le contrat devient immutable après début effectif. Une correction de prévol,
+avant opération/preuve/modification des sources/revue/gel/import, conserve
+ancien contrat et empreinte ; nature, critères et revue réservée restent protégés. Les anciens RUN gardent leur protocole.
 
 Exemple de contrat initial direct, pour le critère exact « Tests unitaires » :
 
@@ -93,3 +95,14 @@ une écriture statistique incertaine garde ses protections, sans rejeu d'exécut
 GET /finalization (project_id/run_id) et finalization_status exposent contrat,
 preuves et manques. La page du RUN et l'icône Réévaluer consultent le même moteur.
 Les STATISTICS.md restent produits et contrôlés par CAB, jamais par le LLM.
+
+## Producteur déclaré et programme natif
+
+Le producer_id identifie un collector habilité ; il ne désigne pas un binaire ou
+un hook exécuté automatiquement par l'outil de livraison. L'interface générique
+est evidence.attest, depuis Client().command ou cab call, avec le profil du
+collector et non le mode --admin. Le programme natif enregistre une exécution
+réelle ou vérifie un état final effectivement publié, avec sa portée, son artefact
+et son reçu. Aucun passed n'est construit par le LLM à partir d'un ancien log.
+Un commit/tag poussé suivi d'un build échoué ne satisfait pas la publication
+complète attendue ; la preuve reste manquante jusqu'à constat réel du résultat.
