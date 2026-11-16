@@ -92,7 +92,9 @@ def opencode_config(original,jsonc=False):
         document=json.loads(normalized,object_pairs_hook=_unique)
         require(isinstance(document,dict),'agent-config-invalid',409)
         mcp=document.get('mcp',{});require(isinstance(mcp,dict),'agent-config-invalid',409)
-        require('cab' not in mcp,'agent-cab-conflict',409)
+        direct=mcp.get('cab')
+        if direct is not None:
+            require(isinstance(direct,dict) and direct.get('type')=='local' and direct.get('enabled') is not False and direct.get('command')==['/usr/bin/cab','mcp','--agent','opencode'],'agent-cab-conflict',409)
         servers=mcp.get('servers',{});require(isinstance(servers,dict),'agent-config-invalid',409)
         target=['/usr/bin/cab','mcp','--agent','opencode'];current=servers.get('cab')
         if current is not None:
@@ -271,6 +273,121 @@ def ensure_opencode_profile(user):
         if result.returncode!=0:raise Uncertain('agent-profile-write-uncertain')
 
 
+def merge_opencode_jsonc(json_bytes,jsonc_bytes):
+    try:
+        source=json.loads(json_bytes.decode('utf-8'),object_pairs_hook=_unique)
+        text=jsonc_bytes.decode('utf-8')
+        normalized,_=normalize_jsonc(text)
+        target=json.loads(normalized,object_pairs_hook=_unique)
+        require(isinstance(source,dict) and isinstance(target,dict),'agent-config-invalid',409)
+        def add_missing(source_obj,target_obj,path):
+            nonlocal text
+            for key,value in source_obj.items():
+                if key in target_obj:
+                    if isinstance(value,dict) and isinstance(target_obj[key],dict):
+                        add_missing(value,target_obj[key],path+[key])
+                    continue
+                normalized,trailing=normalize_jsonc(text)
+                start=normalized.index('{')
+                for part in path:
+                    span,_=_member(normalized,start,part)
+                    if span is None:raise ValueError('missing-parent')
+                    start=span[0]
+                _,end=_member(normalized,start,key)
+                i=end-1
+                while i>=0 and normalized[i].isspace():i-=1
+                comma=',' if target_obj and not any(i<position<end for position in trailing) else ''
+                newline='\r\n' if '\r\n' in text else '\n'
+                text=text[:end]+comma+newline+'  '+json.dumps(key,ensure_ascii=False)+': '+json.dumps(value,ensure_ascii=False)+newline+text[end:]
+                target_obj[key]=copy.deepcopy(value)
+        expected=copy.deepcopy(target)
+        add_missing(source,expected,[])
+        checked,_=normalize_jsonc(text)
+        require(json.loads(checked,object_pairs_hook=_unique)==expected,'agent-config-preservation-failed',409)
+        return text.encode('utf-8')
+    except Refused:raise
+    except (ValueError,UnicodeError,TypeError,KeyError,IndexError):raise Refused('agent-config-invalid',409) from None
+
+
+_COLLAPSE_SCRIPT=r'''import fcntl,hashlib,json,os,secrets,stat,sys
+p=json.load(sys.stdin);source=p['source'];target=p['target'];folder=os.path.dirname(source);tmp=None
+def read(path):
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW);info=os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_size>4194304:os.close(fd);sys.exit(2)
+    with os.fdopen(os.dup(fd),'rb') as f:data=f.read(4194305)
+    return fd,info,data
+fd,info,raw=read(source);fcntl.flock(fd,fcntl.LOCK_EX)
+try:
+    if hashlib.sha256(raw).hexdigest()!=p['source_hash']:sys.exit(2)
+    try:other,oi,old=read(target)
+    except FileNotFoundError:other=None;old=None
+    try:
+        if other is not None:fcntl.flock(other,fcntl.LOCK_EX)
+        if (hashlib.sha256(old).hexdigest() if old is not None else None)!=p['target_hash']:sys.exit(2)
+        tmp=os.path.join(folder,'.cab-opencode-'+secrets.token_hex(12));out=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(out,'wb') as f:
+            original=oi if other is not None else info
+            os.fchown(f.fileno(),-1,original.st_gid);os.fchmod(f.fileno(),stat.S_IMODE(original.st_mode))
+            if other is not None:
+                for key in os.listxattr(other):os.setxattr(f.fileno(),key,os.getxattr(other,key))
+            else:
+                for key in os.listxattr(fd):os.setxattr(f.fileno(),key,os.getxattr(fd,key))
+            f.write(bytes.fromhex(p['content']));f.flush();os.fsync(f.fileno())
+        now=os.stat(source,follow_symlinks=False)
+        if (info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns,info.st_size)!=(now.st_dev,now.st_ino,now.st_mtime_ns,now.st_ctime_ns,now.st_size):sys.exit(2)
+        if other is None:
+            try:os.link(tmp,target,follow_symlinks=False)
+            except FileExistsError:sys.exit(2)
+            os.unlink(tmp);tmp=None
+        else:
+            now=os.stat(target,follow_symlinks=False)
+            if (oi.st_dev,oi.st_ino,oi.st_mtime_ns,oi.st_ctime_ns,oi.st_size)!=(now.st_dev,now.st_ino,now.st_mtime_ns,now.st_ctime_ns,now.st_size):sys.exit(2)
+            os.replace(tmp,target);tmp=None
+        d=os.open(folder,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:
+            os.fsync(d)
+            now=os.stat(source,follow_symlinks=False)
+            if (info.st_dev,info.st_ino,info.st_mtime_ns,info.st_ctime_ns,info.st_size)!=(now.st_dev,now.st_ino,now.st_mtime_ns,now.st_ctime_ns,now.st_size):sys.exit(3)
+            os.unlink(source);os.fsync(d)
+        finally:os.close(d)
+    finally:
+        if other is not None:os.close(other)
+finally:
+    os.close(fd)
+    if tmp is not None:
+        try:os.unlink(tmp)
+        except FileNotFoundError:pass
+'''
+
+
+def collapse_opencode(source,target,user):
+    def read_safe(path):
+        try:fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+        except FileNotFoundError:return None
+        except OSError:raise Refused('agent-config-unsafe',409) from None
+        try:
+            info=os.fstat(fd);require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==user.pw_uid and info.st_size<=4194304,'agent-config-unsafe',409)
+            with os.fdopen(os.dup(fd),'rb') as f:return f.read(4194305)
+        finally:os.close(fd)
+    original=read_safe(source);require(original is not None,'agent-config-changed',409)
+    existing=read_safe(target)
+    merged=merge_opencode_jsonc(original,existing) if existing is not None else original
+    changed=opencode_config(merged,jsonc=True)
+    ensure_opencode_profile(user)
+    backups=private_dir(STATE/'integration-backups')
+    for data in (original,existing):
+        if data is None:continue
+        backup=backups/('agent-config-'+str(user.pw_uid)+'-'+secrets.token_hex(16)+'.backup')
+        fd=os.open(backup,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'wb') as f:f.write(data);f.flush();os.fsync(f.fileno())
+    options={'user':user.pw_uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)} if os.getuid()==0 else {}
+    payload=json.dumps({'source':str(source),'target':str(target),'source_hash':hashlib.sha256(original).hexdigest(),'target_hash':hashlib.sha256(existing).hexdigest() if existing is not None else None,'content':changed.hex()})
+    try:result=subprocess.run([sys.executable,'-c',_COLLAPSE_SCRIPT],input=payload,text=True,capture_output=True,timeout=30,env={'PATH':'/usr/bin:/bin'},**options)
+    except (OSError,subprocess.TimeoutExpired):raise Uncertain('agent-config-write-uncertain') from None
+    if result.returncode==2:raise Refused('agent-config-changed',409)
+    if result.returncode!=0:raise Uncertain('agent-config-write-uncertain')
+
+
 def observe_and_reconcile(row):
     account=local_account(row.username)
     require(account['uid']==row.uid and account['home']==row.home,'agent-account-identity-changed',409)
@@ -284,12 +401,18 @@ def observe_and_reconcile(row):
         candidates=(target,target.with_suffix('.jsonc'))
         for candidate in candidates:require(not candidate.is_symlink(),'agent-config-unsafe',409)
         present=[candidate for candidate in candidates if candidate.exists()]
-        require(len(present)<=1,'agent-config-ambiguous',409)
         if not present:
             guarded_create_opencode(home,user)
             ensure_opencode_profile(user)
             return {'config_present':True,'config_path':str(candidates[1]),'mcp_declared':True,'config_error':''}
-        target=present[0]
+        if candidates[0] in present:
+            parent=candidates[0].parent
+            while parent!=home:
+                require(not parent.is_symlink() and (not parent.exists() or parent.resolve()==parent and parent.is_dir()),'agent-config-unsafe',409)
+                parent=parent.parent
+            collapse_opencode(candidates[0],candidates[1],user)
+            return {'config_present':True,'config_path':str(candidates[1]),'mcp_declared':True,'config_error':''}
+        target=candidates[1]
     parent=target.parent
     while parent!=home:
         require(not parent.is_symlink() and (not parent.exists() or parent.resolve()==parent and parent.is_dir()),'agent-config-unsafe',409)

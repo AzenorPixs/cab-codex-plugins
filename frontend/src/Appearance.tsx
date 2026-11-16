@@ -1,30 +1,58 @@
-import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react'
+import {createContext,useContext,useEffect,useRef,useState,type FormEvent,type ReactNode} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
+import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
 
-type Preference={font_scale:number;theme:'light'|'dark'}
+type ProfileName='mobile'|'tablet'|'hd'|'fullhd'|'qhd'|'uhd'
+type Profile={layout:number;font:number}
+type Profiles=Record<ProfileName,Profile>
+type Preference={font_scale:number;theme:'light'|'dark';responsive:Profiles}
 type SavedPreference=Preference&{persistent:boolean}
 type AppearanceValue={preferences:Preference;pending:boolean;status:string;update:(patch:Partial<Preference>)=>void}
+const profiles:{id:ProfileName;label:string;width:number}[]=[{id:'mobile',label:'Mobile',width:390},{id:'tablet',label:'Tablette',width:768},{id:'hd',label:'HD',width:1366},{id:'fullhd',label:'Full HD',width:1920},{id:'qhd',label:'QHD',width:2560},{id:'uhd',label:'4K',width:3840}]
+function defaultProfiles():Profiles{return Object.fromEntries(profiles.map(({id})=>[id,{layout:100,font:100}])) as Profiles}
+function normalize(value:Partial<Preference>):Preference{
+  const responsive=defaultProfiles()
+  for(const {id} of profiles){const item=value.responsive?.[id];if(item&&Number.isInteger(item.layout)&&item.layout>=50&&item.layout<=150&&Number.isInteger(item.font)&&item.font>=50&&item.font<=150)responsive[id]={layout:item.layout,font:item.font}}
+  return {font_scale:typeof value.font_scale==='number'?value.font_scale:100,theme:value.theme==='dark'?'dark':'light',responsive}
+}
+function interpolate(width:number,values:Profiles,field:keyof Profile){
+  if(width<=profiles[0].width)return values[profiles[0].id][field]
+  for(let i=1;i<profiles.length;i++){const left=profiles[i-1],right=profiles[i];if(width<=right.width){const a=values[left.id][field],b=values[right.id][field];return a+(b-a)*(width-left.width)/(right.width-left.width)}}
+  return values[profiles[profiles.length-1].id][field]
+}
 const AppearanceContext=createContext<AppearanceValue|null>(null)
 function useAppearance(){const value=useContext(AppearanceContext);if(!value)throw new Error('Affichage indisponible');return value}
 export function AppearanceProvider({children}:{children:ReactNode}){
-  const client=useQueryClient();const loaded=useRef(false)
-  const [preferences,setPreferences]=useState<Preference>({font_scale:100,theme:'light'});const [notice,setNotice]=useState('')
+  const client=useQueryClient();const loaded=useRef(false);const electricLoaded=useRef(false)
+  const [preferences,setPreferences]=useState<Preference>(()=>normalize({}));const [notice,setNotice]=useState('')
   const latest=useRef(preferences)
   const query=useQuery({queryKey:['interface-preferences'],queryFn:()=>api<SavedPreference>('interface/preferences')})
-  useEffect(()=>{if(query.data&&!loaded.current){latest.current={font_scale:query.data.font_scale,theme:query.data.theme};setPreferences(latest.current);loaded.current=true}},[query.data])
-  useEffect(()=>{document.documentElement.style.setProperty('--font-scale',String(preferences.font_scale/100));document.documentElement.dataset.theme=preferences.theme},[preferences])
+  useEffect(()=>{if(query.data&&!loaded.current&&!electricLoaded.current){latest.current=normalize(query.data);setPreferences(latest.current);loaded.current=true}},[query.data])
+  useEffect(()=>{
+    if(!query.data?.persistent)return
+    const controller=new AbortController();const stream=new ShapeStream({url:new URL('/api/v1/sync/interface-preferences',location.origin).href,signal:controller.signal,onError:()=>({})});const shape=new Shape(stream)
+    const unsubscribe=shape.subscribe(({rows})=>{const row=rows.find(value=>Number(value.id)===1);if(!row)return;try{const raw=typeof row.preferences==='string'?JSON.parse(row.preferences):row.preferences;if(!raw||typeof raw!=='object')return;latest.current=normalize(raw as Partial<Preference>);electricLoaded.current=true;loaded.current=true;setPreferences(latest.current)}catch{return}})
+    return ()=>{unsubscribe();controller.abort()}
+  },[query.data?.persistent])
+  useEffect(()=>{
+    const apply=()=>{const width=window.innerWidth;const layout=interpolate(width,preferences.responsive,'layout');const font=interpolate(width,preferences.responsive,'font');document.documentElement.style.setProperty('--responsive-layout-scale',String(layout/100));document.documentElement.style.setProperty('--font-scale',String(preferences.font_scale*font/10000));document.documentElement.dataset.theme=preferences.theme}
+    apply();window.addEventListener('resize',apply);return ()=>window.removeEventListener('resize',apply)
+  },[preferences])
   const save=useMutation({mutationFn:(value:Preference)=>api<SavedPreference>('interface/preferences',value),scope:{id:'interface-preferences'},onSuccess:(value)=>{client.setQueryData(['interface-preferences'],value);setNotice('Préférences enregistrées.')},onError:()=>setNotice('Affichage appliqué ; enregistrement indisponible.')})
-  function update(patch:Partial<Preference>){
-    const value={...latest.current,...patch};latest.current=value;setPreferences(value)
-    if(query.data?.persistent)save.mutate(value)
-    else setNotice('Préférences temporaires jusqu’à l’initialisation de CAB.')
-  }
+  function update(patch:Partial<Preference>){const value={...latest.current,...patch};latest.current=value;setPreferences(value);if(query.data?.persistent)save.mutate(value);else setNotice('Préférences temporaires jusqu’à l’initialisation de CAB.')}
   const status=save.isPending?'Enregistrement des préférences…':notice
-  return <AppearanceContext.Provider value={{preferences,pending:query.isPending,status,update}}>{children}</AppearanceContext.Provider>
+  return <AppearanceContext.Provider value={{preferences,pending:query.isPending||save.isPending,status,update}}>{children}</AppearanceContext.Provider>
 }
 export function FontControls(){const {preferences,pending,status,update}=useAppearance();return <div className="interface-font-controls" aria-label="Taille des polices">
     <div className="font-controls"><button type="button" className="header-control" aria-label="Réduire la taille du texte" title="Réduire les polices" disabled={pending||preferences.font_scale<=80} onClick={()=>update({font_scale:Math.max(80,preferences.font_scale-10)})}>−</button><output aria-label="Taille du texte">{preferences.font_scale}%</output><button type="button" className="header-control" aria-label="Augmenter la taille du texte" title="Agrandir les polices" disabled={pending||preferences.font_scale>=160} onClick={()=>update({font_scale:Math.min(160,preferences.font_scale+10)})}>+</button></div><p role="status">{status}</p></div>}
+export function ResponsiveControls(){
+  const {preferences,pending,status,update}=useAppearance();const [draft,setDraft]=useState<Profiles>(preferences.responsive);const [dirty,setDirty]=useState(false)
+  useEffect(()=>{if(!dirty)setDraft(preferences.responsive)},[preferences.responsive,dirty])
+  function change(id:ProfileName,field:keyof Profile,value:string){setDirty(true);setDraft(current=>({...current,[id]:{...current[id],[field]:value===''?0:Number(value)}}))}
+  function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();if(profiles.some(({id})=>[draft[id].layout,draft[id].font].some(value=>!Number.isInteger(value)||value<50||value>150)))return;update({responsive:draft});setDirty(false)}
+  return <form className="responsive-controls" onSubmit={submit}><h2>Adaptation par résolution</h2><p>Les valeurs à 100 % conservent le rendu actuel. Entre deux résolutions, CAB adapte progressivement les valeurs.</p><div className="responsive-profile-list">{profiles.map(({id,label,width})=><fieldset className="responsive-profile" key={id}><legend>{label} · {width} px</legend><label>Interface (%)<input type="number" min="50" max="150" step="1" required value={draft[id].layout||''} onChange={event=>change(id,'layout',event.target.value)}/></label><label>Police (%)<input type="number" min="50" max="150" step="1" required value={draft[id].font||''} onChange={event=>change(id,'font',event.target.value)}/></label></fieldset>)}</div><button type="submit" disabled={pending||!dirty}>Enregistrer</button><p role="status">{status}</p></form>
+}
 export function ThemeToggle(){const {preferences,pending,status,update}=useAppearance();return <div className="appearance-controls" aria-label="Affichage">
 
     <button type="button" className="header-control theme-control" disabled={pending} aria-label={preferences.theme==='light'?'Activer le mode sombre':'Activer le mode clair'} title={preferences.theme==='light'?'Mode sombre':'Mode clair'} onClick={()=>update({theme:preferences.theme==='light'?'dark':'light'})}>

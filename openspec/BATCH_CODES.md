@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Profils responsives partagés — 16 novembre 2026
+
+`configure-responsive-profiles`, code non attribué : change archivé ; attribution ultérieure par ACL.
+
 ## Adaptation responsive — 16 novembre 2026
 
 | Code | Change | État | Preuve |

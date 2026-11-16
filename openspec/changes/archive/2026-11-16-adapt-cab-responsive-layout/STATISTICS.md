@@ -29,7 +29,7 @@ Change : `adapt-cab-responsive-layout` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:7161f3ca326f04a63ff691ef3cfe89a1c86c7bdbf9db6c2d64f08b154864873e
+Provenance : change-periods:5de778b79b3405c96d3496014ad37246b8e9d845cacfe6eed9d798f24d3ebde5
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:7161f3ca326f04a63ff691ef3cfe89a1c86c7bdbf9db6c2d64f0
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 1936384 | bounded |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 1939103 | bounded |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 2199 | bounded |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 262 | bounded |
-| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 1941302 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "generated_at": "2026-11-16T09:07:17.301596+00:00", "revision": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "029e921571c96590f98b32690de1539d34d82db3da2cd340d99115fc1f7414e7", "generated_at": "2026-11-16T09:08:08.364637+00:00", "revision": "029e921571c96590f98b32690de1539d34d82db3da2cd340d99115fc1f7414e7", "scope": "change"} -->

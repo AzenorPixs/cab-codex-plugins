@@ -20,7 +20,7 @@ from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
-from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate,McpConnector
+from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate,McpConnector,InterfacePreferencesProjection
 
 class LocalBearer(HttpBearer):
     def authenticate(self,request,token):return principal(request)
@@ -44,9 +44,20 @@ class Bootstrap(Schema):
 class Login(Schema):
     username:str
     password:str
+class ResponsiveProfile(Schema):
+    layout:int=Field(default=100,ge=50,le=150)
+    font:int=Field(default=100,ge=50,le=150)
+class ResponsiveProfiles(Schema):
+    mobile:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
+    tablet:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
+    hd:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
+    fullhd:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
+    qhd:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
+    uhd:ResponsiveProfile=Field(default_factory=ResponsiveProfile)
 class InterfacePreferences(Schema):
     font_scale:int=Field(ge=80,le=160)
     theme:Literal['light','dark']
+    responsive:ResponsiveProfiles|None=None
 class ServiceConfiguration(Schema):
     revision:str
     configuration:dict[str,Any]
@@ -117,6 +128,7 @@ def interface_preferences(request):
     if initialized:
         record=Configuration.objects.filter(pk='interface').first()
         if record:value=InterfacePreferences.model_validate(record.value).model_dump()
+    if value.get('responsive') is None:value['responsive']=ResponsiveProfiles().model_dump()
     return {**value,'persistent':initialized,'csrf_token':get_token(request)}
 
 @api.post('/interface/preferences',auth=None)
@@ -124,8 +136,14 @@ def save_interface_preferences(request,body:InterfacePreferences):
     csrf_check(request)
     from cab_platform.paths import runtime_config
     commands.require(runtime_config().get('initialized'),'initialization-required',503)
-    Configuration.objects.update_or_create(pk='interface',defaults={'value':body.model_dump()})
-    return {**body.model_dump(),'persistent':True}
+    with transaction.atomic():
+        record=Configuration.objects.select_for_update().filter(pk='interface').first()
+        value=body.model_dump()
+        if value['responsive'] is None:
+            value['responsive']=(record.value.get('responsive') if record else None) or ResponsiveProfiles().model_dump()
+        Configuration.objects.update_or_create(pk='interface',defaults={'value':value})
+        InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
+    return {**value,'persistent':True}
 
 @api.get('/administration/agents')
 def administration_agents(request):

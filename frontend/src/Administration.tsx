@@ -6,7 +6,7 @@ import {Shape,ShapeStream} from '@electric-sql/client'
 import {Link,useRouterState} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
-import {FontControls} from './Appearance'
+import {FontControls,ResponsiveControls} from './Appearance'
 
 type Section='agents'|'database'|'interface'|'projects'|'web-server'
 const pages=[['database','Base de données'],['interface','Interface'],['update','Mise à jour'],['projects','Projets'],['web-server','Serveur Web']] as const
@@ -37,7 +37,7 @@ export function ConfigurationAccess({login,section,selectedAgent}:{login:ReactNo
   return <section className="administration"><p className="eyebrow">ADMINISTRATION</p><h1>{pages.find(([id])=>id===section)?.[1]}</h1>
     {notice&&<p role="status">{notice}</p>}
     {initial.restart_required&&<p role="status" className="pending-configuration">Redémarrage nécessaire pour appliquer : {initial.pending_fields.join(', ')}. La configuration active est conservée jusque-là.</p>}
-    {section==='interface'?<><h2>Taille des polices</h2><p>Ces réglages s’appliquent à toute l’interface et sont enregistrés en base de données. Le bouton clair/sombre reste dans le bandeau.</p><FontControls/></>:<SettingsForm key={section+initial.revision} initial={initial} fields={fields[section]} onSaved={()=>setNotice('Configuration enregistrée.')}/>}
+    {section==='interface'?<><h2>Taille des polices</h2><p>Ces réglages s’appliquent à toute l’interface et sont enregistrés en base de données. Le bouton clair/sombre reste dans le bandeau.</p><FontControls/><ResponsiveControls/></>:<SettingsForm key={section+initial.revision} initial={initial} fields={fields[section]} onSaved={()=>setNotice('Configuration enregistrée.')}/>}
   </section>
 }
 function SettingsForm({initial,fields:items,onSaved}:{initial:Configuration;fields:Field[];onSaved:()=>void}){
@@ -71,7 +71,7 @@ function Agents({selectedAgent}:{selectedAgent?:string}){
       {selectedAgent&&<h2 className="agent-block-heading">Informations</h2>}
       {!selectedAgent&&<div className="agent-title"><h2 className={installed?'agent-installed':'agent-missing'}>{agent.label}</h2>{installed&&<><span className={'status-dot '+(runtime.running?'status-up':'status-down')} role="img" aria-label={runtime.running?'Agent démarré':'Agent non démarré'} title={runtime.running?'Processus de l’agent détecté':'Aucun processus de l’agent détecté'}/><span className="installed-version" aria-label="Version installée">{agent.version||'Version inconnue'}</span>{release.version&&release.version!==agent.version&&<a className="available-version" href={release.url} target="_blank" rel="noreferrer" title="Dernière version disponible observée">{release.provider_label||(agent.agent==='codex_desktop'?'APT ChatGPT':'GitHub')} : {release.version}</a>}</>}<span className="agent-title-separator" aria-hidden="true">|</span><McpVersions agent={agent.connector_agent}/></div>}
       <div className={selectedAgent?'agent-card-content':undefined}>{selectedAgent&&(agent.state==='loading'?<p role="status">Chargement des informations détaillées…</p>:<><div className="agent-info binary-info"><span>Binaire</span><code>{installed?agent.path:'Non installé'}</code></div>
-      <div className="agent-info connector-info"><span>Connecteur MCP</span><code>{agent.connector_path} mcp --agent {agent.connector_agent}</code></div></>)}
+      <div className="agent-info connector-info"><span>MCP</span><code>{agent.connector_path} mcp --agent {agent.connector_agent}</code></div></>)}
       {release.status==='unavailable'&&<p className="release-note">Vérification des versions indisponible ; dernière valeur connue conservée.</p>}
       {!release.version&&<p className="release-note">Vérification quotidienne des versions planifiée.</p>}
       </div>
