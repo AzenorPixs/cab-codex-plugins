@@ -1418,3 +1418,7 @@ le prochain est tiré au sort dans les24h après expiration. Une version plus
 récente confirmée affiche l’étiquette Mise à jour près de la version locale.
 La page /administration/update montre les deux versions, force un contrôle
 asynchrone à chaque ouverture et propose le bouton manuel permanent.
+
+## Surveillance Git récursive
+
+La plateforme surveille les dossiers des projets enregistrés, y compris après déplacement, et regroupe en mémoire les changements avant la réconciliation de leur état Git. Les trois délais sont administrables en base ; une seule analyse est active pour l’ensemble des projets.

@@ -2345,3 +2345,7 @@ sur le rendu ou les boucles métier. APT et la finalisation conservent leurs
 gardes. UNKNOWN conserve sa case active ; le client reconnecte le même reçu.
 Les contrôles administratifs forcés restent authentifiés et distincts du cache
 24h automatique. Aucune variable de configuration ni dépendance nouvelle.
+
+## Surveillance Git récursive
+
+Un surveillant inotify par projet suit récursivement ses répertoires sans suivre les liens symboliques. Les modifications sont regroupées en mémoire par projet ; l’inventaire réaffecte les surveillances après déplacement et une perte d’événements déclenche une reconstruction. Les délais PostgreSQL sont appliqués à chaud. Les analyses automatiques et explicites partagent une exclusion PostgreSQL globale et l’intervalle minimal ; leur projection existante est transmise via Electric.

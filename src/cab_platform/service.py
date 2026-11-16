@@ -144,6 +144,8 @@ def run(port=8790):
     update_future=None;availability_future=None;native_future=None;next_native=0
     agents_future=None;next_agents=0
     agent_config_future=None;next_agent_config=0
+    forge_version_future=None;next_forge_version=0
+    git_monitor_thread=None;next_git_monitor=0
     cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0
     from .core.models import Operation,Maintenance
     from .core import commands
@@ -156,6 +158,7 @@ def run(port=8790):
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
     agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
     agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
+    forge_version_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-forge-version')
     try:
         while not stop.wait(0.2):
             if native_future is not None and native_future.done():
@@ -173,6 +176,10 @@ def run(port=8790):
                 finally:reload_requested.clear()
             if not api.is_alive():raise RuntimeError('cab-api-process-exited')
             if not config().get('initialized'):continue
+            if (git_monitor_thread is None or not git_monitor_thread.is_alive()) and time.monotonic()>=next_git_monitor:
+                from .git_monitor import run as run_git_monitor
+                git_monitor_thread=threading.Thread(target=run_git_monitor,args=(stop,),name='cab-git-watch',daemon=True)
+                git_monitor_thread.start();next_git_monitor=time.monotonic()+10
             if agents_future is not None and agents_future.done():
                 try:agents_future.result()
                 except Exception as error:log.warning('agent observation unavailable',extra={'code':type(error).__name__})
@@ -190,6 +197,13 @@ def run(port=8790):
                             if sync():cab_version_signature=signature;next_cab_version_refresh=time.monotonic()+60
                     except (OSError,ValueError,RuntimeError) as error:
                         log.warning('CAB version observation unavailable',extra={'code':type(error).__name__})
+                if forge_version_future is not None and forge_version_future.done():
+                    try:forge_version_future.result()
+                    except Exception as error:log.warning('forge version observation unavailable',extra={'code':type(error).__name__})
+                    forge_version_future=None
+                if forge_version_future is None and time.monotonic()>=next_forge_version:
+                    from .forge_version import sweep
+                    forge_version_future=forge_version_pool.submit(sweep);next_forge_version=time.monotonic()+60
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1
@@ -270,6 +284,9 @@ def run(port=8790):
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
     finally:
+        stop.set()
+        if git_monitor_thread is not None:git_monitor_thread.join(timeout=30)
+        forge_version_pool.shutdown(wait=True,cancel_futures=True)
         agent_config_pool.shutdown(wait=True,cancel_futures=True)
         agents_pool.shutdown(wait=True,cancel_futures=True)
         native_pool.shutdown(wait=True,cancel_futures=True)

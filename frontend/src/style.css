@@ -47,26 +47,29 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 
 .agent-detail-blocks>.agent-card{height:300px;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}.agent-card-content{flex:1;min-height:0;overflow-y:auto}.agent-card-content>.mcp-profile:first-child{border-top:0}
 
-.agent-config-link{display:inline-block;padding:0;border:0;background:transparent;color:var(--accent-text);font:inherit;font-family:ui-monospace,monospace;text-decoration:underline;text-align:left;overflow-wrap:anywhere}.agent-config-dialog{width:min(72rem,90vw)}.agent-config-content{max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:var(--surface-alt);border:1px solid var(--border);border-radius:5px}
+.agent-config-link{display:inline-block;padding:0;border:0;background:transparent;color:var(--accent-text);font:inherit;font-family:ui-monospace,monospace;text-decoration:underline;text-align:left;overflow-wrap:anywhere}.agent-config-dialog{width:min(72rem,90vw)}.agent-config-content.git-commit-content{white-space:pre;overflow:auto}.git-overview-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0}.git-overview-controls input{margin:0;width:min(100%,340px)}.agent-config-content{max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:var(--surface-alt);border:1px solid var(--border);border-radius:5px}
 
 .agent-user-config-error{font-size:calc(15px * var(--font-scale));color:var(--muted)}
 
 
-.agents-overview .agents-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,clamp(280px,12vw,450px)),1fr))}
+.agents-overview .agents-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,max(400px,calc((100% - 72px)/4))),1fr))}
+.agents-overview .agent-title h2{font-size:calc(19px * var(--font-scale))}.agents-overview .installed-version{font-size:calc(12px * var(--font-scale))}.agents-overview .agent-title-separator{font-size:calc(16px * var(--font-scale))}.agents-overview .mcp-live-badge{font-size:.66rem}@media(min-width:1400px){.agents-overview .agents-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
-.forge-card h2{display:flex;align-items:center;gap:10px}.forge-logo{width:1.15em;height:1.15em;flex:none;fill:currentColor}.forge-logo-forgejo{color:#f05a28}.forge-logo-gitlab{color:#fc6d26}
+.forge-card h2{display:flex;align-items:center;gap:10px}.forge-logo{width:1.15em;height:1.15em;flex:none;fill:currentColor}.forge-logo-forgejo{color:#f05a28}.project-git-logo{color:#f05032}.forge-edit.git-refresh{color:#52b5ee}@keyframes git-refresh-spin{to{transform:rotate(360deg)}}.git-refresh.is-loading svg{animation:git-refresh-spin .85s linear infinite}@media(prefers-reduced-motion:reduce){.git-refresh.is-loading svg{animation:none}}.project-git-version{align-self:flex-end;transform:translateY(-2px);font-size:.65em;font-weight:600;color:var(--muted)}.forge-logo-gitlab{color:#fc6d26}
 
 .forge-card dl>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;align-items:start}.forge-card dd{min-width:0;margin:0}
 
-.forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
+.forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}
+.forge-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
+.forge-card dt,.forge-card dd{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
 
 .forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading h2{margin-bottom:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
 
 .forge-token-field{display:flex;align-items:center;gap:6px}.forge-editor .forge-token-field input{flex:1;min-width:0}.forge-token-eye{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:4px}.forge-token-eye svg{width:21px;height:21px}
 
-.forge-heading-main{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}.forge-auth{white-space:nowrap;font-size:calc(21px * var(--font-scale));color:var(--text)}.forge-auth [role=img]{font-size:1.45em;font-weight:700}.forge-auth-unknown{color:var(--muted)}
+.forge-heading-main{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}.forge-auth{white-space:nowrap;font-size:calc(21px * var(--font-scale));color:var(--text)}.forge-auth [role=img]{font-size:1.45em;font-weight:700}.forge-auth-unknown{color:var(--muted)}.forge-card-forgejo .forge-auth,.forge-card-github .forge-auth{font-size:calc(19px * var(--font-scale))}.forge-card-forgejo .forge-auth [role=img],.forge-card-github .forge-auth [role=img]{font-size:1.25em}
 
-.project-forges{grid-template-columns:repeat(auto-fit,min(450px,100%))}
+.project-forges{grid-template-columns:repeat(auto-fit,minmax(min(100%,max(400px,calc((100% - 72px)/4))),1fr))}@media(min-width:1400px){.project-forges{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
 .forge-card{display:flex;flex-direction:column;overflow:hidden}.forge-heading{flex:none;padding-bottom:20px;border-bottom:1px solid var(--border)}.forge-card-content{min-height:0;overflow-y:auto}
 
@@ -77,7 +80,7 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 .project-configuration-logo{color:#5db4eb;fill:none}
 @media(max-width:600px){header{position:relative}}
 
-.project-metadata-icons{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.project-metadata-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}.project-metadata-icon svg,.project-metadata-icon img{width:24px;height:24px}
+.project-metadata-icons{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.project-metadata-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}.project-metadata-icon svg,.project-metadata-icon img{width:24px;height:24px}.project-configuration-card .project-metadata-icon{width:20px;height:20px}.project-configuration-card .project-metadata-icon svg,.project-configuration-card .project-metadata-icon img{width:16px;height:16px}
 
 .directory-input{display:flex;align-items:center;gap:8px;min-width:0}.directory-input input{flex:1;min-width:0}.directory-browse{flex:none}.directory-current{overflow-wrap:anywhere}.directory-list{display:flex;flex-direction:column;max-height:40vh;overflow-y:auto;gap:4px}.directory-list button{text-align:left;background:transparent;color:var(--text);padding:8px}.project-path-field{margin:1rem 0}.project-path-field label{margin:0}
 

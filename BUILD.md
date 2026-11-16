@@ -2,6 +2,8 @@
 
 ## Livraison CAB — Debian et clients légers
 
+Le paquet Debian dépend de `inotify-tools`, qui fournit les outils de surveillance inotify. CAB utilise également l’API inotify du noyau directement.
+
 La gestion des tokens de forge dépend du paquet Debian `systemd` (au moins 250), qui fournit `systemd-creds`. Les tokens sont conservés chiffrés dans PostgreSQL à l’aide du TPM local `/dev/tpmrm0` ; les fichiers `config/<forge>.token` restent les sources locales en clair demandées par l’administrateur. Sans TPM accessible, CAB refuse le chiffrement et ne bascule pas sur une clé logicielle.
 
 La migration additive 0025 crée la projection Electric de la version CAB. L'entrée `cab` de la table `configuration` est synchronisée depuis le fichier système ; une sauvegarde est requise avant migration.
@@ -36,7 +38,7 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.14` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.15` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
 prépaquet ne constitue pas la release cible.
@@ -1550,3 +1552,5 @@ cache de disponibilité. L’unité cab-update.service est livrée sans dépenda
 à cab.service, pour survivre à son redémarrage. L’activation initiale depuis
 un ancien paquet sans outil MCP passe une fois par l’update administratif existant.
 Les versions3.2.0 partiellement configurées ne sont pas des succès CABU.
+
+La surveillance Git utilise inotify et le paquet `inotify-tools` déclaré au manifeste. Les délais sont initialisés dans PostgreSQL et modifiables à chaud dans Administration / Git.

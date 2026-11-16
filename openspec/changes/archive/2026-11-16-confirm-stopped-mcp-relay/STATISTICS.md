@@ -29,7 +29,7 @@ Change : `confirm-stopped-mcp-relay` · état local : `archived`. Les valeurs ab
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:64bc61496bffe93130ad961ca19d441a0feec22414136b4c775fa7e702777d99
+Provenance : change-periods:d48b399faa7e2496a347d4d5d01ee33e2bc3e7bc1616337f3ca3a921ee9c5174
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:64bc61496bffe93130ad961ca19d441a0feec22414136b4c775f
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 12804736 | bounded |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 12809119 | bounded |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 6876 | bounded |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 1659 | bounded |
-| SCM-MCP-DISCONNECT-3214 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 12815995 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "13ab7bccb49f2aa144f495d8ee3d8104bb688be7d8bb36f3d1e71ce5a0043c91", "generated_at": "2026-11-16T11:56:12.407543+00:00", "revision": "13ab7bccb49f2aa144f495d8ee3d8104bb688be7d8bb36f3d1e71ce5a0043c91", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "19f070697ee6a626066b68457d82c93754827c9d1453dec372999ce0399dae03", "generated_at": "2026-11-16T11:57:08.955525+00:00", "revision": "19f070697ee6a626066b68457d82c93754827c9d1453dec372999ce0399dae03", "scope": "change"} -->

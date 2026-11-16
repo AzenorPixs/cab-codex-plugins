@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY')
-KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 
 def public_value(key,value):
@@ -23,6 +23,7 @@ def public_value(key,value):
         return valid(value)
     if key in ('PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE'):return value.lower() in ('yes','no','true','false','1','0')
     if key=='PROJECT_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&:/@-]+',value))
+    if key=='GIT_USER_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&/@-]+',value))
     if key=='PROJECT_TYPE':return bool(re.fullmatch(r'[\w .,+#()/-]+',value))
     if key=='PROJECT_VERSION':return bool(re.fullmatch(r'[\w.+-]+',value))
     return bool(re.fullmatch(r'[\w./@+-]+',value))
@@ -65,7 +66,20 @@ def synchronize(project_id):
         from .core.commands import Refused
         try:tokens_changed=synchronize_tokens(project);tokens_valid=True
         except Refused:tokens_changed=False;tokens_valid=False
+        from .project_git import probe
+        observed_git=probe(project)
+        configuration=dict(project.configuration or {})
+        if observed_git is not None:
+            if configuration.get('git_initialized') != observed_git:
+                configuration['git_initialized']=observed_git
+                project.configuration=configuration;project.save(update_fields=['configuration'])
+            snapshot['git_initialized']=observed_git
+        elif configuration.get('git_initialized') in (0,1):
+            snapshot['git_initialized']=configuration['git_initialized']
         previous=project.public_metadata or {}
+        if 'git_status' in previous:snapshot['git_status']=previous['git_status']
+        from .forge_version import cached
+        snapshot['forge_versions']=cached(snapshot.get('values',{}))
         from .forge_auth import inputs
         auth=(project.configuration or {}).get('forge_auth',{})
         credentials={forge:inputs(project,snapshot.get('values',{}),forge) for forge in FORGES}
@@ -74,7 +88,7 @@ def synchronize(project_id):
         if changed_forges:
             from .forge_auth import enqueue
             transaction.on_commit(lambda:enqueue(project_id,changed_forges,changed=True))
-        if tokens_changed or any(previous.get(key)!=value for key,value in snapshot.items()):
+        if tokens_changed or 'git_version' in previous or any(previous.get(key)!=value for key,value in snapshot.items()):
             snapshot['revision']=int(previous.get('revision',0))+1
             project.public_metadata=snapshot;project.save(update_fields=['public_metadata'])
         projection,created=ProjectMetadataProjection.objects.get_or_create(pk=project.pk,defaults={'public_metadata':project.public_metadata})

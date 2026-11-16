@@ -179,10 +179,11 @@ Les deux agents DOIVENT connaître les obligations applicables avant exécution.
 Ces références complètent les règles du projet sans étendre les autorisations
 du développeur.
 
-Avant toute intervention sur l'intégration d'un agent, l'agent DOIT consulter
-les [règles d'intégration](AGENT_INTEGRATIONS.md). Toute modification
-de sa configuration ou modification manuelle de ses fichiers générés
-nécessite une validation explicite.
+Toute modification de la configuration d’un agent ou modification manuelle
+de ses fichiers générés nécessite une validation explicite. Pour OpenCode,
+`.opencode/commands/` et `.opencode/skills/` sont générés ; leur modification
+manuelle, leur suppression ou leur régénération nécessite une validation
+explicite, comme toute modification de `.opencode/config/opencode.json`.
 
 Après chaque archivage OpenSpec autorisé et réussi, produire
 `openspec/changes/archive/<archive>/STATISTICS.md`.
@@ -213,8 +214,8 @@ explicite les éléments protégés suivants :
 * `project.env` à la racine ;
 * `openspec/config.yaml`, `openspec/changes/`, `openspec/specs/`.
 
-Les protections propres aux intégrations d'agents sont définies dans
-leurs règles d'intégration, à consulter conformément à la section 7.
+Les protections des fichiers des intégrations d’agents sont définies dans
+la section 7 et restent applicables aux éléments générés.
 
 L'agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
 Seule l'extraction locale filtrée prévue en section « Sources du projet »
@@ -282,8 +283,12 @@ tmp/
 venv/
 ```
 
-Les exclusions et inclusions propres aux intégrations d'agents DOIVENT
-être définies dans leurs règles d'intégration, consultées avant tout accès.
+Les exclusions ci-dessus s’appliquent aussi aux données locales des agents.
+Pour OpenCode, `.opencode/.gitignore`, `.opencode/cache/`,
+`.opencode/config/`, `.opencode/share/` et `.opencode/state/` sont exclus.
+Les seules inclusions nécessaires sont `.opencode/commands/`,
+`.opencode/config/opencode.json` et `.opencode/skills/` ; elles ne confèrent
+aucune autorisation de modification ni de divulgation de secrets.
 
 ### Extraction filtrée de `project.env`
 

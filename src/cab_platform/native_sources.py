@@ -83,6 +83,32 @@ def directory(path: Path) -> int:
         raise
 
 
+def same_git_worktree(uid: int, project_root: str, session_root: object) -> bool:
+    """Accepte seulement un worktree enregistré du dépôt canonique du projet."""
+    if not isinstance(session_root, str):return False
+    try:
+        project=Path(project_root);session=Path(session_root)
+        if not project.is_absolute() or not session.is_absolute() or project.resolve()!=project or session.resolve()!=session:return False
+        user=pwd.getpwuid(uid)
+        if os.geteuid() not in (0,uid):return False
+        options={'user':uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)} if os.geteuid()==0 else {}
+        env={'HOME':user.pw_dir,'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null','GIT_OPTIONAL_LOCKS':'0'}
+        def git(root, *args):
+            result=subprocess.run(['/usr/bin/git','-c','safe.directory='+str(root),'-C',str(root),*args],cwd='/',env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=5,**options)
+            if result.returncode or len(result.stdout)>1048576:return None
+            return result.stdout
+        roots=git(project,'rev-parse','--path-format=absolute','--git-common-dir','--show-toplevel')
+        other=git(session,'rev-parse','--path-format=absolute','--git-common-dir','--show-toplevel')
+        listed=git(project,'worktree','list','--porcelain','-z')
+        if roots is None or other is None or listed is None:return False
+        roots=roots.decode('utf-8').splitlines();other=other.decode('utf-8').splitlines()
+        if len(roots)!=2 or len(other)!=2 or roots[1]!=str(project) or other[1]!=str(session):return False
+        if Path(roots[0]).resolve()!=Path(other[0]).resolve():return False
+        entries=[item[9:].decode('utf-8') for item in listed.split(b'\0') if item.startswith(b'worktree ')]
+        return str(project) in entries and str(session) in entries
+    except (OSError,KeyError,UnicodeError,ValueError,subprocess.TimeoutExpired):return False
+
+
 def inspect(uid: int, session_id: str, project_root: str, source_file: str) -> dict:
     path=Path(source_file)
     if not path.is_absolute() or '..' in path.parts:
@@ -98,7 +124,10 @@ def inspect(uid: int, session_id: str, project_root: str, source_file: str) -> d
             first=stream.readline(65537)
         if len(first)>65536:raise NativeSourceError('native-source-header-invalid')
         identity=json.loads(first)
-        if not isinstance(identity,dict) or identity.get('type')!='session_meta' or not isinstance(identity.get('payload'),dict) or identity['payload'].get('id')!=session_id or identity['payload'].get('cwd')!=project_root:
+        if not isinstance(identity,dict) or identity.get('type')!='session_meta' or not isinstance(identity.get('payload'),dict) or identity['payload'].get('id')!=session_id:
+            raise NativeSourceError('native-source-identity-divergent')
+        source_root=identity['payload'].get('cwd')
+        if source_root!=project_root and not same_git_worktree(uid,project_root,source_root):
             raise NativeSourceError('native-source-identity-divergent')
         return {'source_file':str(path),'device':info.st_dev,'inode':info.st_ino,'uid':info.st_uid}
     except FileNotFoundError:
