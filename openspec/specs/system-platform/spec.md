@@ -1129,7 +1129,7 @@ La fiche MUST afficher les configurations des utilisateurs associés depuis Post
 
 #### Scenario: Fichier OpenCode présent ou absent
 - **WHEN** un utilisateur déclaré dispose de `.config/opencode/opencode.json` ou `.config/opencode/opencode.jsonc`
-- **THEN** CAB conserve son contenu et assure de façon idempotente la déclaration `mcp.servers.cab` compatible OpenCode V2 ; si les deux fichiers existent, CAB signale le conflit sans modification.
+- **THEN** CAB réconcilie leur contenu dans `opencode.jsonc`, conserve les valeurs non conflictuelles, privilégie celles du JSONC en cas de conflit, sauvegarde les fichiers initiaux puis retire le JSON après écriture vérifiée ; il assure la déclaration `mcp.servers.cab` compatible OpenCode V2.
 - **WHEN** aucun de ces fichiers n'existe
 - **THEN** CAB crée `.config/opencode/opencode.jsonc` dans la Home du compte avec le schéma OpenCode, les valeurs par défaut natives et la déclaration MCP CAB V2, puis affiche le chemin et l'état depuis PostgreSQL via Electric.
 - **AND** les commentaires et les virgules finales d'un fichier JSONC existant sont conservés.
@@ -1318,6 +1318,14 @@ L’interface CAB MUST adapter ses pages, sa navigation et ses fenêtres à la l
 - **WHEN** une page CAB est affichée en 3840 × 2160
 - **THEN** elle conserve ses dispositions de référence et ses commandes.
 
+#### Scenario: Détail d’un agent en 4K
+- **WHEN** une page de détail d’agent est affichée en 3840 × 2160
+- **THEN** ses blocs occupent toute la largeur disponible, avec au maximum quatre blocs de même largeur par ligne.
+
+#### Scenario: Détail d’un agent en Full HD
+- **WHEN** une page de détail d’agent est affichée avec une largeur disponible de 1920 pixels
+- **THEN** quatre blocs restent sur la première ligne et la typographie varie progressivement avec la largeur jusqu’au référentiel 4K.
+
 #### Scenario: Téléphone ou tablette
 - **WHEN** la largeur disponible ne permet plus la présentation de référence
 - **THEN** la navigation, les blocs et les fenêtres s’adaptent sans débordement horizontal de la page et les textes longs restent lisibles.
@@ -1329,3 +1337,14 @@ L’interface CAB MUST adapter ses pages, sa navigation et ses fenêtres à la l
 #### Scenario: Contenu et opérations préservés
 - **WHEN** la présentation change selon la taille de l’écran
 - **THEN** CAB conserve les mêmes données, les mises à jour en direct et les mêmes actions métier.
+
+### Requirement: Réglages responsives partagés
+CAB MUST fournir six profils de référence : mobile 390 px, tablette 768 px, HD 1366 px, Full HD 1920 px, QHD 2560 px et 4K 3840 px. Chaque profil MUST comporter deux multiplicateurs réglables de 50 à 150 %, l’un pour la taille générale de l’interface et l’autre pour les polices ; tous valent 100 % par défaut et conservent les comportements responsives existants. Entre deux références, les multiplicateurs MUST être interpolés linéairement et rester constants hors de la plage.
+
+#### Scenario: Modification partagée entre pages
+- **WHEN** un administrateur enregistre les pourcentages d’un profil
+- **THEN** CAB les conserve en PostgreSQL et diffuse une projection limitée aux préférences d’interface via Electric ; les pages ouvertes les appliquent sans rechargement.
+
+#### Scenario: Ancien client
+- **WHEN** un client ancien enregistre le thème ou la police globale sans profils responsives
+- **THEN** les profils préexistants sont conservés.
