@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Confirmation administrative et auditée d’une liaison MCP arrêtée, sans fausse reconnexion, pour débloquer le reçu CABU concerné.
+
 - Arrêt des rechargements MCP répétés pendant l’attente de lecture du catalogue client.
 
 - Réglages responsives propres à chaque page, avec multiplicateurs globaux et mode développeur dans le bandeau.

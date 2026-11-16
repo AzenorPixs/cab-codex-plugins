@@ -77,13 +77,44 @@ def refresh_connectors(request_id):
         if job.state not in ('OK','RECONNECTING','RELOAD_REQUIRED') or job.result.get('verified') is not True:return data(job)
         reload=ConnectorReload.objects.select_for_update().get(update=job)
         if job.state=='OK' and reload.state=='OK':return data(job)
-        state,outcomes=assess(reload.targets,job.result['version'])
+        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]))
         result={**job.result,'connector_targets':reload.targets,'package_state':'OK','connectors':outcomes}
         reload.version=job.result['version'];reload.state=state;reload.observations=outcomes;reload.save()
         if state!=job.state or result!=job.result:
             job.state=state;job.result=result;job.active_slot=None if state=='OK' else 1
             atomic_json(receipt_path(job),data(job));job.save(update_fields=['state','result','active_slot','updated'])
         return data(job)
+
+def confirm_disconnected(actor,data):
+    """Constater une liaison MCP arrêtée et approuvée, sans la dire reconnectée."""
+    from .core.models import McpConnector,Operation,Lease
+    from .core.connectors import observed_dead
+    c.require(actor.active and actor.role=='admin','administrator-required',403)
+    c.require(set(data)=={'request_id','connector_id','confirmation_id','confirmed'} and data['confirmed'] is True,'update-confirmation-invalid',400)
+    request_id=c.identifier(data['request_id']);confirmation_id=c.identifier(data['confirmation_id']);connector_id=data['connector_id']
+    with transaction.atomic():
+        job=SystemUpdate.objects.select_for_update().get(pk=request_id)
+        previous=job.result.get('confirmed_disconnected',[])
+        existing=next((item for item in previous if item.get('confirmation_id')==confirmation_id),None)
+        if existing:
+            c.require(existing['connector_id']==connector_id,'update-confirmation-conflict')
+            return {'state':'ALREADY_CONFIRMED','request_id':request_id,'connector_id':connector_id}
+        c.require(job.state=='RELOAD_REQUIRED' and job.result.get('verified') is True,'update-confirmation-state-invalid')
+        reload=ConnectorReload.objects.select_for_update().get(update=job)
+        matches=[item for item in reload.targets if item.get('kind')=='managed' and item.get('connector_id')==connector_id]
+        c.require(len(matches)==1,'update-connector-not-targeted',404)
+        target=matches[0];row=McpConnector.objects.select_for_update().select_related('actor').get(pk=connector_id)
+        c.require(row.process==target['process'] and observed_dead(row.process) and observed_dead(row.worker),'update-connector-still-running')
+        c.require(not row.pending and not row.uncertain,'update-connector-outcome-uncertain')
+        c.require(not Operation.objects.filter(run__actor=row.actor).exclude(state__in=c.TERMINAL).exists() and not Lease.objects.filter(run__actor=row.actor,state='HELD').exists(),'native-control-effects-protected')
+        c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
+        item={'confirmation_id':confirmation_id,'connector_id':connector_id,'process':row.process,'worker':row.worker,'generation':row.generation,'confirmed_by':actor.pk,'confirmed_at':timezone.now().isoformat(),'pending_evidence':'last-heartbeat','stop_evidence':'pidfd-observed'}
+        row.state='DISCONNECTED';row.save(update_fields=['state','seen'])
+        from .core.connectors import project_connector
+        project_connector(row)
+        job.result={**job.result,'confirmed_disconnected':[*previous,item]};job.save(update_fields=['result','updated'])
+        c.event(None,'update-connector-disconnected',{'request_id':request_id,**item})
+    return {'state':'CONFIRMED','request_id':request_id,'connector_id':connector_id}
 
 def dispatch():
     # Cette fonction est appelée par le superviseur, jamais par le client MCP.
