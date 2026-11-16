@@ -1338,6 +1338,13 @@ L’interface CAB MUST adapter ses pages, sa navigation et ses fenêtres à la l
 - **WHEN** la présentation change selon la taille de l’écran
 - **THEN** CAB conserve les mêmes données, les mises à jour en direct et les mêmes actions métier.
 
+### Requirement: Attente du catalogue MCP sans rechargement répété
+Lorsqu’un relais dispose déjà d’un moteur vivant à la version cible mais attend encore la lecture du catalogue par le client, CAB MUST conserver cet état d’attente sans redémarrer le moteur en boucle. La reconnexion et la mise à jour MUST rester en attente jusqu’à observation du catalogue réel ou d’un état terminal admissible.
+
+#### Scenario: Catalogue encore non lu
+- **WHEN** le moteur est chargé à la version cible et que le catalogue du client n’est pas encore observé
+- **THEN** CAB attend le catalogue sans rejouer le rechargement ni déclarer le connecteur prêt.
+
 ### Requirement: Réglages responsives partagés
 CAB MUST fournir six profils de référence : mobile 390 px, tablette 768 px, HD 1366 px, Full HD 1920 px, QHD 2560 px et 4K 3840 px. Chaque profil MUST comporter deux multiplicateurs réglables de 50 à 150 %, l’un pour la taille générale de l’interface et l’autre pour les polices ; tous valent 100 % par défaut et conservent les comportements responsives existants. Entre deux références, les multiplicateurs MUST être interpolés linéairement et rester constants hors de la plage.
 

@@ -161,7 +161,7 @@ class Bridge:
         while not self.stopped:
             try:
                 target=await asyncio.to_thread(installed_version)
-                if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target or self.catalog!=target):
+                if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
                     try:health=await asyncio.to_thread(self.client.get,'health')
                     except ClientError:health={}
                     if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):

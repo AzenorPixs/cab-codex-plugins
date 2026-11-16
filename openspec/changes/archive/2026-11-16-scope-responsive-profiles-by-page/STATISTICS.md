@@ -29,7 +29,7 @@ Change : `scope-responsive-profiles-by-page` · état local : `archived`. Les va
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:0b403f7bbff02572166cbc736480a7fcf5613065f61e98e48fe85e51c7b38184
+Provenance : change-periods:07baf857d43319e3047647c71947a0d06a672682e341d2065dd5b83c84b520db
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:0b403f7bbff02572166cbc736480a7fcf5613065f61e98e48fe8
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 25799552 | bounded |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 25827122 | bounded |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 12290 | bounded |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 3029 | bounded |
-| SCM-RESPONSIVE-PAGE-3212 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 25839412 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7a170433fe11ddf59fb1715fc6bdd106b8f20e5525e1a9a3d525b8f0b81f3c74", "generated_at": "2026-11-16T10:33:04.402986+00:00", "revision": "7a170433fe11ddf59fb1715fc6bdd106b8f20e5525e1a9a3d525b8f0b81f3c74", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ecd32ac1c08b96484a041fe8fdc768c97c067083a42d07db4d7c00cacdbeb552", "generated_at": "2026-11-16T10:33:39.486225+00:00", "revision": "ecd32ac1c08b96484a041fe8fdc768c97c067083a42d07db4d7c00cacdbeb552", "scope": "change"} -->

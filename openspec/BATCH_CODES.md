@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Attente du catalogue MCP — 16 novembre 2026
+
+`prevent-mcp-catalog-reload-loop`, code non attribué : change archivé ; attribution ultérieure par ACL.
+
 ## Références responsives par page — 16 novembre 2026
 
 `scope-responsive-profiles-by-page`, code non attribué : change archivé ; attribution ultérieure par ACL.
