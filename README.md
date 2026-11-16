@@ -26,6 +26,7 @@ Les connecteurs utilisent un relais stdio stable et remplacent leur moteur à
 une frontière sûre après CABU, sans rejouer les requêtes. Le reçu distingue la
 reconnexion vérifiée d'une reprise native requise pour un ancien connecteur :
 [parcours MCP](docs/mcp-reload.md).
+Un catalogue non relu reste en attente sans redémarrage répété du moteur.
 
 Les nouveaux RUN déclarent un contrat de finalisation. CAB capture les reçus,
 assemble le dossier, ferme les périodes/statistiques et clôture sur preuves sans

@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Arrêt des rechargements MCP répétés pendant l’attente de lecture du catalogue client.
+
 - Réglages responsives propres à chaque page, avec multiplicateurs globaux et mode développeur dans le bandeau.
 
 - Réglages partagés d’échelle de l’interface et des polices par résolution, synchronisés en temps réel.

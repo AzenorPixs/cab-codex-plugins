@@ -15,7 +15,7 @@ from ninja import NinjaAPI,Schema
 from ninja.security import HttpBearer,APIKeyHeader,APIKeyCookie
 from pydantic import Field
 from cab_platform import __version__
-from cab_platform.connector_process import identity
+from cab_platform.connector_process import identity,alive
 from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
@@ -417,7 +417,10 @@ def connector_policy(request,connector_id:str='',version:str=''):
     row=rows.filter(pk=connector_id).first() if connector_id else next((r for r in rows if peer and r.process==identity(peer['pid'])),None)
     if row:
         from .native_control import gate
-        native={'mode':'wait-native','reason':'native-control-effects-protected'} if blocked else gate(actor,row,version or __version__)
+        target=version or __version__
+        native={'mode':'wait-native','reason':'native-control-effects-protected'} if blocked else gate(actor,row,target)
+        if native['mode']=='fallback' and row.loaded_version==target and row.catalog_version!=target and row.state=='CATALOG_PENDING' and alive(row.worker):
+            native={'mode':'wait-native','reason':'catalog-refresh-required'}
     return {'mcp_reload':policy(config().get('mcp_reload')),'stop_allowed':not blocked and native['mode']=='fallback','native_control':native}
 
 @api.get('/finalization')

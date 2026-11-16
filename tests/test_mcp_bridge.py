@@ -33,5 +33,13 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         reader.feed_data((json.dumps({'jsonrpc':'2.0','id':9,'result':{'tools':[]}})+'\n').encode());reader.feed_eof()
         child=Mock(stdout=reader);b.child=child;b.stopped=True;b.pending={key(9):{'id':9,'method':'tools/list'}}
         await b.read_worker(child);self.assertEqual(b.catalog,'3.2.3')
+    async def test_catalog_wait_does_not_reload_current_worker(self):
+        b=self.bridge();b.initialized=True;b.version='3.2.3';b.catalog=''
+        b.child=Mock(returncode=None);b.reload=AsyncMock()
+        async def heartbeat():b.stopped=True
+        b.heartbeat=AsyncMock(side_effect=heartbeat)
+        with patch('cab_platform.mcp_bridge.installed_version',return_value='3.2.3'),patch('cab_platform.mcp_bridge.asyncio.sleep',new=AsyncMock()):
+            await b.watch()
+        b.reload.assert_not_awaited();self.assertEqual(b.catalog,'');b.heartbeat.assert_awaited_once()
 
 if __name__=='__main__':unittest.main()
