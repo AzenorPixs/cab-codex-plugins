@@ -1,3 +1,4 @@
+import {newRequestId} from './requestId'
 import {useEffect,type ReactNode} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
@@ -22,7 +23,7 @@ function useSystemUpdate(){
       if(shown&&update.data?.version&&shown!==update.data.version)location.reload()
     }
   },[state,update.data?.version,client])
-  function begin(version=available.data?.latest_version||''){const id='web-update-'+crypto.randomUUID();sessionStorage.setItem('cab-system-update',id);client.setQueryData(['system-update-request'],id);start.mutate({request_id:id,version})}
+  function begin(version=available.data?.latest_version||''){const id='web-update-'+newRequestId();sessionStorage.setItem('cab-system-update',id);client.setQueryData(['system-update-request'],id);start.mutate({request_id:id,version})}
   return {available,update,start,pending,state,begin}
 }
 

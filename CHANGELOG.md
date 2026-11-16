@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Correction de l’affichage des sessions et archives en HTTP lorsque le navigateur ne fournit pas crypto.randomUUID.
+
 - Adaptation de l’interface CAB aux écrans contraints, avec conservation de la
   référence 4K et présentation lisible des sessions et archives sur mobile.
 - Ajout d’un bloc de configuration projet éditable, avec sélection du dossier

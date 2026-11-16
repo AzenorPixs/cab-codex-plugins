@@ -1,3 +1,4 @@
+import {newRequestId} from './requestId'
 import {useEffect,useRef,useState} from 'react'
 import {Link} from '@tanstack/react-router'
 import {useQuery,useQueryClient} from '@tanstack/react-query'
@@ -47,7 +48,7 @@ export function runStateLabel(state:string){return state==='FINALIZATION_PENDING
 export function useEvaluations(projectId:string){return useQuery({queryKey:['closures',projectId],queryFn:()=>api<{evaluations:Evaluation[]}>('closures?'+new URLSearchParams({project_id:projectId})),refetchInterval:5000})}
 export function SessionActions({projectId,runId,evaluation}:{projectId:string;runId:string;evaluation?:Evaluation}){
   const client=useQueryClient();const dialog=useRef<HTMLDialogElement>(null);const [view,setView]=useState<Evaluation>();const [pending,setPending]=useState(false);const [error,setError]=useState('');const [reason,setReason]=useState('');const [authorized,setAuthorized]=useState(false)
-  const request=useRef(crypto.randomUUID())
+  const request=useRef(newRequestId())
   useEffect(()=>{if(view&&!dialog.current?.open)dialog.current?.showModal()},[view])
   async function refresh(){await client.invalidateQueries({queryKey:['closures',projectId]});await client.invalidateQueries({queryKey:['session-archives',projectId]})}
   async function recheck(){setPending(true);setError('');try{const result=await api<Evaluation>('command',{name:'run.reevaluate',data:{project_id:projectId,run_id:runId}});setView(result);setAuthorized(false);await refresh()}catch(e){setError(e instanceof Error?e.message:'Réévaluation impossible.');setView(evaluation||{run_id:runId,action:'blocked',state:'',suspension:'',reasons:[],archive_allowed:false})}finally{setPending(false)}}
@@ -61,7 +62,7 @@ export function SessionActions({projectId,runId,evaluation}:{projectId:string;ru
 }
 type DeletePreview={allowed:boolean;reasons:string[];deletion_digest:string;shared:{kind:string;label:string;preserved:boolean;runs:{project:string;run_id:string}[]}[]}
 export function SessionTrash({projectId,runId}:{projectId:string;runId:string}){
-  const client=useQueryClient();const dialog=useRef<HTMLDialogElement>(null);const request=useRef(crypto.randomUUID())
+  const client=useQueryClient();const dialog=useRef<HTMLDialogElement>(null);const request=useRef(newRequestId())
   const [preview,setPreview]=useState<DeletePreview>();const [pending,setPending]=useState(false);const [error,setError]=useState('');const [confirmed,setConfirmed]=useState(false);const [sharedConfirmed,setSharedConfirmed]=useState(false)
   async function open(){setPending(true);setError('');setConfirmed(false);setSharedConfirmed(false);try{setPreview(await api<DeletePreview>('command',{name:'session.delete_preview',data:{project_id:projectId,run_id:runId}}))}catch(e){setPreview(undefined);setError(e instanceof Error?reasonText(e.message):'Vérification impossible.')}finally{setPending(false);dialog.current?.showModal()}}
   async function remove(){if(!preview?.allowed||!confirmed||preview.shared.length&&!sharedConfirmed)return;setPending(true);setError('');try{await api('command',{name:'session.delete',data:{project_id:projectId,run_id:runId,request_id:'WEB-DELETE-'+request.current,expected_deletion_digest:preview.deletion_digest,confirm_irreversible:confirmed,confirm_shared:sharedConfirmed}});dialog.current?.close();await client.invalidateQueries({queryKey:['closures',projectId]});await client.invalidateQueries({queryKey:['session-archives',projectId]});await client.invalidateQueries({queryKey:['sessions',projectId]})}catch(e){setError(e instanceof Error?reasonText(e.message):'Suppression refusée.')}finally{setPending(false)}}

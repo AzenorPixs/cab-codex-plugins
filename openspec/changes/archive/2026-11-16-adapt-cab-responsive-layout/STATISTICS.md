@@ -29,7 +29,7 @@ Change : `adapt-cab-responsive-layout` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:04914090dc4ddcfa3e45170e170e0f9daa71ace24b8a4e929a3f0c233c328e93
+Provenance : change-periods:7161f3ca326f04a63ff691ef3cfe89a1c86c7bdbf9db6c2d64f08b154864873e
 
 ## 2. Messages et outils
 
@@ -96,13 +96,13 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 158220160 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 158375822 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 73169 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 38613 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 158448991 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 1936384 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 1939103 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 2199 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 262 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 1941302 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ea1d3b83f0b27fe2b1deb01921b20f7ebee83f282311f83f0bed2d53b637c2fa", "generated_at": "2026-11-16T08:54:47.980939+00:00", "revision": "ea1d3b83f0b27fe2b1deb01921b20f7ebee83f282311f83f0bed2d53b637c2fa", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "generated_at": "2026-11-16T09:07:17.301596+00:00", "revision": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "scope": "change"} -->
