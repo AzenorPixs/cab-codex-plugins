@@ -518,7 +518,7 @@ Change : `adapt-cab-responsive-layout` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:04914090dc4ddcfa3e45170e170e0f9daa71ace24b8a4e929a3f0c233c328e93
+Provenance : change-periods:7161f3ca326f04a63ff691ef3cfe89a1c86c7bdbf9db6c2d64f08b154864873e
 
 ## 2. Messages et outils
 
@@ -585,16 +585,16 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 158220160 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 158375822 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 73169 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 38613 | bounded |
-| CAB-RESPONSIVE-20261116 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 158448991 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 1936384 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 1939103 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 2199 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 262 | bounded |
+| SCM-HTTP-UUID-3210 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 1941302 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ea1d3b83f0b27fe2b1deb01921b20f7ebee83f282311f83f0bed2d53b637c2fa", "generated_at": "2026-11-16T08:54:47.980939+00:00", "revision": "ea1d3b83f0b27fe2b1deb01921b20f7ebee83f282311f83f0bed2d53b637c2fa", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "generated_at": "2026-11-16T09:07:17.301596+00:00", "revision": "05d4b760d974d7f4a472e6be78ae758fba5f64bdce347bfd91c2bafd9dc1ca0a", "scope": "change"} -->
 
 
 ## Change `add-agents-sidebar-postgresql` — openspec/changes/archive/2026-11-14-add-agents-sidebar-postgresql/STATISTICS.md
@@ -69469,4 +69469,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0dc7ec12ea7e92138129f9c78212e02d44a83ceb5b52650df762eb4f3d459f46", "generated_at": "2026-11-16T08:54:51.187216+00:00", "revision": "0dc7ec12ea7e92138129f9c78212e02d44a83ceb5b52650df762eb4f3d459f46", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "fa985498bbcac060eb0c5c8b4d71bf3c3aab48a2125aa97c4d54b3b7996bd2b5", "generated_at": "2026-11-16T09:07:18.169053+00:00", "revision": "fa985498bbcac060eb0c5c8b4d71bf3c3aab48a2125aa97c4d54b3b7996bd2b5", "scope": "project"} -->
