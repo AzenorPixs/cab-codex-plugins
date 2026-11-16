@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Références responsives par page — 16 novembre 2026
+
+`scope-responsive-profiles-by-page`, code non attribué : change archivé ; attribution ultérieure par ACL.
+
 ## Profils responsives partagés — 16 novembre 2026
 
 `configure-responsive-profiles`, code non attribué : change archivé ; attribution ultérieure par ACL.

@@ -252,8 +252,9 @@ un administrateur authentifié.
 L’interface s’adapte aux différentes largeurs d’écran, en conservant sa
 présentation de référence en 3840 × 2160. Sur écran contraint, les tableaux de
 sessions et d’archives se réorganisent avec leurs libellés et leurs actions.
-L’administration Interface propose six profils de résolution pour ajuster séparément
-l’échelle de l’interface et celle des polices ; les valeurs sont partagées en direct.
+L’administration Interface propose six profils de résolution avec des multiplicateurs
+globaux de taille et de police. En mode développeur, le bandeau ajuste les références
+propres à chaque page ; les modifications sont synchronisées en direct.
 La fiche projet présente également sa configuration et permet à un
 administrateur de modifier ses valeurs publiques ou de choisir son dossier.
 
