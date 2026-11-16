@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Profils responsives partagés — 16 novembre 2026
+
+`configure-responsive-profiles`, code non attribué : six profils d’échelle de l’interface et des polices, persistés en PostgreSQL et diffusés par Electric. Change archivé et contrôles ciblés sur l’hôte ; livraison à vérifier séparément.
+
 ## Adaptation responsive — 16 novembre 2026
 
 [`adapt-cab-responsive-layout`](openspec/changes/archive/2026-11-16-adapt-cab-responsive-layout/), code non attribué : change archivé pour adapter les pages CAB aux écrans contraints en conservant la référence 4K. Spécification, contrôles ciblés sur l’hôte et rapport CAB vérifiés le 16 novembre 2026 ; livraison et activation sont établies séparément par leurs reçus. Attribution du code à traiter ultérieurement par ACL.

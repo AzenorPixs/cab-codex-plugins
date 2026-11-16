@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Réglages partagés d’échelle de l’interface et des polices par résolution, synchronisés en temps réel.
+
 - Correction de l’affichage des sessions et archives en HTTP lorsque le navigateur ne fournit pas crypto.randomUUID.
 
 - Adaptation de l’interface CAB aux écrans contraints, avec conservation de la
