@@ -623,13 +623,13 @@ et détails RUN MUST conserver leurs routes et protections.
 
 ### Requirement: Métadonnées publiques du fichier projet
 project.env à la racine canonique MUST être la source de vérité des métadonnées
-publiques. CAB MUST mémoriser leur instantané dans projects. L'accueil MUST
-afficher PROJECT_NAME en grand et gras, PROJECT_VERSION puis PROJECT_TYPE
-découpé par virgules en étiquettes à droite de la version.
+publiques. CAB MUST mémoriser leur instantané dans projects. L’accueil MUST
+afficher PROJECT_NAME en grand et gras et PROJECT_VERSION ; PROJECT_TYPE est
+présenté dans le bloc Configuration dans l’ordre de déclaration.
 
 #### Scenario: Présentation
 - **WHEN** un projet contient un nom, une version et plusieurs types
-- **THEN** ces valeurs sont affichées avec une étiquette par type
+- **THEN** le nom et la version sont affichés en titre et les langages dans Configuration
 
 ### Requirement: Cartes et suppression des métadonnées
 Les cartes Forgejo, GitHub et GitLab MUST afficher les variables publiques
