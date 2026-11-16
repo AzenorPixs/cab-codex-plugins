@@ -8,14 +8,14 @@ Change : `configure-responsive-profiles` · état local : `archived`. Les valeur
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 562.627614 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 562.627614 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 26311161 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 19237 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 3892 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 26279552 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 26330398 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `configure-responsive-profiles` · état local : `archived`. Les valeur
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:df0f20e8f238f6129d8ef15f3b33922f1ad703f49d09a85ee16044e3b68724ff
+Provenance : change-periods:5e2d5e1b314f402d40e81fbccba2c64feca056fbdd980c39c82b91fd1d56d8b1
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:df0f20e8f238f6129d8ef15f3b33922f1ad703f49d09a85ee160
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 23721216 | bounded |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 23751095 | bounded |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 18448 | bounded |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 3833 | bounded |
-| SCM-INTERFACE-RESPONSIVE-3211 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 23769543 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "25131c1af5673c195339cc49d97a4038a211a3560993428ef64d476832144324", "generated_at": "2026-11-16T10:12:15.707666+00:00", "revision": "25131c1af5673c195339cc49d97a4038a211a3560993428ef64d476832144324", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "90a875d65c5701366fad0e4eea273d12f8ee6e2ddf4a611fae5d99cec10409d0", "generated_at": "2026-11-16T10:13:17.202564+00:00", "revision": "90a875d65c5701366fad0e4eea273d12f8ee6e2ddf4a611fae5d99cec10409d0", "scope": "change"} -->

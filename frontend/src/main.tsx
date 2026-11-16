@@ -4,7 +4,7 @@ import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query'
 import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate,Navigate} from '@tanstack/react-router'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
-import {AppearanceProvider,ThemeToggle} from './Appearance'
+import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle} from './Appearance'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
@@ -23,7 +23,7 @@ function Layout(){
   const cabVersion=useCabVersion()
   const pathname=useRouterState({select:state=>state.location.pathname})
   useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
-  return <><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>{cabVersion||''}</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><McpVersions header/><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'||pathname.startsWith('/agents/')?'workspace-main':undefined}><Outlet/></main></>
+  return <><PageAppearance path={pathname}/><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>{cabVersion||''}</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><McpVersions header/><DeveloperToolbar/><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'||pathname.startsWith('/agents/')?'workspace-main':undefined}><Outlet/></main></>
 }
 
 function Gate({children}:{children:React.ReactNode}){
