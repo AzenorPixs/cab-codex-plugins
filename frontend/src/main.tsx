@@ -5,6 +5,7 @@ import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useS
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
 import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle} from './Appearance'
+import {GitMonitorSettings} from './GitMonitorSettings'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
@@ -92,9 +93,10 @@ const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/admin
 const agentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/agents',component:()=> <Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate>})
 const agentPages=([['codex','codex_desktop'],['codex-cli','codex'],['opencode','opencode']] as const).map(([path,agent])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${path}`,component:()=> <Gate><ConfigurationAccess section="agents" selectedAgent={agent} login={<Login/>}/></Gate>}))
 const legacyAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <Navigate to="/agents" replace/>})
+const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/git',component:()=> <AdministrationShell><Gate><GitMonitorSettings/></Gate></AdministrationShell>})
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

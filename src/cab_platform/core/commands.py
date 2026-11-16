@@ -226,7 +226,8 @@ def reconcile_archive(actor,data):
     for marker in ('proposal.md','tasks.md'):
         require(safe_path(root,archive+'/'+marker).is_file(),'archive-proof-required',400)
     paths=r.mandate['paths'];affected=[path for path in paths if path==old or path.startswith(old+'/')]
-    require(affected and not prior,'archive-source-not-framed')
+    covered=any(old.startswith(path+'/') and archive.startswith(path+'/') for path in paths)
+    require((affected or covered) and not prior,'archive-source-not-framed')
     replacements={path:archive+path[len(old):] for path in affected}
     updated={**r.mandate,'paths':[replacements.get(path,path) for path in paths]}
     require(len(set(updated['paths']))==len(updated['paths']),'archive-path-conflict')

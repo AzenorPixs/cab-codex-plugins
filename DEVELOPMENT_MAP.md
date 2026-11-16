@@ -1629,3 +1629,7 @@ Versions3.2.1, précontrôle, MCP autonome, cache quotidien et page administrati
 Prérequis : plateforme système existante ; pas de dépendance à un change actif.
 Qualification sources :55tests Python et Chromium/Firefox validés.
 Livraison et activation sont vérifiées séparément, sans preuve déduite du code.
+
+## Surveillance Git récursive — change archivé
+
+`monitor-project-git-recursively` : code non attribué ; surveillance inotify, file d’analyse globale et délais en base. Archivage et validations ciblées réalisés ; livraison CI/CD distincte. Voir `openspec/changes/archive/2026-11-16-monitor-project-git-recursively`.

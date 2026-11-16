@@ -621,6 +621,101 @@ et détails RUN MUST conserver leurs routes et protections.
 - **WHEN** un utilisateur sélectionne un projet puis Sessions puis la maison
 - **THEN** il voit successivement l'accueil, les sessions et le même accueil
 
+### Requirement: Réconciliation d’archive dans un périmètre parent
+CAB MUST accepter la réconciliation d’une archive dont le change et l’archive
+sont déjà inclus dans un même répertoire parent du mandat, après les contrôles
+d’identité, de preuve, d’absence d’effets en cours et de révision habituels.
+Un périmètre étranger MUST rester refusé.
+
+#### Scenario: Répertoire parent déjà cadré
+- **WHEN** le mandat couvre le dossier parent du change et de son archive
+- **THEN** CAB réconcilie le RUN sans élargir ni modifier les chemins cadrés
+
+### Requirement: Rattachement natif d’un worktree Git
+CAB MUST accepter une session native dont le répertoire est un worktree Git
+enregistré du dépôt du projet, après vérification du dépôt commun et des racines.
+Une identité différente, un autre dépôt ou un répertoire non enregistré MUST
+rester refusé ; les contrôles de propriété et d’identité du journal sont conservés.
+
+#### Scenario: Session dans un worktree du projet
+- **WHEN** le répertoire natif est un worktree enregistré du dépôt du projet
+- **THEN** CAB peut rattacher le journal à ce projet sans changer son identité
+
+### Requirement: Bloc Git du projet
+L’accueil du projet MUST afficher un bloc Git entre Configuration et les cartes
+de forges. Son titre MUST présenter le logo Git, le nom Git et un séparateur
+vertical. La version Git locale MUST être mutualisée en base et synchronisée
+via Electric, puis affichée à côté du titre en plus petit. Les versions des
+instances Forgejo et GitLab et la dernière version disponible de l’API GitHub
+MUST être mutualisées par instance, stockées en base et affichées dans leur
+titre via Electric ; la version Forgejo affichée MUST omettre le signe + et son
+suffixe. Dans les titres de forge, le résultat d’authentification MUST porter
+le libellé « API ». Chaque version MUST être vérifiée au maximum une fois par
+24 heures avec un décalage aléatoire, mémorisé lors des redémarrages.
+Le bloc MUST afficher sur deux colonnes les valeurs présentes de
+GIT_USER_NAME, GIT_USER_EMAIL et LOCAL_DEFAULT_BRANCH avec des libellés lisibles.
+Ces valeurs MUST suivre la projection PostgreSQL et la synchronisation Electric
+des métadonnées de project.env. Un bouton d’édition MUST permettre de modifier
+ces trois valeurs dans project.env avec le contrôle de révision existant, sans
+modifier les autres variables. L’état d’initialisation Git MUST être conservé
+dans les données du projet et projeté vers Electric : 1 si le dépôt est
+initialisé, 0 s’il est absent. La présence de .git MUST être réconciliée en
+arrière-plan ; un bouton MUST permettre son initialisation uniquement lorsque
+l’état conservé est 0. En cas d’état réel illisible, la dernière valeur connue
+MUST être conservée.
+
+#### Scenario: Affichage du bloc Git
+- **WHEN** un utilisateur ouvre l’accueil d’un projet
+- **THEN** il voit le bloc Git après Configuration et avant les cartes de forges
+
+### Requirement: État Git local du projet
+À l’ouverture d’un projet, CAB MUST mesurer en arrière-plan son état Git local
+et en conserver une seule image par projet dans la table git_projects. La page
+MUST afficher l’image enregistrée immédiatement puis recevoir les changements
+via Electric. Le bloc Git MUST présenter le dernier commit et son horodatage
+local au format jj.mm.AA hh.mm, les tags associés à ce commit sous « Version »,
+
+l’état et les nombres de fichiers suivis, modifiés, indexés, ignorés, non suivis
+et en conflit. Une mesure indisponible MUST conserver la dernière image et
+signaler son indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
+
+#### Scenario: Mise à jour de l’état Git
+- **WHEN** un projet est ouvert ou que le bouton de rafraîchissement Git est sélectionné, et que la mesure locale diffère de l’image enregistrée
+- **THEN** CAB met à jour la même ligne du projet et la page affiche la nouvelle image ; le bouton de rafraîchissement est animé pendant la mesure, à l’ouverture comme après un clic
+
+### Requirement: Consultation des modifications non indexées
+Lorsque l’état Git affiche « Modifications », il MUST permettre d’ouvrir une
+fenêtre en lecture seule présentant le résumé et la liste des modifications
+non indexées du projet autorisé. Si aucune modification non indexée n’existe,
+la fenêtre MUST le signaler.
+
+#### Scenario: Détail des modifications
+- **WHEN** un utilisateur sélectionne l’état « Modifications »
+- **THEN** CAB affiche le résumé et la liste des fichiers non indexés
+
+### Requirement: Consultation des compteurs Git
+Les compteurs Suivis, Modifiés, Indexés, Ignorés, Non suivis et Conflits MUST
+ouvrir une fenêtre en lecture seule listant les fichiers correspondants du
+projet autorisé. Les listes volumineuses MUST être paginées et signaler toute
+troncature. Modifiés réutilise la fenêtre des modifications non indexées. Indexés
+MUST afficher le résumé des changements indexés avant la liste des fichiers. Chaque fenêtre de compteur
+MUST proposer une recherche filtrant immédiatement les lignes affichées ; elle
+MUST se placer au-dessus de Fermer, à droite de la pagination si présente.
+
+#### Scenario: Consultation d’un compteur
+- **WHEN** un utilisateur sélectionne un compteur Git
+- **THEN** CAB affiche les fichiers correspondants ou indique qu’il n’y en a aucun
+
+### Requirement: Consultation du dernier commit
+L’identifiant du dernier commit dans le bloc Git MUST ouvrir une fenêtre de
+consultation en lecture seule présentant son identifiant complet, son auteur,
+sa date locale, ses références locales et le résumé des fichiers modifiés.
+Le détail MUST être limité au dernier commit connu et aux projets autorisés.
+
+#### Scenario: Ouverture du détail
+- **WHEN** un utilisateur sélectionne l’identifiant du dernier commit
+- **THEN** la fenêtre affiche ses informations et le résumé de ses fichiers
+
 ### Requirement: Métadonnées publiques du fichier projet
 project.env à la racine canonique MUST être la source de vérité des métadonnées
 publiques. CAB MUST mémoriser leur instantané dans projects. L’accueil MUST
@@ -1032,6 +1127,13 @@ SID/RUN et exiger moteur et catalogue observés dans la version cible.
 - **WHEN** aucun point compatible n'est disponible ou son effet reste inconnu
 - **THEN** CAB distingue indisponibilité et incertitude, conserve les preuves et ne rejoue aucune requête métier
 
+### Requirement: Dépendance Debian inotify-tools
+Le paquet Debian CAB MUST déclarer inotify-tools parmi ses dépendances.
+
+#### Scenario: Construction du paquet Debian
+- **WHEN** le paquet Debian CAB est construit
+- **THEN** son champ Depends contient inotify-tools
+
 ### Requirement: Dépendance Debian Git
 Le paquet Debian CAB MUST déclarer git parmi ses dépendances.
 
@@ -1391,3 +1493,17 @@ CAB MUST permettre à un administrateur de confirmer explicitement la déconnexi
 #### Scenario: Cible vivante ou effet incertain
 - **WHEN** l’arrêt ne peut pas être prouvé ou qu’un effet reste incertain
 - **THEN** CAB refuse la confirmation et conserve la protection de la mise à jour.
+
+### Requirement: Surveillance récursive et limitation des analyses Git
+CAB MUST surveiller récursivement les dossiers des projets enregistrés, adapter la surveillance aux ajouts, suppressions, renommages et déplacements de projet et regrouper les événements dans une file en mémoire par projet. Il MUST limiter à une analyse Git simultanée pour CAB et respecter les délais configurés entre les analyses automatiques et explicites. Une perte d’événements MUST déclencher une reconstruction de la surveillance et une réconciliation.
+
+#### Scenario: Activité continue
+- **WHEN** des fichiers changent sans interruption
+- **THEN** CAB regroupe les événements et lance une analyse au plus tard après le délai maximal, sous réserve de l’intervalle minimal et de la disponibilité du worker
+
+### Requirement: Réglages Git en base
+Administration / Git MUST permettre de modifier les délais en secondes conservés dans PostgreSQL : calme, intervalle minimal et attente maximale. Les valeurs initiales MUST être 7, 30 et 70 et s’appliquer sans redémarrage.
+
+#### Scenario: Modification des délais
+- **WHEN** un administrateur enregistre des délais valides
+- **THEN** CAB les conserve en base et les applique aux prochaines analyses
