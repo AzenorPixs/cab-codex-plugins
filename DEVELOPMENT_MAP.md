@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Attente du catalogue MCP — 16 novembre 2026
+
+`prevent-mcp-catalog-reload-loop`, code non attribué : attente du catalogue sans redémarrage répété ni confirmation fictive ; contrôles ciblés sur l’hôte. La reconnexion réelle et la livraison sont distinctes.
+
 ## Références responsives par page — 16 novembre 2026
 
 `scope-responsive-profiles-by-page`, code non attribué : références par page, multiplicateurs globaux et mode développeur ; change archivé et contrôles ciblés sur l’hôte. Livraison à vérifier séparément.
