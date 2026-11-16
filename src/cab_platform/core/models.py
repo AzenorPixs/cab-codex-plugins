@@ -35,6 +35,7 @@ class Configuration(models.Model):
 class CabVersionProjection(models.Model):
     id=models.PositiveSmallIntegerField(primary_key=True,default=1)
     version=models.CharField(max_length=100)
+    git_version=models.CharField(max_length=100,blank=True,default='')
     class Meta:db_table='cab_version_projection'
 
 class InterfacePreferencesProjection(models.Model):
@@ -56,6 +57,21 @@ class Project(models.Model):
     created=models.DateTimeField(auto_now_add=True)
     class Meta:
         db_table='projects'
+
+class GitProject(models.Model):
+    project=models.OneToOneField(Project,on_delete=models.CASCADE,primary_key=True)
+    state=models.JSONField(default=dict)
+    checked_at=models.DateTimeField(null=True)
+    class Meta:db_table='git_projects'
+
+class ForgeVersion(models.Model):
+    id=models.CharField(max_length=64,primary_key=True)
+    forge=models.CharField(max_length=16)
+    base_url=models.CharField(max_length=500)
+    version=models.CharField(max_length=100,blank=True,default='')
+    last_check=models.DateTimeField(null=True)
+    next_check=models.DateTimeField(null=True)
+    class Meta:db_table='forge_versions'
 
 class ProjectMetadataProjection(models.Model):
     id=models.CharField(primary_key=True,max_length=64)

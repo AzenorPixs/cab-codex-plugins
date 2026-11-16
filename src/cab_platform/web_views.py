@@ -57,7 +57,7 @@ def sync_projection(request,table):
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'
     if table=='agents':params['columns']='id,label,position,installed,running,local_version,mcp_connected,mcp_versions'
     if table=='agent_users':params['columns']='id,agent_id,username,home,config_present,config_path,mcp_declared,config_error,reconcile_state'
-    if table=='cab_version_projection':params['columns']='id,version'
+    if table=='cab_version_projection':params['columns']='id,version,git_version'
     if table=='interface_preferences_projection':params['columns']='id,preferences'
     import httpx
     try:response=httpx.get('http://127.0.0.1:'+str(cfg.get('electric_port',8791))+'/v1/shape',params=params,timeout=65)

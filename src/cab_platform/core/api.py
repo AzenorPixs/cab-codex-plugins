@@ -126,7 +126,7 @@ def cab_version(request):
     from .models import CabVersionProjection
     try:row=CabVersionProjection.objects.filter(pk=1).first()
     except DatabaseError:return api.create_response(request,{'error':'version-unavailable'},status=503)
-    return {'version':row.version if row else None}
+    return {'version':row.version if row else None,'git_version':row.git_version if row else None}
 
 @api.get('/interface/preferences',auth=None)
 def interface_preferences(request):
@@ -290,6 +290,65 @@ def add_existing_project(request,body:ExistingProject):
     from cab_platform.projects import add_existing_project,project_data
     project,created=add_existing_project(actor,body.project_path)
     return {**project_data(project),'created':created}
+
+@api.get('/projects/{project_id}/git/files/{kind}')
+def project_git_files(request,project_id:str,kind:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import files_overview
+    return files_overview(project,kind)
+
+@api.get('/projects/{project_id}/git/changes')
+def project_git_changes(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import changes_overview
+    return changes_overview(project)
+
+@api.get('/projects/{project_id}/git/commit/{commit}')
+def project_git_commit(request,project_id:str,commit:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import commit_overview
+    return commit_overview(project,commit)
+
+class GitMonitorSettings(Schema):
+    quiet_seconds:int
+    interval_seconds:int
+    maximum_seconds:int
+
+@api.get('/administration/git')
+def git_monitor_settings(request):
+    principal(request,admin=True)
+    from cab_platform.git_monitor_config import read
+    return read()
+
+@api.post('/administration/git')
+def save_git_monitor_settings(request,body:GitMonitorSettings):
+    principal(request,admin=True)
+    from cab_platform.git_monitor_config import save
+    return save(body.model_dump())
+
+@api.post('/projects/{project_id}/git/status/refresh')
+def refresh_project_git_status(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import refresh_status
+    return {'git_status':refresh_status(project.pk)}
+
+@api.post('/projects/{project_id}/git/initialize')
+def initialize_project_git(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.project_git import initialize
+    return initialize(project_id)
 
 @api.post('/projects/{project_id}/refresh')
 def refresh_project(request,project_id:str):

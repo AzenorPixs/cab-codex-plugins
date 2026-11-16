@@ -58,7 +58,7 @@ class Watcher:
                 elif wd in self.watches:
                     project_id,is_root=self.watches[wd]
                     if not is_root or name in ('STATISTICS.md','openspec'):self.dirty[project_id]=now
-                    if is_root is True and (name=='project.env' or mask&(0x400|0x800)):self.env_dirty[project_id]=now
+                    if is_root is True and (name in ('project.env','.git') or mask&(0x400|0x800)):self.env_dirty[project_id]=now
                     if is_root=='config' and (name in ('forgejo.token','github.token','gitlab.token') or mask&(0x400|0x800)):self.env_dirty[project_id]=now
                     if mask&(0x100|0x200|0x400|0x800):self.next_inventory=0
         if now>=self.next_active:

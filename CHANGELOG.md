@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- Réconciliation d’une archive OpenSpec déjà couverte par un répertoire parent du mandat.
+
+- Surveillance Git récursive des projets, file d’analyse globale et délais configurables en base dans Administration / Git.
+- Rattachement des sessions natives aux worktrees enregistrés du même dépôt Git.
+
 - Confirmation administrative et auditée d’une liaison MCP arrêtée, sans fausse reconnexion, pour débloquer le reçu CABU concerné.
 
 - Arrêt des rechargements MCP répétés pendant l’attente de lecture du catalogue client.

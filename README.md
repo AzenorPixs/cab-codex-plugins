@@ -276,3 +276,7 @@ La page /administration/update montre les deux versions, force un contrôle
 asynchrone à chaque ouverture et propose le bouton manuel permanent.
 
 Le contrôle forcé administratif est l’exception explicite au cache automatique24h.
+
+## Surveillance Git des projets
+
+CAB surveille récursivement les projets enregistrés et regroupe les changements avant de réconcilier leur état Git. Administration / Git permet de régler les délais conservés en base : 7 secondes sans changement, 30 secondes entre analyses et 70 secondes d’attente maximale par défaut. Une seule analyse Git s’exécute à la fois.
