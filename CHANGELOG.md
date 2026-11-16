@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Réglages responsives propres à chaque page, avec multiplicateurs globaux et mode développeur dans le bandeau.
+
 - Réglages partagés d’échelle de l’interface et des polices par résolution, synchronisés en temps réel.
 
 - Correction de l’affichage des sessions et archives en HTTP lorsque le navigateur ne fournit pas crypto.randomUUID.

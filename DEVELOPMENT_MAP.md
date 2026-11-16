@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Références responsives par page — 16 novembre 2026
+
+`scope-responsive-profiles-by-page`, code non attribué : références par page, multiplicateurs globaux et mode développeur ; change archivé et contrôles ciblés sur l’hôte. Livraison à vérifier séparément.
+
 ## Profils responsives partagés — 16 novembre 2026
 
 `configure-responsive-profiles`, code non attribué : six profils d’échelle de l’interface et des polices, persistés en PostgreSQL et diffusés par Electric. Change archivé et contrôles ciblés sur l’hôte ; livraison à vérifier séparément.

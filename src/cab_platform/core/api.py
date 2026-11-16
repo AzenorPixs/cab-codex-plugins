@@ -58,6 +58,13 @@ class InterfacePreferences(Schema):
     font_scale:int=Field(ge=80,le=160)
     theme:Literal['light','dark']
     responsive:ResponsiveProfiles|None=None
+    developer_mode:bool|None=None
+    page_responsive:dict[str,dict[str,dict[str,int]]]|None=None
+class PageResponsiveAdjustment(Schema):
+    page:str=Field(min_length=1,max_length=500)
+    profile:Literal['mobile','tablet','hd','fullhd','qhd','uhd']
+    field:Literal['layout','font']
+    value:int=Field(ge=50,le=150)
 class ServiceConfiguration(Schema):
     revision:str
     configuration:dict[str,Any]
@@ -129,6 +136,8 @@ def interface_preferences(request):
         record=Configuration.objects.filter(pk='interface').first()
         if record:value=InterfacePreferences.model_validate(record.value).model_dump()
     if value.get('responsive') is None:value['responsive']=ResponsiveProfiles().model_dump()
+    if value.get('developer_mode') is None:value['developer_mode']=False
+    if value.get('page_responsive') is None:value['page_responsive']={}
     return {**value,'persistent':initialized,'csrf_token':get_token(request)}
 
 @api.post('/interface/preferences',auth=None)
@@ -141,9 +150,33 @@ def save_interface_preferences(request,body:InterfacePreferences):
         value=body.model_dump()
         if value['responsive'] is None:
             value['responsive']=(record.value.get('responsive') if record else None) or ResponsiveProfiles().model_dump()
+        previous=bool(record.value.get('developer_mode',False)) if record else False
+        if value['developer_mode'] is None:value['developer_mode']=previous
+        if value['developer_mode']!=previous:principal(request,admin=True)
+        value['page_responsive']=(record.value.get('page_responsive') if record else None) or {}
         Configuration.objects.update_or_create(pk='interface',defaults={'value':value})
         InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
     return {**value,'persistent':True}
+
+@api.post('/interface/responsive/page',auth=None)
+def save_page_responsive(request,body:PageResponsiveAdjustment):
+    csrf_check(request)
+    from cab_platform.paths import runtime_config
+    commands.require(runtime_config().get('initialized'),'initialization-required',503)
+    page=body.page
+    commands.require(page.startswith('/') and '?' not in page and '#' not in page and not any(ord(c)<32 for c in page),'interface-page-invalid',400)
+    with transaction.atomic():
+        record=Configuration.objects.select_for_update().get(pk='interface')
+        value=record.value.copy()
+        commands.require(value.get('developer_mode') is True,'developer-mode-disabled',403)
+        pages=value.get('page_responsive') or {}
+        commands.require(page in pages or len(pages)<500,'interface-page-limit',400)
+        profile=pages.setdefault(page,{}).setdefault(body.profile,{})
+        profile[body.field]=body.value
+        value['page_responsive']=pages
+        record.value=value;record.save(update_fields=['value'])
+        InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
+    return {'page':page,'profile':body.profile,'field':body.field,'value':body.value}
 
 @api.get('/administration/agents')
 def administration_agents(request):
