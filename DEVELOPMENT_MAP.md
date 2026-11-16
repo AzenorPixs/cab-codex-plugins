@@ -1,5 +1,15 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Adaptation responsive — 16 novembre 2026
+
+[`adapt-cab-responsive-layout`](openspec/changes/archive/2026-11-16-adapt-cab-responsive-layout/), code non attribué : change archivé pour adapter les pages CAB aux écrans contraints en conservant la référence 4K. Spécification, contrôles ciblés sur l’hôte et rapport CAB vérifiés le 16 novembre 2026 ; livraison et activation sont établies séparément par leurs reçus. Attribution du code à traiter ultérieurement par ACL.
+
+```mermaid
+flowchart LR
+  responsive["adapt-cab-responsive-layout — code non attribué"]
+  style responsive fill:#eceff1,stroke:#607d8b,color:#17212b
+```
+
 `support-postgresql-17-18-migration`, code non attribué : métapaquets Debian,
 référence /etc/cab et migration protégée ; sources dans openspec/changes/archive/2026-11-15-support-postgresql-17-18-migration.
 Qualification Docker17→18 réussie le 15 novembre2026 : 52 tables, 30 séquences

@@ -2,6 +2,8 @@
 
 ## Architecture CAB 3.2.8
 
+La version déclarée dans la configuration CAB est projetée dans PostgreSQL et diffusée seule par Electric pour l'affichage web ; les autres valeurs du fichier restent privées.
+
 Une autorisation administrative locale `finalization.host_check` permet de vérifier sur l'hôte une commande déjà cadrée dans un RUN direct. L'identité du propriétaire, l'empreinte de politique, les protections et un reçu explicite sont conservés ; l'exécution ordinaire reste isolée.
 
 Le parcours de versions et migrations PostgreSQL est décrit dans

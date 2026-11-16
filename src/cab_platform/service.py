@@ -86,7 +86,8 @@ def background_closure():
 def background_native():
     from django.db import close_old_connections
     from .core.native_control import recover,queue_mismatched,work_one
-    try:recover();queue_mismatched();work_one()
+    from .opencode_recovery import sweep as recover_opencode
+    try:recover();queue_mismatched();work_one();recover_opencode()
     finally:close_old_connections()
 
 def background_agents():
@@ -143,6 +144,7 @@ def run(port=8790):
     update_future=None;availability_future=None;native_future=None;next_native=0
     agents_future=None;next_agents=0
     agent_config_future=None;next_agent_config=0
+    cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -179,6 +181,15 @@ def run(port=8790):
                 agents_future=agents_pool.submit(background_agents);next_agents=time.monotonic()+2
             try:
                 refresh_database()
+                if time.monotonic()>=next_cab_version:
+                    next_cab_version=time.monotonic()+1
+                    try:
+                        info=CONFIG.stat();signature=(info.st_dev,info.st_ino,info.st_mtime_ns,info.st_size)
+                        if signature!=cab_version_signature or time.monotonic()>=next_cab_version_refresh:
+                            from .cab_version import sync
+                            if sync():cab_version_signature=signature;next_cab_version_refresh=time.monotonic()+60
+                    except (OSError,ValueError,RuntimeError) as error:
+                        log.warning('CAB version observation unavailable',extra={'code':type(error).__name__})
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1

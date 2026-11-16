@@ -13,6 +13,7 @@ import stat
 import subprocess
 import tempfile
 import tomllib
+from .jsonc import loads as jsonc_loads
 from .paths import config
 
 
@@ -64,13 +65,13 @@ def mcp_configuration(path,user,agent):
             if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>4*1024*1024:
                 return {**result,'state':'unsafe'}
             raw=stream.read(4*1024*1024+1)
-        value=tomllib.loads(raw.decode()) if agent=='codex' else json.loads(raw)
+        value=tomllib.loads(raw.decode()) if agent=='codex' else (jsonc_loads(raw.decode()) if path.suffix=='.jsonc' else json.loads(raw))
         if not isinstance(value,dict):return {**result,'state':'invalid'}
-        servers=value.get('mcp_servers' if agent=='codex' else 'mcp',{})
+        servers=value.get('mcp_servers',{}) if agent=='codex' else value.get('mcp',{}).get('servers',{}) if isinstance(value.get('mcp',{}),dict) else None
         if not isinstance(servers,dict):return {**result,'state':'invalid'}
         # Seuls noms et état de déclaration sortent du processus : ni commandes,
         # arguments, environnement, URLs, headers ou credentials des MCP.
-        result['servers']=[{'name':str(name)[:160],'state':'disabled' if isinstance(server,dict) and server.get('enabled') is False else 'declared','runtime':'unverified'} for name,server in servers.items()][:128]
+        result['servers']=[{'name':str(name)[:160],'state':'disabled' if isinstance(server,dict) and (server.get('disabled') is True or server.get('enabled') is False) else 'declared','runtime':'unverified'} for name,server in servers.items()][:128]
         result['state']='configured' if servers else 'empty'
     except FileNotFoundError:pass
     except (ValueError,UnicodeError):result['state']='invalid'

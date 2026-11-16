@@ -8,14 +8,14 @@ Change : `support-postgresql-17-18-migration` · état local : `archived`. Les v
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 1542.52806 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 1542.52806 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 11014385 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 41783 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 19377 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 10947584 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 11056168 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `support-postgresql-17-18-migration` · état local : `archived`. Les v
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:3de59707b47eb2b7a0b8813e224ed97c307853873a64179e83a88cdac31078ad
+Provenance : change-periods:685036dd2299a1133ef25482fb64b987bbf40586e4b8080a9cdfbcc5a90149f0
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:3de59707b47eb2b7a0b8813e224ed97c307853873a64179e83a8
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_read | 6405504 | bounded |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_cache_write | 0 | bounded |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_input | 6440269 | bounded |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_output | 31377 | bounded |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_reasoning | 13023 | bounded |
-| SCM-PG17-PG18-328 | 01a1c9e3-bed3-7a52-abca-0ea08eaa71d9 | tokens_total | 6471646 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7ff9ab100bf77ab922c94ec133d84f9f2056592d31509d15d42e0b662a39b7dc", "generated_at": "2026-11-15T08:30:23.477608+00:00", "revision": "7ff9ab100bf77ab922c94ec133d84f9f2056592d31509d15d42e0b662a39b7dc", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ae936ee3c5018cce3882e0f359eab651ec3679848cb7b9a1ff770c40eb8c1b5b", "generated_at": "2026-11-15T08:37:58.015438+00:00", "revision": "ae936ee3c5018cce3882e0f359eab651ec3679848cb7b9a1ff770c40eb8c1b5b", "scope": "change"} -->
