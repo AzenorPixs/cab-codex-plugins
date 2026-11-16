@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY')
-KEYS={'PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 
 def public_value(key,value):
@@ -18,6 +18,10 @@ def public_value(key,value):
             return url.scheme in ('http','https') and bool(url.hostname) and url.username is None and url.password is None and not url.query and not url.fragment and url.port!=0 and not any(c.isspace() for c in value)
         except ValueError:return False
     if key.endswith('_SSL_VERIFY'):return value.lower() in ('0','1','true','false','yes','no')
+    if key=='PROJECT_ID':
+        from .project_ids import valid
+        return valid(value)
+    if key in ('PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE'):return value.lower() in ('yes','no','true','false','1','0')
     if key=='PROJECT_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&:/@-]+',value))
     if key=='PROJECT_TYPE':return bool(re.fullmatch(r'[\w .,+#()/-]+',value))
     if key=='PROJECT_VERSION':return bool(re.fullmatch(r'[\w.+-]+',value))
@@ -56,8 +60,21 @@ def synchronize(project_id):
     with transaction.atomic():
         project=Project.objects.select_for_update().get(pk=project_id)
         snapshot=read_metadata(project.root)
+        snapshot['project_root']=project.root
+        from .forge_settings import synchronize_tokens
+        from .core.commands import Refused
+        try:tokens_changed=synchronize_tokens(project);tokens_valid=True
+        except Refused:tokens_changed=False;tokens_valid=False
         previous=project.public_metadata or {}
-        if any(previous.get(key)!=value for key,value in snapshot.items()):
+        from .forge_auth import inputs
+        auth=(project.configuration or {}).get('forge_auth',{})
+        credentials={forge:inputs(project,snapshot.get('values',{}),forge) for forge in FORGES}
+        changed_forges=tuple(forge for forge,(url,owner,token,signature) in credentials.items() if tokens_valid and url and owner and token and auth.get(forge,{}).get('signature')!=signature)
+        snapshot['forge_auth']={forge:(auth.get(forge,{}).get('state') if tokens_valid and all(credentials[forge][:3]) and auth.get(forge,{}).get('signature')==credentials[forge][3] else None) for forge in FORGES}
+        if changed_forges:
+            from .forge_auth import enqueue
+            transaction.on_commit(lambda:enqueue(project_id,changed_forges,changed=True))
+        if tokens_changed or any(previous.get(key)!=value for key,value in snapshot.items()):
             snapshot['revision']=int(previous.get('revision',0))+1
             project.public_metadata=snapshot;project.save(update_fields=['public_metadata'])
         projection,created=ProjectMetadataProjection.objects.get_or_create(pk=project.pk,defaults={'public_metadata':project.public_metadata})

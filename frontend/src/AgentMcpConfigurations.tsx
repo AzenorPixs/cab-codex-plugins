@@ -22,9 +22,17 @@ export function AgentMcpConfigurations({agent}:{agent:string}){
   },[agent,client])
   useEffect(()=>{
     if(!query.data)return
-    let active=true;setError('')
-    void api('administration/agent-users/reconcile',{agent}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Réconciliation indisponible')})
-    return ()=>{active=false}
+    let active=true;let running=false;setError('')
+    const reconcile=async()=>{
+      if(running)return
+      running=true
+      try{await api('administration/agent-users/reconcile',{agent});if(active)setError('')}
+      catch(reason){if(active)setError(reason instanceof Error?reason.message:'Réconciliation indisponible')}
+      finally{running=false}
+    }
+    void reconcile()
+    const timer=window.setInterval(()=>{void reconcile()},5000)
+    return ()=>{active=false;window.clearInterval(timer)}
   },[agent,identities,Boolean(query.data)])
-  return <section className="agent-card"><h2 className="agent-block-heading">Configuration MCP</h2><div className="agent-card-content">{query.error&&<p role="alert">Configurations indisponibles : {query.error.message}</p>}{query.data?.users.some(user=>user.mcp_declared===true)&&<ul><li><strong>MCP cab</strong> — Déclaré</li></ul>}{query.data&&query.data.users.length>0&&error&&<p role="alert">{error}</p>}</div></section>
+  return <section className="agent-card"><h2 className="agent-block-heading">Configuration MCP</h2><div className="agent-card-content">{query.error&&<p role="alert">Configurations indisponibles : {query.error.message}</p>}{query.data?.users.map(user=><p className="mcp-user-status" key={user.id}><strong>{user.username}</strong> · <span className={user.mcp_declared===true?'agent-installed':'agent-missing'}>{user.mcp_declared===true?'OK':'NOK'}</span> · <strong>MCP cab</strong> · <span className={user.mcp_declared===true?'agent-installed':'agent-missing'}>{user.mcp_declared===true?'Déclaré':user.mcp_declared===false?'Non Déclaré':'À vérifier'}</span></p>)}{query.data&&query.data.users.length>0&&error&&<p role="alert">{error}</p>}</div></section>
 }

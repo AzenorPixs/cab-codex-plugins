@@ -1,6 +1,10 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Livraison CAB 3.2.8 — Debian et clients légers
+## Livraison CAB — Debian et clients légers
+
+La gestion des tokens de forge dépend du paquet Debian `systemd` (au moins 250), qui fournit `systemd-creds`. Les tokens sont conservés chiffrés dans PostgreSQL à l’aide du TPM local `/dev/tpmrm0` ; les fichiers `config/<forge>.token` restent les sources locales en clair demandées par l’administrateur. Sans TPM accessible, CAB refuse le chiffrement et ne bascule pas sur une clé logicielle.
+
+La migration additive 0025 crée la projection Electric de la version CAB. L'entrée `cab` de la table `configuration` est synchronisée depuis le fichier système ; une sauvegarde est requise avant migration.
 
 La migration additive 0018 crée le catalogue `agents` et initialise les trois agents existants. Sauvegarder la base avant migration ; le retour de migration supprime cette table et ses entrées.
 
@@ -32,10 +36,10 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.8` ; PROJECT_VERSION est
+build. La CI/CD finale est `diu projects cicd cab 3.2.9` ; PROJECT_VERSION est
 alors mis à jour par DIU avant commit/tag et construction du paquet exact.
 Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release 3.2.8.
+prépaquet ne constitue pas la release cible.
 
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 

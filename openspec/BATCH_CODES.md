@@ -1,5 +1,11 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Adaptation responsive — 16 novembre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | adapt-cab-responsive-layout | ARCHIVÉ ; contrôles ciblés et rapport CAB vérifiés ; livraison et activation distinctes ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-16-adapt-cab-responsive-layout/tasks.md) |
+
 `recover-finalization-checks-autonomously`, code non attribué : révision autonome des contrôles et actions de convergence, migration additive0016. Sources : change OpenSpec du même nom ; 13 tests PostgreSQL, 9 tests purs et parcours API réel réussis. Livraison/activation3.2.5 à vérifier séparément.
 
 Raccordement commun du 9 novembre 2026 : `unify-session-coordination-adapter`, ARCHIVÉ,

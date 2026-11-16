@@ -31,6 +31,8 @@ class Watcher:
                         if (folder/'specs').is_dir():candidates.extend((folder/'specs').iterdir())
             for path in candidates:
                 if path.is_dir() and path.resolve()==path:desired[str(path)]=(project.pk,path==root)
+            config_dir=root/'config'
+            if config_dir.is_dir() and not config_dir.is_symlink() and config_dir.resolve()==config_dir:desired[str(config_dir)]=(project.pk,'config')
             state=ProjectStatistics.objects.filter(project=project).first()
             if state is None or state.next_full_sync is None or state.next_full_sync<=timezone.now():self.dirty[project.pk]=time.monotonic()
         for path,wd in list(self.paths.items()):
@@ -56,7 +58,8 @@ class Watcher:
                 elif wd in self.watches:
                     project_id,is_root=self.watches[wd]
                     if not is_root or name in ('STATISTICS.md','openspec'):self.dirty[project_id]=now
-                    if is_root and (name=='project.env' or mask&(0x400|0x800)):self.env_dirty[project_id]=now
+                    if is_root is True and (name=='project.env' or mask&(0x400|0x800)):self.env_dirty[project_id]=now
+                    if is_root=='config' and (name in ('forgejo.token','github.token','gitlab.token') or mask&(0x400|0x800)):self.env_dirty[project_id]=now
                     if mask&(0x100|0x200|0x400|0x800):self.next_inventory=0
         if now>=self.next_active:
             for project_id in Run.objects.filter(state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('project_id',flat=True).distinct():

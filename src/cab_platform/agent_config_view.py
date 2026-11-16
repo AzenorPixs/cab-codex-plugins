@@ -14,7 +14,11 @@ def read_configuration(agent,user_id):
     account=local_account(row.username)
     require(account['uid']==row.uid and account['home']==row.home,'agent-account-identity-changed',409)
     home=Path(row.home);require(home.is_absolute() and home.resolve()==home,'agent-config-unsafe',409)
-    target=home/('.config/opencode/opencode.json' if agent=='opencode' else '.codex/config.toml')
+    if agent=='opencode':
+        allowed=(home/'.config/opencode/opencode.json',home/'.config/opencode/opencode.jsonc')
+        target=next((path for path in allowed if str(path)==row.config_path),None)
+        require(target is not None,'agent-config-unsafe',409)
+    else:target=home/'.codex/config.toml'
     parent=target.parent
     while parent!=home:
         require(not parent.is_symlink() and parent.is_dir() and parent.resolve()==parent,'agent-config-unsafe',409)
