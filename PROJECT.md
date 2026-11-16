@@ -1400,7 +1400,9 @@ de sa maison ; les sessions sont accessibles à `/projects/<ID>/sessions`.
 Les valeurs publiques de `project.env` sont mémorisées dans `projects` pour
 un premier affichage immédiat. La relecture à la sélection et la surveillance
 externe actualisent ensuite l’écran par Electric, sans bloquer l’affichage.
-Nom, version, types et cartes de forges sont filtrés ; aucun secret n’est exposé.
+Nom, version, types et cartes de forges sont filtrés ; la projection publique
+ne contient pas de secret. L’édition des identifiants est réservée à un
+administrateur authentifié.
 
 La mise à jour CAB peut être demandée par le MCP cab_update ou par le bouton
 permanent de /administration/update. CAB conduit seul le job durable via

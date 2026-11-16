@@ -22,7 +22,7 @@ def validate_versions(root):
     require(json.loads((root/'frontend/package.json').read_text())['version']==version)
     lock=json.loads((root/'frontend/package-lock.json').read_text())
     require(lock['version']==version and lock['packages']['']['version']==version)
-    require('CAB <span>'+version+'</span>' in (root/'frontend/src/main.tsx').read_text())
+    require("import {version as buildVersion} from '../package.json'" in (root/'frontend/src/SystemUpdate.tsx').read_text())
     for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu')]:
         base=root/'integrations/codex'/folder
         manifest=base/'.codex-plugin/plugin.json';skill=base/'skills'/folder/'SKILL.md';command=root/'integrations/commands'/(label+'.md')

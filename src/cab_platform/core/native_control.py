@@ -9,7 +9,7 @@ from cab_platform.native_api import NativeFailure,codex_peer,codex_frontends,ins
 from . import commands as c
 from .models import Actor,McpConnector,NativeReload,Operation,Lease,Maintenance
 
-PENDING=('QUEUED','DISPATCHED','UNKNOWN')
+PENDING=('QUEUED','DISPATCHED','UNKNOWN','AUTO_OC_DISPATCHED','AUTO_OC_WAITING','AUTO_OC_UNKNOWN')
 
 def target_actor(caller,data):
     key=data.get('actor_id',caller.pk)

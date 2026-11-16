@@ -32,6 +32,11 @@ class Configuration(models.Model):
     class Meta:
         db_table='configuration'
 
+class CabVersionProjection(models.Model):
+    id=models.PositiveSmallIntegerField(primary_key=True,default=1)
+    version=models.CharField(max_length=100)
+    class Meta:db_table='cab_version_projection'
+
 class Project(models.Model):
     identifier=models.CharField(max_length=100,unique=True,null=True,blank=True)
     id=models.CharField(primary_key=True,max_length=64)

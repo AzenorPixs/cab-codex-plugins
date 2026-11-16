@@ -1,5 +1,16 @@
 # Historique des versions
 
+## Non publié
+
+- Adaptation de l’interface CAB aux écrans contraints, avec conservation de la
+  référence 4K et présentation lisible des sessions et archives sur mobile.
+- Ajout d’un bloc de configuration projet éditable, avec sélection du dossier
+  et contrôle de l’unicité de l’identifiant.
+- Édition des forges par projet, stockage chiffré des tokens par le TPM et
+  vérification des authentifications avec affichage actualisé par Electric.
+- Réconciliation des configurations MCP des utilisateurs d’agents et
+  surveillance permanente des connecteurs CAB avec reprise native protégée.
+
 ## 3.2.8 — 2026-11-15
 
 - Compatibilité officielle PostgreSQL17/18 (Trixie/Forky), dépendances Debian

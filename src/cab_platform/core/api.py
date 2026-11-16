@@ -54,6 +54,20 @@ class NewProject(Schema):
     name:str
     folder:str
     request_id:str
+    project_path:str=''
+
+class ExistingProject(Schema):
+    project_path:str
+
+class ProjectConfigurationEdit(Schema):
+    fields:dict[str,str]
+    revision:str
+    project_path:str|None=None
+
+class ForgeEdit(Schema):
+    fields:dict[str,str]
+    token:str|None=None
+    revision:str
 
 class AgentUserRequest(Schema):
     agent:str
@@ -87,6 +101,14 @@ def invalid_input(request,error):return api.create_response(request,{'error':'co
 
 @api.get('/health',auth=None)
 def health(request):return {**bootstrap.status(),'csrf_token':get_token(request)}
+
+@api.get('/cab-version',auth=None)
+def cab_version(request):
+    from django.db import DatabaseError
+    from .models import CabVersionProjection
+    try:row=CabVersionProjection.objects.filter(pk=1).first()
+    except DatabaseError:return api.create_response(request,{'error':'version-unavailable'},status=503)
+    return {'version':row.version if row else None}
 
 @api.get('/interface/preferences',auth=None)
 def interface_preferences(request):
@@ -205,6 +227,19 @@ def projects_settings(request):
     from cab_platform.projects import settings_view
     return settings_view()
 
+@api.get('/projects/browse')
+def browse_project_directories(request,path:str=''):
+    principal(request,admin=True)
+    from cab_platform.projects import browse_directories
+    return browse_directories(path)
+
+@api.post('/projects/import')
+def add_existing_project(request,body:ExistingProject):
+    actor=principal(request,admin=True)
+    from cab_platform.projects import add_existing_project,project_data
+    project,created=add_existing_project(actor,body.project_path)
+    return {**project_data(project),'created':created}
+
 @api.post('/projects/{project_id}/refresh')
 def refresh_project(request,project_id:str):
     actor=principal(request)
@@ -214,11 +249,80 @@ def refresh_project(request,project_id:str):
     from cab_platform.project_metadata import synchronize
     return {'public_metadata':synchronize(project.pk)}
 
+@api.get('/projects/{project_id}/configuration')
+def project_configuration_read(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.forge_settings import file_operation
+    from cab_platform.project_configuration_edit import FIELDS
+    from cab_platform.project_metadata import synchronize
+    from cab_platform.paths import secret
+    import hmac
+    project=Project.objects.get(pk=project_id);before=file_operation(project,{'op':'env-read'});snapshot=synchronize(project.pk);env=file_operation(project,{'op':'env-read'})
+    commands.require(before['digest']==env['digest'],'project-configuration-changed',409)
+    commands.require(Project.objects.filter(pk=project.pk,root=project.root).exists(),'project-configuration-changed',409)
+    revision=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
+    response=JsonResponse({'fields':{key:snapshot.get('values',{}).get(key,'') for key in FIELDS},'project_path':project.root,'revision':revision})
+    response['Cache-Control']='no-store';return response
+
+@api.post('/projects/{project_id}/configuration')
+def project_configuration_save(request,project_id:str,body:ProjectConfigurationEdit):
+    principal(request,admin=True)
+    from cab_platform.forge_settings import file_operation
+    from cab_platform.project_configuration_edit import edit
+    from cab_platform.paths import secret
+    import hmac
+    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read'})
+    expected=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
+    commands.require(hmac.compare_digest(expected,body.revision),'project-configuration-changed',409)
+    return edit(project.pk,body.fields,env['digest'],body.project_path)
+
+@api.post('/projects/{project_id}/forges/authenticate')
+def forge_authenticate(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.get(pk=project_id)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_auth import enqueue
+    enqueue(project.pk)
+    return {'queued':True}
+
+@api.get('/projects/{project_id}/forges/{forge}')
+def forge_read(request,project_id:str,forge:str):
+    principal(request,admin=True)
+    from cab_platform.forge_settings import file_operation,token_read,validate_forge
+    from cab_platform.project_metadata import synchronize
+    from cab_platform.paths import secret
+    import hmac
+    validate_forge(forge);project=Project.objects.get(pk=project_id)
+    snapshot=synchronize(project.pk);env=file_operation(project,{'op':'env-read'})
+    value=token_read(project,forge)
+    revision=hmac.new(secret('django-secret').encode(),(env['digest']+'\0'+(value or '')).encode(),hashlib.sha256).hexdigest()
+    response=JsonResponse({'fields':{k:v for k,v in snapshot.get('values',{}).items() if k.startswith('REMOTE_'+forge+'_')},'token':value or '', 'revision':revision})
+    response['Cache-Control']='no-store';return response
+
+@api.post('/projects/{project_id}/forges/{forge}')
+def forge_save(request,project_id:str,forge:str,body:ForgeEdit):
+    principal(request,admin=True)
+    from cab_platform.forge_settings import edit_values,file_operation,token_read,validate_forge,synchronize_tokens
+    from cab_platform.project_metadata import synchronize
+    from cab_platform.paths import secret
+    import hmac
+    validate_forge(forge);project=Project.objects.get(pk=project_id)
+    env=file_operation(project,{'op':'env-read'})
+    current_token=token_read(project,forge)
+    expected=hmac.new(secret('django-secret').encode(),(env['digest']+'\0'+(current_token or '')).encode(),hashlib.sha256).hexdigest()
+    commands.require(hmac.compare_digest(expected,body.revision),'forge-file-changed',409)
+    edit_values(project,forge,body.fields,body.token,env['digest'])
+    try:
+        with transaction.atomic():synchronize_tokens(Project.objects.select_for_update().get(pk=project.pk))
+        synchronize(project.pk)
+    except commands.Refused:raise commands.Refused('forge-file-outcome-uncertain',409) from None
+    return {'saved':True}
+
 @api.post('/projects')
 def new_project(request,body:NewProject):
     actor=principal(request,admin=True)
     from cab_platform.projects import create_project,project_data
-    project,created=create_project(actor,body.name,body.folder,body.request_id)
+    project,created=create_project(actor,body.name,body.folder,body.request_id,body.project_path)
     return {**project_data(project),'created':created}
 
 @api.get('/sessions')

@@ -43,7 +43,7 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 
 .agent-block-header{display:flex;justify-content:space-between;align-items:center;gap:12px}.agent-block-header h2{margin:0}.agent-block-header .add-project{flex:none}
 
-.agent-block-header button.add-project{box-sizing:border-box;padding:0}.agent-user-row{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,13fr) auto;gap:12px;margin-top:24px;font-size:calc(19px * var(--font-scale));color:var(--muted)}.agent-user-config{min-width:0;overflow-wrap:anywhere;color:#fff}.agent-user-row small{grid-column:1/-1}:root[data-theme=light] .agent-user-config{color:var(--text)}.agent-user-remove{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:2px;background:transparent;color:var(--muted)}.agent-user-remove svg{width:20px;height:20px}.agent-user-remove:hover{color:var(--danger)}@media(max-width:600px){.agent-user-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}.agent-user-config{grid-column:1/-1;grid-row:2}.agent-user-remove{grid-column:2;grid-row:1}}
+.agent-block-header button.add-project{box-sizing:border-box;padding:0}.agent-user-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,3fr) auto;gap:12px;margin-top:24px;font-size:calc(19px * var(--font-scale));color:var(--muted)}.agent-user-config{min-width:0;overflow-wrap:anywhere;color:#fff}.agent-user-row small{grid-column:1/-1}:root[data-theme=light] .agent-user-config{color:var(--text)}.agent-user-remove{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:2px;background:transparent;color:var(--muted)}.agent-user-remove svg{width:20px;height:20px}.agent-user-remove:hover{color:var(--danger)}@media(max-width:600px){.agent-user-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}.agent-user-config{grid-column:1/-1;grid-row:2}.agent-user-remove{grid-column:2;grid-row:1}}
 
 .agent-detail-blocks>.agent-card{height:300px;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}.agent-card-content{flex:1;min-height:0;overflow-y:auto}.agent-card-content>.mcp-profile:first-child{border-top:0}
 
@@ -52,3 +52,34 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 .agent-user-config-error{font-size:calc(15px * var(--font-scale));color:var(--muted)}
 
 @container (max-width:2471px){.agent-detail-blocks>.agent-card:nth-child(4){grid-column:1}}
+
+.agents-overview .agents-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,450px),1fr))}
+
+.forge-card h2{display:flex;align-items:center;gap:10px}.forge-logo{width:1.15em;height:1.15em;flex:none;fill:currentColor}.forge-logo-forgejo{color:#f05a28}.forge-logo-gitlab{color:#fc6d26}
+
+.forge-card dl>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;align-items:start}.forge-card dd{min-width:0;margin:0}
+
+.forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
+
+.forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading h2{margin-bottom:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
+
+.forge-token-field{display:flex;align-items:center;gap:6px}.forge-editor .forge-token-field input{flex:1;min-width:0}.forge-token-eye{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:4px}.forge-token-eye svg{width:21px;height:21px}
+
+.forge-heading-main{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}.forge-auth{white-space:nowrap;font-size:calc(21px * var(--font-scale));color:var(--text)}.forge-auth [role=img]{font-size:1.45em;font-weight:700}.forge-auth-unknown{color:var(--muted)}
+
+.project-forges{grid-template-columns:repeat(auto-fit,min(450px,100%))}
+
+.forge-card{display:flex;flex-direction:column;overflow:hidden}.forge-heading{flex:none;padding-bottom:20px;border-bottom:1px solid var(--border)}.forge-card-content{min-height:0;overflow-y:auto}
+
+@media(max-width:850px){.project-path,.configuration-path{overflow-wrap:anywhere}.project-tabs{flex-wrap:wrap;gap:12px 18px}.lifecycle-dialog{max-width:calc(100vw - 24px)}.lifecycle-dialog label{overflow-wrap:anywhere}}
+@media(max-width:1300px){.table-wrap{overflow:visible}.table-wrap table,.table-wrap tbody,.table-wrap tr,.table-wrap td{display:block;width:100%;min-width:0}.table-wrap thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.table-wrap tr+tr{border-top:1px solid var(--border)}.table-wrap td{padding:10px 14px;border:0;overflow-wrap:anywhere}.table-wrap td::before{content:attr(data-label);display:block;color:var(--muted);font-size:calc(13px * var(--font-scale));font-weight:700;margin-bottom:4px}.table-wrap td small{overflow-wrap:anywhere}.table-wrap .session-actions{flex-wrap:wrap}.project-content pre{overflow-wrap:anywhere}}
+@media(max-width:600px){header{position:relative}.agent-detail-blocks .binary-info>span,.agent-detail-blocks .connector-info>span,.agent-detail-blocks .binary-info code,.agent-detail-blocks .connector-info code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}.forge-auth{white-space:normal;overflow-wrap:anywhere}}
+
+.project-configuration-logo{color:#5db4eb;fill:none}
+@media(max-width:600px){header{position:relative}}
+
+.project-metadata-icons{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.project-metadata-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}.project-metadata-icon svg,.project-metadata-icon img{width:24px;height:24px}
+
+.directory-input{display:flex;align-items:center;gap:8px;min-width:0}.directory-input input{flex:1;min-width:0}.directory-browse{flex:none}.directory-current{overflow-wrap:anywhere}.directory-list{display:flex;flex-direction:column;max-height:40vh;overflow-y:auto;gap:4px}.directory-list button{text-align:left;background:transparent;color:var(--text);padding:8px}.project-path-field{margin:1rem 0}.project-path-field label{margin:0}
+
+.forge-card .project-configuration-values>div{grid-template-columns:minmax(0,3fr) minmax(0,7fr)}

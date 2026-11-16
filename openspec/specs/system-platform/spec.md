@@ -123,16 +123,15 @@ Avant initialisation, leur changement MUST rester temporaire sans créer de base
 - **THEN** la taille s’applique globalement et le thème est restauré depuis configuration
 
 ### Requirement: Catalogue et création de projets
-Le catalogue MUST persister les projets dans la table PostgreSQL projects.
-La migration MUST conserver les identités et relations existantes. /projects
-MUST afficher une liste à gauche avec un bouton + en haut vers /projects/new.
-Chaque projet enregistré MUST disposer d’un lien vers /projects/<ID>.
-La création authentifiée MUST enregistrer le projet et créer son seul dossier
-dans la racine configurée, sans écraser un dossier existant ni rejouer une intention incertaine.
+Le catalogue MUST conserver les projets dans PostgreSQL et préserver leurs identités et relations. `/projects` MUST fournir une liste et un bouton d’ajout. L’administrateur MAY créer un projet ou ajouter un dossier existant, sans écrasement ni rejeu d’une création incertaine.
 
 #### Scenario: Création d’un projet
 - **WHEN** un administrateur valide le nom et le dossier d’un nouveau projet
 - **THEN** le projet est conservé dans projects, son dossier utilise les UID/GID configurés et il apparaît sélectionné dans la liste de gauche
+
+#### Scenario: Chemin choisi et projet existant
+- **WHEN** un administrateur crée ou ajoute un projet et saisit ou sélectionne un chemin absolu
+- **THEN** CAB conserve ce chemin dans PostgreSQL ; le chemin par défaut est la racine configurée suivie de l’identifiant si aucun chemin n’est fourni.
 
 #### Scenario: Page individuelle
 - **WHEN** un projet de la liste est sélectionné
@@ -634,29 +633,82 @@ découpé par virgules en étiquettes à droite de la version.
 
 ### Requirement: Cartes et suppression des métadonnées
 Les cartes Forgejo, GitHub et GitLab MUST afficher les variables publiques
-présentes de leur famille REMOTE respective. Un fichier absent, ambigu ou
+présentes de leur famille REMOTE respective, sauf les valeurs SSL_VERIFY,
+qui restent conservées dans la projection sans être affichées. Un fichier absent, ambigu ou
 inaccessible MUST être signalé sans contenu brut. Les variables retirées
 MUST disparaître de l'instantané.
+
+#### Scenario: Affichage masqué du token
+- **WHEN** une carte Forgejo, GitHub ou GitLab est affichée
+- **THEN** une ligne Token présente toujours 22 astérisques, indépendamment de la présence d’un token, sans lecture ni exposition de sa valeur.
+
+#### Scenario: Bloc de configuration du projet
+- **WHEN** la fiche d’un projet est affichée
+- **THEN** un bloc « Configuration » avec son icône précède les cartes des forges et affiche ID, nom, langages, publication et version depuis PostgreSQL, puis Electric.
+- **AND** les langages reconnus sont représentés dans l’ordre de `PROJECT_TYPE` par des logos liés à leur site officiel ; les valeurs non reconnues restent lisibles.
+- **AND** les logos Debian et Docker sont affichés lorsque leur variable vaut « Yes » et renvoient vers leurs sites officiels.
+
+#### Scenario: Chemin d’un projet initialisé
+- **WHEN** un administrateur modifie le chemin d’un projet initialisé
+- **THEN** CAB le conserve uniquement dans PostgreSQL, sans écrire de variable de chemin dans `project.env`, après vérification que le nouveau dossier contient un `project.env` de contenu identique.
+- **AND** la clé interne et les relations sont conservées ; le bloc est actualisé par Electric et le changement est refusé si une opération est active.
+
+#### Scenario: Édition de la configuration du projet
+- **WHEN** un administrateur ouvre le stylo du bloc « Configuration »
+- **THEN** il peut modifier les six variables publiques du bloc dans `project.env` ; CAB vérifie la révision et l’unicité de l’identifiant avant d’enregistrer et synchronise PostgreSQL puis Electric.
+- **AND** un changement d’identifiant actualise l’adresse canonique sans modifier la clé interne du projet.
 
 #### Scenario: Métadonnées et cartes
 - **WHEN** le fichier contient une seule forge puis la retire
 - **THEN** seule sa carte est affichée puis elle disparaît
 
+### Requirement: Authentification des forges
+À l’ouverture d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+
+#### Scenario: Modification des identifiants
+- **WHEN** le compte ou le token d’une forge change
+- **THEN** CAB invalide l’ancien état, planifie automatiquement une nouvelle vérification et transmet son résultat par PostgreSQL et Electric, même si une vérification précédente est encore en cours.
+
+#### Scenario: Utilisateur ou token absent
+- **WHEN** l’utilisateur ou le token de la forge est absent ou vide
+- **THEN** CAB ne lance pas de tentative d’authentification, conserve l’état indéterminé `null` dans PostgreSQL et affiche « ... » via Electric.
+
+#### Scenario: Identité vérifiée ou refusée
+- **WHEN** la forge confirme l’identité attendue ou refuse l’authentification
+- **THEN** le bloc affiche respectivement une coche verte ou une croix rouge.
+
+#### Scenario: Accès Forgejo par le dépôt
+- **WHEN** le token ne permet pas la lecture du profil utilisateur Forgejo
+- **THEN** CAB vérifie le dépôt configuré et ne confirme l’authentification que si la réponse démontre un accès supérieur à la réponse anonyme ; un dépôt public accessible sans distinction reste non vérifié.
+
+#### Scenario: Token GitHub ou GitLab limité au dépôt
+- **WHEN** l’API du profil ne peut pas confirmer le compte configuré
+- **THEN** CAB vérifie l’accès Git HTTPS au dépôt et ne confirme l’authentification que si l’accès authentifié est distinct de l’accès anonyme ; un dépôt public sans distinction reste non vérifié.
+
+#### Scenario: Vérification indéterminée
+- **WHEN** la forge est indisponible, la portée du token insuffisante ou les identifiants non configurés
+- **THEN** le bloc indique que l’état n’est pas vérifié sans conclure à un échec d’authentification.
+
+### Requirement: Édition des forges et chiffrement TPM
+Chaque carte de forge MUST proposer une édition administrateur de ses variables et de son token local, masqué par défaut et affichable par un bouton. Les fichiers MUST être surveillés ; PostgreSQL conserve le token chiffré par le TPM et Electric ne reçoit aucun token en clair. Le paquet Debian MUST dépendre de systemd fournissant systemd-creds.
+
+#### Scenario: Enregistrement d’un token
+- **WHEN** un administrateur modifie un token de forge
+- **THEN** CAB écrit `config/<forge>.token` et `config/<forge>.username` avec le propriétaire de la forge, puis synchronise le token chiffré par le TPM dans PostgreSQL, sans l’écrire dans project.env.
+
+#### Scenario: Fichier modifié ou TPM indisponible
+- **WHEN** la configuration a changé depuis l’ouverture ou que le TPM est inaccessible
+- **THEN** CAB refuse l’enregistrement plutôt que d’écraser la modification concurrente ou de substituer un chiffrement logiciel.
+
 ### Requirement: Lecture littérale sans effet
-CAB MUST NOT exécuter ou modifier project.env. Les clés dupliquées, expressions,
-liens et fichiers non réguliers MUST être refusés.
+CAB MUST NOT exécuter project.env. Seule une édition administrateur explicite des variables du projet ou de la forge sélectionnée MAY modifier ce fichier ; les autres lignes MUST être conservées. Les clés dupliquées, expressions, liens et fichiers non réguliers MUST être refusés.
 
 #### Scenario: Syntaxe active
 - **WHEN** le fichier contient une substitution shell
 - **THEN** elle est refusée et aucun effet n'est exécuté
 
 ### Requirement: Liste publique fermée
-Seules PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE et les variables
-REMOTE_FORGEJO_, REMOTE_GITHUB_, REMOTE_GITLAB_ de suffixes BASE_URL, OWNER,
-REPOSITORY, NAME, BRANCH, SSL_VERIFY MAY être retenues après validation.
-Une URL avec identifiants, requête ou fragment et toute valeur incertaine MUST
-être exclues avant persistance. Les jetons, mots de passe et clés MUST NOT
-entrer dans projects, les réponses ni Electric.
+Seuls PROJECT_ID, PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE, PROJECT_DOCKERED, PROJECT_DEBIAN_PACKAGE et les REMOTE_(FORGEJO|GITHUB|GITLAB) aux suffixes BASE_URL, OWNER, REPOSITORY, NAME, BRANCH, SSL_VERIFY MAY être publiés après validation. Les URL avec identifiants, requête ou fragment et les valeurs incertaines MUST être exclues. Electric et la projection publique MUST NOT contenir de secrets en clair. Seul un administrateur MAY consulter les tokens sans cache.
 
 #### Scenario: Secrets
 - **WHEN** le fichier contient un jeton ou une URL authentifiée
@@ -950,6 +1002,21 @@ et les refus réels d'accès MUST rester contrôlés sans exposer de credentials
 - **WHEN** le compte effectif peut lire son profil CAB régulier en 0770 ou autre mode
 - **THEN** CAB le charge sans chmod et utilise son authentification normale
 
+### Requirement: Surveillance permanente des connecteurs MCP CAB
+Le service CAB MUST surveiller en permanence les connecteurs CAB des agents OpenCode, Codex et Codex CLI, indépendamment des pages ouvertes. Une reprise automatique MUST cibler une instance identifiée, préserver les opérations actives et conserver un reçu durable ; un résultat incertain MUST NOT être rejoué automatiquement.
+
+#### Scenario: Relais OpenCode disparu
+- **WHEN** OpenCode V2 indique le connecteur CAB connecté mais que son relais est absent et que l’instance et la frontière sûre sont vérifiées
+- **THEN** CAB demande une reconnexion ciblée et confirme la reprise uniquement après réception d’un nouveau heartbeat.
+
+#### Scenario: Connecteur Codex ou Codex CLI disparu
+- **WHEN** un relais CAB est absent et que son contrôle natif est identifié et utilisable
+- **THEN** CAB planifie une reprise par le contrôle natif existant, sous les mêmes protections d’opérations actives et de non-rejeu.
+
+#### Scenario: Instance non identifiée ou effet incertain
+- **WHEN** l’instance ne peut être identifiée, qu’une opération est active ou qu’une reprise est incertaine
+- **THEN** CAB s’abstient de déclencher ou de rejouer la reconnexion.
+
 ### Requirement: API native prioritaire de rechargement MCP
 CAB MUST privilégier l'API native de l'instance réelle de Codex, Codex CLI ou
 OpenCode avant ses replis possédés. Un socket d'un autre app-server MUST NOT
@@ -1018,6 +1085,10 @@ Seule la version littérale change ; une nouvelle preuve MUST être exigée.
 ### Requirement: Catalogue et navigation des agents
 La page /agents MUST présenter les trois fiches et une colonne latérale listant les agents déclarés dans la table PostgreSQL `agents`, dans l'ordre Codex, Codex CLI, OpenCode. Les liens /agents/codex, /agents/codex-cli et /agents/opencode MUST afficher chacun la fiche correspondante sans recharger le document. Les états de processus, versions et connexions MUST rester issus des observations courantes et les secrets MUST NOT être stockés dans ce catalogue.
 
+#### Scenario: Accueil des agents
+- **WHEN** la page `/agents` présente les trois agents
+- **THEN** leurs blocs ne présentent pas les lignes « Binaire », « Connecteur MCP » ou « Configurations MCP » ; ces informations restent disponibles dans la fiche individuelle.
+
 #### Scenario: Sélection d'un agent
 - **WHEN** un administrateur sélectionne un agent dans la colonne
 - **THEN** sa fiche, son nom comme titre principal et une barre de navigation avec un lien vers /agents sont affichés ; les autres agents restent accessibles dans le menu.
@@ -1042,7 +1113,11 @@ CAB MUST permettre à un administrateur de déclarer un compte présent dans `/e
 - **THEN** seule l'association affichée à cet agent est retirée de `agent_users`.
 
 ### Requirement: Réconciliation MCP des utilisateurs déclarés
-La fiche d'un agent MUST afficher dans le bloc utilisateurs l'état du fichier de configuration des seuls utilisateurs associés, depuis PostgreSQL puis actualisé par Electric. Le bloc MCP MUST afficher « MCP cab — Déclaré » lorsqu'au moins une déclaration est présente. À chaque ouverture, CAB MUST réconcilier les fichiers en arrière-plan sans créer un fichier absent ni modifier les autres entrées MCP. Un conflit ou un effet incertain MUST être signalé sans écrasement ni rejeu automatique.
+La fiche MUST afficher les configurations des utilisateurs associés depuis PostgreSQL puis Electric. À chaque ouverture et tant que la fiche reste ouverte, CAB MUST réconcilier périodiquement leurs déclarations MCP en arrière-plan selon les scénarios ci-dessous. Un conflit ou un effet incertain MUST être signalé sans écrasement ni rejeu automatique. Le bloc MCP MUST afficher l’état de chaque utilisateur.
+
+#### Scenario: État MCP par utilisateur
+- **WHEN** un utilisateur est associé à l’agent
+- **THEN** sa ligne affiche « OK · MCP cab · Déclaré » si la déclaration est vérifiée, « NOK · MCP cab · Non Déclaré » si elle est absente, ou « NOK · MCP cab · À vérifier » si son état est inconnu.
 
 #### Scenario: Fichier Codex présent
 - **WHEN** le fichier `.codex/config.toml` d'un utilisateur déclaré est présent et compatible
@@ -1053,8 +1128,12 @@ La fiche d'un agent MUST afficher dans le bloc utilisateurs l'état du fichier d
 - **THEN** l'entrée `cab` commune cible Codex en priorité.
 
 #### Scenario: Fichier OpenCode présent ou absent
-- **WHEN** le fichier `.config/opencode/opencode.json` d'un utilisateur déclaré existe
-- **THEN** CAB assure de façon idempotente la déclaration du connecteur OpenCode ; sinon il affiche « Configuration non présente » sans créer le fichier.
+- **WHEN** un utilisateur déclaré dispose de `.config/opencode/opencode.json` ou `.config/opencode/opencode.jsonc`
+- **THEN** CAB conserve son contenu et assure de façon idempotente la déclaration `mcp.servers.cab` compatible OpenCode V2 ; si les deux fichiers existent, CAB signale le conflit sans modification.
+- **WHEN** aucun de ces fichiers n'existe
+- **THEN** CAB crée `.config/opencode/opencode.jsonc` dans la Home du compte avec le schéma OpenCode, les valeurs par défaut natives et la déclaration MCP CAB V2, puis affiche le chemin et l'état depuis PostgreSQL via Electric.
+- **AND** les commentaires et les virgules finales d'un fichier JSONC existant sont conservés.
+- **AND** CAB vérifie ou crée un profil d’authentification OpenCode propre au compte, sans écraser un profil existant ni renouveler un secret ; un conflit ou un résultat incertain est signalé.
 
 #### Scenario: Aucun utilisateur déclaré
 - **WHEN** aucun compte n'est associé à l'agent
@@ -1070,6 +1149,17 @@ Un administrateur MUST pouvoir ouvrir en lecture seule le fichier de configurati
 #### Scenario: Accès non autorisé ou fichier non sûr
 - **WHEN** le demandeur n'est pas administrateur ou que le fichier ne satisfait pas les contrôles de sécurité
 - **THEN** CAB refuse la lecture et n'affiche pas le contenu.
+
+### Requirement: Version CAB issue de la configuration
+La version déclarée dans `/etc/cab/cab.json` MUST être conservée dans l'entrée `cab` de la table PostgreSQL `configuration`. CAB MUST surveiller le fichier et actualiser cette entrée et une projection Electric limitée à la version. Le bandeau et la version locale de la page de mise à jour MUST afficher la valeur enregistrée, puis les changements reçus par Electric. Une lecture invalide MUST préserver la dernière valeur valide ; la projection MUST NOT exposer d'autres données privées du fichier.
+
+#### Scenario: Modification de la version déclarée
+- **WHEN** le fichier contient une nouvelle version valide
+- **THEN** l'entrée PostgreSQL, la projection Electric et l'affichage web sont actualisés sans rechargement de page.
+
+#### Scenario: Configuration indisponible ou invalide
+- **WHEN** le fichier ne peut pas être lu ou contient une version invalide
+- **THEN** CAB conserve la dernière valeur valide et ne publie aucune valeur inventée.
 
 #### Scenario: Base indisponible
 - **WHEN** le catalogue ne peut pas être lu
@@ -1220,3 +1310,22 @@ reconstruire son flux après une migration logique sans ancienne projection.
 #### Scenario: Opération protégée
 - **WHEN** une opération possède un reçu UNKNOWN non réconcilié
 - **THEN** la migration est refusée et ce reçu demeure intact
+
+### Requirement: Interface CAB adaptée aux écrans
+L’interface CAB MUST adapter ses pages, sa navigation et ses fenêtres à la largeur disponible. La présentation existante en 3840 × 2160 MUST rester la référence sur grand écran. Les données, états et actions MUST rester accessibles.
+
+#### Scenario: Grand écran de référence
+- **WHEN** une page CAB est affichée en 3840 × 2160
+- **THEN** elle conserve ses dispositions de référence et ses commandes.
+
+#### Scenario: Téléphone ou tablette
+- **WHEN** la largeur disponible ne permet plus la présentation de référence
+- **THEN** la navigation, les blocs et les fenêtres s’adaptent sans débordement horizontal de la page et les textes longs restent lisibles.
+
+#### Scenario: Sessions sur écran contraint
+- **WHEN** un tableau de sessions ou d’archives ne dispose pas de la largeur nécessaire
+- **THEN** ses données et actions restent accessibles dans une présentation adaptée avec leurs libellés.
+
+#### Scenario: Contenu et opérations préservés
+- **WHEN** la présentation change selon la taille de l’écran
+- **THEN** CAB conserve les mêmes données, les mises à jour en direct et les mêmes actions métier.
