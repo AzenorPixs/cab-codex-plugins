@@ -1345,6 +1345,14 @@ Lorsqu’un relais dispose déjà d’un moteur vivant à la version cible mais 
 - **WHEN** le moteur est chargé à la version cible et que le catalogue du client n’est pas encore observé
 - **THEN** CAB attend le catalogue sans rejouer le rechargement ni déclarer le connecteur prêt.
 
+#### Scenario: Déconnexion explicitement confirmée
+- **WHEN** un administrateur confirme la déconnexion d’un relais ciblé après vérification de l’arrêt de ce relais et de son moteur, sans requête ni effet incertain à la dernière observation
+- **THEN** CAB conserve un reçu de déconnexion explicite, sans déclarer le catalogue lu ni le relais reconnecté, et réévalue la mise à jour concernée.
+
+#### Scenario: Relais de remplacement
+- **WHEN** un relais ciblé disparaît mais que son client reste actif
+- **THEN** CAB ne considère comme remplacement qu’un relais nouveau lié à la même instance ; un autre relais déjà présent ne constitue pas une preuve.
+
 ### Requirement: Réglages responsives partagés
 CAB MUST fournir six profils de référence : mobile 390 px, tablette 768 px, HD 1366 px, Full HD 1920 px, QHD 2560 px et 4K 3840 px. Chaque profil MUST comporter deux multiplicateurs réglables de 50 à 150 %, l’un pour la taille générale de l’interface et l’autre pour les polices ; tous valent 100 % par défaut et conservent les comportements responsives existants. Entre deux références, les multiplicateurs MUST être interpolés linéairement et rester constants hors de la plage.
 
@@ -1372,3 +1380,14 @@ CAB MUST conserver en base des références de taille d’interface et de police
 - **WHEN** un administrateur active le mode développeur depuis la page de mise à jour
 - **THEN** les commandes du bandeau modifient les références de la page courante pour le profil de résolution le plus proche.
 - **AND** le mode développeur est désactivé par défaut sur une installation neuve.
+
+### Requirement: Confirmation administrative d’une liaison MCP arrêtée
+CAB MUST permettre à un administrateur de confirmer explicitement la déconnexion d’un relais ciblé par un reçu de mise à jour, uniquement après vérification de l’arrêt effectif du relais et de son moteur et de l’absence de requête ou d’effet incertain à la dernière observation et d’opération ou de bail actif pour son acteur. CAB MUST conserver la décision et ses identités dans le reçu et l’audit, sans la présenter comme une reconnexion ou une lecture de catalogue.
+
+#### Scenario: Confirmation de la déconnexion
+- **WHEN** la cible du reçu est arrêtée et que l’administrateur confirme sa déconnexion
+- **THEN** CAB enregistre l’état DISCONNECTED et réévalue le même reçu sans lancer une nouvelle installation.
+
+#### Scenario: Cible vivante ou effet incertain
+- **WHEN** l’arrêt ne peut pas être prouvé ou qu’un effet reste incertain
+- **THEN** CAB refuse la confirmation et conserve la protection de la mise à jour.

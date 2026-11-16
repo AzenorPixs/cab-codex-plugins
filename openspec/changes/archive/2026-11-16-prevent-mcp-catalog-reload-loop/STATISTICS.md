@@ -29,7 +29,7 @@ Change : `prevent-mcp-catalog-reload-loop` · état local : `archived`. Les vale
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:5fdb1cabd59bacc2995ca1cd0b6e7f1e4658bf4f0a8cd985430fab860843a80f
+Provenance : change-periods:c6eecf58a612d1b8dbf68f36678fab186d6dc40e8e0b62dbee4fe7cc6efc1f2d
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:5fdb1cabd59bacc2995ca1cd0b6e7f1e4658bf4f0a8cd985430f
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 9841792 | bounded |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 9845742 | bounded |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 4476 | bounded |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 278 | bounded |
-| SCM-MCP-CATALOG-3213 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 9850218 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4a6cd338b94c501e243919da488b52e45231b21d6174d1ed85fef7357a3d4c61", "generated_at": "2026-11-16T11:06:06.785593+00:00", "revision": "4a6cd338b94c501e243919da488b52e45231b21d6174d1ed85fef7357a3d4c61", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "55fd3f2dbcd1d6a5ca4e14f5511a3aa143c841f6853914c7040a06ee31dc22ae", "generated_at": "2026-11-16T11:06:52.120206+00:00", "revision": "55fd3f2dbcd1d6a5ca4e14f5511a3aa143c841f6853914c7040a06ee31dc22ae", "scope": "change"} -->

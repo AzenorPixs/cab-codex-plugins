@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Confirmation de déconnexion MCP — 16 novembre 2026
+
+`confirm-stopped-mcp-relay`, code non attribué : constat administratif audité d’une liaison arrêtée et conservation des preuves ; change archivé, vérifié sur l’hôte. Livraison distincte.
+
 ## Attente du catalogue MCP — 16 novembre 2026
 
 `prevent-mcp-catalog-reload-loop`, code non attribué : attente du catalogue sans redémarrage répété ni confirmation fictive ; contrôles ciblés sur l’hôte. La reconnexion réelle et la livraison sont distinctes.

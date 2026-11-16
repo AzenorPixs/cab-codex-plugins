@@ -496,6 +496,10 @@ def command(request,body:Command):
         if data.get('force'):principal(request,admin=True)
         from cab_platform.update_availability import request_check
         return request_check(data.get('force',False))
+    if name=='system.update.confirm_disconnected':
+        principal(request,admin=True)
+        from cab_platform import system_updates
+        return system_updates.confirm_disconnected(actor,data)
     if name in ('system.update','system.update.status'):
         commands.require(set(data)<=({'request_id','version'} if name=='system.update' else {'request_id'}),'update-fields-invalid',400)
         from cab_platform import system_updates
