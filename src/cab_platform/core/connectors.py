@@ -1,11 +1,24 @@
 """Registre authentifié et observations de rechargement CABU."""
+import os
 import re
+import select
 from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 from cab_platform.connector_process import identity,alive,cab_process,legacy_processes
 from . import commands as c
 from .models import Actor,McpConnector,ConnectorReload,SystemUpdate,McpConnectorProjection,McpStopAttempt
+
+def observed_dead(saved):
+    if not isinstance(saved,dict) or not all(key in saved for key in ('pid','uid','start','boot')):return False
+    try:fd=os.pidfd_open(saved['pid'])
+    except ProcessLookupError:return True
+    except (OSError,ValueError,TypeError):return False
+    try:
+        current=identity(saved['pid'])
+        if current is not None and current!=saved:return True
+        return bool(select.select([fd],[],[],0)[0])
+    finally:os.close(fd)
 
 @transaction.atomic
 def heartbeat(actor,data,peer):
@@ -82,16 +95,21 @@ def snapshot():
     rows.extend(legacy_processes(allowed,managed))
     return rows
 
-def assess(targets,version):
+def assess(targets,version,confirmed_disconnected=()):
     outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)))
+    original_ids={target.get('connector_id') for target in targets if target.get('kind')=='managed'}
     for target in targets:
         state='RECONNECTING';detail='';row=None
+        confirmed=next((item for item in confirmed_disconnected if item.get('connector_id')==target.get('connector_id') and item.get('process')==target.get('process')),None)
+        if confirmed and observed_dead(target['process']) and observed_dead(confirmed.get('worker')):
+            outcomes.append({'kind':target['kind'],'agent':target['agent'],'uid':target['process']['uid'],'original_pid':target['process']['pid'],'state':'DISCONNECTED','reason':'operator-confirmed-disconnected','connector_id':target.get('connector_id'),'loaded_version':None,'catalog_version':None,'generation':confirmed.get('generation')})
+            continue
         if target['kind']=='managed':
             row=next((r for r in current if r.pk==target['connector_id'] and alive(r.process)),None)
             if row is None:
                 if not alive(target['process']) and alive(target.get('owner')):
                     from cab_platform.native_api import same_instance
-                    candidates=[r for r in current if r.agent==target['agent'] and r.process['uid']==target['process']['uid'] and alive(r.process) and same_instance(identity(r.process['parent_pid']),target['owner'])]
+                    candidates=[r for r in current if r.pk not in original_ids and r.agent==target['agent'] and r.process['uid']==target['process']['uid'] and alive(r.process) and same_instance(identity(r.process['parent_pid']),target['owner'])]
                     row=next((r for r in candidates if r.loaded_version==version and r.catalog_version==version),candidates[0] if candidates else None)
                     state='RELOAD_REQUIRED' if row is None else 'RECONNECTING';detail='native-replacement-not-observed'
                 else:state='DISCONNECTED' if not alive(target['process']) else 'RECONNECTING';detail='connector-heartbeat-missing'

@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Confirmation de déconnexion MCP — 16 novembre 2026
+
+`confirm-stopped-mcp-relay`, code non attribué : change archivé ; attribution ultérieure par ACL.
+
 ## Attente du catalogue MCP — 16 novembre 2026
 
 `prevent-mcp-catalog-reload-loop`, code non attribué : change archivé ; attribution ultérieure par ACL.
