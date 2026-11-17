@@ -163,11 +163,7 @@ La validation du cookie, du jeton CSRF et des origines MUST rester active.
 - **THEN** CAB refuse la requête sans authentifier le compte
 
 ### Requirement: Administration par sections et menus latéraux
-Les espaces Administration et Projets MUST disposer d’un menu latéral directement
-au bord gauche de l’écran, sans marge extérieure. L’administration MUST proposer
-les routes /administration/agents, /administration/database,
-/administration/interface, /administration/projects et /administration/web-server.
-/administration MUST ouvrir la section Agents. La version suit la livraison du paquet CAB.
+Administration et Projets MUST disposer d’un menu latéral au bord gauche, sans marge extérieure. L’administration MUST proposer les routes /administration/agents, /administration/database, /administration/interface, /administration/projects et /administration/web-server. /administration MUST afficher le titre Administration sans contenu de section. /administration/database MUST afficher les paramètres de base de données.
 
 #### Scenario: Navigation entre paramètres
 - **WHEN** l’administrateur sélectionne une section dans la barre gauche
@@ -642,46 +638,118 @@ rester refusé ; les contrôles de propriété et d’identité du journal sont 
 - **THEN** CAB peut rattacher le journal à ce projet sans changer son identité
 
 ### Requirement: Bloc Git du projet
-L’accueil du projet MUST afficher un bloc Git entre Configuration et les cartes
+La page Forges du projet MUST afficher le bloc Git en premier, avant les cartes
 de forges. Son titre MUST présenter le logo Git, le nom Git et un séparateur
-vertical. La version Git locale MUST être mutualisée en base et synchronisée
-via Electric, puis affichée à côté du titre en plus petit. Les versions des
-instances Forgejo et GitLab et la dernière version disponible de l’API GitHub
-MUST être mutualisées par instance, stockées en base et affichées dans leur
-titre via Electric ; la version Forgejo affichée MUST omettre le signe + et son
-suffixe. Dans les titres de forge, le résultat d’authentification MUST porter
-le libellé « API ». Chaque version MUST être vérifiée au maximum une fois par
-24 heures avec un décalage aléatoire, mémorisé lors des redémarrages.
-Le bloc MUST afficher sur deux colonnes les valeurs présentes de
-GIT_USER_NAME, GIT_USER_EMAIL et LOCAL_DEFAULT_BRANCH avec des libellés lisibles.
-Ces valeurs MUST suivre la projection PostgreSQL et la synchronisation Electric
-des métadonnées de project.env. Un bouton d’édition MUST permettre de modifier
-ces trois valeurs dans project.env avec le contrôle de révision existant, sans
-modifier les autres variables. L’état d’initialisation Git MUST être conservé
-dans les données du projet et projeté vers Electric : 1 si le dépôt est
-initialisé, 0 s’il est absent. La présence de .git MUST être réconciliée en
-arrière-plan ; un bouton MUST permettre son initialisation uniquement lorsque
-l’état conservé est 0. En cas d’état réel illisible, la dernière valeur connue
-MUST être conservée.
+vertical.
+
+Le bloc Git MUST afficher entre la version et les fichiers suivis le nombre de commits accessibles depuis le commit courant. Ce nombre MUST être conservé dans PostgreSQL, recalculé en arrière-plan et diffusé via Electric lorsqu’il change. Un dépôt sans commit affiche zéro.
+
+#### Scenario: Affichage du nombre de commits
+- **WHEN** CAB mesure l’état Git d’un projet
+- **THEN** le nombre de commits accessibles depuis le commit courant est enregistré et affiché dans le bloc Git.
 
 #### Scenario: Affichage du bloc Git
-- **WHEN** un utilisateur ouvre l’accueil d’un projet
-- **THEN** il voit le bloc Git après Configuration et avant les cartes de forges
+- **WHEN** un utilisateur ouvre la page Forges d’un projet
+- **THEN** il voit le bloc Git en premier, suivi des cartes des forges.
+
+### Requirement: Version Git locale mutualisée
+La version Git locale MUST être mutualisée en base et synchronisée via Electric,
+puis affichée à côté du titre en plus petit. Elle MUST être vérifiée au maximum
+une fois par 24 heures avec un décalage aléatoire mémorisé lors des redémarrages.
+
+#### Scenario: Affichage de la version Git
+- **WHEN** la version Git locale est connue
+- **THEN** elle est affichée à côté du titre Git depuis la valeur mutualisée
+
+### Requirement: Versions des forges mutualisées
+Les versions Forgejo et GitLab et la dernière version disponible de l’API GitHub
+MUST être mutualisées par instance, stockées en base et affichées via Electric.
+La version Forgejo affichée MUST omettre le signe + et son suffixe. Le résultat
+d’authentification MUST porter le libellé « API ». Chaque version MUST être
+vérifiée au maximum une fois par 24 heures avec un décalage aléatoire mémorisé.
+
+#### Scenario: Affichage des versions de forge
+- **WHEN** une version de forge est connue
+- **THEN** sa valeur mutualisée est affichée dans le titre correspondant
+
+### Requirement: Configuration Git du projet
+Le bloc Git MUST afficher sur deux colonnes les valeurs présentes de
+GIT_USER_NAME, GIT_USER_EMAIL et LOCAL_DEFAULT_BRANCH avec des libellés lisibles.
+Ces valeurs MUST suivre la projection PostgreSQL et Electric depuis project.env.
+Un bouton MUST permettre de modifier ces trois valeurs dans project.env avec le
+contrôle de révision existant, sans modifier les autres variables.
+
+#### Scenario: Modification de la configuration Git
+- **WHEN** un administrateur édite les valeurs Git du projet
+- **THEN** seules les trois variables demandées peuvent être modifiées
+
+### Requirement: Initialisation Git du projet
+L’état Git MUST être conservé dans les données du projet et projeté via Electric :
+1 si le dépôt est initialisé, 0 s’il est absent. La présence de .git MUST être
+réconciliée en arrière-plan ; un bouton MUST permettre son initialisation uniquement
+lorsque l’état conservé est 0. En cas d’état réel illisible, la dernière valeur
+connue MUST être conservée.
+
+#### Scenario: Dépôt non initialisé
+- **WHEN** l’état conservé vaut 0
+- **THEN** le bouton d’initialisation du dépôt Git est affiché
 
 ### Requirement: État Git local du projet
-À l’ouverture d’un projet, CAB MUST mesurer en arrière-plan son état Git local
-et en conserver une seule image par projet dans la table git_projects. La page
-MUST afficher l’image enregistrée immédiatement puis recevoir les changements
-via Electric. Le bloc Git MUST présenter le dernier commit et son horodatage
-local au format jj.mm.AA hh.mm, les tags associés à ce commit sous « Version »,
-
-l’état et les nombres de fichiers suivis, modifiés, indexés, ignorés, non suivis
-et en conflit. Une mesure indisponible MUST conserver la dernière image et
-signaler son indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
+À l’ouverture d’un projet, CAB MUST mesurer son état Git local en arrière-plan
+et conserver une seule image par projet dans git_projects. La page MUST afficher
+l’image enregistrée immédiatement puis recevoir les changements via Electric.
+Une mesure indisponible MUST conserver la dernière image et signaler son
+indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
 
 #### Scenario: Mise à jour de l’état Git
-- **WHEN** un projet est ouvert ou que le bouton de rafraîchissement Git est sélectionné, et que la mesure locale diffère de l’image enregistrée
-- **THEN** CAB met à jour la même ligne du projet et la page affiche la nouvelle image ; le bouton de rafraîchissement est animé pendant la mesure, à l’ouverture comme après un clic
+- **WHEN** un projet est ouvert ou que le bouton de rafraîchissement Git est sélectionné et que l’état local diffère
+- **THEN** CAB met à jour la même ligne et la page affiche la nouvelle image
+
+### Requirement: Présentation de l’état Git local
+Le bloc Git MUST présenter le dernier commit, son horodatage local au format
+jj.mm.AA hh.mm, ses tags sous « Version », l’état et les nombres de fichiers
+suivis, modifiés, indexés, ignorés, non suivis et en conflit. Le bouton de
+rafraîchissement MUST être animé pendant la mesure, à l’ouverture comme après
+un clic.
+
+#### Scenario: Affichage de l’état Git
+- **WHEN** l’état Git est disponible
+- **THEN** ses indicateurs sont affichés dans le bloc Git du projet
+
+### Requirement: Stockage des objets Git
+Le bloc Git MUST afficher les nombres et tailles des objets libres et compactés, le nombre de packs, les objets libres déjà compactés et les fichiers inutiles. CAB MUST mesurer ces indicateurs avec l’état Git, les conserver en PostgreSQL et diffuser leurs changements par Electric.
+
+#### Scenario: Réconciliation des objets Git
+- **WHEN** la page Forges est chargée ou que l’état Git est rafraîchi automatiquement ou manuellement
+- **THEN** CAB actualise les indicateurs et les diffuse si leurs valeurs changent.
+
+### Requirement: Commit local depuis le bloc Git
+Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et description facultatifs. Le tag MUST être prérempli avec la date et l’heure locales AAAA-MM-JJ-HH-MM-SS et rester modifiable. CAB MUST indexer les modifications et créer le commit avec l’identité du projet et la description ou un message automatique. Il MUST créer le tag uniquement s’il est renseigné et diffuser l’état Git via PostgreSQL et Electric. Il MUST NOT lancer de push ou CI/CD.
+
+#### Scenario: Suivi du commit
+- **WHEN** un administrateur lance le commit depuis la fenêtre
+- **THEN** la fenêtre reste ouverte et présente les étapes réelles et le résultat, diffusés en temps réel via PostgreSQL et Electric.
+
+#### Scenario: Modifications disponibles
+- **WHEN** un administrateur lance le commit et que des modifications sont indexées
+- **THEN** CAB crée un commit local et réconcilie l’état Git.
+
+#### Scenario: Tag existant
+- **WHEN** le tag demandé existe déjà
+- **THEN** CAB demande si le tag local doit être déplacé avant toute indexation.
+- **AND** si le déplacement est confirmé, CAB protège la valeur observée du tag contre une modification concurrente et le déplace vers le nouveau commit.
+- **AND** si le déplacement est refusé, CAB ne modifie pas le dépôt.
+
+#### Scenario: Aucune modification
+- **WHEN** aucune modification n’est à enregistrer
+- **THEN** CAB ne crée pas de commit vide et réconcilie l’état Git.
+
+### Requirement: Nettoyage des objets Git déjà compactés
+Le bloc Git MUST proposer une action de nettoyage sur la ligne des objets à nettoyer uniquement lorsque leur nombre est supérieur à zéro. Cette action MUST supprimer seulement les objets libres déjà présents dans les packs, puis relire l’état Git et actualiser la projection PostgreSQL diffusée par Electric.
+
+#### Scenario: Nettoyage demandé
+- **WHEN** un administrateur sélectionne le nettoyage des objets déjà compactés
+- **THEN** CAB exécute le nettoyage local et réconcilie l’état Git, ou signale son échec.
 
 ### Requirement: Consultation des modifications non indexées
 Lorsque l’état Git affiche « Modifications », il MUST permettre d’ouvrir une
@@ -695,16 +763,40 @@ la fenêtre MUST le signaler.
 
 ### Requirement: Consultation des compteurs Git
 Les compteurs Suivis, Modifiés, Indexés, Ignorés, Non suivis et Conflits MUST
-ouvrir une fenêtre en lecture seule listant les fichiers correspondants du
-projet autorisé. Les listes volumineuses MUST être paginées et signaler toute
-troncature. Modifiés réutilise la fenêtre des modifications non indexées. Indexés
-MUST afficher le résumé des changements indexés avant la liste des fichiers. Chaque fenêtre de compteur
-MUST proposer une recherche filtrant immédiatement les lignes affichées ; elle
-MUST se placer au-dessus de Fermer, à droite de la pagination si présente.
+ouvrir une fenêtre en lecture seule listant les fichiers correspondants du projet
+autorisé. Les listes volumineuses MUST être paginées et signaler toute troncature.
 
 #### Scenario: Consultation d’un compteur
 - **WHEN** un utilisateur sélectionne un compteur Git
 - **THEN** CAB affiche les fichiers correspondants ou indique qu’il n’y en a aucun
+
+### Requirement: Détail des changements indexés
+Modifiés MUST réutiliser la fenêtre des modifications non indexées. Indexés MUST
+afficher le résumé des changements indexés avant la liste des fichiers.
+
+#### Scenario: Consultation des fichiers indexés
+- **WHEN** un utilisateur sélectionne le compteur Indexés
+- **THEN** le résumé des changements précède la liste des fichiers
+
+### Requirement: Recherche dans les compteurs Git
+Chaque fenêtre de compteur MUST proposer une recherche filtrant immédiatement
+les lignes affichées. Le champ MUST se placer au-dessus de Fermer, à droite de
+la pagination si présente.
+
+#### Scenario: Filtrage des fichiers
+- **WHEN** un utilisateur saisit une recherche dans une fenêtre de compteur
+- **THEN** seules les lignes correspondantes restent affichées
+
+### Requirement: Consultation des branches Git
+La valeur de branche dans le bloc Git MUST ouvrir une fenêtre en lecture seule
+présentant les branches locales et les références distantes connues localement,
+leur synchronisation et les dépôts distants configurés. La consultation MUST
+fonctionner sans connexion réseau et masquer les identifiants sensibles dans
+les adresses.
+
+#### Scenario: Consultation des branches
+- **WHEN** un utilisateur sélectionne la valeur de branche du projet
+- **THEN** CAB affiche les branches et les informations locales des dépôts
 
 ### Requirement: Consultation du dernier commit
 L’identifiant du dernier commit dans le bloc Git MUST ouvrir une fenêtre de
@@ -739,7 +831,7 @@ MUST disparaître de l'instantané.
 
 #### Scenario: Bloc de configuration du projet
 - **WHEN** la fiche d’un projet est affichée
-- **THEN** un bloc « Configuration » avec son icône précède les cartes des forges et affiche ID, nom, langages, publication et version depuis PostgreSQL, puis Electric.
+- **THEN** le bloc « Configuration » de l’accueil affiche ID, nom, langages, publication et version depuis PostgreSQL, puis Electric.
 - **AND** les langages reconnus sont représentés dans l’ordre de `PROJECT_TYPE` par des logos liés à leur site officiel ; les valeurs non reconnues restent lisibles.
 - **AND** les logos Debian et Docker sont affichés lorsque leur variable vaut « Yes » et renvoient vers leurs sites officiels.
 
@@ -757,8 +849,23 @@ MUST disparaître de l'instantané.
 - **WHEN** le fichier contient une seule forge puis la retire
 - **THEN** seule sa carte est affichée puis elle disparaît
 
+### Requirement: État des dépôts distants
+Les blocs Forgejo, GitHub et GitLab MUST afficher la branche distante, le dernier commit, son horodatage, ses versions, le nombre de commits et la taille du dépôt lorsque la forge fournit ces informations. CAB MUST conserver la dernière observation en PostgreSQL et diffuser ses changements par Electric, sans exposer les tokens.
+
+#### Scenario: Réconciliation des dépôts distants
+- **WHEN** un utilisateur ouvre la page Forges d’un projet
+- **THEN** CAB affiche les données enregistrées puis vérifie les dépôts configurés en arrière-plan.
+
+#### Scenario: Vérification quotidienne
+- **WHEN** l’horaire quotidien aléatoire mémorisé pour une forge et un projet est atteint
+- **THEN** CAB vérifie le dépôt en arrière-plan et programme la prochaine vérification 24 heures après, même si aucune page n’est ouverte.
+
+#### Scenario: Mesure indisponible
+- **WHEN** une forge ou une information est indisponible
+- **THEN** CAB conserve les dernières données valides du même dépôt, signale l’indisponibilité et ne présente pas une valeur inconnue comme zéro.
+
 ### Requirement: Authentification des forges
-À l’ouverture d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+À l’ouverture de la page Forges d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
 
 #### Scenario: Modification des identifiants
 - **WHEN** le compte ou le token d’une forge change
@@ -1495,11 +1602,15 @@ CAB MUST permettre à un administrateur de confirmer explicitement la déconnexi
 - **THEN** CAB refuse la confirmation et conserve la protection de la mise à jour.
 
 ### Requirement: Surveillance récursive et limitation des analyses Git
-CAB MUST surveiller récursivement les dossiers des projets enregistrés, adapter la surveillance aux ajouts, suppressions, renommages et déplacements de projet et regrouper les événements dans une file en mémoire par projet. Il MUST limiter à une analyse Git simultanée pour CAB et respecter les délais configurés entre les analyses automatiques et explicites. Une perte d’événements MUST déclencher une reconstruction de la surveillance et une réconciliation.
+CAB MUST surveiller récursivement les dossiers des projets enregistrés, adapter la surveillance aux ajouts, suppressions, renommages et déplacements de projet et regrouper les événements dans une file en mémoire par projet. Il MUST limiter à une analyse Git simultanée pour CAB et appliquer les délais configurés uniquement aux analyses automatiques. Un clic manuel MUST les ignorer. Une perte d’événements MUST déclencher une reconstruction de la surveillance et une réconciliation.
 
 #### Scenario: Activité continue
 - **WHEN** des fichiers changent sans interruption
 - **THEN** CAB regroupe les événements et lance une analyse au plus tard après le délai maximal, sous réserve de l’intervalle minimal et de la disponibilité du worker
+
+#### Scenario: Relance manuelle
+- **WHEN** un utilisateur demande une relance manuelle
+- **THEN** CAB ignore les délais automatiques tout en conservant une seule analyse simultanée
 
 ### Requirement: Réglages Git en base
 Administration / Git MUST permettre de modifier les délais en secondes conservés dans PostgreSQL : calme, intervalle minimal et attente maximale. Les valeurs initiales MUST être 7, 30 et 70 et s’appliquer sans redémarrage.
@@ -1507,3 +1618,15 @@ Administration / Git MUST permettre de modifier les délais en secondes conserv�
 #### Scenario: Modification des délais
 - **WHEN** un administrateur enregistre des délais valides
 - **THEN** CAB les conserve en base et les applique aux prochaines analyses
+
+### Requirement: Navigation Forges d’un projet
+Le menu des projets MUST présenter les entrées Archives, Forges, Incidents et Sessions par ordre alphabétique. La page `/projects/<identifiant>/forges` MUST afficher le nom et la version du projet à partir de ses métadonnées, avec actualisation via Electric.
+
+#### Scenario: Ouverture de la page Forges
+- **WHEN** un utilisateur ouvre Forges depuis un projet accessible
+- **THEN** CAB affiche la page propre à ce projet avec son nom, sa version, le sous-titre « DEPÔTS DU PROJET », puis les blocs Git et forges.
+- **AND** les lectures Git et les vérifications de forges déclenchées à l’ouverture sont effectuées depuis cette page plutôt que depuis l’accueil.
+
+#### Scenario: Présentation commune des pages du projet
+- **WHEN** un utilisateur ouvre Archives, Incidents ou Sessions
+- **THEN** CAB présente le nom et la version du projet suivis du nom de la page, avec la même typographie et le même menu que Forges.

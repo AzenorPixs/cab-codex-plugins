@@ -5,8 +5,9 @@ import {Link,useNavigate} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
-export type GitStatus={available:boolean;branch?:string;commit?:string;commit_time?:string;commit_tags?:string[];tracked?:number;ignored?:number;modified?:number;staged?:number;untracked?:number;conflicts?:number}
-export type PublicMetadata={state:string;values:Record<string,string>;revision:number;project_root?:string;git_initialized?:number;git_status?:GitStatus;forge_versions?:Record<string,string>;forge_auth?:Record<string,boolean|null>}
+export type GitStatus={available:boolean;branch?:string;commit?:string;commit_time?:string;commit_tags?:string[];commit_count?:number;object_stats?:Record<string,number>;tracked?:number;ignored?:number;modified?:number;staged?:number;untracked?:number;conflicts?:number}
+export type ForgeRepository={available:boolean;branch?:string;commit?:string;commit_time?:string|null;commit_count?:number|null;repository_size?:number|null;versions?:string[]|null}
+export type PublicMetadata={state:string;values:Record<string,string>;revision:number;project_root?:string;git_initialized?:number;git_status?:GitStatus;forge_versions?:Record<string,string>;forge_auth?:Record<string,boolean|null>;forge_repositories?:Record<string,ForgeRepository>}
 export type Project={id:string;identifier:string|null;name:string;root:string;owner_uid:number;owner_gid:number|null;creation_state:string;public_metadata?:PublicMetadata}
 type Settings={projects_root:string;projects_user:string;projects_group:string;configured:boolean;error:string|null}
 export function ProjectSidebar({projects,selected}:{projects:Project[];selected?:string}){

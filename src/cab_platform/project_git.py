@@ -83,6 +83,18 @@ def measure(project):
                 return None
             counts.append(listing.stdout.count(b'\0'))
         state = {'available': True, 'branch': '', 'commit': '', 'tracked': counts[0], 'ignored': counts[1], 'modified': 0, 'staged': 0, 'untracked': 0, 'conflicts': 0}
+        objects = subprocess.run(['/usr/bin/git', '-C', project.root, 'count-objects', '-v'], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+        if objects.returncode:
+            return None
+        object_stats = {}
+        for line in objects.stdout.splitlines():
+            key, separator, value = line.partition(b': ')
+            if separator and value.isdigit():
+                object_stats[key.decode('ascii', 'replace')] = int(value)
+        keys = ('count', 'size', 'in-pack', 'packs', 'size-pack', 'prune-packable', 'garbage', 'size-garbage')
+        if not all(key in object_stats for key in keys):
+            return None
+        state['object_stats'] = {key: object_stats[key] * 1024 if key in ('size', 'size-pack', 'size-garbage') else object_stats[key] for key in keys}
         entries = iter(result.stdout.split(b'\0'))
         for item in entries:
             if item.startswith(b'# branch.head '):
@@ -99,7 +111,12 @@ def measure(project):
                 state['modified'] += item[3:4] != b'.'
                 if item.startswith(b'2 '):
                     next(entries, None)
+        state['commit_count'] = 0
         if state['commit']:
+            count = subprocess.run(['/usr/bin/git', '-C', project.root, 'rev-list', '--count', state['commit']], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+            if count.returncode or not count.stdout.strip().isdigit():
+                return None
+            state['commit_count'] = int(count.stdout.strip())
             date = subprocess.run(['/usr/bin/git', '-C', project.root, 'show', '-s', '--format=%cI', state['commit']], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, **options)
             if date.returncode:
                 return None
@@ -116,19 +133,130 @@ def measure(project):
         return None
 
 
-def refresh_status(project_id):
+def commit_local(project_id, tag="", description="", expected_tag=""):
+    """Enregistre les modifications locales et, si demandé, un tag."""
+    from django.db import connection
+    project = Project.objects.get(pk=project_id)
+    require(project.creation_state == 'READY', 'project-git-unavailable', 409)
+    require(isinstance(tag, str) and len(tag) <= 200 and not tag.startswith('-') and isinstance(description, str) and len(description) <= 2000 and '\0' not in description, 'project-git-commit-input-invalid', 400)
+    require(isinstance(expected_tag, str) and (not expected_tag or len(expected_tag) in (40, 64) and all(c in '0123456789abcdef' for c in expected_tag)), 'project-git-tag-invalid', 400)
+    tag, description = tag.strip(), description.strip()
+    require(not tag.startswith('-'), 'project-git-tag-invalid', 400)
+    message = description or 'Mise à jour du projet'
+    values = (project.public_metadata or {}).get('values', {})
+    name, email = values.get('GIT_USER_NAME', ''), values.get('GIT_USER_EMAIL', '')
+    require(bool(name and email), 'project-git-identity-missing', 409)
+    state = probe(project)
+    require(state is not None, 'project-git-unavailable', 409)
+    try:
+        user = pwd.getpwuid(project.owner_uid)
+        group = project.owner_gid if project.owner_gid is not None else user.pw_gid
+        options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
+        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_LAZY_FETCH': '1'}
+    except (OSError, KeyError):
+        raise Refused('project-git-unavailable', 409) from None
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
+    try:
+        def git(*args, timeout=30):
+            return subprocess.run(['/usr/bin/git', '-C', project.root, *args], cwd='/', env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout, **options).returncode
+        def git_output(*args, input_data=None):
+            return subprocess.run(['/usr/bin/git', '-C', project.root, *args], cwd='/', env=env, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, **options)
+        created = False
+        existing_tag = ''
+        try:
+            if tag:
+                require(git('check-ref-format', 'refs/tags/' + tag) == 0, 'project-git-tag-invalid', 400)
+                if state == 1:
+                    tag_exists = git('show-ref', '--verify', '--quiet', 'refs/tags/' + tag)
+                    require(tag_exists in (0, 1), 'project-git-commit-failed', 409)
+                    if tag_exists == 0:
+                        current = git_output('rev-parse', '--verify', 'refs/tags/' + tag)
+                        require(current.returncode == 0, 'project-git-commit-failed', 409)
+                        existing_tag = current.stdout.decode('ascii').strip()
+                        if not expected_tag:
+                            return {'created': False, 'tag_conflict': existing_tag}
+                        require(existing_tag == expected_tag, 'project-git-tag-changed', 409)
+                    else:
+                        require(not expected_tag, 'project-git-tag-changed', 409)
+                else:
+                    require(not expected_tag, 'project-git-tag-changed', 409)
+            if state == 0:
+                initialize(project_id)
+            require(git('config', '--local', 'user.name', name) == 0, 'project-git-commit-failed', 409)
+            require(git('config', '--local', 'user.email', email) == 0, 'project-git-commit-failed', 409)
+            require(git('add', '.') == 0, 'project-git-commit-failed', 409)
+            difference = git('diff', '--cached', '--quiet')
+            require(difference in (0, 1), 'project-git-commit-failed', 409)
+            if difference == 1:
+                require(git('commit', '-m', message, timeout=120) == 0, 'project-git-commit-failed', 409)
+                created = True
+                if tag and existing_tag:
+                    head = git_output('rev-parse', '--verify', 'HEAD')
+                    ident = git_output('var', 'GIT_COMMITTER_IDENT')
+                    require(head.returncode == 0 and ident.returncode == 0, 'project-git-tag-create-failed', 409)
+                    contents = b'object ' + head.stdout.strip() + b'\ntype commit\ntag ' + tag.encode('utf-8') + b'\ntagger ' + ident.stdout.strip() + b'\n\n' + message.encode('utf-8') + b'\n'
+                    tag_object = git_output('mktag', input_data=contents)
+                    require(tag_object.returncode == 0, 'project-git-tag-create-failed', 409)
+                    require(git('update-ref', 'refs/tags/' + tag, tag_object.stdout.decode('ascii').strip(), existing_tag) == 0, 'project-git-tag-move-failed', 409)
+                elif tag:
+                    require(git('tag', '-a', '-m', message, '--', tag) == 0, 'project-git-tag-create-failed', 409)
+        except (OSError, subprocess.TimeoutExpired):
+            raise Refused('project-git-commit-uncertain', 409) from None
+        finally:
+            _refresh_status(project_id)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT pg_advisory_unlock(%s, %s)', [7348501, 7348502])
+    return {'created': created}
+
+
+def clean_packed_objects(project_id):
+    """Supprime les copies libres déjà présentes dans un pack, puis réconcilie."""
+    from django.db import connection
+    project = Project.objects.get(pk=project_id)
+    require(probe(project) == 1, 'project-git-unavailable', 409)
+    try:
+        user = pwd.getpwuid(project.owner_uid)
+        group = project.owner_gid if project.owner_gid is not None else user.pw_gid
+        options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
+        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_LAZY_FETCH': '1'}
+    except (OSError, KeyError):
+        raise Refused('project-git-clean-unavailable', 409) from None
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
+    try:
+        try:
+            result = subprocess.run(['/usr/bin/git', '-C', project.root, 'prune-packed'], cwd='/', env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20, **options)
+            cleaned = result.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            cleaned = False
+        state = _refresh_status(project_id)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT pg_advisory_unlock(%s, %s)', [7348501, 7348502])
+    require(cleaned, 'project-git-clean-failed', 409)
+    require(state is not None and state.get('available'), 'project-git-clean-status-unavailable', 409)
+    return state
+
+
+def refresh_status(project_id, manual=False):
     import time
     from django.db import connection
     from django.utils import timezone
     from .core.models import GitProject
     from .git_monitor_config import read
+    requested_at = timezone.now()
     while True:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
         try:
-            last = GitProject.objects.filter(project_id=project_id).values_list('checked_at', flat=True).first()
+            latest = GitProject.objects.filter(project_id=project_id).values('checked_at', 'state').first()
+            last = latest['checked_at'] if latest else None
+            if not manual and last and last >= requested_at:
+                return latest['state']
             remaining = read()['interval_seconds'] - (timezone.now() - last).total_seconds() if last else 0
-            if remaining <= 0:
+            if manual or remaining <= 0:
                 return _refresh_status(project_id)
         finally:
             with connection.cursor() as cursor:
@@ -230,3 +358,64 @@ def files_overview(project, kind):
         return {'content': content or 'Aucun fichier.'}
     except (OSError, KeyError, subprocess.TimeoutExpired):
         raise Refused('project-git-files-unavailable', 409) from None
+
+
+def branches_overview(project):
+    """Références locales uniquement ; aucune connexion aux dépôts distants."""
+    import re
+    from urllib.parse import urlsplit
+    require(probe(project) == 1, 'project-git-branches-unavailable', 409)
+    try:
+        user = pwd.getpwuid(project.owner_uid)
+        group = project.owner_gid if project.owner_gid is not None else user.pw_gid
+        options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
+        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'LANG': 'fr_FR.UTF-8', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_LAZY_FETCH': '1', 'GIT_TERMINAL_PROMPT': '0', 'GIT_ALLOW_PROTOCOL': 'https:ssh:file:git', 'PAGER': 'cat'}
+
+        def git(*args, required=True):
+            result = subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false', '-c', 'color.ui=false', *args], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, **options)
+            if result.returncode:
+                if required:raise Refused('project-git-branches-unavailable', 409)
+                return ''
+            require(len(result.stdout) <= 1048576, 'project-git-branches-too-large', 409)
+            return result.stdout.decode('utf-8', 'replace').strip('\n')
+
+        def safe_url(value):
+            if not value or any(ord(c) < 32 for c in value):return '[adresse masquée]'
+            try:
+                parts = urlsplit(value)
+                if parts.scheme not in ('http', 'https', 'git') or not parts.hostname or parts.username is not None or parts.password is not None or parts.query or parts.fragment:
+                    return '[adresse masquée]'
+                if re.search(r'(?i)(token|password|secret|credential|auth)[=/]', parts.path):return '[adresse masquée]'
+                return value
+            except ValueError:
+                return '[adresse masquée]'
+
+        local = git('branch', '--list', '-vv', '--no-abbrev') or 'Aucune branche locale.'
+        remote = git('branch', '--remotes', '-v', '--no-abbrev') or 'Aucune branche distante connue localement.'
+        upstream = git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}', required=False)
+        counts = git('rev-list', '--left-right', '--count', 'HEAD...@{upstream}', required=False).split() if upstream else []
+        ahead, behind = counts if len(counts) == 2 and all(part.isdigit() for part in counts) else ('—', '—')
+        sections = ['### Branches locales ###\n\n' + local, '### Branches distantes ###\n\n' + remote, '### Synchronisation avec la branche distante ###\n\nBranche suivie     : ' + (upstream or 'Aucune') + '\nCommits en avance  : ' + ahead + '\nCommits en retard  : ' + behind]
+        names = git('remote').splitlines()
+        require(len(names) <= 64, 'project-git-branches-too-large', 409)
+        remote_lines = []
+        details = []
+        for name in names:
+            require(bool(re.fullmatch(r'[A-Za-z0-9._-]{1,200}', name)), 'project-git-branches-unavailable', 409)
+            for direction, arguments in [('fetch', ()), ('push', ('--push',))]:
+                for url in git('remote', 'get-url', '--all', *arguments, name, required=False).splitlines():
+                    remote_lines.append(name + '  ' + safe_url(url) + ' (' + direction + ')')
+            detail = git('remote', 'show', '-n', name, required=False)
+            cleaned = []
+            for line in detail.splitlines():
+                if re.search(r'(?i)(url\s+(de\s+)?(rapatriement|récupération|push)|fetch url|push\s+url)', line):
+                    prefix, separator, value = line.partition(':')
+                    cleaned.append(prefix + separator + ' ' + safe_url(value.strip()) if separator else '[adresse masquée]')
+                else:
+                    cleaned.append(line)
+            details.append('--- ' + name + ' ---\n' + ('\n'.join(cleaned) or 'Détails indisponibles.'))
+        sections.append('### Dépôts distants ###\n\n' + ('\n'.join(remote_lines) or 'Aucun dépôt distant.'))
+        if details:sections.append('Détails locaux des dépôts distants :\n\n' + '\n\n'.join(details))
+        return {'content': '\n\n'.join(sections)}
+    except (OSError, KeyError, subprocess.TimeoutExpired):
+        raise Refused('project-git-branches-unavailable', 409) from None

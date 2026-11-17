@@ -300,6 +300,15 @@ def project_git_files(request,project_id:str,kind:str):
     from cab_platform.project_git import files_overview
     return files_overview(project,kind)
 
+@api.get('/projects/{project_id}/git/branches')
+def project_git_branches(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import branches_overview
+    return branches_overview(project)
+
 @api.get('/projects/{project_id}/git/changes')
 def project_git_changes(request,project_id:str):
     actor=principal(request)
@@ -335,6 +344,15 @@ def save_git_monitor_settings(request,body:GitMonitorSettings):
     from cab_platform.git_monitor_config import save
     return save(body.model_dump())
 
+@api.post('/projects/{project_id}/git/status/refresh/manual')
+def refresh_project_git_status_manually(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import refresh_status
+    return {'git_status':refresh_status(project.pk,manual=True)}
+
 @api.post('/projects/{project_id}/git/status/refresh')
 def refresh_project_git_status(request,project_id:str):
     actor=principal(request)
@@ -344,6 +362,23 @@ def refresh_project_git_status(request,project_id:str):
     from cab_platform.project_git import refresh_status
     return {'git_status':refresh_status(project.pk)}
 
+class GitCommitInput(Schema):
+    tag:str = ''
+    description:str = ''
+    expected_tag:str = ''
+
+@api.post('/projects/{project_id}/git/commit')
+def commit_project_git(request,project_id:str,body:GitCommitInput):
+    principal(request,admin=True)
+    from cab_platform.project_git import commit_local
+    return commit_local(project_id,body.tag,body.description,body.expected_tag)
+
+@api.post('/projects/{project_id}/git/clean')
+def clean_project_git(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.project_git import clean_packed_objects
+    return {'git_status':clean_packed_objects(project_id)}
+
 @api.post('/projects/{project_id}/git/initialize')
 def initialize_project_git(request,project_id:str):
     principal(request,admin=True)
@@ -351,13 +386,13 @@ def initialize_project_git(request,project_id:str):
     return initialize(project_id)
 
 @api.post('/projects/{project_id}/refresh')
-def refresh_project(request,project_id:str):
+def refresh_project(request,project_id:str,include_forges:bool=True,include_git:bool=True):
     actor=principal(request)
     try:project=Project.objects.get(pk=project_id)
     except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
     if actor.role!='admin':commands.scope(actor,project)
     from cab_platform.project_metadata import synchronize
-    return {'public_metadata':synchronize(project.pk)}
+    return {'public_metadata':synchronize(project.pk,include_forges=include_forges,include_git=include_git)}
 
 @api.get('/projects/{project_id}/configuration')
 def project_configuration_read(request,project_id:str):
@@ -392,6 +427,15 @@ def forge_authenticate(request,project_id:str):
     project=Project.objects.get(pk=project_id)
     if actor.role!='admin':commands.scope(actor,project)
     from cab_platform.forge_auth import enqueue
+    enqueue(project.pk)
+    return {'queued':True}
+
+@api.post('/projects/{project_id}/forges/repositories/refresh')
+def refresh_forge_repositories(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.get(pk=project_id)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import enqueue
     enqueue(project.pk)
     return {'queued':True}
 

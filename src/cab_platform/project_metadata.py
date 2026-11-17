@@ -53,7 +53,7 @@ def read_metadata(root):
     except FileNotFoundError:return {'state':'missing','values':{}}
     except (OSError,UnicodeError):return {'state':'unavailable','values':{}}
 
-def synchronize(project_id):
+def synchronize(project_id,include_forges=True,include_git=True):
     from django.db import transaction
     from .core.models import Project,ProjectMetadataProjection
     # La lecture et la mise à jour sont sérialisées pour éviter qu'une sélection
@@ -62,32 +62,47 @@ def synchronize(project_id):
         project=Project.objects.select_for_update().get(pk=project_id)
         snapshot=read_metadata(project.root)
         snapshot['project_root']=project.root
-        from .forge_settings import synchronize_tokens
-        from .core.commands import Refused
-        try:tokens_changed=synchronize_tokens(project);tokens_valid=True
-        except Refused:tokens_changed=False;tokens_valid=False
-        from .project_git import probe
-        observed_git=probe(project)
-        configuration=dict(project.configuration or {})
-        if observed_git is not None:
-            if configuration.get('git_initialized') != observed_git:
-                configuration['git_initialized']=observed_git
-                project.configuration=configuration;project.save(update_fields=['configuration'])
-            snapshot['git_initialized']=observed_git
-        elif configuration.get('git_initialized') in (0,1):
-            snapshot['git_initialized']=configuration['git_initialized']
         previous=project.public_metadata or {}
+        tokens_changed=False
+        if include_forges:
+            from .forge_settings import synchronize_tokens
+            from .core.commands import Refused
+            try:tokens_changed=synchronize_tokens(project);tokens_valid=True
+            except Refused:tokens_valid=False
+        else:
+            values=snapshot.get('values',{})
+            snapshot['values']={**{key:value for key,value in values.items() if not key.startswith('REMOTE_')},**{key:value for key,value in previous.get('values',{}).items() if key.startswith('REMOTE_')}}
+        if include_git:
+            from .project_git import probe
+            observed_git=probe(project)
+            configuration=dict(project.configuration or {})
+            if observed_git is not None:
+                if configuration.get('git_initialized') != observed_git:
+                    configuration['git_initialized']=observed_git
+                    project.configuration=configuration;project.save(update_fields=['configuration'])
+                snapshot['git_initialized']=observed_git
+            elif configuration.get('git_initialized') in (0,1):
+                snapshot['git_initialized']=configuration['git_initialized']
+        elif 'git_initialized' in previous:snapshot['git_initialized']=previous['git_initialized']
         if 'git_status' in previous:snapshot['git_status']=previous['git_status']
-        from .forge_version import cached
-        snapshot['forge_versions']=cached(snapshot.get('values',{}))
-        from .forge_auth import inputs
-        auth=(project.configuration or {}).get('forge_auth',{})
-        credentials={forge:inputs(project,snapshot.get('values',{}),forge) for forge in FORGES}
-        changed_forges=tuple(forge for forge,(url,owner,token,signature) in credentials.items() if tokens_valid and url and owner and token and auth.get(forge,{}).get('signature')!=signature)
-        snapshot['forge_auth']={forge:(auth.get(forge,{}).get('state') if tokens_valid and all(credentials[forge][:3]) and auth.get(forge,{}).get('signature')==credentials[forge][3] else None) for forge in FORGES}
-        if changed_forges:
-            from .forge_auth import enqueue
-            transaction.on_commit(lambda:enqueue(project_id,changed_forges,changed=True))
+        if include_forges:
+            from .forge_version import cached
+            snapshot['forge_versions']=cached(snapshot.get('values',{}))
+            from .forge_auth import inputs
+            auth=(project.configuration or {}).get('forge_auth',{})
+            credentials={forge:inputs(project,snapshot.get('values',{}),forge) for forge in FORGES}
+            changed_forges=tuple(forge for forge,(url,owner,token,signature) in credentials.items() if tokens_valid and url and owner and token and auth.get(forge,{}).get('signature')!=signature)
+            snapshot['forge_auth']={forge:(auth.get(forge,{}).get('state') if tokens_valid and all(credentials[forge][:3]) and auth.get(forge,{}).get('signature')==credentials[forge][3] else None) for forge in FORGES}
+            if changed_forges:
+                from .forge_auth import enqueue
+                transaction.on_commit(lambda:enqueue(project_id,changed_forges,changed=True))
+        else:
+            for key in ('forge_versions','forge_auth'):
+                if key in previous:snapshot[key]=previous[key]
+        from .forge_repository import identity
+        records=(project.configuration or {}).get('forge_repositories',{})
+        cached=previous.get('forge_repositories',{})
+        snapshot['forge_repositories']={forge:value for forge,value in cached.items() if forge in FORGES and isinstance(value,dict) and records.get(forge,{}).get('observed_signature')==identity(project,snapshot.get('values',{}),forge)}
         if tokens_changed or 'git_version' in previous or any(previous.get(key)!=value for key,value in snapshot.items()):
             snapshot['revision']=int(previous.get('revision',0))+1
             project.public_metadata=snapshot;project.save(update_fields=['public_metadata'])
