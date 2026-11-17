@@ -350,26 +350,76 @@ def _refresh_status(project_id):
         return state
 
 
-def commit_overview(project, commit):
+def commit_overview(project, commit, history_head=None):
     import re
     require(isinstance(commit, str) and re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', commit) is not None, 'project-git-commit-invalid', 400)
     from .core.models import GitProject
-    record = GitProject.objects.filter(project=project).first()
-    require(record is not None and record.state.get('commit') == commit, 'project-git-commit-unavailable', 409)
+    if history_head is None:
+        record = GitProject.objects.filter(project=project).first()
+        require(record is not None and record.state.get('commit') == commit, 'project-git-commit-unavailable', 409)
+    else:
+        require(isinstance(history_head, str) and re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', history_head) is not None, 'project-git-commit-invalid', 400)
     require(probe(project) == 1, 'project-git-commit-unavailable', 409)
     try:
         user = pwd.getpwuid(project.owner_uid)
         group = project.owner_gid if project.owner_gid is not None else user.pw_gid
         options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
         env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_LAZY_FETCH': '1', 'PAGER': 'cat'}
+        if history_head is not None:
+            git = ['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false']
+            current = subprocess.run([*git, 'rev-parse', '--verify', 'HEAD^{commit}'], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+            require(current.returncode == 0 and current.stdout.decode('ascii', 'strict').strip() == history_head, 'project-git-commit-unavailable', 409)
+            ancestor = subprocess.run([*git, 'merge-base', '--is-ancestor', commit, history_head], cwd='/', env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20, **options)
+            require(ancestor.returncode == 0, 'project-git-commit-unavailable', 409)
         fmt = 'format:Commit           : %H%nAuteur           : %an <%ae>%nDate commit      : %cd%nRéférences       : %D%n'
+        if history_head is not None:
+            fmt += 'Message          : %s%n'
         result = subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false', 'show', '--no-color', '--no-ext-diff', '--no-renames', '--decorate=short', '--date=iso-local', '--stat=120,85', '--stat-count=1000', '--format='+fmt, commit, '--'], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
         require(result.returncode == 0, 'project-git-commit-unavailable', 409)
         require(len(result.stdout) <= 1048576, 'project-git-commit-too-large', 409)
         return {'content': result.stdout.decode('utf-8', 'replace')}
-    except (OSError, KeyError, subprocess.TimeoutExpired):
+    except (OSError, KeyError, UnicodeError, subprocess.TimeoutExpired):
         raise Refused('project-git-commit-unavailable', 409) from None
 
+
+
+def commit_history(project, page=1, head='', search=''):
+    import re
+    require(isinstance(page, int) and 1 <= page <= 100000 and (not head or re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', head)), 'project-git-history-invalid', 400)
+    require(isinstance(search, str) and len(search) <= 200 and '\0' not in search, 'project-git-history-invalid', 400)
+    require(probe(project) == 1, 'project-git-history-unavailable', 409)
+    try:
+        user = pwd.getpwuid(project.owner_uid)
+        group = project.owner_gid if project.owner_gid is not None else user.pw_gid
+        options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
+        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_LAZY_FETCH': '1', 'PAGER': 'cat'}
+        base = ['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false']
+        if not head:
+            result = subprocess.run([*base, 'rev-parse', '--verify', 'HEAD^{commit}'], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+            require(result.returncode == 0, 'project-git-history-unavailable', 409)
+            head = result.stdout.decode('ascii', 'strict').strip()
+            require(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', head) is not None, 'project-git-history-unavailable', 409)
+        if not search:
+            total_result = subprocess.run([*base, 'rev-list', '--count', head], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+            require(total_result.returncode == 0 and total_result.stdout.strip().isdigit(), 'project-git-history-unavailable', 409)
+            total_pages = max(1, (int(total_result.stdout.strip()) + 24) // 25)
+        command = [*base, 'log', '-z', '--no-color', '--decorate=short', '--date=iso', '--format=%H%x00%cd%x00%an%x00%D%x00%s']
+        if not search:
+            command.extend(['--max-count=26', '--skip='+str((page-1)*25)])
+        result = subprocess.run([*command, head, '--'], cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, **options)
+        require(result.returncode == 0 and len(result.stdout) <= (16777216 if search else 1048576), 'project-git-history-unavailable', 409)
+        fields = result.stdout.split(b'\0')
+        if fields and not fields[-1]: fields.pop()
+        require(len(fields) % 5 == 0, 'project-git-history-unavailable', 409)
+        entries = [dict(zip(('commit','date','author','refs','subject'), (field.decode('utf-8', 'replace') for field in fields[i:i+5]))) for i in range(0, len(fields), 5)]
+        if search:
+            needle = search.casefold()
+            entries = [entry for entry in entries if needle in ' | '.join(entry.values()).casefold()]
+            total_pages = max(1, (len(entries) + 24) // 25)
+            entries = entries[(page-1)*25:page*25+1]
+        return {'head': head, 'page': page, 'total_pages': total_pages, 'entries': entries[:25], 'has_next': len(entries)>25}
+    except (OSError, KeyError, UnicodeError, subprocess.TimeoutExpired):
+        raise Refused('project-git-history-unavailable', 409) from None
 
 def changes_overview(project):
     require(probe(project) == 1, 'project-git-changes-unavailable', 409)

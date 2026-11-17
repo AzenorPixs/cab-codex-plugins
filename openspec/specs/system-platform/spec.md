@@ -753,7 +753,8 @@ Le bloc Git MUST proposer une corbeille pour le dernier commit. La fenêtre MUST
 
 #### Scenario: Revenir à l’état précédent
 - **WHEN** l’administrateur choisit de supprimer les modifications du commit
-- **THEN** CAB refuse si d’autres modifications locales sont présentes ; sinon il replace la branche et les fichiers sur le premier parent.
+- **THEN** CAB affiche une seconde fenêtre détaillant les fichiers à restaurer ou supprimer avant validation, y compris les fichiers présents dans les dossiers non suivis.
+- **AND** après validation, CAB vérifie que la liste et la référence n’ont pas changé, replace la branche et les fichiers sur le premier parent, et supprime les modifications locales et les fichiers non suivis non ignorés.
 
 #### Scenario: Référence modifiée ou résultat partiel
 - **WHEN** le commit a changé depuis l’ouverture ou que la restauration des fichiers échoue après déplacement
@@ -835,6 +836,24 @@ les adresses.
 #### Scenario: Consultation des branches
 - **WHEN** un utilisateur sélectionne la valeur de branche du projet
 - **THEN** CAB affiche les branches et les informations locales des dépôts
+
+### Requirement: Consultation de l’historique des commits locaux
+Le nombre de commits du bloc Git MUST ouvrir une fenêtre de consultation de l’historique du projet autorisé, avec au plus 25 commits par page. Chaque commit MUST apparaître sur une seule ligne avec son identifiant court, sa date, son auteur, ses références et son message. La pagination MUST afficher la page courante et le nombre total de pages, permettre de parcourir l’historique jusqu’au dernier commit et conserver le point de départ de la consultation. Un filtre de recherche MUST affiner à la saisie l’ensemble de l’historique selon les informations affichées, et adapter la pagination aux résultats. Chaque identifiant MUST ouvrir une fenêtre de détail par-dessus l’historique, limitée aux commits accessibles depuis la branche affichée et au projet autorisé.
+
+#### Scenario: Ouvrir et parcourir l’historique
+- **WHEN** un utilisateur sélectionne le nombre de commits dans le bloc Git
+- **THEN** CAB affiche la première page et permet de naviguer entre les pages disponibles.
+
+### Requirement: Retrait de commits sélectionnés dans l’historique
+L’historique Git MUST permettre de sélectionner un ou plusieurs commits, à l’exception du commit HEAD, et de demander leur retrait de la branche locale. Une case « Tout cocher » MUST sélectionner ou désélectionner les commits de la page affichée, sauf HEAD, sans modifier les sélections des autres pages. CAB MUST conserver l’arbre et les modifications locales, vérifier que HEAD n’a pas changé et ne pas déplacer les tags ni les autres branches. Les commits descendants réécrits changent d’identifiant ; CAB MUST en avertir l’utilisateur. CAB MUST refuser la réécriture de commits signés qu’il ne peut préserver.
+
+#### Scenario: Demander la suppression sans sélection
+- **WHEN** l’utilisateur demande la suppression sans commit coché
+- **THEN** CAB l’invite à sélectionner au moins un commit.
+
+#### Scenario: Confirmer la suppression de commits
+- **WHEN** l’utilisateur demande la suppression avec des commits cochés
+- **THEN** CAB présente une fenêtre de confirmation indiquant que les fichiers et modifications restent conservés et précisant l’effet sur les identifiants et les tags.
 
 ### Requirement: Consultation du dernier commit
 L’identifiant du dernier commit dans le bloc Git MUST ouvrir une fenêtre de

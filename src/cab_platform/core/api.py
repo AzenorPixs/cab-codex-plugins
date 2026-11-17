@@ -338,12 +338,19 @@ class GitCommitRemoval(Schema):
     expected_parent:str
     expected_branch:str
     mode:Literal['keep','discard']
+    expected_status:str=''
+
+@api.get('/projects/{project_id}/git/commit-removal/details')
+def git_commit_removal_details(request,project_id:str,expected_head:str,expected_parent:str,expected_branch:str):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import restoration_plan
+    return restoration_plan(Project.objects.get(pk=project_id),expected_head,expected_parent,expected_branch)
 
 @api.post('/projects/{project_id}/git/commit-removal')
 def remove_git_commit(request,project_id:str,body:GitCommitRemoval):
     principal(request,admin=True)
     from cab_platform.git_commit_remove import remove
-    return remove(project_id,body.expected_head,body.expected_parent,body.expected_branch,body.mode)
+    return remove(project_id,body.expected_head,body.expected_parent,body.expected_branch,body.mode,body.expected_status)
 
 @api.get('/projects/{project_id}/git/tag')
 def read_project_git_tag(request,project_id:str,name:str):
@@ -386,6 +393,34 @@ def project_git_changes(request,project_id:str):
     if actor.role!='admin':commands.scope(actor,project)
     from cab_platform.project_git import changes_overview
     return changes_overview(project)
+
+@api.get('/projects/{project_id}/git/history')
+def project_git_history(request,project_id:str,page:int=1,head:str='',search:str=''):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import commit_history
+    return commit_history(project,page,head,search)
+
+class GitHistoryRemoval(Schema):
+    expected_head:str
+    commits:list[str]
+
+@api.post('/projects/{project_id}/git/history/remove')
+def project_git_history_remove(request,project_id:str,body:GitHistoryRemoval):
+    principal(request,admin=True)
+    from cab_platform.git_history_remove import remove_selected
+    return remove_selected(project_id,body.expected_head,body.commits)
+
+@api.get('/projects/{project_id}/git/history/commit/{commit}')
+def project_git_history_commit(request,project_id:str,commit:str,head:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import commit_overview
+    return commit_overview(project,commit,head)
 
 @api.get('/projects/{project_id}/git/commit/{commit}')
 def project_git_commit(request,project_id:str,commit:str):
