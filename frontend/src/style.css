@@ -98,3 +98,22 @@ body{zoom:var(--responsive-layout-scale,1)}
 .responsive-controls{margin-top:32px;max-width:1100px}.responsive-profile-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px;margin:20px 0}.responsive-profile{min-width:0;border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.responsive-profile legend{font-weight:700;padding:0 6px}.responsive-profile label{margin:0;font-size:calc(15px * var(--font-scale))}.responsive-profile input{margin-top:6px;padding:8px;min-width:0}
 
 .developer-mode{margin:20px 0}.developer-mode h2{margin-bottom:8px}.developer-mode label{display:inline-flex;align-items:center;gap:10px;margin:0 12px 0 0}.developer-mode input{width:auto;margin:0}.developer-mode output{font-weight:700}.developer-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:calc(13px * var(--font-scale))}.developer-toolbar-control{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.developer-toolbar-control button{padding:2px 7px;border:1px solid #68818b;background:transparent;font-size:inherit}.developer-toolbar-control output{min-width:3.8em;text-align:center}
+
+.project-page-title{font-size:calc(32px * var(--font-scale));font-weight:700;letter-spacing:-.04em}@media(max-width:700px){.project-page-title{font-size:calc(27px * var(--font-scale))}}
+
+.project-forges-page .project-identity{align-items:baseline}
+
+.project-forges-page .project-release-version{position:relative;top:1px}
+
+.project-content>.project-tabs{margin-top:-16px}
+
+.project-forges-page .project-identity h1{font-size:calc(36px * var(--font-scale))}@media(max-width:700px){.project-forges-page .project-identity h1{font-size:calc(30px * var(--font-scale))}}
+
+.project-forges-page>.section-heading{margin-top:-14px}
+
+.project-forges-content .project-forges .agent-card{margin-top:0}
+.git-clean-value{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.project-forges .forge-card .forge-card-content dl>div{margin-top:10px}
+.agents-overview>.agent-title{margin-top:-14px}.agents-overview>.agent-title>h1{margin:0;font-size:calc(36px * var(--font-scale));font-weight:800;overflow-wrap:anywhere}@media(max-width:700px){.agents-overview>.agent-title>h1{font-size:calc(30px * var(--font-scale))}}
+.git-heading-actions{display:flex;align-items:center;gap:6px}
+.git-commit svg{width:21px;height:21px}@keyframes git-commit-pulse{50%{opacity:.45;transform:scale(.88)}}.git-commit.is-loading svg{animation:git-commit-pulse .85s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.git-commit.is-loading svg{animation:none}}

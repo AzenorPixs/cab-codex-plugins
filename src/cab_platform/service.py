@@ -123,6 +123,15 @@ def update_agent_mcp():
             if changed:row.save(update_fields=changed)
 
 
+def background_forge_updates():
+    from .forge_version import sweep as sweep_versions
+    from .forge_repository import sweep as sweep_repositories
+    try:
+        sweep_versions()
+    finally:
+        sweep_repositories()
+
+
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
@@ -202,8 +211,7 @@ def run(port=8790):
                     except Exception as error:log.warning('forge version observation unavailable',extra={'code':type(error).__name__})
                     forge_version_future=None
                 if forge_version_future is None and time.monotonic()>=next_forge_version:
-                    from .forge_version import sweep
-                    forge_version_future=forge_version_pool.submit(sweep);next_forge_version=time.monotonic()+60
+                    forge_version_future=forge_version_pool.submit(background_forge_updates);next_forge_version=time.monotonic()+60
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1

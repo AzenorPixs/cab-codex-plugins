@@ -39908,14 +39908,14 @@ Change : `monitor-project-git-recursively` · état local : `archived`. Les vale
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 3540.287986 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 3540.287986 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 121802402 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 91677 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 48459 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 121683072 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 121894079 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -39929,7 +39929,7 @@ Change : `monitor-project-git-recursively` · état local : `archived`. Les vale
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:36e4219824c18d63a53880b1d3b1bc7191f8843f43f94e701166ca9a9c14a73c
+Provenance : change-periods:a1c7af59a627a0734082fd4071abd7c14520bf97fa38448008a0402790bcef7e
 
 ## 2. Messages et outils
 
@@ -39991,21 +39991,8 @@ Provenance : change-periods:36e4219824c18d63a53880b1d3b1bc7191f8843f43f94e701166
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_read | 119111936 | bounded |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_write | 0 | bounded |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_input | 119230114 | bounded |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_output | 91106 | bounded |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_reasoning | 48317 | bounded |
-| SCM-GIT-MONITOR-20261116 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_total | 119321220 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "5007c702958cdaceeb5f210193456d14ecb796f95715f90f4e2b44010dbc84bc", "generated_at": "2026-11-16T21:13:47.873672+00:00", "revision": "5007c702958cdaceeb5f210193456d14ecb796f95715f90f4e2b44010dbc84bc", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0dbfbca507f22a266cb343a72f91227a644ec72fcbde01bde8badae3e8566876", "generated_at": "2026-11-16T21:14:41.802423+00:00", "revision": "0dbfbca507f22a266cb343a72f91227a644ec72fcbde01bde8badae3e8566876", "scope": "change"} -->
 
 
 ## Change `native-api-first-mcp-reload` — openspec/changes/archive/2026-11-14-native-api-first-mcp-reload/STATISTICS.md
@@ -69969,4 +69956,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "db8a7177055de41556b98046df29403ed423861fb571232b47a06cd1cac77548", "generated_at": "2026-11-16T21:13:49.077850+00:00", "revision": "db8a7177055de41556b98046df29403ed423861fb571232b47a06cd1cac77548", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "500e1afbc75ca8858e5a827dc8dad9380470160f849b67a6e1c468f118f9f753", "generated_at": "2026-11-16T21:14:42.704900+00:00", "revision": "500e1afbc75ca8858e5a827dc8dad9380470160f849b67a6e1c468f118f9f753", "scope": "project"} -->
