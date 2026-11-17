@@ -59,9 +59,7 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 
 .forge-card dl>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;align-items:start}.forge-card dd{min-width:0;margin:0}
 
-.forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}
-.forge-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
-.forge-card dt,.forge-card dd{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
+.forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
 
 .forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading h2{margin-bottom:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
 
@@ -92,6 +90,8 @@ header{position:sticky;top:0;z-index:30;padding-left:28px;padding-right:28px}.pr
 @media(min-width:1400px){.agent-detail-blocks{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .agent-detail-blocks .agent-card{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 .agent-detail-blocks .agent-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
+.forge-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
+.forge-card dt,.forge-card dd{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 .agent-detail-blocks .binary-info>span,.agent-detail-blocks .connector-info>span,.agent-detail-blocks .binary-info code,.agent-detail-blocks .connector-info code,.agent-detail-blocks .agent-user-row{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 
 body{zoom:var(--responsive-layout-scale,1)}
@@ -111,16 +111,31 @@ body{zoom:var(--responsive-layout-scale,1)}
 
 .project-forges-page>.section-heading{margin-top:-14px}
 
+
 .project-forges-content .project-forges .agent-card{margin-top:0}
+
 .git-clean-value{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+
 .project-forges .forge-card .forge-card-content dl>div{margin-top:10px}
+
 .agents-overview>.agent-title{margin-top:-14px}.agents-overview>.agent-title>h1{margin:0;font-size:calc(36px * var(--font-scale));font-weight:800;overflow-wrap:anywhere}@media(max-width:700px){.agents-overview>.agent-title>h1{font-size:calc(30px * var(--font-scale))}}
+
 .git-heading-actions{display:flex;align-items:center;gap:6px}
+
 .git-commit svg{width:21px;height:21px}@keyframes git-commit-pulse{50%{opacity:.45;transform:scale(.88)}}.git-commit.is-loading svg{animation:git-commit-pulse .85s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.git-commit.is-loading svg{animation:none}}
+
 .git-commit-console-dialog{width:min(80rem,95vw)}.git-commit-console{height:min(55vh,32rem);max-height:55vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#101820;color:#e4eee9;border:1px solid var(--border);border-radius:6px;padding:16px;font:calc(15px * var(--font-scale))/1.5 ui-monospace,monospace}
+
 .project-forges-content .forge-card dl>div{grid-template-columns:minmax(0,40fr) minmax(0,60fr)}
+
 .project-git-card .forge-card-content>dl+dl{margin-top:0}
+
 .forge-auth-action{background:transparent;border:0;padding:0;color:var(--text);font-family:inherit;cursor:pointer}.forge-auth-action:hover{color:var(--accent-text)}
+
 .forge-actions{display:inline-flex;align-items:center;gap:8px;flex:none;white-space:nowrap}
 .git-tag-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0}.git-tag-delete{padding:2px;flex:none;margin-left:auto}.git-tag-delete svg{width:15px;height:15px}
 .git-commit-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0}.git-commit-inline>.git-tag-delete{margin-left:auto}
+
+.forge-edit.forge-push-action{color:var(--accent-text)}
+.forge-edit.forge-sync-action{color:#2169b2}
+:root[data-theme=dark] .forge-edit.forge-sync-action{color:#75baff}

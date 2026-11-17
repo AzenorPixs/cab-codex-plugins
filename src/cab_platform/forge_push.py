@@ -127,6 +127,7 @@ def prepare(project_id, forge, actor):
         require(current.root == project.root and identity(current, (current.public_metadata or {}).get('values', {}), forge) == signature, 'forge-push-configuration-changed', 409)
         config = dict(current.configuration or {})
         records = dict(config.get('forge_push') or {})
+        require((config.get('forge_sync', {}).get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
         require((records.get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
         records[forge] = {'nonce': nonce, 'actor': str(actor), 'state': 'READY', 'head': head, 'remote': remote, 'branch': branch, 'signature': signature, 'expires': (timezone.now() + timedelta(minutes=5)).isoformat()}
         config['forge_push'] = records
@@ -144,6 +145,7 @@ def execute(project_id, forge, actor, nonce):
         current = Project.objects.select_for_update().get(pk=project_id)
         config = dict(current.configuration or {})
         records = dict(config.get('forge_push') or {})
+        require((config.get('forge_sync', {}).get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
         record = dict(records.get(forge) or {})
         expires = parse_datetime(record.get('expires', ''))
         require(record.get('state') == 'READY' and secrets.compare_digest(str(record.get('nonce', '')), nonce) and record.get('actor') == str(actor) and expires is not None and timezone.is_aware(expires) and expires > timezone.now(), 'forge-push-preview-invalid', 409)

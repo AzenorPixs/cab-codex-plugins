@@ -724,7 +724,7 @@ Le bloc Git MUST afficher les nombres et tailles des objets libres et compactés
 - **THEN** CAB actualise les indicateurs et les diffuse si leurs valeurs changent.
 
 ### Requirement: Commit local depuis le bloc Git
-Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et description facultatifs. Le tag MUST être prérempli avec la date et l’heure locales AAAA-MM-JJ-HH-MM-SS et rester modifiable. CAB MUST indexer les modifications et créer le commit avec l’identité du projet et la description ou un message automatique. Il MUST créer le tag uniquement s’il est renseigné et diffuser l’état Git via PostgreSQL et Electric. Il MUST NOT lancer de push ou CI/CD.
+Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et description facultatifs. Le champ du tag MUST être vide par défaut et rester facultatif. CAB MUST indexer les modifications et créer le commit avec l’identité du projet et la description ou un message automatique. Il MUST créer le tag uniquement s’il est renseigné et diffuser l’état Git via PostgreSQL et Electric. Il MUST NOT lancer de push ou CI/CD.
 
 #### Scenario: Suivi du commit
 - **WHEN** un administrateur lance le commit depuis la fenêtre
@@ -945,6 +945,19 @@ CAB MUST limiter les vérifications automatiques de chaque forge et projet à un
 #### Scenario: Page ouverte plusieurs fois
 - **WHEN** la page Forges est rouverte avant l’expiration de l’intervalle configuré
 - **THEN** CAB affiche les valeurs mémorisées sans relancer la vérification automatique.
+
+### Requirement: Synchronisation de branche et des tags vers une forge
+Chaque bloc de forge distante MUST proposer une action « Synchroniser » après « Envoyer ». CAB MUST présenter un aperçu de la branche cible, des commits et des tags à créer, modifier ou supprimer avant confirmation. La branche distante configurée MUST être alignée sur HEAD local et les tags distants sur tous les tags locaux ; les tags distants absents localement MUST être supprimés, sans déplacer d’autres branches. Un renommage de tag se traduit par la suppression de son ancien nom et la création du nouveau.
+
+CAB MUST utiliser les identifiants de forge qu’il gère, vérifier les références et tags locaux et distants observés, protéger chaque mise à jour par une lease explicite et demander une transaction Git atomique. CAB MUST vérifier l’état distant après l’envoi et signaler un résultat incertain sans rejeu automatique si la confirmation échoue. Les modifications non commitées MUST rester locales.
+
+#### Scenario: Examiner la synchronisation
+- **WHEN** l’administrateur ouvre la synchronisation d’une forge
+- **THEN** CAB affiche les différences de branche et de tags sans modifier la forge.
+
+#### Scenario: Confirmer la synchronisation
+- **WHEN** l’administrateur confirme un aperçu encore valide
+- **THEN** CAB synchronise la branche et les tags dans une transaction atomique et vérifie le résultat distant.
 
 ### Requirement: Envoi manuel de branche vers les forges
 Chaque bloc de forge MUST proposer un bouton « Envoyer » après le rafraîchissement. CAB MUST utiliser les identifiants de forge chiffrés qu’il gère, présenter la branche cible et le commit local avant confirmation, puis envoyer uniquement ce commit sur la branche distante avec un force-with-lease explicite sur la valeur observée. CAB MUST NOT créer, comparer ou publier de tag pour cette action.

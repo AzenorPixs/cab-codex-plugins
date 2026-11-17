@@ -47,6 +47,8 @@ const messages:Record<string,string>={
   'project-git-identity-missing':'Renseignez le nom et l’adresse Git du projet avant le commit.',
   'project-git-commit-failed':'Le commit Git a échoué. Vérifiez l’état et les modifications indexées.',
   'project-git-commit-uncertain':'Résultat incertain : vérifiez l’historique Git avant de réessayer.',
+  'forge-sync-refs-changed':'La branche ou les tags distants ont changé depuis l’aperçu. Fermez et recommencez.',
+  'forge-sync-preview-unavailable':'Impossible de comparer la branche et les tags de cette forge.',
   'forge-push-unavailable':'La forge ou le projet est indisponible.',
   'forge-push-git-unavailable':'Le dépôt Git local est indisponible.',
   'forge-push-local-unavailable':'Impossible de lire la branche et le commit locaux.',

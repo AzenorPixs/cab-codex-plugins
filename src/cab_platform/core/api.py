@@ -660,6 +660,18 @@ def execute_forge_push(request,project_id:str,forge:str,body:ForgePushInput):
     from cab_platform.forge_push import execute
     return execute(project_id,forge.upper(),actor.pk,body.nonce)
 
+@api.post('/projects/{project_id}/forges/{forge}/sync-prepare')
+def prepare_forge_sync(request,project_id:str,forge:str):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_sync import prepare
+    return prepare(project_id,forge.upper(),actor.pk)
+
+@api.post('/projects/{project_id}/forges/{forge}/sync')
+def execute_forge_sync(request,project_id:str,forge:str,body:ForgePushInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_sync import execute
+    return execute(project_id,forge.upper(),actor.pk,body.nonce)
+
 @api.post('/projects/{project_id}/forges/{forge}/refresh')
 def refresh_one_forge(request,project_id:str,forge:str,automatic:bool=False):
     actor=principal(request)
