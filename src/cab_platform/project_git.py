@@ -133,10 +133,25 @@ def measure(project):
         return None
 
 
-def commit_local(project_id, tag="", description="", expected_tag=""):
+def commit_progress(project_id, request_id, stage):
+    if not request_id:
+        return
+    from .core.models import ProjectMetadataProjection
+    with transaction.atomic():
+        project = Project.objects.select_for_update().get(pk=project_id)
+        snapshot = dict(project.public_metadata or {})
+        snapshot['git_commit_progress'] = {'request_id': request_id, 'stage': stage}
+        snapshot['revision'] = int(snapshot.get('revision', 0)) + 1
+        project.public_metadata = snapshot
+        project.save(update_fields=['public_metadata'])
+        ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
+
+
+def commit_local(project_id, tag="", description="", expected_tag="", request_id=""):
     """Enregistre les modifications locales et, si demandé, un tag."""
     from django.db import connection
     project = Project.objects.get(pk=project_id)
+    require(isinstance(request_id, str) and len(request_id) <= 80 and all(c in '0123456789abcdef-' for c in request_id), 'project-git-commit-input-invalid', 400)
     require(project.creation_state == 'READY', 'project-git-unavailable', 409)
     require(isinstance(tag, str) and len(tag) <= 200 and not tag.startswith('-') and isinstance(description, str) and len(description) <= 2000 and '\0' not in description, 'project-git-commit-input-invalid', 400)
     require(isinstance(expected_tag, str) and (not expected_tag or len(expected_tag) in (40, 64) and all(c in '0123456789abcdef' for c in expected_tag)), 'project-git-tag-invalid', 400)
@@ -155,6 +170,7 @@ def commit_local(project_id, tag="", description="", expected_tag=""):
         env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_LAZY_FETCH': '1'}
     except (OSError, KeyError):
         raise Refused('project-git-unavailable', 409) from None
+    commit_progress(project_id, request_id, 'waiting')
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
     try:
@@ -165,6 +181,7 @@ def commit_local(project_id, tag="", description="", expected_tag=""):
         created = False
         existing_tag = ''
         try:
+            commit_progress(project_id, request_id, 'checking')
             if tag:
                 require(git('check-ref-format', 'refs/tags/' + tag) == 0, 'project-git-tag-invalid', 400)
                 if state == 1:
@@ -175,6 +192,7 @@ def commit_local(project_id, tag="", description="", expected_tag=""):
                         require(current.returncode == 0, 'project-git-commit-failed', 409)
                         existing_tag = current.stdout.decode('ascii').strip()
                         if not expected_tag:
+                            commit_progress(project_id, request_id, 'confirmation')
                             return {'created': False, 'tag_conflict': existing_tag}
                         require(existing_tag == expected_tag, 'project-git-tag-changed', 409)
                     else:
@@ -182,15 +200,21 @@ def commit_local(project_id, tag="", description="", expected_tag=""):
                 else:
                     require(not expected_tag, 'project-git-tag-changed', 409)
             if state == 0:
+                commit_progress(project_id, request_id, 'initializing')
                 initialize(project_id)
+            commit_progress(project_id, request_id, 'identity')
             require(git('config', '--local', 'user.name', name) == 0, 'project-git-commit-failed', 409)
             require(git('config', '--local', 'user.email', email) == 0, 'project-git-commit-failed', 409)
+            commit_progress(project_id, request_id, 'staging')
             require(git('add', '.') == 0, 'project-git-commit-failed', 409)
             difference = git('diff', '--cached', '--quiet')
             require(difference in (0, 1), 'project-git-commit-failed', 409)
             if difference == 1:
+                commit_progress(project_id, request_id, 'committing')
                 require(git('commit', '-m', message, timeout=120) == 0, 'project-git-commit-failed', 409)
                 created = True
+                if tag:
+                    commit_progress(project_id, request_id, 'tagging')
                 if tag and existing_tag:
                     head = git_output('rev-parse', '--verify', 'HEAD')
                     ident = git_output('var', 'GIT_COMMITTER_IDENT')
@@ -204,10 +228,12 @@ def commit_local(project_id, tag="", description="", expected_tag=""):
         except (OSError, subprocess.TimeoutExpired):
             raise Refused('project-git-commit-uncertain', 409) from None
         finally:
+            commit_progress(project_id, request_id, 'refreshing')
             _refresh_status(project_id)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s, %s)', [7348501, 7348502])
+    commit_progress(project_id, request_id, 'completed' if created else 'unchanged')
     return {'created': created}
 
 

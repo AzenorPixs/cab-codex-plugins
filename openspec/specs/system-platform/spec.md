@@ -728,7 +728,7 @@ Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et descrip
 
 #### Scenario: Suivi du commit
 - **WHEN** un administrateur lance le commit depuis la fenêtre
-- **THEN** la fenêtre reste ouverte et présente les étapes réelles et le résultat, diffusés en temps réel via PostgreSQL et Electric.
+- **THEN** la fenêtre se transforme en console et présente les étapes, les sorties réelles des commandes et le résultat en direct. Les étapes sont diffusées via PostgreSQL et Electric ; les sorties de console sont transmises à la session sans être stockées en base.
 
 #### Scenario: Modifications disponibles
 - **WHEN** un administrateur lance le commit et que des modifications sont indexées

@@ -366,12 +366,18 @@ class GitCommitInput(Schema):
     tag:str = ''
     description:str = ''
     expected_tag:str = ''
+    request_id:str = ''
 
 @api.post('/projects/{project_id}/git/commit')
 def commit_project_git(request,project_id:str,body:GitCommitInput):
     principal(request,admin=True)
-    from cab_platform.project_git import commit_local
-    return commit_local(project_id,body.tag,body.description,body.expected_tag)
+    from cab_platform.project_git import commit_local,commit_progress
+    try:
+        return commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id)
+    except Exception:
+        if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+            commit_progress(project_id,body.request_id,'failed')
+        raise
 
 @api.post('/projects/{project_id}/git/clean')
 def clean_project_git(request,project_id:str):

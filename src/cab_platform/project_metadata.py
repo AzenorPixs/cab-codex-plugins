@@ -85,6 +85,7 @@ def synchronize(project_id,include_forges=True,include_git=True):
                 snapshot['git_initialized']=configuration['git_initialized']
         elif 'git_initialized' in previous:snapshot['git_initialized']=previous['git_initialized']
         if 'git_status' in previous:snapshot['git_status']=previous['git_status']
+        if 'git_commit_progress' in previous:snapshot['git_commit_progress']=previous['git_commit_progress']
         if include_forges:
             from .forge_version import cached
             snapshot['forge_versions']=cached(snapshot.get('values',{}))
