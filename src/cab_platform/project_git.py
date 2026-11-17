@@ -147,7 +147,7 @@ def commit_progress(project_id, request_id, stage):
         ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
 
 
-def commit_local(project_id, tag="", description="", expected_tag="", request_id=""):
+def commit_local(project_id, tag="", description="", expected_tag="", request_id="", console=None):
     """Enregistre les modifications locales et, si demandé, un tag."""
     from django.db import connection
     project = Project.objects.get(pk=project_id)
@@ -175,7 +175,40 @@ def commit_local(project_id, tag="", description="", expected_tag="", request_id
         cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
     try:
         def git(*args, timeout=30):
-            return subprocess.run(['/usr/bin/git', '-C', project.root, *args], cwd='/', env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout, **options).returncode
+            command = ['/usr/bin/git', '-C', project.root, *args]
+            if console is None:
+                return subprocess.run(command, cwd='/', env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout, **options).returncode
+            import codecs
+            import selectors
+            import time
+            console('$ git ' + args[0] + (' …' if len(args) > 1 else '') + '\n')
+            process = subprocess.Popen(command, cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options)
+            deadline = time.monotonic() + timeout
+            decoder = codecs.getincrementaldecoder('utf-8')('replace')
+            try:
+                with selectors.DefaultSelector() as selector:
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            process.kill()
+                            process.wait()
+                            raise subprocess.TimeoutExpired(command, timeout)
+                        if not selector.select(min(remaining, 1)):
+                            continue
+                        chunk = os.read(process.stdout.fileno(), 4096)
+                        if not chunk:
+                            break
+                        console(decoder.decode(chunk))
+                tail = decoder.decode(b'', final=True)
+                if tail:
+                    console(tail)
+                return process.wait(timeout=max(0.01, deadline - time.monotonic()))
+            finally:
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
         def git_output(*args, input_data=None):
             return subprocess.run(['/usr/bin/git', '-C', project.root, *args], cwd='/', env=env, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, **options)
         created = False
@@ -312,6 +345,8 @@ def _refresh_status(project_id):
             project.public_metadata = snapshot
             project.save(update_fields=['public_metadata'])
             ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
+        from .forge_comparison import enqueue
+        transaction.on_commit(lambda: enqueue(project_id))
         return state
 
 

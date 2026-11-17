@@ -642,7 +642,7 @@ La page Forges du projet MUST afficher le bloc Git en premier, avant les cartes
 de forges. Son titre MUST présenter le logo Git, le nom Git et un séparateur
 vertical.
 
-Le bloc Git MUST afficher entre la version et les fichiers suivis le nombre de commits accessibles depuis le commit courant. Ce nombre MUST être conservé dans PostgreSQL, recalculé en arrière-plan et diffusé via Electric lorsqu’il change. Un dépôt sans commit affiche zéro.
+Le bloc Git MUST afficher après le courriel le nombre de commits accessibles depuis le commit courant. Ce nombre MUST être conservé dans PostgreSQL, recalculé en arrière-plan et diffusé via Electric lorsqu’il change. Un dépôt sans commit affiche zéro.
 
 #### Scenario: Affichage du nombre de commits
 - **WHEN** CAB mesure l’état Git d’un projet
@@ -663,14 +663,14 @@ une fois par 24 heures avec un décalage aléatoire mémorisé lors des redémar
 
 ### Requirement: Versions des forges mutualisées
 Les versions Forgejo et GitLab et la dernière version disponible de l’API GitHub
-MUST être mutualisées par instance, stockées en base et affichées via Electric.
-La version Forgejo affichée MUST omettre le signe + et son suffixe. Le résultat
+MUST être mutualisées par instance et stockées en base. Les versions des forges
+distantes MUST NOT être affichées dans les titres des blocs. Le résultat
 d’authentification MUST porter le libellé « API ». Chaque version MUST être
 vérifiée au maximum une fois par 24 heures avec un décalage aléatoire mémorisé.
 
-#### Scenario: Affichage des versions de forge
-- **WHEN** une version de forge est connue
-- **THEN** sa valeur mutualisée est affichée dans le titre correspondant
+#### Scenario: Version de forge connue
+- **WHEN** une version de forge distante est connue
+- **THEN** sa valeur reste conservée en base sans être affichée dans le titre
 
 ### Requirement: Configuration Git du projet
 Le bloc Git MUST afficher sur deux colonnes les valeurs présentes de
@@ -707,7 +707,7 @@ indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
 
 ### Requirement: Présentation de l’état Git local
 Le bloc Git MUST présenter le dernier commit, son horodatage local au format
-jj.mm.AA hh.mm, ses tags sous « Version », l’état et les nombres de fichiers
+jj.mm.AA hh.mm, ses tags sous « Tag », l’état et les nombres de fichiers
 suivis, modifiés, indexés, ignorés, non suivis et en conflit. Le bouton de
 rafraîchissement MUST être animé pendant la mesure, à l’ouverture comme après
 un clic.
@@ -743,6 +743,44 @@ Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et descrip
 #### Scenario: Aucune modification
 - **WHEN** aucune modification n’est à enregistrer
 - **THEN** CAB ne crée pas de commit vide et réconcilie l’état Git.
+
+### Requirement: Retrait du dernier commit local
+Le bloc Git MUST proposer une corbeille pour le dernier commit. La fenêtre MUST permettre de retirer ce commit en conservant les modifications ou de revenir aux fichiers du premier parent. CAB MUST vérifier la référence observée avant de la déplacer et actualiser PostgreSQL et Electric. Les tags existants et les forges distantes MUST rester inchangés.
+
+#### Scenario: Conserver les modifications
+- **WHEN** l’administrateur choisit de conserver les modifications
+- **THEN** CAB replace la branche sur le premier parent et conserve les fichiers et l’index.
+
+#### Scenario: Revenir à l’état précédent
+- **WHEN** l’administrateur choisit de supprimer les modifications du commit
+- **THEN** CAB refuse si d’autres modifications locales sont présentes ; sinon il replace la branche et les fichiers sur le premier parent.
+
+#### Scenario: Référence modifiée ou résultat partiel
+- **WHEN** le commit a changé depuis l’ouverture ou que la restauration des fichiers échoue après déplacement
+- **THEN** CAB signale le résultat sans rejouer automatiquement l’opération.
+
+### Requirement: Édition du tag Git local
+Dans le bloc Git, chaque tag du dernier commit MUST ouvrir une fenêtre permettant de modifier son nom et sa description. CAB MUST vérifier que le tag et le commit observés n’ont pas changé, refuser un nom déjà utilisé et appliquer les changements localement sans publier vers les forges. Les changements MUST actualiser l’état PostgreSQL et Electric.
+
+#### Scenario: Renommage ou description du tag
+- **WHEN** un administrateur enregistre un tag valide dont la référence observée est inchangée
+- **THEN** CAB conserve le commit ciblé et actualise le nom et la description du tag local.
+
+#### Scenario: Nom du tag effacé
+- **WHEN** un administrateur enregistre la fenêtre avec le champ Tag vide
+- **THEN** CAB supprime uniquement le tag local, conserve le commit et actualise l’état Git.
+
+#### Scenario: Ajout d’un tag absent
+- **WHEN** le commit courant n’a pas de tag et qu’un administrateur sélectionne sa ligne Tag
+- **THEN** CAB ouvre une fenêtre pour créer un tag local avec un nom et une description facultative, sans changer le commit.
+
+#### Scenario: Corbeille du tag
+- **WHEN** un administrateur sélectionne la corbeille associée à un tag local
+- **THEN** CAB supprime ce tag sans confirmation supplémentaire, conserve le commit et actualise l’état Git.
+
+#### Scenario: Modification concurrente
+- **WHEN** le tag ou le commit a changé depuis l’ouverture de la fenêtre
+- **THEN** CAB refuse la modification sans écraser la nouvelle référence.
 
 ### Requirement: Nettoyage des objets Git déjà compactés
 Le bloc Git MUST proposer une action de nettoyage sur la ligne des objets à nettoyer uniquement lorsque leur nombre est supérieur à zéro. Cette action MUST supprimer seulement les objets libres déjà présents dans les packs, puis relire l’état Git et actualiser la projection PostgreSQL diffusée par Electric.
@@ -808,6 +846,13 @@ Le détail MUST être limité au dernier commit connu et aux projets autorisés.
 - **WHEN** un utilisateur sélectionne l’identifiant du dernier commit
 - **THEN** la fenêtre affiche ses informations et le résumé de ses fichiers
 
+### Requirement: Consultation du dernier commit distant
+Le dernier commit affiché par chaque forge MUST ouvrir une fenêtre en lecture seule présentant les informations disponibles auprès de la forge, notamment son identifiant, son auteur, sa date, son message et, lorsque disponible, le résumé des fichiers modifiés. CAB MUST limiter la consultation au dernier commit observé et au projet autorisé, sans exposer le token.
+
+#### Scenario: Ouverture du détail distant
+- **WHEN** un utilisateur sélectionne le dernier commit d’une forge
+- **THEN** CAB lit les informations de ce commit auprès de la forge et les affiche dans une fenêtre de consultation.
+
 ### Requirement: Métadonnées publiques du fichier projet
 project.env à la racine canonique MUST être la source de vérité des métadonnées
 publiques. CAB MUST mémoriser leur instantané dans projects. L’accueil MUST
@@ -825,9 +870,13 @@ qui restent conservées dans la projection sans être affichées. Un fichier abs
 inaccessible MUST être signalé sans contenu brut. Les variables retirées
 MUST disparaître de l'instantané.
 
-#### Scenario: Affichage masqué du token
+#### Scenario: Accès au dépôt distant
+- **WHEN** l’URL, l’utilisateur et le dépôt d’une forge sont configurés
+- **THEN** le nom de la forge ouvre le dépôt à l’adresse construite à partir de ces trois valeurs.
+
+#### Scenario: Token dans la configuration de forge
 - **WHEN** une carte Forgejo, GitHub ou GitLab est affichée
-- **THEN** une ligne Token présente toujours 22 astérisques, indépendamment de la présence d’un token, sans lecture ni exposition de sa valeur.
+- **THEN** aucune ligne Token n’est affichée dans la carte et le token reste disponible dans la configuration de la forge.
 
 #### Scenario: Bloc de configuration du projet
 - **WHEN** la fiche d’un projet est affichée
@@ -850,11 +899,11 @@ MUST disparaître de l'instantané.
 - **THEN** seule sa carte est affichée puis elle disparaît
 
 ### Requirement: État des dépôts distants
-Les blocs Forgejo, GitHub et GitLab MUST afficher la branche distante, le dernier commit, son horodatage, ses versions, le nombre de commits et la taille du dépôt lorsque la forge fournit ces informations. CAB MUST conserver la dernière observation en PostgreSQL et diffuser ses changements par Electric, sans exposer les tokens.
+Les blocs Forgejo, GitHub et GitLab MUST afficher le dernier commit de la branche distante, son horodatage, ses versions, le nombre de commits et la taille du dépôt lorsque la forge fournit ces informations. CAB MUST conserver la dernière observation en PostgreSQL et diffuser ses changements par Electric, sans exposer les tokens.
 
 #### Scenario: Réconciliation des dépôts distants
 - **WHEN** un utilisateur ouvre la page Forges d’un projet
-- **THEN** CAB affiche les données enregistrées puis vérifie les dépôts configurés en arrière-plan.
+- **THEN** CAB affiche les données enregistrées puis vérifie les dépôts en arrière-plan si le délai minimal automatique est écoulé.
 
 #### Scenario: Vérification quotidienne
 - **WHEN** l’horaire quotidien aléatoire mémorisé pour une forge et un projet est atteint
@@ -864,8 +913,44 @@ Les blocs Forgejo, GitHub et GitLab MUST afficher la branche distante, le dernie
 - **WHEN** une forge ou une information est indisponible
 - **THEN** CAB conserve les dernières données valides du même dépôt, signale l’indisponibilité et ne présente pas une valeur inconnue comme zéro.
 
+### Requirement: Rafraîchissement manuel des forges
+Chaque bloc de forge MUST proposer un bouton de rafraîchissement manuel. Son icône MUST être animée pendant la vérification de cette forge, y compris lors de l’ouverture de la page et des vérifications automatiques. L’état de vérification MUST être diffusé aux pages ouvertes via PostgreSQL et Electric.
+
+#### Scenario: Rafraîchissement demandé
+- **WHEN** un utilisateur sélectionne le rafraîchissement d’une forge configurée
+- **THEN** CAB vérifie son dépôt et son authentification en arrière-plan, actualise les données et arrête l’animation à la fin.
+
+### Requirement: Intervalle automatique des forges
+CAB MUST limiter les vérifications automatiques de chaque forge et projet à une par intervalle minimal, réglable dans Administration / Git en minutes et conservé en PostgreSQL. Le défaut MUST être 60 minutes. Une vérification manuelle MUST rester possible sans attendre cet intervalle. La vérification quotidienne existante demeure active sous cette limite.
+
+#### Scenario: Page ouverte plusieurs fois
+- **WHEN** la page Forges est rouverte avant l’expiration de l’intervalle configuré
+- **THEN** CAB affiche les valeurs mémorisées sans relancer la vérification automatique.
+
+### Requirement: Envoi manuel de branche vers les forges
+Chaque bloc de forge MUST proposer un bouton « Envoyer » après le rafraîchissement. CAB MUST utiliser les identifiants de forge chiffrés qu’il gère, présenter la branche cible et le commit local avant confirmation, puis envoyer uniquement ce commit sur la branche distante avec un force-with-lease explicite sur la valeur observée. CAB MUST NOT créer, comparer ou publier de tag pour cette action.
+
+#### Scenario: Confirmation de l’envoi
+- **WHEN** l’administrateur confirme l’envoi préparé et que les références n’ont pas changé
+- **THEN** CAB envoie la branche avec protection de la valeur distante, sans envoyer de tag, puis actualise l’état de la forge.
+
+#### Scenario: Résultat incertain
+- **WHEN** l’envoi est interrompu ou son résultat n’est pas confirmé
+- **THEN** CAB signale un résultat incertain et interdit le rejeu automatique.
+
+### Requirement: Comparaison des forges avec Git local
+Chaque bloc de forge MUST afficher après la branche un état comparant son commit observé au commit local courant. La comparaison MUST distinguer les commits d’avance et de retard de la forge, être mémorisée en PostgreSQL et diffusée via Electric, puis recalculée à chaque actualisation locale ou distante. CAB MUST afficher une indisponibilité si les commits nécessaires ne sont pas connus localement et MUST NOT effectuer de fetch implicite.
+
+#### Scenario: Détail de la comparaison
+- **WHEN** l’utilisateur sélectionne l’état d’une forge
+- **THEN** CAB affiche les commits comparés, les nombres d’avance et de retard et les commits distincts disponibles localement.
+
 ### Requirement: Authentification des forges
-À l’ouverture de la page Forges d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+À l’ouverture de la page Forges d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis, lorsque l’intervalle automatique est écoulé, vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+
+#### Scenario: Diagnostic interactif
+- **WHEN** un utilisateur sélectionne l’authentification d’une forge
+- **THEN** CAB ouvre une console, lance la vérification et affiche ses étapes et son résultat en direct, avec possibilité de la relancer, sans exposer le token.
 
 #### Scenario: Modification des identifiants
 - **WHEN** le compte ou le token d’une forge change

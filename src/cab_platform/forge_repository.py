@@ -11,7 +11,7 @@ import httpx
 from django.db import close_old_connections, connection, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from .core.commands import Refused
+from .core.commands import Refused, require
 from .core.models import Project, ProjectMetadataProjection
 from .forge_settings import crypt
 from .forge_version import base_for
@@ -132,20 +132,124 @@ def observe(project, values, forge):
         return None
 
 
-def refresh_one(project_id, forge):
+def commit_details(project, forge, commit):
+    """Lit les métadonnées du dernier commit observé sur la forge."""
+    require(forge in FORGES and isinstance(commit, str) and len(commit) in (40, 64) and all(c in '0123456789abcdef' for c in commit), 'forge-commit-unavailable', 409)
+    snapshot = project.public_metadata or {}
+    values = snapshot.get('values', {})
+    record = (snapshot.get('forge_repositories') or {}).get(forge) or {}
+    signature = identity(project, values, forge)
+    observed = ((project.configuration or {}).get('forge_repositories') or {}).get(forge) or {}
+    require(record.get('available') is True and record.get('commit') == commit and observed.get('observed_signature') == signature and configured(project, values, forge), 'forge-commit-unavailable', 409)
+    prefix = 'REMOTE_' + forge + '_'
+    base = base_for(values, forge)
+    owner, repo = values.get(prefix + 'OWNER', ''), values.get(prefix + 'REPOSITORY', '')
+    require(isinstance(owner, str) and isinstance(repo, str) and owner and repo and '/' not in repo and repo not in ('.', '..') and all(part and part not in ('.', '..') for part in owner.split('/')), 'forge-commit-unavailable', 409)
+    try:
+        encrypted = project.configuration['forge_tokens_tpm'][forge]
+        token = crypt(project, forge, encrypted.encode(), True).decode('utf-8')
+        require(bool(token) and not any(char in token for char in '\r\n\0'), 'forge-commit-unavailable', 409)
+        headers = {'Accept': 'application/json', 'User-Agent': 'CAB-forge-commit'}
+        headers['PRIVATE-TOKEN' if forge == 'GITLAB' else 'Authorization'] = token if forge == 'GITLAB' else ('token ' if forge == 'FORGEJO' else 'Bearer ') + token
+        parts = urlsplit(base)
+        github_public = forge == 'GITHUB' and parts.hostname.lower() == 'github.com' and parts.port in (None, 443) and parts.path in ('', '/')
+        if forge == 'GITLAB':
+            root = base + '/api/v4/projects/' + quote(owner + '/' + repo, safe='') + '/repository/commits/' + commit
+        else:
+            api = ('https://api.github.com' if github_public else base + '/api/v3') if forge == 'GITHUB' else base + '/api/v1'
+            root = api + '/repos/' + '/'.join(quote(part, safe='') for part in owner.split('/')) + '/' + quote(repo, safe='') + ('/git/commits/' if forge == 'FORGEJO' else '/commits/') + commit
+        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False, headers=headers) as client:
+            data, _ = get_json(client, root)
+            require(isinstance(data, dict), 'forge-commit-unavailable', 409)
+            payload = data if forge == 'GITLAB' else data.get('commit')
+            require(isinstance(payload, dict), 'forge-commit-unavailable', 409)
+            author = payload.get('author') if isinstance(payload.get('author'), dict) else {}
+            name = payload.get('author_name') if forge == 'GITLAB' else author.get('name')
+            email = payload.get('author_email') if forge == 'GITLAB' else author.get('email')
+            date = payload.get('committed_date') if forge == 'GITLAB' else (payload.get('committer') or {}).get('date') if isinstance(payload.get('committer'), dict) else None
+            message = payload.get('message')
+            def text(value, limit):
+                return value[:limit] if isinstance(value, str) and value else 'Non disponible'
+            author_line = text(name, 300) + (' <' + email[:300] + '>' if isinstance(email, str) and email else '')
+            content = 'Commit : ' + commit + '\nAuteur : ' + author_line + '\nDate : ' + text(date, 100) + '\n\nMessage :\n' + text(message, 16000)
+            files = data.get('files')
+            if forge == 'GITLAB':
+                try:
+                    files, _ = get_json(client, root + '/diff', params={'per_page': 100})
+                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                    files = None
+            if isinstance(files, list):
+                names = []
+                for item in files[:100]:
+                    if not isinstance(item, dict):continue
+                    filename = item.get('filename') or item.get('new_path') or item.get('old_path')
+                    if isinstance(filename, str) and filename:
+                        names.append(filename[:1000].replace('\n', ' ').replace('\r', ' '))
+                if names:
+                    content += '\n\nFichiers modifiés' + (' (100 premiers)' if len(files) >= 100 else '') + ' :\n' + '\n'.join(names)
+            current = Project.objects.get(pk=project.pk)
+            latest = current.public_metadata or {}
+            require(identity(current, latest.get('values', {}), forge) == signature and ((latest.get('forge_repositories') or {}).get(forge) or {}).get('commit') == commit, 'forge-commit-unavailable', 409)
+            return {'content': content}
+    except (httpx.HTTPError, ValueError, UnicodeError, KeyError, TypeError, OSError):
+        raise Refused('forge-commit-unavailable', 409) from None
+
+
+def publish_refresh(project_id, forge, running):
+    with transaction.atomic():
+        project = Project.objects.select_for_update().get(pk=project_id)
+        snapshot = dict(project.public_metadata or {})
+        statuses = dict(snapshot.get('forge_refresh') or {})
+        statuses[forge] = {'running': running, 'started_at': timezone.now().timestamp() if running else None}
+        snapshot['forge_refresh'] = statuses
+        snapshot['revision'] = int(snapshot.get('revision', 0)) + 1
+        project.public_metadata = snapshot
+        project.save(update_fields=['public_metadata'])
+        ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
+
+
+def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
     lock_id = int.from_bytes(hashlib.sha256((str(project_id) + ':' + forge).encode()).digest()[:4], 'big', signed=True)
     acquired = False
+    announced = False
     try:
         with connection.cursor() as cursor:
-            cursor.execute('SELECT pg_try_advisory_lock(%s,%s)', [7348510, lock_id])
-            acquired = cursor.fetchone()[0]
+            if wait:
+                cursor.execute('SELECT pg_advisory_lock(%s,%s)', [7348510, lock_id])
+                acquired = True
+            else:
+                cursor.execute('SELECT pg_try_advisory_lock(%s,%s)', [7348510, lock_id])
+                acquired = cursor.fetchone()[0]
         if not acquired:
             return
         project = Project.objects.get(pk=project_id)
         values = (project.public_metadata or {}).get('values', {})
         signature = identity(project, values, forge)
         if not configured(project, values, forge):
-            return
+            return False
+        from .git_monitor_config import read as read_monitor_settings
+        with transaction.atomic():
+            current = Project.objects.select_for_update().get(pk=project_id)
+            current_values = (current.public_metadata or {}).get('values', {})
+            if identity(current, current_values, forge) != signature:
+                return False
+            config = dict(current.configuration or {})
+            records = dict(config.get('forge_repositories') or {})
+            record = dict(records.get(forge) or {})
+            if record.get('signature') != signature:
+                record = {'signature': signature}
+            now = timezone.now()
+            last_check = parse_datetime(record.get('last_check', ''))
+            interval = read_monitor_settings()['forge_auto_interval_minutes']
+            if automatic and last_check is not None and timezone.is_aware(last_check) and (now - last_check).total_seconds() < interval * 60:
+                return True
+            record['last_check'] = now.isoformat()
+            records[forge] = record
+            config['forge_repositories'] = records
+            current.configuration = config
+            current.save(update_fields=['configuration'])
+        publish_refresh(project_id, forge, True)
+        announced = True
         observed = observe(project, values, forge)
         with transaction.atomic():
             project = Project.objects.select_for_update().get(pk=project_id)
@@ -185,13 +289,24 @@ def refresh_one(project_id, forge):
             else:
                 project.configuration = config
                 project.save(update_fields=['configuration'])
+        if observed is not None:
+            from .forge_auth import refresh_one as refresh_auth
+            refresh_auth(project_id, forge, managed=False)
+        from .forge_comparison import enqueue
+        enqueue(project_id)
+        return observed is not None
     finally:
-        if acquired:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT pg_advisory_unlock(%s,%s)', [7348510, lock_id])
-        close_old_connections()
-        with _lock:
-            _running.discard((str(project_id), forge))
+        try:
+            if announced:
+                publish_refresh(project_id, forge, False)
+        finally:
+            if acquired:
+                with connection.cursor() as cursor:
+                    cursor.execute('SELECT pg_advisory_unlock(%s,%s)', [7348510, lock_id])
+            close_old_connections()
+            if managed:
+                with _lock:
+                    _running.discard((str(project_id), forge))
 
 
 def enqueue(project_id, forges=FORGES):

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any,Literal
 from django.contrib.auth import authenticate,login,logout
 from django.db import transaction
-from django.http import HttpResponse,JsonResponse
+from django.http import HttpResponse,JsonResponse,StreamingHttpResponse
 from django.middleware.csrf import CsrfViewMiddleware,get_token
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
@@ -309,6 +309,75 @@ def project_git_branches(request,project_id:str):
     from cab_platform.project_git import branches_overview
     return branches_overview(project)
 
+@api.get('/projects/{project_id}/forges/{forge}/commit/{commit}')
+def project_forge_commit(request,project_id:str,forge:str,commit:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import commit_details
+    return commit_details(project,forge.upper(),commit)
+
+@api.get('/projects/{project_id}/forges/{forge}/comparison')
+def project_forge_comparison(request,project_id:str,forge:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_comparison import details
+    return details(project,forge.upper())
+
+@api.get('/projects/{project_id}/git/commit-removal')
+def preview_git_commit_removal(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import inspect
+    return inspect(Project.objects.get(pk=project_id))
+
+class GitCommitRemoval(Schema):
+    expected_head:str
+    expected_parent:str
+    expected_branch:str
+    mode:Literal['keep','discard']
+
+@api.post('/projects/{project_id}/git/commit-removal')
+def remove_git_commit(request,project_id:str,body:GitCommitRemoval):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import remove
+    return remove(project_id,body.expected_head,body.expected_parent,body.expected_branch,body.mode)
+
+@api.get('/projects/{project_id}/git/tag')
+def read_project_git_tag(request,project_id:str,name:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.git_tag_edit import read_tag
+    return read_tag(project,name)
+
+class GitTagEditInput(Schema):
+    name:str
+    new_name:str
+    description:str
+    expected_oid:str
+    expected_commit:str
+
+class GitTagCreateInput(Schema):
+    name:str
+    description:str
+    expected_commit:str
+
+@api.post('/projects/{project_id}/git/tag/create')
+def create_project_git_tag(request,project_id:str,body:GitTagCreateInput):
+    principal(request,admin=True)
+    from cab_platform.git_tag_edit import create_tag
+    return create_tag(project_id,body.name,body.description,body.expected_commit)
+
+@api.post('/projects/{project_id}/git/tag')
+def edit_project_git_tag(request,project_id:str,body:GitTagEditInput):
+    principal(request,admin=True)
+    from cab_platform.git_tag_edit import edit_tag
+    return edit_tag(project_id,body.name,body.new_name,body.description,body.expected_oid,body.expected_commit)
+
 @api.get('/projects/{project_id}/git/changes')
 def project_git_changes(request,project_id:str):
     actor=principal(request)
@@ -331,6 +400,7 @@ class GitMonitorSettings(Schema):
     quiet_seconds:int
     interval_seconds:int
     maximum_seconds:int
+    forge_auto_interval_minutes:int=60
 
 @api.get('/administration/git')
 def git_monitor_settings(request):
@@ -378,6 +448,60 @@ def commit_project_git(request,project_id:str,body:GitCommitInput):
         if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
             commit_progress(project_id,body.request_id,'failed')
         raise
+
+@api.post('/projects/{project_id}/git/commit-stream')
+def stream_project_git_commit(request,project_id:str,body:GitCommitInput):
+    principal(request,admin=True)
+    import asyncio
+    import threading
+    from django.db import close_old_connections
+    from cab_platform.project_git import commit_local,commit_progress
+    async def events():
+        loop = asyncio.get_running_loop()
+        queue = asyncio.Queue()
+        def send(event):
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait,event)
+            except RuntimeError:
+                pass
+        def work():
+            emitted = 0
+            truncated = False
+            def output(text):
+                nonlocal emitted,truncated
+                remaining = 1048576 - emitted
+                if remaining > 0:
+                    part = text[:remaining]
+                    emitted += len(part)
+                    if part:send({'type':'output','text':part})
+                if len(text) > remaining and not truncated:
+                    truncated = True
+                    send({'type':'output','text':'\n[Sortie limitée à 1 Mio.]\n'})
+            try:
+                result=commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,output)
+                send({'type':'result','result':result})
+            except commands.Refused as error:
+                if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+                    try:commit_progress(project_id,body.request_id,'failed')
+                    except Exception:pass
+                send({'type':'error','error':error.code})
+            except Exception:
+                if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+                    try:commit_progress(project_id,body.request_id,'failed')
+                    except Exception:pass
+                send({'type':'error','error':'project-git-commit-uncertain'})
+            finally:
+                close_old_connections()
+                send({'type':'end'})
+        threading.Thread(target=work,daemon=True,name='cab-git-commit-stream').start()
+        while True:
+            event=await queue.get()
+            yield (json.dumps(event,ensure_ascii=False)+'\n').encode('utf-8')
+            if event['type']=='end':break
+    response=StreamingHttpResponse(events(),content_type='application/x-ndjson; charset=utf-8')
+    response['Cache-Control']='no-store'
+    response['X-Accel-Buffering']='no'
+    return response
 
 @api.post('/projects/{project_id}/git/clean')
 def clean_project_git(request,project_id:str):
@@ -444,6 +568,73 @@ def refresh_forge_repositories(request,project_id:str):
     from cab_platform.forge_repository import enqueue
     enqueue(project.pk)
     return {'queued':True}
+
+@api.post('/projects/{project_id}/forges/{forge}/authenticate-stream')
+def stream_forge_authentication(request,project_id:str,forge:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import FORGES
+    forge=forge.upper()
+    commands.require(forge in FORGES,'forge-refresh-invalid',400)
+    import asyncio
+    import threading
+    from django.db import close_old_connections
+    from cab_platform.forge_auth import refresh_one
+    async def events():
+        loop=asyncio.get_running_loop()
+        queue=asyncio.Queue()
+        def send(event):
+            try:loop.call_soon_threadsafe(queue.put_nowait,event)
+            except RuntimeError:pass
+        def work():
+            def report(message):send({'type':'output','text':message})
+            try:
+                state=refresh_one(project.pk,forge,managed=False,report=report)
+                report('Authentification réussie.\n' if state is True else 'Authentification échouée.\n' if state is False else 'Authentification non vérifiée.\n')
+                send({'type':'result','result':{'state':state}})
+            except Exception:
+                report('La vérification a échoué avant sa conclusion.\n')
+                send({'type':'error','error':'forge-auth-diagnostic-failed'})
+            finally:
+                close_old_connections()
+                send({'type':'end'})
+        threading.Thread(target=work,daemon=True,name='cab-forge-auth-stream').start()
+        while True:
+            event=await queue.get()
+            yield (json.dumps(event,ensure_ascii=False)+'\n').encode('utf-8')
+            if event['type']=='end':break
+    response=StreamingHttpResponse(events(),content_type='application/x-ndjson; charset=utf-8')
+    response['Cache-Control']='no-store'
+    response['X-Accel-Buffering']='no'
+    return response
+
+class ForgePushInput(Schema):
+    nonce:str
+
+@api.post('/projects/{project_id}/forges/{forge}/push-prepare')
+def prepare_forge_push(request,project_id:str,forge:str):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_push import prepare
+    return prepare(project_id,forge.upper(),actor.pk)
+
+@api.post('/projects/{project_id}/forges/{forge}/push')
+def execute_forge_push(request,project_id:str,forge:str,body:ForgePushInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_push import execute
+    return execute(project_id,forge.upper(),actor.pk,body.nonce)
+
+@api.post('/projects/{project_id}/forges/{forge}/refresh')
+def refresh_one_forge(request,project_id:str,forge:str,automatic:bool=False):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import FORGES,refresh_one
+    forge=forge.upper()
+    commands.require(forge in FORGES,'forge-refresh-invalid',400)
+    return {'available':bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=automatic))}
 
 @api.get('/projects/{project_id}/forges/{forge}')
 def forge_read(request,project_id:str,forge:str):

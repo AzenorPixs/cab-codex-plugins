@@ -117,3 +117,10 @@ body{zoom:var(--responsive-layout-scale,1)}
 .agents-overview>.agent-title{margin-top:-14px}.agents-overview>.agent-title>h1{margin:0;font-size:calc(36px * var(--font-scale));font-weight:800;overflow-wrap:anywhere}@media(max-width:700px){.agents-overview>.agent-title>h1{font-size:calc(30px * var(--font-scale))}}
 .git-heading-actions{display:flex;align-items:center;gap:6px}
 .git-commit svg{width:21px;height:21px}@keyframes git-commit-pulse{50%{opacity:.45;transform:scale(.88)}}.git-commit.is-loading svg{animation:git-commit-pulse .85s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.git-commit.is-loading svg{animation:none}}
+.git-commit-console-dialog{width:min(80rem,95vw)}.git-commit-console{height:min(55vh,32rem);max-height:55vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#101820;color:#e4eee9;border:1px solid var(--border);border-radius:6px;padding:16px;font:calc(15px * var(--font-scale))/1.5 ui-monospace,monospace}
+.project-forges-content .forge-card dl>div{grid-template-columns:minmax(0,40fr) minmax(0,60fr)}
+.project-git-card .forge-card-content>dl+dl{margin-top:0}
+.forge-auth-action{background:transparent;border:0;padding:0;color:var(--text);font-family:inherit;cursor:pointer}.forge-auth-action:hover{color:var(--accent-text)}
+.forge-actions{display:inline-flex;align-items:center;gap:8px;flex:none;white-space:nowrap}
+.git-tag-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0}.git-tag-delete{padding:2px;flex:none;margin-left:auto}.git-tag-delete svg{width:15px;height:15px}
+.git-commit-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0}.git-commit-inline>.git-tag-delete{margin-left:auto}
