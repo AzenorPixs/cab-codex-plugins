@@ -8,14 +8,14 @@ Change : `manage-session-git-and-cicd` · état local : `archived`. Les valeurs 
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 32364.582887 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 32364.582887 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 294598182 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 573421 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 379538 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 294151808 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 295171603 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `manage-session-git-and-cicd` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:25c08cf52ced80ebb1befb8fff47ca0d7de0bd27d1810317c2fb2ce6ad4aac2b
+Provenance : change-periods:ce9e82929cc81a3af8fafe58c0b975eac6b8836f1f5e7b4b4d66437c9481c32f
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:25c08cf52ced80ebb1befb8fff47ca0d7de0bd27d1810317c2fb
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 293189760 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 293635692 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 572434 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 378722 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 294208126 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4801597be17a2a7b9b9e4352c0581e2d7cbfb4e34994b8e3d707905de8282b12", "generated_at": "2026-11-18T07:30:06.033735+00:00", "revision": "4801597be17a2a7b9b9e4352c0581e2d7cbfb4e34994b8e3d707905de8282b12", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "668082776630690380dacbafd3eae5861bd6a220777bac52b8f11c4aed8c325c", "generated_at": "2026-11-18T07:31:10.780248+00:00", "revision": "668082776630690380dacbafd3eae5861bd6a220777bac52b8f11c4aed8c325c", "scope": "change"} -->
