@@ -464,3 +464,58 @@ def inspect_session(actor, data):
         result['reserved']=paths
         result['changes']=relevant
     return result
+
+
+def verify_releasable_index(project,index_path,paths):
+    """Chaque fichier libéré doit déjà correspondre à son index de session."""
+    from pathlib import Path
+    from .core.commands import safe_path
+    from .session_delivery import _index_digest
+    options,env=context(project);own={**env,'GIT_INDEX_FILE':index_path,'GIT_LITERAL_PATHSPECS':'1'}
+    for name in paths:
+        target=safe_path(Path(project.root),name,exists=False)
+        tracked=run(project,options,own,'ls-files','--error-unmatch','--',name)
+        require(tracked.returncode in (0,1),'session-git-unavailable',409)
+        require(not target.exists() or tracked.returncode==0,'session-git-release-unstaged',409)
+    same=run(project,options,own,'diff','--quiet','--no-ext-diff','--ignore-submodules=none','--',*paths)
+    require(same.returncode==0,'session-git-release-unstaged',409)
+    return _index_digest(index_path,project.owner_uid)
+
+
+def release_files(actor,data,connector_id=None):
+    """Rend les réservations validées sans commit, push ni destruction de l'index."""
+    from django.db import transaction
+    from .core import commands as c
+    from .core.models import Event,GitDelivery,GitFileReservation,GitSessionIndex,Operation
+    require(set(data)=={'project_id','run_id','request_id'},'session-git-fields-invalid',400)
+    request_id=c.identifier(data['request_id'])
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:
+        with transaction.atomic():
+            current=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
+            prior=Event.objects.filter(run=current,kind='git-files-released',data__request_id=request_id).first()
+            if prior:return prior.data['receipt']
+            c.working(current);require(c.no_pending(current),'session-git-effect-unresolved',409)
+            if connector_id is not None:
+                from .core.connectors import lock_worker_binding
+                lock_worker_binding(actor,connector_id,current)
+            index=GitSessionIndex.objects.select_for_update().get(change_id=current.change_record_id,session_id=current.coding_session_id)
+            require(index.state=='OPEN' and not GitDelivery.objects.filter(git_index=index).exists(),'session-git-release-protected',409)
+            require(not index.effects.filter(state__in=['INTENT','RUNNING','UNKNOWN']).exists(),'session-git-effect-unresolved',409)
+            revision=c.revision(current)
+            validations=Operation.objects.filter(run=current,state='COMPLETED',source_revision=revision).order_by('-updated')[:50]
+            require(any(op.receipt.get('exit_code')==0 and (op.request.get('phase') in ('test','verify','verification') or isinstance(op.request.get('host_authorization'),dict)) for op in validations),'session-git-validation-required',409)
+            paths=list(GitFileReservation.objects.select_for_update().filter(git_index=index,active=True).values_list('path',flat=True))
+            require(paths,'session-git-reservation-required',409)
+            options,env=context(current.project)
+            require(index.index_path==_index_path(current.project,index,options,env) and index.keep_ref and index.keep_oid,'session-git-index-unavailable',409)
+            keep=run(current.project,options,env,'rev-parse','--verify',index.keep_ref)
+            require(keep.returncode==0 and keep.stdout.decode('ascii').strip()==index.keep_oid,'session-git-index-unavailable',409)
+            digest=verify_releasable_index(current.project,index.index_path,paths)
+            receipt={'request_id':request_id,'released_count':len(paths),'state':'RELEASED','source_revision':revision,'index_sha256':digest,'index_preserved':True,'delivered':False}
+            GitFileReservation.objects.filter(git_index=index,active=True).update(active=False,released=timezone.now())
+            index.state='RELEASED';index.origin={**index.origin,'release':receipt};index.save(update_fields=['state','origin','updated'])
+            c.event(current,'git-files-released',{'request_id':request_id,'receipt':receipt})
+            return receipt
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])

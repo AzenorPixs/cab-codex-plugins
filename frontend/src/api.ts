@@ -6,6 +6,18 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'git-commit-edit-unavailable':'Impossible de lire ou modifier les métadonnées de ce commit.',
+  'git-commit-edit-invalid':'La demande d’édition du commit est invalide.',
+  'git-commit-edit-changed':'La branche, le commit ou les tags ont changé. Fermez puis rouvrez l’éditeur.',
+  'git-commit-edit-signed':'Cette édition invaliderait une signature de commit ou de tag ; CAB la refuse.',
+  'git-commit-edit-encoding':'Ce commit utilise un encodage non pris en charge pour l’édition.',
+  'git-commit-edit-author-invalid':'Renseignez un auteur et un courriel valides.',
+  'git-commit-edit-date-invalid':'Renseignez une date complète avec son fuseau, par exemple 2026-11-18T17:00:00+01:00.',
+  'git-commit-edit-message-invalid':'Le message du commit est invalide ou trop long.',
+  'git-commit-edit-operation-active':'Une opération Git est en cours dans ce dépôt.',
+  'git-commit-edit-request-conflict':'Cette demande a déjà été utilisée avec d’autres valeurs.',
+  'git-commit-edit-uncertain':'Résultat incertain : vérifiez l’état Git avant toute nouvelle édition.',
+
   'project-configuration-fields-invalid':'Une variable ne peut pas être modifiée ici.',
   'project-configuration-value-invalid':'Une valeur du projet est invalide.',
   'project-configuration-id-invalid':'L’identifiant du projet est obligatoire.',

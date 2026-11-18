@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-15T10:15:24Z
+Début du relevé (UTC) : 2026-11-18T16:45:30Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -59,7 +59,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Conteneur Docker, pour tests nécessitant des droits root
 
-  * 29.9.3
+  * 29.10.0
   * /usr/bin/docker
   * /var/run/docker.sock
   * debian:stable-slim
@@ -117,6 +117,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 ## Dépendances JavaScript du projet
 
   * Inventaire incomplet : limite d'entrées de découverte atteinte
+  * Inventaire incomplet : sous-dossier inaccessible ou modifié pendant la découverte
 
 ## Dépendances OpenCode du projet
 
@@ -131,7 +132,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
   * @opencode-ai/plugin : déclarée 1.19.3 ; verrouillée (npm) 1.19.3 ; observée 1.19.3
     * Installation : /home/devops/datas/cab/.opencode/node\_modules/@opencode-ai/plugin# OpenSpec
 
-  * 2.0.0
+  * 2.1.0
   * /home/devops/.local/npm/bin/openspec
 
 
@@ -164,6 +165,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Dépendances du projet - Source de vérité `pyproject.toml`
 
+  * Recherche ou sonde des venv du projet non vérifiable : inventaire partiel.
   * Django ==6.1.3 : 6.1.3 --> /home/devops/datas/cab/.cab-tests/DCAB/venv/bin/python3
     * Environnement : /home/devops/datas/cab/.cab-tests/DCAB/venv
     * Installation : /home/devops/datas/cab/.cab-tests/DCAB/venv/lib/python3.14/site-packages
@@ -204,14 +206,15 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Outils de compilation
 
-  * Cython : non installé
+  * Cython : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
     * Déclaration : Cython ==3.3.0
     * Source : pyproject.toml — [build-system].requires
-  * Nuitka : non installé
+  * Nuitka : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
     * Déclaration : Nuitka ==4.3.1
     * Source : pyproject.toml — [build-system].requires
+    * Diagnostic : recherche ou sonde des venv non vérifiable, inventaire partiel
 
 
 # Prompts

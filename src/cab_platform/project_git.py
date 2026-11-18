@@ -147,7 +147,7 @@ def commit_progress(project_id, request_id, stage):
         ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
 
 
-def commit_local(project_id, tag=None, description="", expected_tag="", request_id="", console=None):
+def commit_local(project_id, tag=None, description="", expected_tag="", request_id="", console=None, *, author=None, email=None, date=None, tag_description=None):
     """Enregistre les modifications locales et, si demandé, un tag."""
     from django.db import connection
     project = Project.objects.get(pk=project_id)
@@ -164,15 +164,29 @@ def commit_local(project_id, tag=None, description="", expected_tag="", request_
     require(not tag.startswith('-'), 'project-git-tag-invalid', 400)
     message = description or 'Mise à jour du projet'
     values = (project.public_metadata or {}).get('values', {})
-    name, email = values.get('GIT_USER_NAME', ''), values.get('GIT_USER_EMAIL', '')
-    require(bool(name and email), 'project-git-identity-missing', 409)
+    name, configured_email = values.get('GIT_USER_NAME', ''), values.get('GIT_USER_EMAIL', '')
+    require(bool(name and configured_email), 'project-git-identity-missing', 409)
+    require(tag_description is None or isinstance(tag_description,str) and len(tag_description)<=16000 and '\0' not in tag_description,'git-tag-invalid',400)
+    require(bool(tag) or not tag_description,'git-tag-invalid',400)
+    tag_message=message if tag_description is None else tag_description
+    metadata_env={}
+    if author is not None or email is not None or date is not None:
+        from datetime import datetime
+        from .git_commit_metadata import author_line
+        chosen_author=name if author is None else author
+        chosen_email=configured_email if email is None else email
+        raw=author_line(chosen_author,chosen_email,datetime.now().astimezone().replace(microsecond=0).isoformat() if date is None else date)
+        metadata_env={'GIT_AUTHOR_NAME':chosen_author,'GIT_AUTHOR_EMAIL':chosen_email}
+        if date is not None:
+            stamp=raw.rsplit(b'> ',1)[1].decode('ascii')
+            metadata_env.update(GIT_AUTHOR_DATE=stamp,GIT_COMMITTER_DATE=stamp)
     state = probe(project)
     require(state is not None, 'project-git-unavailable', 409)
     try:
         user = pwd.getpwuid(project.owner_uid)
         group = project.owner_gid if project.owner_gid is not None else user.pw_gid
         options = {'user': project.owner_uid, 'group': group, 'extra_groups': os.getgrouplist(user.pw_name, group)} if os.geteuid() == 0 else {}
-        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_LAZY_FETCH': '1'}
+        env = {'PATH': '/usr/bin:/bin', 'HOME': user.pw_dir, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0', 'GIT_NO_LAZY_FETCH': '1', **metadata_env}
     except (OSError, KeyError):
         raise Refused('project-git-unavailable', 409) from None
     commit_progress(project_id, request_id, 'waiting')
@@ -244,7 +258,7 @@ def commit_local(project_id, tag=None, description="", expected_tag="", request_
                 initialize(project_id)
             commit_progress(project_id, request_id, 'identity')
             require(git('config', '--local', 'user.name', name) == 0, 'project-git-commit-failed', 409)
-            require(git('config', '--local', 'user.email', email) == 0, 'project-git-commit-failed', 409)
+            require(git('config', '--local', 'user.email', configured_email) == 0, 'project-git-commit-failed', 409)
             commit_progress(project_id, request_id, 'staging')
             require(git('add', '.') == 0, 'project-git-commit-failed', 409)
             difference = git('diff', '--cached', '--quiet')
@@ -259,12 +273,12 @@ def commit_local(project_id, tag=None, description="", expected_tag="", request_
                     head = git_output('rev-parse', '--verify', 'HEAD')
                     ident = git_output('var', 'GIT_COMMITTER_IDENT')
                     require(head.returncode == 0 and ident.returncode == 0, 'project-git-tag-create-failed', 409)
-                    contents = b'object ' + head.stdout.strip() + b'\ntype commit\ntag ' + tag.encode('utf-8') + b'\ntagger ' + ident.stdout.strip() + b'\n\n' + message.encode('utf-8') + b'\n'
+                    contents = b'object ' + head.stdout.strip() + b'\ntype commit\ntag ' + tag.encode('utf-8') + b'\ntagger ' + ident.stdout.strip() + b'\n\n' + tag_message.encode('utf-8') + b'\n'
                     tag_object = git_output('mktag', input_data=contents)
                     require(tag_object.returncode == 0, 'project-git-tag-create-failed', 409)
                     require(git('update-ref', 'refs/tags/' + tag, tag_object.stdout.decode('ascii').strip(), existing_tag) == 0, 'project-git-tag-move-failed', 409)
                 elif tag:
-                    require(git('tag', '-a', '-m', message, '--', tag) == 0, 'project-git-tag-create-failed', 409)
+                    require(git('tag', '-a', '-m', tag_message, '--', tag) == 0, 'project-git-tag-create-failed', 409)
         except (OSError, subprocess.TimeoutExpired):
             raise Refused('project-git-commit-uncertain', 409) from None
         finally:

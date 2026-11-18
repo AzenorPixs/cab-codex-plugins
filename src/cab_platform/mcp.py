@@ -93,6 +93,11 @@ def session_git_context()->dict:
     return client().command('session.git.context',{})
 
 @public_tool()
+def session_git_release(request_id:str)->dict:
+    """Libère les fichiers validés et indexés en fin de travail sans livraison ; conserve l'index, aucun commit ni push."""
+    return client().command('session.git.release',{'request_id':request_id})
+
+@public_tool()
 def session_git_reserve(request_id:str,paths:list[str])->dict:
     """Réserve avant modification les fichiers du RUN lié à cette connexion."""
     return client().command('session.git.reserve',{'request_id':request_id,'paths':paths})

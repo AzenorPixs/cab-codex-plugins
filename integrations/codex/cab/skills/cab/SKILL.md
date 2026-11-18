@@ -57,6 +57,14 @@ livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
 
+Pour un travail demandé sans CI/CD ni livraison, après les derniers contrôles,
+le report source et leur indexation, appeler `session_git_release` avant de
+rendre la main. CAB exige que les fichiers correspondent à l'index validé et
+ne libère que les réservations du RUN. L'index isolé et ses objets restent
+conservés en état RELEASED ; aucun commit, tag ou push n'est créé. Un effet
+incertain ou une livraison commencée interdit cette libération. Une reprise
+d'écriture doit repasser par une nouvelle réservation dans un nouveau parcours.
+
 Pour une CI/CD autorisée, charger le skill CICD. En direct, le codeur choisit
 avec discernement une version cohérente avec le projet sans la redemander au
 développeur ; une version explicitement imposée reste prioritaire. En piloté,

@@ -452,6 +452,32 @@ def project_git_history_remove(request,project_id:str,body:GitHistoryRemoval):
     from cab_platform.git_history_remove import remove_selected
     return remove_selected(project_id,body.expected_head,body.commits)
 
+class GitCommitMetadataInput(Schema):
+    request_id:str
+    commit:str
+    expected_head:str
+    expected_branch:str
+    refs_digest:str
+    author:str
+    email:str
+    date:str
+    message:str
+    tag_name:str=''
+    new_tag:str=''
+    tag_description:str=''
+
+@api.get('/projects/{project_id}/git/history/commit/{commit}/metadata')
+def project_git_commit_metadata(request,project_id:str,commit:str,head:str=''):
+    principal(request,admin=True)
+    from cab_platform.git_commit_metadata import preview
+    return preview(Project.objects.get(pk=project_id),commit,head)
+
+@api.post('/projects/{project_id}/git/history/commit-metadata')
+def project_git_edit_commit_metadata(request,project_id:str,body:GitCommitMetadataInput):
+    principal(request,admin=True)
+    from cab_platform.git_commit_metadata import edit
+    return edit(project_id,body.model_dump())
+
 @api.get('/projects/{project_id}/git/history/commit/{commit}')
 def project_git_history_commit(request,project_id:str,commit:str,head:str):
     actor=principal(request)
@@ -507,6 +533,10 @@ def refresh_project_git_status(request,project_id:str):
     return {'git_status':refresh_status(project.pk)}
 
 class GitCommitInput(Schema):
+    author:str|None = None
+    email:str|None = None
+    date:str|None = None
+    tag_description:str|None = None
     tag:str|None = None
     description:str = ''
     expected_tag:str = ''
@@ -517,7 +547,7 @@ def commit_project_git(request,project_id:str,body:GitCommitInput):
     principal(request,admin=True)
     from cab_platform.project_git import commit_local,commit_progress
     try:
-        return commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id)
+        return commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,author=body.author,email=body.email,date=body.date,tag_description=body.tag_description)
     except Exception:
         if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
             commit_progress(project_id,body.request_id,'failed')
@@ -552,7 +582,7 @@ def stream_project_git_commit(request,project_id:str,body:GitCommitInput):
                     truncated = True
                     send({'type':'output','text':'\n[Sortie limitée à 1 Mio.]\n'})
             try:
-                result=commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,output)
+                result=commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,output,author=body.author,email=body.email,date=body.date,tag_description=body.tag_description)
                 send({'type':'result','result':result})
             except commands.Refused as error:
                 if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
@@ -988,15 +1018,16 @@ def command(request,body:Command):
         current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True)
         from cab_platform.session_delivery import version_policy
         return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id,'version_policy':version_policy(current)}
-    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect'):
+    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
         from .connectors import current_worker_run,worker_connector
-        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session
+        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
         peer=getattr(request,'cab_peer',None)
         current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'))
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
         commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)
         scoped={**data,'project_id':current.project_id,'run_id':current.run_id}
+        if name=='session.git.release':return release_files(actor,scoped,connector.pk)
         if name in ('session.git.reserve','session.git.stage'):
             return (reserve_files if name=='session.git.reserve' else stage_files)(actor,scoped,connector.pk)
         return (effect_status if name=='session.git.status' else inspect_session)(actor,scoped)
