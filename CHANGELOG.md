@@ -1,5 +1,13 @@
 # Historique des versions
 
+## 3.2.16 — 2026-11-18
+
+- Instantané Git PostgreSQL au démarrage des nouveaux changes, réservations de fichiers et index isolés par session conservés après archivage.
+- Orchestration Git et builds DIU par CAB, reçus durables, refus de rejeu des effets incertains ; releases DIU différées pour cette livraison.
+- Plugin, skill et commande CICD ; autorisations interprojets génériques et révocables sans modifier l'identité native.
+- Indexation du STATISTICS.md global par CAB après écriture et avant libération de sa réservation.
+- Protection des index et preuves de session contre une suppression prématurée ; suivi de livraison dans la projection projet.
+
 ## Non publié
 
 - Réconciliation d’une archive OpenSpec déjà couverte par un répertoire parent du mandat.

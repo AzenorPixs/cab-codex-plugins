@@ -6,6 +6,7 @@ import {api} from './api'
 
 export type Evaluation={run_id:string;action:string;state:string;suspension:string;reasons:string[];archive_allowed:boolean;archive_path?:string;evaluation_digest?:string;evidence_digest?:string}
 const reasons:Record<string,string>={
+  'session-git-index-protected':'L’index Git de cette session doit être conservé tant que sa livraison n’est pas confirmée.',
   'session-not-closed':'La session doit être clôturée sur preuves avant suppression.',
   'session-delete-protected':'Les conditions de suppression ne sont pas réunies.',
   'session-delete-preview-stale':'Les liens ont changé. Fermez cette fenêtre et vérifiez à nouveau.',

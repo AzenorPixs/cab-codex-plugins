@@ -385,6 +385,21 @@ def edit_project_git_tag(request,project_id:str,body:GitTagEditInput):
     from cab_platform.git_tag_edit import edit_tag
     return edit_tag(project_id,body.name,body.new_name,body.description,body.expected_oid,body.expected_commit)
 
+class GitStageModifiedInput(Schema):
+    digest:str
+
+@api.get('/projects/{project_id}/git/stage-modified')
+def preview_stage_modified(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.git_stage_modified import describe
+    return describe(Project.objects.get(pk=project_id))
+
+@api.post('/projects/{project_id}/git/stage-modified')
+def stage_modified(request,project_id:str,body:GitStageModifiedInput):
+    principal(request,admin=True)
+    from cab_platform.git_stage_modified import stage
+    return stage(project_id,body.digest)
+
 @api.get('/projects/{project_id}/git/changes')
 def project_git_changes(request,project_id:str):
     actor=principal(request)
@@ -867,7 +882,9 @@ def command(request,body:Command):
         from . import historical
         return historical.inspect(actor,data) if name=='run.inspect_historical' else historical.close(actor,data)
     if name=='project.register':
-        p=commands.register_project(actor,data['root']);return {'project_id':p.pk,'root':p.root}
+        p=commands.register_project(actor,data['root'])
+        from cab_platform.session_delivery import ensure_delivery_producer
+        return {'project_id':p.pk,'root':p.root,'delivery_producer':ensure_delivery_producer(p)}
     if name=='actor.enroll':
         principal(request,admin=True)
         uid=int(data['uid']);role=data.get('role','coder');commands.require(role in ('coder','orchestrator','collector','admin'),'actor-role-invalid',400)
@@ -895,8 +912,58 @@ def command(request,body:Command):
                 session(r)
             r.source_revision=commands.revision(r);r.state='WORKING';r.suspension='';r.save();commands.event(r,'legacy-run-adopted',{'session_id':r.session_id,'generation':r.generation})
             return run_data(r)
+    if name=='session.git.adopt':
+        from cab_platform.session_git import adopt_files
+        return adopt_files(actor,data)
+    if name in ('session.git.stage_adopted','session.git.reserve_adopted'):
+        from cab_platform.session_git import administrative_stage
+        return administrative_stage(actor,data,reserve=name=='session.git.reserve_adopted')
+    if name in ('session.delivery.start_adopted','session.delivery.status_adopted'):
+        from cab_platform.session_git import administrative_run
+        from cab_platform.session_delivery import start_delivery,delivery_status
+        commands.require(set(data)=={'project_id','run_id','version'},'session-delivery-fields-invalid',400)
+        if name=='session.delivery.status_adopted':
+            commands.require(actor.active and actor.role=='admin','session-git-administrator-required',403)
+            current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
+            return delivery_status(current.actor,current,data['version'],None,administrator=actor)
+        current,connector_id=administrative_run(actor,data)
+        return start_delivery(current.actor,current,data['version'],connector_id)
+    if name=='session.delivery.policy':
+        from cab_platform.session_delivery import configure_delivery_policy
+        return configure_delivery_policy(actor,data)
+    if name in ('session.delivery.start','session.delivery.status'):
+        from .connectors import current_worker_run,worker_connector
+        from cab_platform.session_delivery import start_delivery,delivery_status
+        commands.require(set(data)=={'version'},'session-delivery-fields-invalid',400)
+        peer=getattr(request,'cab_peer',None)
+        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status')
+        connector=worker_connector(actor,peer)
+        commands.require(connector is not None,'session-connector-unbound',409)
+        return (start_delivery if name=='session.delivery.start' else delivery_status)(actor,current,data['version'],connector.pk)
+    if name=='session.git.context':
+        commands.require(not data,'session-git-fields-invalid',400)
+        from .connectors import current_worker_run
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True)
+        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id}
+    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect'):
+        from .connectors import current_worker_run,worker_connector
+        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session
+        peer=getattr(request,'cab_peer',None)
+        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'))
+        connector=worker_connector(actor,peer)
+        commands.require(connector is not None,'session-connector-unbound',409)
+        commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)
+        scoped={**data,'project_id':current.project_id,'run_id':current.run_id}
+        if name in ('session.git.reserve','session.git.stage'):
+            return (reserve_files if name=='session.git.reserve' else stage_files)(actor,scoped,connector.pk)
+        return (effect_status if name=='session.git.status' else inspect_session)(actor,scoped)
     if name=='native.locate':return commands.locate_native(actor,data)
-    if name=='native.bind':return commands.bind_native(actor,data)
+    if name=='native.bind':
+        from .connectors import bind_worker_run
+        with transaction.atomic():
+            result=commands.bind_native(actor,data)
+            bind_worker_run(actor,data,getattr(request,'cab_peer',None))
+            return result
     if name in ('statistics.begin','statistics.end','statistics.change'):
         from . import measurements
         if name=='statistics.change':
@@ -964,6 +1031,12 @@ def command(request,body:Command):
     if name=='coordinate':return commands.coordinate(actor,data)
     if name=='bank.reserve':return commands.reserve_bank(actor,data)
     if name=='bank.release':return commands.release_bank(actor,data)
+    if name=='native.grant':
+        from .native_access import grant
+        return grant(actor,data)
+    if name=='native.grant.revoke':
+        from .native_access import revoke
+        return revoke(actor,data)
     if name=='exception.request':return commands.exception(actor,data)
     if name=='exception.decide':return commands.exception_decision(actor,data)
     if name=='metric.record':

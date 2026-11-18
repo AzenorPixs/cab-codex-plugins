@@ -14,7 +14,8 @@ def codex_snapshot(run):
     if not path:return {'status':'unavailable','reason':'native-source-not-bound'}
     indexed=indexed_path(run.actor.uid,run.session_id,run.mandate.get('native_source_home',''),strict=False)
     if indexed and indexed!=path:raise NativeSourceError('native-source-resume-required')
-    checked=inspect(run.actor.uid,run.session_id,run.project.root,path)
+    from .core.native_access import root_for
+    checked=inspect(run.actor.uid,run.session_id,root_for(run),path)
     if checked!=source:raise NativeSourceError('native-source-replaced')
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     counters={};native_at=None;offset=0

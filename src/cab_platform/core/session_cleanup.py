@@ -104,8 +104,11 @@ def deletion_preview(actor,data,lock=False):
         c.require(not any((STATE/'receipts'/(str(pk)+'.json')).exists() for pk in run.operation_set.values_list('pk',flat=True)),'session-receipt-pending')
     except (c.Refused,OSError,ValueError) as error:reasons.append(getattr(error,'code','session-proof-unavailable'))
     if run.coding_session_id:
+        from .models import GitSessionIndex
         peers=Run.objects.filter(coding_session_id=run.coding_session_id).exclude(pk=run.pk)
         if peers.exists():shared.append({'kind':'session','label':'Même SID de codage','runs':linked(peers),'preserved':True})
+        elif GitSessionIndex.objects.filter(session_id=run.coding_session_id).exclude(state='RETIRED').exists():
+            reasons.append('session-git-index-protected')
     if run.change_record_id:
         peers=Run.objects.filter(change_record_id=run.change_record_id).exclude(pk=run.pk)
         if peers.exists():shared.append({'kind':'change','label':'Même change','runs':linked(peers),'preserved':True})
@@ -136,6 +139,15 @@ def delete(actor,data):
     c.require(preview['deletion_digest']==data.get('expected_deletion_digest'),'session-delete-preview-stale')
     c.require(not preview['shared'] or data.get('confirm_shared') is True,'session-delete-shared-confirmation-required',400)
     run=Run.objects.get(project_id=data['project_id'],run_id=data['run_id']);sid=run.coding_session_id;project=run.project
+    from .models import GitChange,GitSessionIndex,GitSessionEffect,GitDelivery
+    origin={'run_id':run.run_id,'session_id':run.session_id}
+    GitChange.objects.filter(initial_run=run,origin={}).update(origin=origin)
+    for index in GitSessionIndex.objects.filter(initial_run=run,origin={}).select_related('session'):
+        details={**origin}
+        if index.session_id:details.update(agent=index.session.agent,uid=index.session.uid)
+        index.origin=details;index.save(update_fields=['origin'])
+    GitSessionEffect.objects.filter(run=run,origin={}).update(origin=origin)
+    GitDelivery.objects.filter(run=run,origin={}).update(origin=origin)
     if sid:CodingSession.objects.select_for_update().get(pk=sid)
     for model in (Lease,MeasurementAction,MeasurementPeriod,RunEvidence,FinalizationPlan,SessionArchive,Workshop,Metric,Incident,Subscription):model.objects.filter(run=run).delete()
     Notice.objects.filter(producer=run).delete();SessionProjection.objects.filter(binding=run).delete();Event.objects.filter(run=run).delete();Operation.objects.filter(run=run).delete();run.delete()

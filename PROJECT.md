@@ -1422,3 +1422,13 @@ asynchrone à chaque ouverture et propose le bouton manuel permanent.
 ## Surveillance Git récursive
 
 La plateforme surveille les dossiers des projets enregistrés, y compris après déplacement, et regroupe en mémoire les changements avant la réconciliation de leur état Git. Les trois délais sont administrables en base ; une seule analyse est active pour l’ensemble des projets.
+
+## Git des sessions et CI/CD
+
+CAB conserve l'instantané Git initial des nouveaux changes, les réservations
+coopératives des fichiers et les index isolés des sessions. Les agents demandent
+les opérations au service ; Git et la mise à jour PROJECT_VERSION appartiennent
+à CAB. Le plugin CICD transmet la version et suit les reçus, y compris les
+builds DIU sur le projet courant et les éventuelles releases différées.
+Le global STATISTICS.md reste une production partagée de CAB, indexée après
+chaque écriture avant libération de sa réservation.

@@ -1,0 +1,466 @@
+"""Instantané Git initial d'un change, conservé par CAB."""
+import hashlib
+import os
+import re
+import stat
+import subprocess
+from django.db import connection
+from django.utils import timezone
+from .core.commands import PROTECTED, SECRET, Refused, require
+from .core.models import Change, GitChange
+from .project_git import probe
+from .git_commit_remove import context, run
+
+
+def _visible_entry(status, path, previous=None):
+    blocked = {'__pycache__', '.cache', '.npm', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.cab-tests', 'tmp', 'output', 'reports'} | PROTECTED
+    if SECRET.search(path) or any(part in blocked for part in path.split('/')):
+        return None
+    if previous and (SECRET.search(previous) or any(part in blocked for part in previous.split('/'))):
+        return None
+    item = {'status': status, 'path': path}
+    if previous is not None:
+        item['previous'] = previous
+    return item
+
+
+def git_snapshot(project, index_path=None):
+    state = probe(project)
+    require(state is not None, 'session-git-unavailable', 409)
+    if state == 0:
+        return {'available': False, 'reason': 'not-initialized', 'head': None, 'branch': None, 'entries': []}
+    options, env = context(project)
+    if index_path is not None:
+        env = {**env, 'GIT_INDEX_FILE': index_path}
+    result = run(project, options, env, 'status', '--porcelain=v2', '--branch', '--no-ahead-behind', '-z', '--untracked-files=all', '--ignore-submodules=none')
+    require(result.returncode == 0 and len(result.stdout) <= 4194304, 'session-git-unavailable', 409)
+    head, branch, entries, protected = None, None, [], 0
+    items = iter(result.stdout.split(b'\0'))
+    try:
+        for item in items:
+            if item.startswith(b'# branch.oid '):
+                value = item[len(b'# branch.oid '):].decode('ascii', 'strict')
+                head = None if value == '(initial)' else value
+            elif item.startswith(b'# branch.head '):
+                branch = item[len(b'# branch.head '):].decode('utf-8', 'strict')
+            elif item.startswith(b'1 '):
+                fields = item.split(b' ', 8)
+                require(len(fields) == 9, 'session-git-unavailable', 409)
+                entry = _visible_entry(fields[1].decode('ascii', 'strict'), fields[8].decode('utf-8', 'strict'))
+                if entry is None: protected += 1
+                else: entries.append(entry)
+            elif item.startswith(b'2 '):
+                fields = item.split(b' ', 9)
+                require(len(fields) == 10, 'session-git-unavailable', 409)
+                previous = next(items)
+                entry = _visible_entry(fields[1].decode('ascii', 'strict'), fields[9].decode('utf-8', 'strict'), previous.decode('utf-8', 'strict'))
+                if entry is None: protected += 1
+                else: entries.append(entry)
+            elif item.startswith(b'u '):
+                fields = item.split(b' ', 10)
+                require(len(fields) == 11, 'session-git-unavailable', 409)
+                entry = _visible_entry(fields[1].decode('ascii', 'strict'), fields[10].decode('utf-8', 'strict'))
+                if entry is None: protected += 1
+                else: entries.append(entry)
+            elif item.startswith(b'? '):
+                entry = _visible_entry('??', item[2:].decode('utf-8', 'strict'))
+                if entry is None: protected += 1
+                else: entries.append(entry)
+    except (StopIteration, UnicodeError) as error:
+        raise Refused('session-git-unavailable', 409) from error
+    require(branch is not None and len(entries) <= 10000, 'session-git-unavailable', 409)
+    return {'available': True, 'head': head, 'branch': branch, 'entries': entries, 'protected_count': protected, 'status_sha256': hashlib.sha256(result.stdout).hexdigest()}
+
+
+def _origin_if_supported(model, run, *, session=False):
+    if not any(field.name=='origin' for field in model._meta.fields):
+        return {}
+    value={'run_id':run.run_id,'session_id':run.session_id}
+    if session:value.update(agent=run.actor.agent,uid=run.actor.uid)
+    return {'origin':value}
+
+
+def capture_initial(run):
+    """Sérialise la capture d'un change ; une reprise ne la remplace jamais."""
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE', [run.project_id])
+    change = Change.objects.select_for_update().get(pk=run.change_record_id)
+    existing = GitChange.objects.filter(change=change).first()
+    if existing is not None:
+        return existing
+    baseline = {**git_snapshot(run.project),'capture_kind':'initial'}
+    return GitChange.objects.create(change=change, project=run.project, initial_run=run, baseline=baseline, captured_at=timezone.now(), **_origin_if_supported(GitChange,run))
+
+
+def reserve_files(actor,data,connector_id=None):
+    """Sérialise les réservations avec les opérations Git du projet."""
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:return _reserve_files_locked(actor,data,connector_id)
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def _reserve_files_locked(actor, data, connector_id=None):
+    """Réserve les fichiers propres du mandat avant leur modification."""
+    from pathlib import Path
+    from django.db import transaction
+    from .core.commands import digest, event, identifier, run_scope, safe_path, working
+    from .core.models import Event, GitDelivery, GitFileReservation, GitSessionIndex, Project
+
+    require(set(data) == {'project_id', 'run_id', 'request_id', 'paths'}, 'session-git-fields-invalid', 400)
+    request_id = identifier(data['request_id'])
+    paths = data['paths']
+    require(isinstance(paths, list) and 0 < len(paths) <= 256 and all(isinstance(path, str) and path and '\0' not in path and len(path) <= 1500 for path in paths) and len(paths) == len(set(paths)), 'session-git-paths-invalid', 400)
+    fingerprint = digest({'paths': sorted(paths)})
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE', [data['project_id']])
+        current = run_scope(actor, data['run_id'], data['project_id'], lock=True)
+        working(current)
+        if connector_id is not None:
+            from .core.connectors import lock_worker_binding
+            lock_worker_binding(actor,connector_id,current)
+        prior = Event.objects.filter(run=current, kind='git-files-reserved', data__request_id=request_id).first()
+        if prior:
+            require(prior.data.get('digest') == fingerprint, 'session-git-request-conflict', 409)
+            return prior.data['receipt']
+        require(current.change_record_id is not None and current.coding_session_id is not None, 'session-git-change-unavailable', 409)
+        project = Project.objects.get(pk=current.project_id)
+        change = Change.objects.select_for_update().get(pk=current.change_record_id)
+        baseline = GitChange.objects.filter(change=change).first()
+        require(baseline is not None and baseline.baseline.get('available') is True, 'session-git-baseline-unavailable', 409)
+        framed = current.mandate.get('paths', [])
+        root = Path(project.root)
+        options, env = context(project)
+        for path in paths:
+            require(path!='STATISTICS.md','session-git-system-managed-path',409)
+            require(str(Path(path)) == path, 'session-git-path-invalid', 400)
+            require(any(path == scope or path.startswith(scope + '/') for scope in framed), 'session-git-outside-mandate', 403)
+            target = safe_path(root, path, exists=False)
+            require(not target.is_dir() and _visible_entry('?', path) is not None, 'session-git-path-invalid', 400)
+            ignored = run(project, options, env, 'check-ignore', '--quiet', '--', './' + path)
+            require(ignored.returncode in (0, 1), 'session-git-unavailable', 409)
+            require(ignored.returncode == 1, 'session-git-ignored', 409)
+        snapshot = git_snapshot(project)
+        require(snapshot['available'] and snapshot['branch'] != '(detached)', 'session-git-unavailable', 409)
+        index, created = GitSessionIndex.objects.get_or_create(change=change, session_id=current.coding_session_id, defaults={'initial_run': current, 'base_head': snapshot['head'] or '', 'index_path': '', 'state': 'PENDING', **_origin_if_supported(GitSessionIndex,current,session=True)})
+        require(index.state in ('PENDING', 'OPEN'), 'session-git-index-unavailable', 409)
+        require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
+        prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
+        current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
+        for path in sorted(paths):
+            key = hashlib.sha256(path.encode('utf-8')).hexdigest()
+            existing = GitFileReservation.objects.select_for_update().filter(project=project, path_digest=key, active=True).first()
+            if existing is not None:
+                require(existing.path == path and existing.git_index_id == index.pk, 'session-git-reserved', 409)
+                continue
+            require(path not in prior_dirty and path not in current_dirty, 'session-git-file-preexisting', 409)
+            GitFileReservation.objects.create(project=project, git_index=index, path=path, path_digest=key)
+        receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change, 'session_id': current.session_id}
+        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt})
+        return receipt
+
+
+def administrative_run(actor,data,*,read_only=False):
+    """Pont d'amorçage borné aux index adoptés et au relais natif vérifié."""
+    from .core import commands as c
+    from .core.models import GitSessionIndex,McpRunBinding
+    require(actor.active and actor.role=='admin','session-git-administrator-required',403)
+    current=c.run_scope(actor,data['run_id'],data['project_id'],owner=False)
+    if not read_only:c.working(current)
+    index=GitSessionIndex.objects.filter(change_id=current.change_record_id,session_id=current.coding_session_id).first()
+    require(index is not None and bool(index.origin.get('adoption')),'session-git-adoption-required',403)
+    source=c.resolve_native(current.actor,current.project,current.session_id,{'source_file':current.mandate.get('native_source',{}).get('source_file','')},run=current)
+    require(source==current.mandate.get('native_source'),'native-source-resume-required',409)
+    binding=McpRunBinding.objects.select_related('connector').filter(run=current,connector__actor=current.actor).first()
+    require(binding is not None,'session-connector-unbound',409)
+    from .connector_process import alive
+    require(alive(binding.connector.process) and alive(binding.connector.worker),'session-connector-unbound',409)
+    return current,binding.connector_id
+
+
+def administrative_stage(actor,data,*,reserve=False):
+    require(set(data)=={'project_id','run_id','request_id','paths'},'session-git-fields-invalid',400)
+    current,connector_id=administrative_run(actor,data)
+    from .core import commands as c
+    from .core.models import Event
+    from django.db import transaction
+    with transaction.atomic():
+        locked=c.run_scope(actor,current.run_id,current.project_id,lock=True,owner=False)
+        request_id=c.identifier(data['request_id']);kind='git-administrative-reserve' if reserve else 'git-administrative-stage'
+        prior=Event.objects.filter(run=locked,kind=kind,data__request_id=request_id).first()
+        fingerprint=c.digest(data)
+        if prior:require(prior.data.get('request_digest')==fingerprint,'session-git-request-conflict',409)
+        else:c.event(locked,kind,{'request_id':request_id,'request_digest':fingerprint,'authority':actor.pk,'owner':current.actor_id})
+    return (reserve_files if reserve else stage_files)(current.actor,data,connector_id)
+
+
+def shared_scope_digest(project,options,env,paths):
+    selected=run(project,options,{**env,'GIT_LITERAL_PATHSPECS':'1'},'ls-files','--stage','-z','--',*sorted(paths))
+    require(selected.returncode==0,'session-git-unavailable',409)
+    require(all(part.split(b'\t',1)[0].endswith(b' 0') for part in selected.stdout.split(b'\0') if part),'session-git-unmerged',409)
+    return hashlib.sha256(selected.stdout).hexdigest()
+
+
+def shared_index_allowed(project,options,env,names,staged,adoption=None):
+    overlap=set(names)&set(staged)
+    if not overlap:return True
+    if not isinstance(adoption,dict):return False
+    paths=adoption.get('paths',[])
+    if not isinstance(paths,list) or not paths or not overlap.issubset(set(paths)):return False
+    return shared_scope_digest(project,options,env,paths)==adoption.get('shared_digest')
+
+
+def adopt_files(actor,data):
+    """Adoption administrative des seuls RUN antérieurs à la migration Git."""
+    from pathlib import Path
+    from django.db import transaction
+    from django.db.migrations.recorder import MigrationRecorder
+    from .core import commands as c
+    from .core.models import Event,GitFileReservation,GitSessionIndex
+    require(actor.active and actor.role=='admin','session-git-administrator-required',403)
+    require(set(data)=={'project_id','run_id','request_id','paths','expected_snapshot','expected_revision','authorization'},'session-git-fields-invalid',400)
+    request_id=c.identifier(data['request_id']);fingerprint=c.digest(data)
+    require(isinstance(data['authorization'],str) and 0<len(data['authorization'])<=4000,'session-git-authorization-required',400)
+    paths=data['paths']
+    require(isinstance(paths,list) and 0<len(paths)<=256 and all(isinstance(path,str) and path and '\0' not in path and len(path)<=1500 for path in paths) and len(set(paths))==len(paths),'session-git-paths-invalid',400)
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:
+        with transaction.atomic():
+            with connection.cursor() as cursor:cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[data['project_id']])
+            current=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+            previous=Event.objects.filter(run=current,kind='git-files-adopted',data__request_id=request_id).first()
+            if previous:
+                require(previous.data.get('request_digest')==fingerprint,'session-git-request-conflict',409)
+                return previous.data['receipt']
+            c.working(current)
+            require(current.mode=='direct' and c.no_pending(current) and not current.review and not current.mandate.get('native_frozen_at'),'session-git-adoption-protected',409)
+            native=c.resolve_native(current.actor,current.project,current.session_id,{'source_file':current.mandate.get('native_source',{}).get('source_file','')},run=current)
+            require(native==current.mandate.get('native_source'),'native-source-resume-required',409)
+            migration=MigrationRecorder.Migration.objects.filter(app='cab_core',name='0030_session_git').first()
+            require(migration is not None and current.created<migration.applied,'session-git-adoption-not-legacy',409)
+            require(current.change_record_id and current.coding_session_id,'session-git-change-unavailable',409)
+            change=Change.objects.select_for_update().get(pk=current.change_record_id)
+            require(not GitChange.objects.filter(change=change).exists() and not GitSessionIndex.objects.filter(change=change,session_id=current.coding_session_id).exists(),'session-git-adoption-already-initialized',409)
+            require(c.revision(current)==data['expected_revision'],'session-git-adoption-source-changed',409)
+            snapshot=git_snapshot(current.project)
+            require(snapshot.get('available') and snapshot.get('status_sha256')==data['expected_snapshot'] and snapshot.get('head'),'session-git-adoption-source-changed',409)
+            observed={entry['path'] for entry in snapshot['entries']}
+            require(set(paths).issubset(observed),'session-git-adoption-path-invalid',409)
+            framed=current.mandate.get('paths',[]);root=Path(current.project.root)
+            options,env=context(current.project)
+            for path in paths:
+                require(path!='STATISTICS.md' and str(Path(path))==path and _visible_entry('?',path) is not None,'session-git-path-invalid',400)
+                require(any(path==base or path.startswith(base+'/') for base in framed),'session-git-outside-mandate',403)
+                target=c.safe_path(root,path,exists=False);require(not target.is_dir(),'session-git-path-invalid',400)
+                ignored=run(current.project,options,env,'check-ignore','--quiet','--','./'+path)
+                require(ignored.returncode==1,'session-git-ignored',409)
+            require(not GitFileReservation.objects.filter(project=current.project,active=True,path__in=paths).exists(),'session-git-reserved',409)
+            adoption={'paths':sorted(paths),'shared_digest':shared_scope_digest(current.project,options,env,paths),'request_id':request_id,'authorization':data['authorization']}
+            origin=_origin_if_supported(GitSessionIndex,current,session=True).get('origin',{});origin['adoption']=adoption
+            baseline={**snapshot,'capture_kind':'legacy-adoption','source_revision':data['expected_revision']}
+            GitChange.objects.create(change=change,project=current.project,initial_run=current,baseline=baseline,captured_at=timezone.now(),**_origin_if_supported(GitChange,current))
+            index=GitSessionIndex.objects.create(change=change,session_id=current.coding_session_id,initial_run=current,base_head=snapshot['head'],index_path='',state='PENDING',origin=origin)
+            GitFileReservation.objects.bulk_create([GitFileReservation(project=current.project,git_index=index,path=path,path_digest=hashlib.sha256(path.encode()).hexdigest()) for path in paths])
+            receipt={'adopted_count':len(paths),'request_id':request_id,'capture_kind':'legacy-adoption'}
+            c.event(current,'git-files-adopted',{'request_id':request_id,'request_digest':fingerprint,'authority':actor.pk,'paths':paths,'receipt':receipt})
+            return receipt
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def _index_path(project, index, options, env):
+    """Répertoire privé dans le répertoire Git réellement résolu par Git."""
+    from pathlib import Path
+    result = run(project, options, env, 'rev-parse', '--absolute-git-dir')
+    require(result.returncode == 0, 'session-git-index-unavailable', 409)
+    try:
+        gitdir = Path(result.stdout.decode('utf-8', 'strict').rstrip('\n'))
+        require(gitdir.is_absolute() and gitdir.resolve() == gitdir, 'session-git-index-unavailable', 409)
+        rootfd = os.open(gitdir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            require(os.fstat(rootfd).st_uid == project.owner_uid, 'session-git-index-unavailable', 409)
+            try:
+                os.mkdir('cab-session-index', 0o700, dir_fd=rootfd)
+                made = True
+            except FileExistsError:
+                made = False
+            indexfd = os.open('cab-session-index', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=rootfd)
+            try:
+                if made and os.geteuid() == 0:
+                    os.fchown(indexfd, project.owner_uid, project.owner_gid if project.owner_gid is not None else -1)
+                info = os.fstat(indexfd)
+                require(info.st_uid == project.owner_uid and stat.S_IMODE(info.st_mode) & 0o077 == 0, 'session-git-index-unavailable', 409)
+            finally:
+                os.close(indexfd)
+        finally:
+            os.close(rootfd)
+        token = hashlib.sha256((str(index.change_id) + ':' + str(index.session_id)).encode()).hexdigest()
+        return str(gitdir / 'cab-session-index' / (token + '.index'))
+    except (OSError, UnicodeError) as error:
+        raise Refused('session-git-index-unavailable', 409) from error
+
+
+def _reference_hook_safe(project, options, env):
+    from pathlib import Path
+    result=run(project,options,env,'rev-parse','--path-format=absolute','--git-path','hooks')
+    require(result.returncode==0,'session-git-hook-unavailable',409)
+    try:hooks=Path(result.stdout.decode('utf-8','strict').rstrip('\n'))
+    except UnicodeError as error:raise Refused('session-git-hook-unavailable',409) from error
+    require(hooks.is_absolute() and not os.access(hooks/'reference-transaction',os.X_OK),'session-git-reference-hook-active',409)
+
+
+def stage_files(actor, data, connector_id=None):
+    from .core.models import GitSessionIndex
+    fields={field.name for field in GitSessionIndex._meta.fields}
+    require({'keep_ref','keep_oid'}.issubset(fields),'session-git-upgrade-pending',409)
+    require(not connection.in_atomic_block, 'session-git-transaction-invalid', 409)
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:return _stage_files_locked(actor,data,connector_id)
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def _stage_files_locked(actor, data, connector_id=None):
+    """Indexe une étape validée dans l'index propre à sa session."""
+    from django.db import transaction
+    from .core.commands import digest, event, identifier, revision, run_scope, safe_path, working
+    from .core.models import GitDelivery, GitFileReservation, GitSessionEffect, GitSessionIndex, Operation
+
+    require(not connection.in_atomic_block, 'session-git-transaction-invalid', 409)
+    require(set(data) == {'project_id', 'run_id', 'request_id', 'paths'}, 'session-git-fields-invalid', 400)
+    request_id = identifier(data['request_id'])
+    paths = data['paths']
+    require(isinstance(paths, list) and 0 < len(paths) <= 256 and all(isinstance(path, str) and path and '\0' not in path and len(path) <= 1500 for path in paths) and len(paths) == len(set(paths)), 'session-git-paths-invalid', 400)
+    fingerprint = digest({'paths': sorted(paths)})
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE', [data['project_id']])
+        current = run_scope(actor, data['run_id'], data['project_id'], lock=True)
+        working(current)
+        if connector_id is not None:
+            from .core.connectors import lock_worker_binding
+            lock_worker_binding(actor,connector_id,current)
+        prior = GitSessionEffect.objects.filter(run=current, request_id=request_id).first()
+        if prior:
+            require(prior.request_digest == fingerprint, 'session-git-request-conflict', 409)
+            require(prior.state == 'COMPLETED', 'session-git-effect-unresolved', 409)
+            return prior.receipt
+        index = GitSessionIndex.objects.select_for_update().filter(change_id=current.change_record_id, session_id=current.coding_session_id).first()
+        require(index is not None and index.state in ('PENDING', 'OPEN'), 'session-git-index-unavailable', 409)
+        require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
+        require(not index.effects.filter(state__in=('INTENT', 'RUNNING', 'UNKNOWN')).exists(), 'session-git-effect-unresolved', 409)
+        recorded = {entry.path for entry in GitFileReservation.objects.filter(git_index=index, active=True)}
+        require(set(paths).issubset(recorded), 'session-git-reservation-required', 409)
+        for path in paths:
+            safe_path(__import__('pathlib').Path(current.project.root), path, exists=False)
+        current_revision = revision(current)
+        validations = Operation.objects.filter(run=current, state='COMPLETED', source_revision=current_revision).order_by('-updated')[:50]
+        require(any(op.receipt.get('exit_code') == 0 and (op.request.get('phase') in ('test', 'verify', 'verification') or isinstance(op.request.get('host_authorization'), dict)) for op in validations), 'session-git-validation-required', 409)
+        initializing = index.state == 'PENDING'
+        effect = GitSessionEffect.objects.create(run=current, git_index=index, request_id=request_id, request_digest=fingerprint, state='RUNNING', **_origin_if_supported(GitSessionEffect,current))
+        index.state = 'INITIALIZING' if initializing else 'STAGING'
+        index.save(update_fields=['state', 'updated'])
+        project = current.project
+        event(current, 'git-stage-started', {'request_id': request_id, 'count': len(paths)})
+    mutated=False
+    try:
+        options, env = context(project)
+        _reference_hook_safe(project,options,env)
+        path = _index_path(project, index, options, env)
+        if initializing:
+            require(not os.path.lexists(path), 'session-git-index-unavailable', 409)
+        else:
+            require(index.index_path == path, 'session-git-index-unavailable', 409)
+        token=__import__('pathlib').Path(path).stem
+        require(re.fullmatch(r'[a-f0-9]{64}',token) is not None,'session-git-index-unavailable',409)
+        keep_ref='refs/cab/session-index/'+token
+        base_ref='refs/cab/session-base/'+token
+        require(index.keep_ref in ('',keep_ref) and bool(index.keep_ref)==bool(index.keep_oid),'session-git-index-unavailable',409)
+        with transaction.atomic():
+            record=GitSessionEffect.objects.select_for_update().get(pk=effect.pk)
+            require(record.state=='RUNNING','session-git-effect-unresolved',409)
+            record.receipt={'index_path':path,'keep_ref':keep_ref,'previous_keep_oid':index.keep_oid,'base_ref':base_ref,'base_oid':index.base_head,'phase':'prepared'}
+            record.save(update_fields=['receipt','updated'])
+            if initializing:GitSessionIndex.objects.filter(pk=index.pk).update(index_path=path)
+        if initializing:
+            mutated=True
+            init = run(project, options, {**env, 'GIT_INDEX_FILE': path}, 'read-tree', index.base_head if index.base_head else '--empty')
+            require(init.returncode == 0, 'session-git-index-unavailable', 409)
+        info = os.lstat(path)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == project.owner_uid and info.st_nlink == 1, 'session-git-index-unavailable', 409)
+        mutated=True
+        staged = subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false', 'add', '--all', '--pathspec-from-file=-', '--pathspec-file-nul'], input=b'\0'.join(path.encode('utf-8') for path in paths) + b'\0', cwd='/', env={**env, 'GIT_INDEX_FILE':path, 'GIT_LITERAL_PATHSPECS':'1'}, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120, **options)
+        require(staged.returncode == 0, 'session-git-effect-unresolved', 409)
+        tree=run(project,options,{**env,'GIT_INDEX_FILE':path},'write-tree')
+        require(tree.returncode==0,'session-git-effect-unresolved',409)
+        oid=tree.stdout.decode('ascii','strict').strip()
+        from .git_commit_remove import OID
+        require(OID.fullmatch(oid) is not None,'session-git-effect-unresolved',409)
+        old=index.keep_oid or ('0'*len(oid))
+        with transaction.atomic():
+            effect=GitSessionEffect.objects.select_for_update().get(pk=effect.pk)
+            require(effect.state=='RUNNING','session-git-effect-unresolved',409)
+            effect.receipt={'index_path':path,'keep_ref':keep_ref,'previous_keep_oid':index.keep_oid,'keep_oid':oid,'base_ref':base_ref,'base_oid':index.base_head}
+            effect.save(update_fields=['receipt','updated'])
+        commands=['start',f'update {keep_ref} {oid} {old}']
+        if index.base_head:
+            commands.append(f'create {base_ref} {index.base_head}' if initializing else f'verify {base_ref} {index.base_head}')
+        commands.extend(['prepare','commit'])
+        updated=subprocess.run(['/usr/bin/git','-C',project.root,'update-ref','--stdin'],input=('\n'.join(commands)+'\n').encode('ascii'),cwd='/',env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=120,**options)
+        require(updated.returncode==0,'session-git-effect-unresolved',409)
+    except Exception as error:
+        with transaction.atomic():
+            record=GitSessionEffect.objects.select_for_update().get(pk=effect.pk)
+            if record.state=='RUNNING':
+                record.state='UNKNOWN' if mutated else 'FAILED'
+                record.receipt={**record.receipt,'error':'session-git-effect-unresolved' if mutated else getattr(error,'code','session-git-index-unavailable')}
+                record.save(update_fields=['state','receipt','updated'])
+            GitSessionIndex.objects.filter(pk=index.pk).update(state='UNKNOWN' if mutated else ('PENDING' if initializing else 'OPEN'))
+        if mutated:raise Refused('session-git-effect-unresolved', 409) from error
+        if isinstance(error,Refused):raise
+        raise Refused('session-git-index-unavailable',409) from error
+    with transaction.atomic():
+        effect = GitSessionEffect.objects.select_for_update().get(pk=effect.pk)
+        require(effect.state == 'RUNNING', 'session-git-effect-unresolved', 409)
+        index = GitSessionIndex.objects.select_for_update().get(pk=index.pk)
+        index.index_path = path
+        index.keep_ref = keep_ref
+        index.keep_oid = oid
+        index.state = 'OPEN'
+        index.save(update_fields=['index_path','keep_ref','keep_oid','state','updated'])
+        effect.state = 'COMPLETED'
+        effect.receipt = {'request_id': request_id, 'staged_count': len(paths), 'state':'COMPLETED'}
+        effect.save(update_fields=['state','receipt','updated'])
+        event(current, 'git-stage-completed', {'request_id': request_id, 'count': len(paths)})
+        return effect.receipt
+
+
+def effect_status(actor, data):
+    from .core.commands import identifier, run_scope
+    from .core.models import GitSessionEffect
+    require(set(data) == {'project_id','run_id','request_id'}, 'session-git-fields-invalid', 400)
+    current = run_scope(actor, data['run_id'], data['project_id'])
+    effect = GitSessionEffect.objects.filter(run=current, request_id=identifier(data['request_id'])).first()
+    require(effect is not None, 'session-git-effect-not-found', 404)
+    return {'request_id': effect.request_id, 'state': effect.state, 'receipt': effect.receipt}
+
+
+def inspect_session(actor, data):
+    """État compact du Git et des réservations de la session courante."""
+    from .core.commands import run_scope
+    from .core.models import GitFileReservation, GitSessionIndex
+    require(set(data) <= {'project_id','run_id','include_paths'} and type(data.get('include_paths',False)) is bool, 'session-git-fields-invalid',400)
+    current=run_scope(actor,data['run_id'],data['project_id'])
+    index=GitSessionIndex.objects.filter(change_id=current.change_record_id,session_id=current.coding_session_id).first()
+    paths=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True)) if index else []
+    snap=git_snapshot(current.project,index.index_path if index and index.state=='OPEN' else None)
+    owned=set(paths)
+    relevant=[entry for entry in snap['entries'] if entry['path'] in owned]
+    staged=sum(entry['status']!='??' and entry['status'][0:1]!='.' for entry in relevant)
+    baseline=GitChange.objects.filter(change_id=current.change_record_id).first()
+    result={'capture_kind':baseline.baseline.get('capture_kind','initial') if baseline else None,'available':snap['available'],'head':snap['head'],'branch':snap['branch'],'baseline':GitChange.objects.filter(change_id=current.change_record_id).exists(),'index_state':index.state if index else 'ABSENT','reserved_count':len(paths),'staged_count':staged,'other_changes_count':len(snap['entries'])-len(relevant)}
+    if data.get('include_paths'):
+        result['reserved']=paths
+        result['changes']=relevant
+    return result

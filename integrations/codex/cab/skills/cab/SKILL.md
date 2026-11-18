@@ -3,10 +3,14 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.15
+# CAB 3.2.16
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
+Pour une livraison Git CAB, l'exigence de publication utilise le producteur
+`delivery_producer` retourné par project_register ; CAB atteste le tag envoyé.
+Une délégation administrative explicite peut conserver un producteur déjà
+autorisé pour le RUN et sa version. Les releases différées restent distinctes.
 Tous les critères doivent être couverts. Les autres essais autorisés restent
 autonomes. Cadrer des chemins sources précis sans les dépendances régénérables.
 Le service capture les reçus, assemble le dossier et finalise périodes/stats
@@ -40,6 +44,28 @@ puis `run_close_historical` pour un RUN direct ancien archivé. Conserver digest
 receipt_id, référence d'autorisation et justification. Lire le reçu après une
 réponse perdue ; aucun test inventé ou rejoué. CLOSED historique ne vaut pas
 acceptation normale ni qualification courante de la livraison.
+
+Les opérations Git des sessions passent exclusivement par CAB. Après le
+rattachement natif, `session_git_context` identifie le RUN courant et
+`session_git_inspect` fournit son état compact. Avant toute édition, réserver
+les chemins exacts en un appel `session_git_reserve` ; un refus de réservation
+interdit de modifier le fichier concerné. Après validation d'une étape, appeler
+`session_git_stage` avec ses seuls chemins réservés et un request_id stable.
+`session_git_status` relit le reçu ; ne pas rejouer un effet UNKNOWN. CAB possède
+l'index isolé et les références internes qui conservent ses objets jusqu'à la
+livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
+STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
+réservent ni ne l'éditent.
+
+Pour une CI/CD autorisée, charger le skill CICD : transmettre seulement la
+version à `session_delivery_start`, puis consulter `session_delivery_status`
+sur cette même version. CAB met à jour PROJECT_VERSION, réalise commit, tag et
+envois, puis les builds DIU activés sur le projet courant. Une décision de
+report des releases appartient au RUN et à sa version, sans devenir un défaut
+pour les autres projets. Les reçus distinguent livraison Git, build et release.
+L'absence d'un outil sur un ancien connecteur n'autorise ni Git direct ni un
+CI/CD DIU de substitution. Une capture initiale absente d'un RUN antérieur à
+cette capacité reste signalée ; ne pas inventer un instantané historique.
 
 Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
 puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le

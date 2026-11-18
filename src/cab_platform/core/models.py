@@ -196,6 +196,96 @@ class Change(models.Model):
         db_table='changes'
         constraints=[models.UniqueConstraint(fields=['project','identifier'],name='cab_change_identity')]
 
+class GitChange(models.Model):
+    change=models.OneToOneField(Change,on_delete=models.PROTECT,primary_key=True,related_name='git_snapshot')
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    initial_run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL)
+    origin=models.JSONField(default=dict,db_default={})
+    baseline=models.JSONField(default=dict)
+    captured_at=models.DateTimeField()
+    class Meta:db_table='git_changes'
+
+
+class GitSessionIndex(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='git_indexes')
+    session=models.ForeignKey(CodingSession,null=True,on_delete=models.SET_NULL,related_name='git_indexes')
+    initial_run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL)
+    origin=models.JSONField(default=dict,db_default={})
+    base_head=models.CharField(max_length=64,blank=True)
+    index_path=models.CharField(max_length=1500)
+    keep_ref=models.CharField(max_length=200,blank=True,default='',db_default='')
+    keep_oid=models.CharField(max_length=64,blank=True,default='',db_default='')
+    state=models.CharField(max_length=24,default='OPEN')
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_session_indexes'
+        constraints=[models.UniqueConstraint(fields=['change','session'],name='git_session_change_unique')]
+
+class GitFileReservation(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT,related_name='reservations')
+    path=models.CharField(max_length=1500)
+    path_digest=models.CharField(max_length=64)
+    active=models.BooleanField(default=True)
+    created=models.DateTimeField(auto_now_add=True)
+    released=models.DateTimeField(null=True)
+    class Meta:
+        db_table='git_file_reservations'
+        constraints=[models.UniqueConstraint(fields=['project','path_digest'],condition=models.Q(active=True),name='git_file_active_unique')]
+
+
+class GitSessionEffect(models.Model):
+    run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL,related_name='git_effects')
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT,related_name='effects')
+    origin=models.JSONField(default=dict,db_default={})
+    request_id=models.CharField(max_length=200)
+    request_digest=models.CharField(max_length=64)
+    state=models.CharField(max_length=24,default='INTENT')
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_session_effects'
+        constraints=[models.UniqueConstraint(fields=['run','request_id'],name='git_session_effect_unique')]
+
+
+class McpRunBinding(models.Model):
+    connector=models.OneToOneField(McpConnector,on_delete=models.CASCADE,primary_key=True,related_name='run_binding')
+    run=models.ForeignKey('Run',on_delete=models.CASCADE)
+    bound_at=models.DateTimeField(auto_now=True)
+    class Meta:db_table='mcp_run_bindings'
+
+
+class GitDelivery(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='git_deliveries')
+    run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL,related_name='git_deliveries')
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT)
+    origin=models.JSONField(default=dict,db_default={})
+    version=models.CharField(max_length=64)
+    state=models.CharField(max_length=24,default='PENDING')
+    executor=models.JSONField(default=dict)
+    plan=models.JSONField(default=dict)
+    commit_oid=models.CharField(max_length=64,blank=True)
+    tag_oid=models.CharField(max_length=64,blank=True)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_deliveries'
+        constraints=[models.UniqueConstraint(fields=['run','version'],name='git_delivery_run_version_unique'),models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']),name='git_delivery_active_project_unique')]
+
+class GitDeliveryStep(models.Model):
+    delivery=models.ForeignKey(GitDelivery,on_delete=models.PROTECT,related_name='steps')
+    key=models.CharField(max_length=100)
+    state=models.CharField(max_length=24,default='PENDING')
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_delivery_steps'
+        constraints=[models.UniqueConstraint(fields=['delivery','key'],name='git_delivery_step_unique')]
+
+
 class ChangeTask(models.Model):
     change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='task_records')
     source_id=models.CharField(max_length=128)

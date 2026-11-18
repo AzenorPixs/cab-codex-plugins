@@ -73,6 +73,41 @@ def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths
     """Cadre un RUN. Piloté : autorité orchestrateur requise, choix résolus avant codage."""
     return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization})
 @public_tool()
+def session_delivery_start(version:str)->dict:
+    """Lance la livraison autorisée du RUN lié à cette connexion, avec cette seule version."""
+    return client().command('session.delivery.start',{'version':version})
+
+@public_tool()
+def session_delivery_status(version:str)->dict:
+    """Lit le reçu de cette version sans relancer ses effets."""
+    return client().command('session.delivery.status',{'version':version})
+
+@public_tool()
+def session_git_context()->dict:
+    """Identifie le RUN attaché à cette connexion MCP."""
+    return client().command('session.git.context',{})
+
+@public_tool()
+def session_git_reserve(request_id:str,paths:list[str])->dict:
+    """Réserve avant modification les fichiers du RUN lié à cette connexion."""
+    return client().command('session.git.reserve',{'request_id':request_id,'paths':paths})
+
+@public_tool()
+def session_git_stage(request_id:str,paths:list[str])->dict:
+    """Indexe les fichiers réservés d'une étape validée dans l'index de session."""
+    return client().command('session.git.stage',{'request_id':request_id,'paths':paths})
+
+@public_tool()
+def session_git_status(request_id:str)->dict:
+    """Lit le reçu de la même indexation sans la rejouer."""
+    return client().command('session.git.status',{'request_id':request_id})
+
+@public_tool()
+def session_git_inspect(include_paths:bool=False)->dict:
+    """Lit l’état compact Git et les réservations du RUN lié à cette connexion."""
+    return client().command('session.git.inspect',{'include_paths':include_paths})
+
+@public_tool()
 def finalization_status(project_id:str,run_id:str)->dict:
     """Consulte le contrat, les preuves et les attentes ; aucun reçu inventé."""
     return client().get('finalization',project_id=project_id,run_id=run_id)

@@ -38,10 +38,13 @@ licences et certificats CA publics ; les sources privées du projet restent excl
 
 Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
 DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.15` ; PROJECT_VERSION est
-alors mis à jour par DIU avant commit/tag et construction du paquet exact.
-Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release cible.
+build. La CI/CD est déclenchée par le skill CICD et le moteur CAB : version,
+index de session, commit, tag et envois Git appartiennent à CAB. Les commandes
+DIU existantes restent chargées des builds sur le projet courant ; elles ne
+reçoivent pas de répertoire de sources figées. Pour la livraison 3.2.16, le tag
+reste exactement 3.2.16 et les releases DIU sont explicitement différées, car
+leur contrat actuel exige un tag préfixé v. Aucune modification de DIU n'est
+incluse. Un build ne prouve pas une publication ou une installation.
 
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 
@@ -53,7 +56,7 @@ migrent uniquement une base déjà initialisée, redémarrent et vérifient le m
 reçu. Un effet incertain n’est pas réémis. Une première installation reste en
 mode Web bootstrap ; le parcours authentifié crée la base et ses tables.
 
-Les plugins CAB/CCAB/CABU distribués par le catalogue viennent désormais de
+Les plugins CAB/CCAB/CABU/CICD distribués par le catalogue viennent désormais de
 integrations/codex ; commandes minimes sous integrations/commands. Les anciens
 plugins du répertoire plugins restent sources historiques et ne sont plus les
 payloads distribués par ce catalogue. La présence de source ou d’un .deb ne

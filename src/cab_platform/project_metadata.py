@@ -86,6 +86,7 @@ def synchronize(project_id,include_forges=True,include_git=True):
         elif 'git_initialized' in previous:snapshot['git_initialized']=previous['git_initialized']
         if 'git_status' in previous:snapshot['git_status']=previous['git_status']
         if 'git_commit_progress' in previous:snapshot['git_commit_progress']=previous['git_commit_progress']
+        if 'git_delivery' in previous:snapshot['git_delivery']=previous['git_delivery']
         if 'forge_comparisons' in previous:snapshot['forge_comparisons']=previous['forge_comparisons']
         if 'forge_refresh' in previous:snapshot['forge_refresh']=previous['forge_refresh']
         if include_forges:

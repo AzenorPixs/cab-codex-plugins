@@ -12,7 +12,7 @@ import secrets
 import subprocess
 import sys
 import threading
-from django.db import transaction
+from django.db import connection,transaction
 from django.utils import timezone
 from cab_platform import statistics_documents as documents
 from cab_platform import sgs_engine as engine
@@ -32,6 +32,37 @@ def file_hash(project,path):
     try:return documents.sha(documents.read_source(Path(project.root),Path(path),64*1024*1024)[0])
     except FileNotFoundError:return None
 
+def global_index_matches(project,expected):
+    """Vérifie le contenu indexé sans le modifier ni le restituer."""
+    from cab_platform.git_commit_remove import context,run
+    options,env=context(project)
+    result=run(project,options,env,'show',':STATISTICS.md')
+    return result.returncode==0 and documents.sha(result.stdout)==expected
+
+
+def stage_global(job,path,expected):
+    """Indexe uniquement le global CAB avant de libérer son écrivain."""
+    from cab_platform.project_git import probe
+    from cab_platform.git_commit_remove import context,run
+    project=job.project
+    commands.require(Path(path)==Path(project.root)/'STATISTICS.md','statistics-target-invalid')
+    available=probe(project)
+    commands.require(available is not None,'statistics-git-unavailable')
+    receipt={'path':'STATISTICS.md','sha256':expected,'state':'SKIPPED' if available==0 else 'RUNNING'}
+    job.result={**job.result,'global_index':receipt};job.save(update_fields=['result','updated'])
+    if available==0:return
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:
+        commands.require(file_hash(project,path)==expected,'statistics-global-index-divergent')
+        options,env=context(project)
+        result=run(project,options,{**env,'GIT_LITERAL_PATHSPECS':'1'},'add','--','STATISTICS.md')
+        commands.require(result.returncode==0,'statistics-global-index-unconfirmed')
+        commands.require(file_hash(project,path)==expected and global_index_matches(project,expected),'statistics-global-index-divergent')
+        job.result={**job.result,'global_index':{**receipt,'state':'COMPLETED'}};job.save(update_fields=['result','updated'])
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
 def recover_lock(lock):
     job=lock.owner
     if not job:return
@@ -41,6 +72,10 @@ def recover_lock(lock):
     if alive(child.get('pid',0),child.get('start','')):raise commands.Refused('statistics-effect-unknown')
     for path,expected in job.expected.items():
         if file_hash(job.project,path) not in (expected['before'],expected['after']):raise commands.Refused('statistics-effect-unknown')
+    indexed=job.result.get('global_index',{})
+    if indexed and indexed.get('state') not in ('COMPLETED','SKIPPED'):
+        if file_hash(job.project,Path(job.project.root)/'STATISTICS.md')!=indexed.get('sha256') or not global_index_matches(job.project,indexed.get('sha256')):raise commands.Refused('statistics-effect-unknown')
+        job.result={**job.result,'global_index':{**indexed,'state':'COMPLETED','recovered':True}}
     job.state='FAILED';job.result={**job.result,'recovered':'writer-stopped-files-verified'};job.save();lock.owner=None;lock.save()
 
 @contextmanager
@@ -70,9 +105,19 @@ def guarded(project,action,request_id):
     finally:ACTIVE.discard(job.pk)
 
 def write(job,path,content):
+    if Path(path)!=Path(job.project.root)/'STATISTICS.md':return _write_locked(job,path,content)
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:return _write_locked(job,path,content)
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def _write_locked(job,path,content):
     project=job.project;root=Path(project.root);path=Path(path);expected=file_hash(project,path);desired=documents.sha(content.encode())
     if expected==desired:return desired
     job.expected={**job.expected,str(path):{'before':expected,'after':desired}};job.save(update_fields=['expected','updated'])
+    if path==root/'STATISTICS.md':
+        job.result={**job.result,'global_index':{'path':'STATISTICS.md','sha256':desired,'state':'PENDING'}};job.save(update_fields=['result','updated'])
     try:info=path.stat();uid=info.st_uid;gid=info.st_gid;mode=info.st_mode&0o777
     except FileNotFoundError:uid=project.owner_uid;gid=project.owner_gid if project.owner_gid is not None else root.stat().st_gid;mode=0o770
     user=pwd.getpwuid(uid);env={'HOME':user.pw_dir,'USER':user.pw_name,'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','PYTHONPATH':str(Path(__file__).resolve().parents[2]),'PYTHONDONTWRITEBYTECODE':'1'}
@@ -87,6 +132,7 @@ def write(job,path,content):
         if result.get('error') in {'statistics-local-conflict','statistics-target-invalid','statistics-target-unsafe'}:raise commands.Refused(result['error'])
         commands.require(process.returncode==0 and result.get('ok') and result['result']['sha256']==desired,'statistics-publication-unconfirmed')
         commands.require(file_hash(project,path)==desired,'statistics-publication-divergent')
+        if path==root/'STATISTICS.md':stage_global(job,path,desired)
         return desired
     finally:
         if process.poll() is None:process.kill();process.communicate()

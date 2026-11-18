@@ -101,15 +101,19 @@ def event(run,kind,data):
     Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)
     if run:projection(run)
 
-def no_pending(run):return not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists()
+def no_pending(run):
+    from .models import GitDelivery,GitSessionEffect
+    return not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists() and not GitSessionEffect.objects.filter(run=run,state__in=['INTENT','RUNNING','UNKNOWN']).exists() and not GitDelivery.objects.filter(run=run,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists()
 
-def resolve_native(actor,project,session_id,data):
+def resolve_native(actor,project,session_id,data,run=None):
     from cab_platform.native_sources import inspect,locate,NativeSourceError
     require(actor.agent in ('codex','codex-cli'),'native-source-agent-unsupported',400)
     require(isinstance(data.get('source_file',''),str) and isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
     require(not data.get('codex_home') or Path(data['codex_home']).is_absolute() and '..' not in Path(data['codex_home']).parts,'native-source-path-invalid',400)
+    from .native_access import root_for
+    native_root=root_for(run) if run is not None else project.root
     try:
-        return inspect(actor.uid,session_id,project.root,data['source_file']) if data.get('source_file') else locate(actor.uid,session_id,project.root,data.get('codex_home',''))
+        return inspect(actor.uid,session_id,native_root,data['source_file']) if data.get('source_file') else locate(actor.uid,session_id,native_root,data.get('codex_home',''))
     except NativeSourceError as error:raise Refused(str(error),400) from None
 
 def locate_native(actor,data):
@@ -119,11 +123,12 @@ def locate_native(actor,data):
 
 @transaction.atomic
 def bind_native(actor,data):
+    from .native_access import root_for
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
     require(type(data.get('resume',False)) is bool,'native-source-resume-invalid',400)
     require(isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
     if not data.get('codex_home') and r.mandate.get('native_source_home'):data={**data,'codex_home':r.mandate['native_source_home']}
-    source=resolve_native(actor,r.project,r.session_id,data)
+    source=resolve_native(actor,r.project,r.session_id,data,run=r)
     previous=r.mandate.get('native_source')
     if previous is not None and previous!=source:
         require(data.get('resume') is True,'native-source-replacement-refused')
@@ -135,7 +140,7 @@ def bind_native(actor,data):
         try:
             indexed=indexed_path(actor.uid,r.session_id,data.get('codex_home',''))
             require(indexed==source['source_file'],'native-source-index-authority-required')
-            require(inspect(actor.uid,r.session_id,r.project.root,previous['source_file'])==previous,'native-source-previous-divergent')
+            require(inspect(actor.uid,r.session_id,root_for(r),previous['source_file'])==previous,'native-source-previous-divergent')
         except NativeSourceError as error:raise Refused(str(error),400) from None
         history=r.mandate.get('native_source_history',[]);require(isinstance(history,list) and len(history)<128,'native-source-history-limit')
         r.mandate['native_source_history']=[*history,{'previous':previous,'current':source,'at':timezone.now().isoformat(),'authority':'exact-native-index','actor':actor.pk}]
@@ -147,6 +152,8 @@ def bind_native(actor,data):
     return {'bound':True,'run_id':r.run_id,'session_id':r.session_id}
 
 def working(run):
+    from .native_access import root_for
+    root_for(run)
     require(run.state in ('WORKING','FINALIZATION_PENDING') and not run.suspension,'run-not-working')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
     from .models import NativeReload
@@ -168,6 +175,7 @@ def register_project(actor,root):
 @transaction.atomic
 def begin_run(actor,data):
     project=Project.objects.get(pk=data['project_id']);scope(actor,project)
+    with connection.cursor() as cursor:cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[project.pk])
     require(project.creation_state=='READY','project-creation-needs-reconciliation')
     run_id=identifier(data['run_id']);sid=identifier(data['session_id']);mode=data['mode']
     require(mode in ('direct','piloted'),'run-mode-invalid',400)
@@ -185,7 +193,12 @@ def begin_run(actor,data):
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=identifier(data['change']),mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
-    r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode});return r
+    r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode})
+    r.refresh_from_db(fields=['change_record'])
+    require(r.change_record_id is not None,'session-git-change-unavailable',409)
+    from cab_platform.session_git import capture_initial
+    capture_initial(r)
+    return r
 
 @transaction.atomic
 def progress(actor,data):

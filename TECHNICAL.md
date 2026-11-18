@@ -2349,3 +2349,29 @@ Les contrôles administratifs forcés restent authentifiés et distincts du cach
 ## Surveillance Git récursive
 
 Un surveillant inotify par projet suit récursivement ses répertoires sans suivre les liens symboliques. Les modifications sont regroupées en mémoire par projet ; l’inventaire réaffecte les surveillances après déplacement et une perte d’événements déclenche une reconstruction. Les délais PostgreSQL sont appliqués à chaud. Les analyses partagent une exclusion PostgreSQL globale. L’intervalle minimal s’applique aux seules analyses automatiques ; le clic manuel le contourne. Une lecture automatique en attente est satisfaite par une mesure manuelle plus récente. Leur projection existante est transmise via Electric.
+
+## Git par session — CAB 3.2.16
+
+Les migrations 0030 à 0036 créent git_changes, les index et réservations de
+session, les effets idempotents, les liaisons MCP/RUN et les étapes de livraison.
+Les références internes refs/cab/session-index et refs/cab/session-base
+protègent les objets et le commit de base jusqu'au retrait contrôlé de l'index.
+Une archive conserve les index encore nécessaires ; une suppression de session
+ne peut pas détruire un index actif. Les états UNKNOWN conservent leur protection.
+
+La connexion MCP fournit le RUN réel ; la livraison reçoit seulement la version.
+Les autorisations interprojets sont des événements administratifs persistés,
+bornés aux chemins du RUN et révocables, sans identité native modifiée. Les
+projections de livraison sont synchronisées par Electric. Les builds DIU utilisent
+le projet courant ; leur exécution ne prouve pas une release. Un report explicite
+des releases est enregistré par RUN et version. Les commits et indexations manuels
+refusent les réservations concurrentes ; le global STATISTICS.md est indexé
+séparément par le service statistique avant libération de son verrou PostgreSQL.
+
+Le project_register expose delivery_producer, identité interne de publication
+Git sans profil de connexion. Le collecteur calcule l'empreinte de l'objet tag
+réellement envoyé, après vérification des étapes. Un ancien producteur peut
+être explicitement délégué par l'administrateur pour un RUN et une version.
+L'adoption d'une session antérieure à la migration 0030 est administrative,
+bornée à sa liste de fichiers et enregistrée comme legacy-adoption ; elle ne
+remplace jamais une capture initiale historique.

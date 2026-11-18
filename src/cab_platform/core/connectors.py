@@ -20,6 +20,60 @@ def observed_dead(saved):
         return bool(select.select([fd],[],[],0)[0])
     finally:os.close(fd)
 
+def worker_connector(actor,peer):
+    """Identifie uniquement le relais parent du processus MCP appelant."""
+    if not peer or peer.get('uid')!=actor.uid:
+        return None
+    worker=identity(peer.get('pid',0))
+    if not worker or cab_process(worker['pid'],'mcp-worker')!=actor.agent:
+        return None
+    matches=[row for row in McpConnector.objects.filter(actor=actor) if row.worker==worker and alive(row.process)]
+    c.require(len(matches)<=1,'connector-worker-ambiguous',409)
+    return matches[0] if matches else None
+
+
+@transaction.atomic
+def bind_worker_run(actor,data,peer):
+    from .models import McpRunBinding
+    connector=worker_connector(actor,peer)
+    if connector is None:
+        return False
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    c.require(bool(run.mandate.get('native_source')),'native-source-not-bound',409)
+    connector=McpConnector.objects.select_for_update().get(pk=connector.pk)
+    c.require(connector.actor_id==actor.pk and connector.worker==identity(peer['pid']) and alive(connector.process),'connector-owner-divergent',403)
+    previous=McpRunBinding.objects.select_for_update().select_related('run').filter(connector=connector).first()
+    if previous is not None and previous.run_id!=run.pk:
+        c.require(c.no_pending(previous.run),'session-connector-busy',409)
+        if previous.run.session_id!=run.session_id:
+            c.require(previous.run.state=='CLOSED','session-connector-shared',409)
+    McpRunBinding.objects.update_or_create(connector=connector,defaults={'run':run})
+    return True
+
+
+def lock_worker_binding(actor,connector_id,run):
+    """Fige la liaison pendant l'admission d'un effet Git."""
+    from .models import McpRunBinding
+    connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).first()
+    c.require(connector is not None and alive(connector.process) and alive(connector.worker),'session-connector-unbound',409)
+    binding=McpRunBinding.objects.select_for_update().filter(connector=connector,run=run).first()
+    c.require(binding is not None,'session-connector-run-divergent',403)
+
+
+def current_worker_run(actor,peer,*,read_only=False):
+    from .models import McpRunBinding
+    connector=worker_connector(actor,peer)
+    c.require(connector is not None,'session-connector-unbound',409)
+    binding=McpRunBinding.objects.select_related('run__project','run__actor').filter(connector=connector).first()
+    c.require(binding is not None and binding.run.actor_id==actor.pk,'session-connector-unbound',409)
+    run=binding.run;c.scope(actor,run.project)
+    if read_only:return run
+    c.working(run)
+    source=c.resolve_native(actor,run.project,run.session_id,{'codex_home':run.mandate.get('native_source_home','')},run=run)
+    c.require(source==run.mandate.get('native_source'),'native-source-resume-required',409)
+    return run
+
+
 @transaction.atomic
 def heartbeat(actor,data,peer):
     c.require(actor.active and actor.agent in ('codex','codex-cli','opencode'),'connector-actor-invalid',403)

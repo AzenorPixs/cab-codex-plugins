@@ -174,6 +174,8 @@ def commit_local(project_id, tag="", description="", expected_tag="", request_id
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
     try:
+        from .core.models import GitFileReservation
+        require(not GitFileReservation.objects.filter(project=project,active=True).exists(),'project-git-reservations-active',409)
         def git(*args, timeout=30):
             command = ['/usr/bin/git', '-C', project.root, *args]
             if console is None:
