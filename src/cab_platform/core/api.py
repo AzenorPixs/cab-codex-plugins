@@ -4,6 +4,7 @@ import json
 import secrets
 from pathlib import Path
 from typing import Any,Literal
+from uuid import UUID
 from django.contrib.auth import authenticate,login,logout
 from django.db import transaction
 from django.http import HttpResponse,JsonResponse,StreamingHttpResponse
@@ -116,6 +117,29 @@ def conflict(request,error):return api.create_response(request,{'error':'identit
 @api.exception_handler(TypeError)
 @api.exception_handler(ValueError)
 def invalid_input(request,error):return api.create_response(request,{'error':'command-input-invalid'},status=400)
+
+class NotificationRead(Schema):
+    id:UUID
+
+class NotificationAnswer(NotificationRead):
+    choice:str=Field(min_length=1,max_length=100)
+
+@api.get('/notifications')
+def notifications_list(request):
+    from cab_platform.notifications import administrator,serialize
+    from .models import Notification
+    administrator(request.auth)
+    return {'notifications':[serialize(row) for row in Notification.objects.order_by('created','id')]}
+
+@api.post('/notifications/read')
+def notifications_read(request,body:NotificationRead):
+    from cab_platform.notifications import read
+    return read(request.auth,body.id)
+
+@api.post('/notifications/answer')
+def notifications_answer(request,body:NotificationAnswer):
+    from cab_platform.notifications import answer
+    return answer(request.auth,body.id,body.choice)
 
 @api.get('/health',auth=None)
 def health(request):return {**bootstrap.status(),'csrf_token':get_token(request)}
@@ -912,6 +936,16 @@ def command(request,body:Command):
                 session(r)
             r.source_revision=commands.revision(r);r.state='WORKING';r.suspension='';r.save();commands.event(r,'legacy-run-adopted',{'session_id':r.session_id,'generation':r.generation})
             return run_data(r)
+    if name=='notification.create':
+        from cab_platform.notifications import create
+        return create(actor,data)
+    if name=='notification.receipt':
+        from cab_platform.notifications import administrator,receipt_view
+        from .models import NotificationReceipt
+        administrator(actor)
+        commands.require(set(data)=={'id'},'notification-fields-invalid',400)
+        receipt=NotificationReceipt.objects.filter(pk=UUID(str(data['id']))).first()
+        return receipt_view(receipt) if receipt else {'id':data['id'],'state':'PENDING'}
     if name=='session.git.adopt':
         from cab_platform.session_git import adopt_files
         return adopt_files(actor,data)
@@ -933,6 +967,9 @@ def command(request,body:Command):
         if name=='terminal.git.authorize':return authorize(actor,data)
         current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
         return view(current)
+    if name=='session.delivery.select_version':
+        from cab_platform.session_delivery import select_delivery_version
+        return select_delivery_version(actor,data)
     if name=='session.delivery.policy':
         from cab_platform.session_delivery import configure_delivery_policy
         return configure_delivery_policy(actor,data)
@@ -949,7 +986,8 @@ def command(request,body:Command):
         commands.require(not data,'session-git-fields-invalid',400)
         from .connectors import current_worker_run
         current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True)
-        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id}
+        from cab_platform.session_delivery import version_policy
+        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id,'version_policy':version_policy(current)}
     if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session

@@ -18,6 +18,50 @@ def version_tuple(value):
     return tuple(int(part) for part in value.split('.'))
 
 
+
+def version_authority(actor,run):
+    """L'orchestrateur choisit en piloté, le codeur choisit en direct."""
+    expected=run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id
+    require(actor.active and actor.pk==expected,'session-delivery-version-authority-required',403)
+    return expected
+
+
+def version_policy(run):
+    from .project_metadata import read_metadata
+    values=read_metadata(run.project.root).get('values',{})
+    current=values.get('PROJECT_VERSION','')
+    parts=version_tuple(current)
+    return {'current_version':current,'numeric_components':len(parts),'selected_by':'orchestrator' if run.mode=='piloted' else 'coding-agent','authority':run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id,'developer_version_overrides':True,'ask_developer_when_missing':False,'prefix':''}
+
+
+def select_delivery_version(actor,data):
+    from django.db import transaction
+    from .core import commands as c
+    from .core.models import Event,GitDelivery
+    require(set(data)=={'project_id','run_id','version'},'session-delivery-fields-invalid',400)
+    version_tuple(data['version'])
+    with transaction.atomic():
+        run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+        authority=version_authority(actor,run)
+        previous=Event.objects.filter(run=run,kind='delivery-version-selected').order_by('-pk').first()
+        if previous and previous.data['version']==data['version']:return previous.data
+        c.working(run)
+        require(c.no_pending(run) and not GitDelivery.objects.filter(run=run).exists(),'session-delivery-version-selection-protected',409)
+        policy=version_policy(run)
+        require(version_tuple(data['version'])>version_tuple(policy['current_version']),'session-delivery-version-not-new',409)
+        receipt={'version':data['version'],'previous_version':policy['current_version'],'authority':authority,'selected_by':policy['selected_by'],'mode':run.mode}
+        c.event(run,'delivery-version-selected',receipt)
+        return receipt
+
+
+def delivery_version_selection(actor,run,version):
+    if run.mode=='direct':return select_delivery_version(actor,{'project_id':run.project_id,'run_id':run.run_id,'version':version})
+    from .core.models import Event
+    selected=Event.objects.filter(run=run,kind='delivery-version-selected').order_by('-pk').first()
+    require(selected is not None and selected.data.get('version')==version and selected.data.get('authority')==run.mandate.get('orchestrator_id'),'session-delivery-orchestrator-version-required',403)
+    return selected.data
+
+
 def replace_version(raw, version):
     """Remplace seulement PROJECT_VERSION ; les autres octets sont conservés."""
     version_tuple(version)
@@ -853,6 +897,8 @@ def _publish_delivery(delivery_id):
         project=Project.objects.select_for_update().get(pk=project_id)
         delivery=GitDelivery.objects.get(pk=delivery_id)
         view=_delivery_view(delivery)
+        from .notifications import delivery_notification
+        delivery_notification(delivery,view)
         snapshot=dict(project.public_metadata or {})
         if snapshot.get('git_delivery')!=view:
             snapshot['git_delivery']=view
@@ -915,6 +961,7 @@ def start_delivery(actor, run, version, connector_id):
     existing=GitDelivery.objects.filter(run=run,version=version).first()
     if existing is not None:
         return delivery_status(actor,run,version,connector_id)
+    selection=delivery_version_selection(actor,run,version)
     working(run)
     require(no_pending(run),'session-git-effect-unresolved',409)
     contract=FinalizationPlan.objects.filter(run=run).first()
@@ -938,6 +985,7 @@ def start_delivery(actor, run, version, connector_id):
     require(any(rule.get('kind')=='publication' and rule.get('producer')==plan['evidence_producer'] for rule in contract.policy.get('requirements',[])),'session-delivery-producer-rule-missing',409)
     if plan['debian'] or plan['docker']:
         require(BUILD_STRATEGY=='working-tree','session-delivery-build-policy-unavailable',409)
+    plan['version_selection']=selection
     plan['source_revision']=current_revision
     plan['git']=git_plan
     executor=process_identity(os.getpid())

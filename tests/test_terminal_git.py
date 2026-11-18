@@ -64,6 +64,8 @@ class TerminalGitTests(unittest.TestCase):
         self.assertEqual(first,second);self.assertTrue(first['verified']);self.assertEqual(sends.call_count,2)
         self.assertEqual(len(verbs),count)
         self.assertEqual(sum(args[0]=='commit-tree' for args,_ in verbs),1)
+        commit_args=next(args for args,_ in verbs if args[0]=='commit-tree')
+        self.assertEqual(commit_args[-2:],('-m',current.change))
         self.assertEqual(row.state,'COMPLETED')
         self.assertEqual(first['tag'],'3.2.17');self.assertTrue(first['tag_moved'])
         if branch=='BLOQUÉ':self.assertIn('openspec/changes/example/BLOCKERS.md',first['documents'])

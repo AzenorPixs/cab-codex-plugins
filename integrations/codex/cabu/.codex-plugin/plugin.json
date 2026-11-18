@@ -1,6 +1,6 @@
 {
   "name": "CABU",
-  "version": "3.2.17",
+  "version": "3.2.18",
   "description": "Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.",
   "author": {
     "name": "CAB"

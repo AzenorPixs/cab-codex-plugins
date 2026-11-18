@@ -609,3 +609,28 @@ class TerminalGitCommit(models.Model):
     created=models.DateTimeField(auto_now_add=True)
     updated=models.DateTimeField(auto_now=True)
     class Meta:db_table='terminal_git_commits'
+
+
+class Notification(models.Model):
+    id=models.UUIDField(primary_key=True,editable=False)
+    project=models.ForeignKey(Project,null=True,on_delete=models.SET_NULL)
+    sender=models.CharField(max_length=300)
+    title=models.CharField(max_length=300)
+    body=models.TextField()
+    kind=models.CharField(max_length=16,default='message')
+    choices=models.JSONField(default=list)
+    fingerprint=models.CharField(max_length=64)
+    read_at=models.DateTimeField(null=True)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='cab_notifications'
+
+
+class NotificationReceipt(models.Model):
+    id=models.UUIDField(primary_key=True,editable=False)
+    state=models.CharField(max_length=16)
+    fingerprint=models.CharField(max_length=64)
+    choice=models.CharField(max_length=100,blank=True)
+    actor=models.ForeignKey(Actor,null=True,on_delete=models.SET_NULL)
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:db_table='cab_notification_receipts'

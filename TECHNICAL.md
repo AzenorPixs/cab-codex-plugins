@@ -1,5 +1,21 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Le service expose la politique de versionnement dans `session.git.context`.
+En direct, le codeur choisit la version et CAB enregistre ce choix à l'admission.
+En piloté, `session.delivery.select_version` exige l'identité de l'orchestrateur
+du RUN ; le moteur refuse un numéro non déclaré ou différent avant tout Git.
+Les reçus de livraison conservent l'autorité et la version choisie.
+
+Le centre administrateur utilise `cab_notifications` et les reçus immuables
+`cab_notification_receipts`. Lectures et réponses sont transactionnelles et
+idempotentes ; les questions ne portent aucune commande exécutable. Le flux
+Electric `/api/v1/sync/notifications` reste authentifié et réservé aux admins.
+`notification.create` crée un message ou une question (`request_id`, `title`,
+`body`, `project_id` facultatif, `kind`, `choices` avec `id`/`label`). Le reçu
+retourne l'`id` corrélé. `notification.receipt` consulte son état READ/ANSWERED
+et la réponse sans recréer la notification. Les réponses sont accessibles au
+producteur CAB autorisé ; leur prise en compte conserve les règles du mandat.
+
 ## Architecture CAB 3.2.8
 
 La version déclarée dans la configuration CAB est projetée dans PostgreSQL et diffusée seule par Electric pour l'affichage web ; les autres valeurs du fichier restent privées.

@@ -155,7 +155,7 @@ def complete(run,branch,source_path):
         values=(current.project.public_metadata or {}).get('values',{});name=values.get('GIT_USER_NAME','');mail=values.get('GIT_USER_EMAIL','')
         c.require(name and mail and not any(char in name+mail for char in '\n\0'),'project-git-identity-missing',409)
         identity_env={**env,'GIT_AUTHOR_NAME':name,'GIT_AUTHOR_EMAIL':mail,'GIT_COMMITTER_NAME':name,'GIT_COMMITTER_EMAIL':mail}
-        created=_git(current.project,options,identity_env,'commit-tree',tree.stdout.decode().strip(),'-p',head,'-m','Clôture de session : statistiques'+(' et dépendances' if branch=='BLOQUÉ' else ''))
+        created=_git(current.project,options,identity_env,'commit-tree',tree.stdout.decode().strip(),'-p',head,'-m',current.change)
         commit=created.stdout.decode('ascii','strict').strip();c.require(created.returncode==0 and OID.fullmatch(commit),'closure-git-commit-invalid',409)
         ident=_git(current.project,options,identity_env,'var','GIT_COMMITTER_IDENT')
         c.require(ident.returncode==0 and bool(ident.stdout.strip()) and b'\n' not in ident.stdout.strip(),'closure-git-tag-invalid',409)

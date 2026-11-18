@@ -74,8 +74,13 @@ def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths
     return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization})
 @public_tool()
 def session_delivery_start(version:str)->dict:
-    """Lance la livraison autorisée du RUN lié à cette connexion, avec cette seule version."""
+    """Lance la livraison CAB avec la version choisie par le codeur direct ou déclarée par son orchestrateur."""
     return client().command('session.delivery.start',{'version':version})
+
+@public_tool()
+def session_delivery_select_version(project_id:str,run_id:str,version:str)->dict:
+    """Déclare la version choisie : orchestrateur en piloté, codeur en direct ; sans question systématique au développeur."""
+    return client().command('session.delivery.select_version',{'project_id':project_id,'run_id':run_id,'version':version})
 
 @public_tool()
 def session_delivery_status(version:str)->dict:

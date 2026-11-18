@@ -3,9 +3,22 @@ name: cicd
 description: Déclencher la CI/CD autorisée du projet via CAB avec une version, puis suivre le même reçu de livraison.
 ---
 
-# CICD 3.2.17
+# CICD 3.2.18
 
-Utiliser ce skill pour une demande de livraison CI/CD par CAB, avec la version fournie par le développeur. Si la version manque, demander uniquement cette valeur. Le RUN et le projet proviennent du rattachement natif vérifié de la connexion MCP ; ne pas inventer leur identité.
+Utiliser ce skill pour une demande de livraison CI/CD par CAB. En session directe,
+le LLM de codage choisit et transmet la nouvelle version avec discernement : lire
+PROJECT_VERSION et les conventions du projet, puis adapter l'incrément au
+périmètre validé. Ne pas demander systématiquement un numéro au développeur.
+Une version explicitement imposée par le développeur prime sur ce choix.
+
+En session pilotée, cette responsabilité appartient à l'orchestrateur : il
+déclare son choix par `session_delivery_select_version(project_id,run_id,version)`
+avant la livraison et le transmet au codeur. Le codeur utilise exactement cette
+version ; CAB refuse une version choisie unilatéralement par le codeur piloté.
+En direct, cette déclaration est possible et CAB la réalise aussi à l'admission
+de `session_delivery_start`. `session_git_context` expose `version_policy` avec
+version courante, format numérique et autorité. Le RUN et le projet proviennent
+du rattachement natif vérifié ; ne pas inventer leur identité.
 
 Vérifier que le catalogue MCP fournit `session_delivery_start` et `session_delivery_status`. Si ces outils manquent, signaler que le moteur ou le connecteur chargé ne propose pas encore ce parcours ; ne pas remplacer leur absence par des commandes Git ou un CI/CD DIU global.
 

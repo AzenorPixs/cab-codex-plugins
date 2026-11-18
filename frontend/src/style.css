@@ -139,3 +139,18 @@ body{zoom:var(--responsive-layout-scale,1)}
 .forge-edit.forge-push-action{color:var(--accent-text)}
 .forge-edit.forge-sync-action{color:#2169b2}
 :root[data-theme=dark] .forge-edit.forge-sync-action{color:#75baff}
+
+/* Centre de notifications global, aperçu conservé uniquement pendant l'ouverture. */
+.notification-bell{position:relative;flex-shrink:0}
+.notification-bell svg{width:1.35rem;height:1.35rem;transform-origin:50% 15%}
+.notification-bell.has-unread svg{animation:cab-bell 1.4s ease-in-out infinite}
+.notification-count{position:absolute;top:-.2rem;right:-.25rem;min-width:1rem;border-radius:1rem;padding:.05rem .2rem;background:#b51b32;color:#fff;font-size:.65rem;line-height:1.2}
+@keyframes cab-bell{0%,50%,100%{transform:rotate(0)}10%,30%{transform:rotate(18deg)}20%,40%{transform:rotate(-18deg)}}
+.notifications-dialog{width:min(760px,calc(100vw - 2rem));max-width:calc(100vw - 2rem);max-height:85dvh;box-sizing:border-box;overflow-y:auto;overflow-x:hidden}
+.notification-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;border-bottom:1px solid var(--border,#626976);padding-bottom:.6rem}
+.notification-heading h2{margin:0}.notification-heading button{font-size:1.4rem;padding:.15rem .65rem}
+.notification-message{min-width:0;padding:1rem 0}.notification-message h3{margin:.3rem 0;overflow-wrap:anywhere}
+.notification-sender{font-weight:700;margin:0}.notification-message time{font-size:.8em;opacity:.75}
+.notification-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;margin:1rem 0}
+.notification-choices{display:flex;flex-wrap:wrap;gap:.6rem}.notification-navigation{display:flex;justify-content:center;align-items:center;gap:1rem;border-top:1px solid var(--border,#626976);padding-top:.8rem}
+@media(prefers-reduced-motion:reduce){.notification-bell.has-unread svg{animation:none}}

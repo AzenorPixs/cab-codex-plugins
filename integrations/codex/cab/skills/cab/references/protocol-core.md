@@ -53,3 +53,10 @@ Versions du projet, tags de version Git, tags et versions de release sont
 produits sans v. Le défaut est PROJECT_VERSION ; une nouvelle version transmise
 prime sur ce défaut. La compatibilité de lecture des anciens tags ne constitue
 pas une autorisation d'en créer de nouveaux avec ce préfixe.
+
+Pour une nouvelle livraison, la sélection du numéro incombe au LLM de codage
+en direct et à l'orchestrateur en piloté, suivant le versionnement du projet.
+Ne pas redemander au développeur une version absente : exercer ce discernement,
+sauf choix contradictoire réellement non résolu. Une version imposée prime.
+En piloté, l'orchestrateur utilise `session_delivery_select_version` ; le service
+refuse la livraison du codeur sans cette déclaration ou avec un autre numéro.

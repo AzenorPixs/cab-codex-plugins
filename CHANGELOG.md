@@ -2469,3 +2469,13 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - Normalisation de l'arborescence du plugin Codex.
 - Déplacement de la marketplace Codex et du plugin à la racine du dépôt pour la distribution GitHub privée.
 - Réparation du contrat HTTP du contrôleur local.
+# 3.2.18
+
+- Centre de notifications global PostgreSQL/Electric avec cloche animée,
+  navigation, expéditeur projet, purge à la lecture et questions interactives.
+- Déplacement du journal CI/CD du bloc Git vers les notifications ; reçus de
+  réponses durables et réponses idempotentes sans commande implicite.
+- Message du commit final de clôture égal au nom du change concerné.
+- Choix de version confié au codeur direct ou à l'orchestrateur en piloté,
+  avec contrôle de l'autorité par le service et protocole CICD harmonisé.
+

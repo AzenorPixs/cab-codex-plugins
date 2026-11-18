@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.17
+# CAB 3.2.18
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -57,8 +57,12 @@ livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
 
-Pour une CI/CD autorisée, charger le skill CICD : transmettre seulement la
-version à `session_delivery_start`, puis consulter `session_delivery_status`
+Pour une CI/CD autorisée, charger le skill CICD. En direct, le codeur choisit
+avec discernement une version cohérente avec le projet sans la redemander au
+développeur ; une version explicitement imposée reste prioritaire. En piloté,
+l'orchestrateur choisit et déclare la version par `session_delivery_select_version`
+puis la transmet au codeur. CAB contrôle cette autorité dans son service.
+Transmettre cette version à `session_delivery_start`, puis consulter `session_delivery_status`
 sur cette même version. CAB met à jour PROJECT_VERSION, réalise commit, tag et
 envois, puis les builds DIU activés sur le projet courant. Une décision de
 report des releases appartient au RUN et à sa version, sans devenir un défaut

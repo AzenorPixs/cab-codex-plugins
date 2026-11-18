@@ -1,5 +1,10 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Le centre de notifications de la top barre remplace le journal de livraison du
+bloc Git. PostgreSQL conserve les messages et questions ; Electric actualise la
+cloche. L'expéditeur est le projet concerné, ou CAB pour les messages globaux.
+Les messages sont consommés à la lecture, les questions restent jusqu'à réponse.
+
 ## Plateforme CAB 3.2.8
 
 La page Agents présente un catalogue latéral issu de PostgreSQL ; les états des agents et de leurs connexions restent des observations courantes.

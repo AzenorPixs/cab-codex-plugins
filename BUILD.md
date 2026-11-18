@@ -1,5 +1,11 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La migration additive 0038 crée `cab_notifications` et
+`cab_notification_receipts`. Sauvegarder avant migration. L'installation et la
+mise à niveau publient uniquement la table des notifications dans Electric ;
+les reçus de décision restent hors de son flux. La migration inverse supprime
+les notifications et reçus : elle nécessite un choix explicite de restauration.
+
 ## Livraison CAB — Debian et clients légers
 
 Le paquet Debian dépend de `inotify-tools`, qui fournit les outils de surveillance inotify. CAB utilise également l’API inotify du noyau directement.

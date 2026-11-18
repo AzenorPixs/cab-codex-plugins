@@ -29,13 +29,15 @@ def sync_agent_users(request):return sync_projection(request,'agent_users')
 
 def sync_cab_version(request):return sync_projection(request,'cab_version_projection')
 
+def sync_notifications(request):return sync_projection(request,'cab_notifications')
+
 def sync_interface_preferences(request):return sync_projection(request,'interface_preferences_projection')
 
 def sync_projection(request,table):
     try:
         actor=None if table in ('cab_version_projection','interface_preferences_projection') else principal(request)
         if table in ('cab_version_projection','interface_preferences_projection'):project=None
-        elif table in ('agents','agent_users'):
+        elif table in ('agents','agent_users','cab_notifications'):
             if actor.role!='admin':raise Refused('administrator-required',403)
             if table=='agent_users' and request.GET.get('agent') not in ('codex_desktop','codex','opencode'):raise Refused('agent-not-found',404)
             project=None
@@ -46,7 +48,7 @@ def sync_projection(request,table):
     if table in ('cab_version_projection','interface_preferences_projection') and (not cfg.get('initialized') or not cfg.get('electric_secret')):return JsonResponse({'error':'sync-unavailable'},status=503)
     # L'identifiant est encodé comme littéral SQL même pour un catalogue importé.
     if table in ('cab_version_projection','interface_preferences_projection'):where='id = 1'
-    elif table=='agents':where='true'
+    elif table in ('agents','cab_notifications'):where='true'
     elif table=='agent_users':where="agent_id = '"+request.GET['agent']+"'"
     elif table=='mcp_connector_projection':where='true' if actor.role=='admin' else 'uid = '+str(actor.uid)
     else:
@@ -55,6 +57,7 @@ def sync_projection(request,table):
     params.update(table=table,where=where,secret=cfg['electric_secret'])
     if table=='project_metadata_projection':params['columns']='id,public_metadata'
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'
+    if table=='cab_notifications':params['columns']='id,project_id,sender,title,body,kind,choices,read_at,created,updated'
     if table=='agents':params['columns']='id,label,position,installed,running,local_version,mcp_connected,mcp_versions'
     if table=='agent_users':params['columns']='id,agent_id,username,home,config_present,config_path,mcp_declared,config_error,reconcile_state'
     if table=='cab_version_projection':params['columns']='id,version,git_version'
