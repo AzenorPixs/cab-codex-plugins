@@ -1,5 +1,13 @@
 # Historique des versions
 
+## 3.2.17 — 2026-11-18
+
+- Clôture achevée ou bloquée retenue jusqu'au dernier commit des statistiques et de BLOCKERS.md éventuel, puis confirmation des envois Git.
+- Tag de version déplacé automatiquement par le moteur vers le commit terminal, avec protection des références locales et distantes.
+- Indexation immédiate des rapports du change et du global, et de BLOCKERS.md attribuable au RUN.
+- Règle centrale sans préfixe v pour les versions du projet, les tags Git et les métadonnées de release ; défaut égal à PROJECT_VERSION.
+- CABU recherche les releases sans construire de préfixe et conserve la lecture compatible des publications historiques.
+
 ## 3.2.16 — 2026-11-18
 
 - Instantané Git PostgreSQL au démarrage des nouveaux changes, réservations de fichiers et index isolés par session conservés après archivage.

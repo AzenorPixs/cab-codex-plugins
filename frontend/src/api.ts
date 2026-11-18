@@ -47,6 +47,8 @@ const messages:Record<string,string>={
   'project-git-tag-exists':'Ce tag existe déjà : choisissez un autre nom.',
   'project-git-tag-create-failed':'Le commit a été créé, mais la création du tag a échoué.',
   'project-git-reservations-active':'Des fichiers sont réservés par une session de codage. Utilisez son parcours CAB ou attendez leur libération.',
+  'version-without-prefix-required':'Saisissez une version sans préfixe « v ».',
+  'version-tag-prefix-forbidden':'Un tag de version doit être écrit sans préfixe « v ».',
   'project-git-commit-input-invalid':'Le tag ou la description est invalide.',
   'project-git-identity-missing':'Renseignez le nom et l’adresse Git du projet avant le commit.',
   'project-git-commit-failed':'Le commit Git a échoué. Vérifiez l’état et les modifications indexées.',

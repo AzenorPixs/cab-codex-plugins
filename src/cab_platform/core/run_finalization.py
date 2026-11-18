@@ -6,13 +6,13 @@ from . import commands as c,run_evidence as evidence
 from .models import EvidenceProducer,FinalizationPlan,Operation,Run
 from cab_platform.finalization_contract import next_actions
 
-def dossier(run,plan):
+def dossier(run,plan,*,allow_terminal_git=False):
     from .run_lifecycle import archive_state,guard
     missing=[];selected=[];archive=None;boundary=False
     if not plan.policy:return {'missing':['finalization-contract-required'],'proofs':[],'boundary':False}
     c.require(c.digest(plan.policy)==plan.digest,'finalization-policy-divergent')
     try:
-        guard(run,allow_measurement=True);c.require(not run.suspension,'run-suspended')
+        guard(run,allow_measurement=True,allow_terminal_git=allow_terminal_git);c.require(not run.suspension,'run-suspended')
         c.require(run.actor.active,'finalization-owner-inactive')
     except c.Refused as error:missing.append(error.code)
     if plan.policy['nature']=='development':
@@ -55,10 +55,13 @@ def dossier(run,plan):
 def view(run,plan=None):
     plan=plan or FinalizationPlan.objects.get(run=run)
     if run.state=='CLOSED' and plan.receipt:return {'phase':'CLOSED','missing':[],'next_actions':[],'policy_digest':plan.digest,'receipt':plan.receipt}
+    if run.state=='BLOCKED' and run.review.get('closure'):
+        return {'phase':'BLOCKED','missing':['dependency-unsatisfied'],'next_actions':[],'policy_digest':plan.digest,'receipt':run.review['closure']}
     try:result=dossier(run,plan)
     except (c.Refused,OSError,ValueError) as error:result={'missing':[getattr(error,'code','finalization-source-unavailable')],'proofs':[],'boundary':False}
     pending=list(run.operation_set.exclude(state__in=c.TERMINAL).values('request_id','state'))
-    return {**result,'next_actions':next_actions(result['missing'],plan.policy),'pending_operations':pending,'check_revisions':plan.check_revisions,'phase':'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
+    from cab_platform.closure_git import view as terminal_view
+    return {**result,'terminal_git':terminal_view(run),'next_actions':next_actions(result['missing'],plan.policy),'pending_operations':pending,'check_revisions':plan.check_revisions,'phase':'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
 
 def prepare_review(run,plan,result):
     tests=[]
@@ -89,7 +92,7 @@ def process(run_id):
         run=Run.objects.select_for_update().select_related('actor','project').get(pk=run_id)
         plan=FinalizationPlan.objects.select_for_update().get(run=run)
         if run.state in ('CLOSED','BLOCKED'):return
-        result=dossier(run,plan)
+        result=dossier(run,plan,allow_terminal_git=run.state=='FINALIZING')
         if result['missing']:
             changed=plan.missing!=result['missing'] or plan.phase!='WAITING'
             plan.phase='WAITING';plan.missing=result['missing']
@@ -116,13 +119,20 @@ def process(run_id):
         report=source.path+'/STATISTICS.md'
         from cab_platform.statistics_documents import read_source,sha
         raw,_=read_source(Path(run.project.root),Path(run.project.root)/report);report_sha=sha(raw)
+    from cab_platform.closure_git import complete,enabled
+    if source is None and enabled(run):
+        FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=['closure-report-required']);return
+    try:terminal=complete(run,'TERMINÉ',source.path) if source else None
+    except c.Refused as error:
+        FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);return
+    if terminal and report:report_sha=terminal['documents'][report]['sha256']
     with transaction.atomic():
         run=Run.objects.select_for_update().select_related('actor','project').get(pk=run_id)
         plan=FinalizationPlan.objects.select_for_update().get(run=run)
         if plan.receipt:return plan.receipt
-        current=dossier(run,plan)
+        current=dossier(run,plan,allow_terminal_git=True)
         c.require(not current['missing'] and current['proofs']==result['proofs'] and current['source_revision']==result['source_revision'],'finalization-proof-changed')
-        receipt={'receipt_id':'POLICY-FINALIZE-'+str(run.pk),'kind':'policy','branch':'TERMINÉ','policy_digest':plan.digest,'nature':plan.policy['nature'],'proofs':current['proofs'],'source_revision':current['source_revision'],'artifact_groups':current['artifact_groups'],'report':report,'sha256':report_sha,'at':timezone.now().isoformat(),'authority':'cab-policy','llm_submission_required':False}
+        receipt={'receipt_id':'POLICY-FINALIZE-'+str(run.pk),'kind':'policy','branch':'TERMINÉ','policy_digest':plan.digest,'nature':plan.policy['nature'],'proofs':current['proofs'],'source_revision':current['source_revision'],'artifact_groups':current['artifact_groups'],'report':report,'sha256':report_sha,'at':timezone.now().isoformat(),'authority':'cab-policy','llm_submission_required':False,'terminal_git':terminal}
         plan.receipt=receipt;plan.phase='CLOSED';plan.missing=[];plan.save()
         run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=11;run.phase='CLOSED';run.save(update_fields=['review','state','stage','phase','updated'])
         c.event(run,'run-closed',receipt)

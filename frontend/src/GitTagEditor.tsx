@@ -3,15 +3,15 @@ import {useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
 type Tag={name:string;description:string;object_id:string;commit:string;annotated:boolean}
-export function GitTagEditor({projectId,name,commit}:{projectId:string;name:string;commit?:string}){
+export function GitTagEditor({projectId,name,commit,defaultTag=''}:{projectId:string;name:string;commit?:string;defaultTag?:string}){
   const [open,setOpen]=useState(false);const [tag,setTag]=useState<Tag|null>(null);const [newName,setNewName]=useState('');const [description,setDescription]=useState('');const [busy,setBusy]=useState(false);const [error,setError]=useState('');const dialog=useRef<HTMLDialogElement>(null);const client=useQueryClient();const creating=!name
   useEffect(()=>{
     if(!open){dialog.current?.close();return}
     if(!dialog.current?.open)dialog.current?.showModal();let active=true;setTag(null);setError('')
-    if(creating){setTag({name:'',description:'',object_id:'',commit:commit||'',annotated:false});setNewName('');setDescription('')}
+    if(creating){setTag({name:'',description:'',object_id:'',commit:commit||'',annotated:false});setNewName(defaultTag);setDescription('')}
     else api<Tag>(`projects/${encodeURIComponent(projectId)}/git/tag?name=${encodeURIComponent(name)}`).then(value=>{if(active){setTag(value);setNewName(value.name);setDescription(value.description)}}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Lecture du tag indisponible.')})
     return ()=>{active=false}
-  },[open,projectId,name,commit,creating])
+  },[open,projectId,name,commit,creating,defaultTag])
   const save=async(event:FormEvent)=>{event.preventDefault();if(!tag)return;if(creating&&!newName){setError(description?'Renseignez un tag pour pouvoir ajouter une description.':'Renseignez un tag pour pouvoir le créer.');return}setBusy(true);setError('');try{if(creating)await api(`projects/${encodeURIComponent(projectId)}/git/tag/create`,{name:newName,description,expected_commit:tag.commit});else await api(`projects/${encodeURIComponent(projectId)}/git/tag`,{name:tag.name,new_name:newName,description,expected_oid:tag.object_id,expected_commit:tag.commit});await client.invalidateQueries({queryKey:['projects']});setOpen(false)}catch(reason){setError(reason instanceof Error?reason.message:'Modification du tag indisponible.')}finally{setBusy(false)}}
   const remove=async()=>{setBusy(true);setError('');try{const current=await api<Tag>(`projects/${encodeURIComponent(projectId)}/git/tag?name=${encodeURIComponent(name)}`);await api(`projects/${encodeURIComponent(projectId)}/git/tag`,{name:current.name,new_name:'',description:'',expected_oid:current.object_id,expected_commit:current.commit});await client.invalidateQueries({queryKey:['projects']})}catch(reason){setError(reason instanceof Error?reason.message:'Suppression du tag indisponible.')}finally{setBusy(false)}}
   const title=creating?'Ajouter un tag Git':'Modifier le tag Git'

@@ -23,9 +23,9 @@ def archive_state(run):
     return str(path.relative_to(root)),observed
 
 
-def guard(run,*,allow_measurement=False):
+def guard(run,*,allow_measurement=False,allow_terminal_git=False):
     c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
-    c.require(c.no_pending(run) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
+    c.require(c.no_pending(run,terminal_git=allow_terminal_git) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
     c.require(allow_measurement or not MeasurementPeriod.objects.filter(run=run,ended__isnull=True).exists(),'closure-measurement-open')
     requested={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-requested')}
     decided={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-decided')}

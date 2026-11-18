@@ -25,7 +25,10 @@ def public_value(key,value):
     if key=='PROJECT_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&:/@-]+',value))
     if key=='GIT_USER_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&/@-]+',value))
     if key=='PROJECT_TYPE':return bool(re.fullmatch(r'[\w .,+#()/-]+',value))
-    if key=='PROJECT_VERSION':return bool(re.fullmatch(r'[\w.+-]+',value))
+    if key=='PROJECT_VERSION':
+        from .versioning import canonical_version,VersionError
+        try:canonical_version(value);return True
+        except VersionError:return False
     return bool(re.fullmatch(r'[\w./@+-]+',value))
 
 def read_metadata(root):
@@ -47,6 +50,10 @@ def read_metadata(root):
                 values.pop(key,None);seen.add(key);invalid=True;continue
             seen.add(key);value=next(part for part in match.groups()[1:] if part is not None).strip()
             if not value:continue
+            if key=='PROJECT_VERSION':
+                from .versioning import historical_version,VersionError
+                try:value=historical_version(value)
+                except VersionError:invalid=True;continue
             if public_value(key,value):values[key]=value
             else:invalid=True
         return {'state':'partial' if invalid else 'ready','values':values}

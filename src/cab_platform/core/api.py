@@ -483,7 +483,7 @@ def refresh_project_git_status(request,project_id:str):
     return {'git_status':refresh_status(project.pk)}
 
 class GitCommitInput(Schema):
-    tag:str = ''
+    tag:str|None = None
     description:str = ''
     expected_tag:str = ''
     request_id:str = ''
@@ -928,6 +928,11 @@ def command(request,body:Command):
             return delivery_status(current.actor,current,data['version'],None,administrator=actor)
         current,connector_id=administrative_run(actor,data)
         return start_delivery(current.actor,current,data['version'],connector_id)
+    if name in ('terminal.git.authorize','terminal.git.status'):
+        from cab_platform.closure_git import authorize,view
+        if name=='terminal.git.authorize':return authorize(actor,data)
+        current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
+        return view(current)
     if name=='session.delivery.policy':
         from cab_platform.session_delivery import configure_delivery_policy
         return configure_delivery_policy(actor,data)

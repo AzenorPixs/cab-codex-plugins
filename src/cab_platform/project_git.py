@@ -147,10 +147,15 @@ def commit_progress(project_id, request_id, stage):
         ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
 
 
-def commit_local(project_id, tag="", description="", expected_tag="", request_id="", console=None):
+def commit_local(project_id, tag=None, description="", expected_tag="", request_id="", console=None):
     """Enregistre les modifications locales et, si demandé, un tag."""
     from django.db import connection
     project = Project.objects.get(pk=project_id)
+    from .versioning import version_tag,validate_new_tag,VersionError
+    try:
+        if tag is None:tag=version_tag(project_version=(project.public_metadata or {}).get('values',{}).get('PROJECT_VERSION'))
+        validate_new_tag(tag)
+    except VersionError as error:raise Refused(str(error),400) from None
     require(isinstance(request_id, str) and len(request_id) <= 80 and all(c in '0123456789abcdef-' for c in request_id), 'project-git-commit-input-invalid', 400)
     require(project.creation_state == 'READY', 'project-git-unavailable', 409)
     require(isinstance(tag, str) and len(tag) <= 200 and not tag.startswith('-') and isinstance(description, str) and len(description) <= 2000 and '\0' not in description, 'project-git-commit-input-invalid', 400)

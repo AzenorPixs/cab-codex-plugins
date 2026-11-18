@@ -45,8 +45,9 @@ def check():
         release=json.loads(raw)
         if not isinstance(release,dict):raise ValueError('release-invalid')
         tag=release.get('tag_name','')
-        if not isinstance(tag,str) or not tag.startswith('v') or not version_tuple(tag[1:]) or release.get('draft') or release.get('prerelease'):raise ValueError('release-invalid')
-        version=tag[1:]
+        from .versioning import historical_version
+        version=historical_version(tag)
+        if not version_tuple(version) or release.get('draft') or release.get('prerelease'):raise ValueError('release-invalid')
     except (OSError,ValueError,TypeError):error='github-version-check-unavailable'
     with transaction.atomic():
         cached=UpdateAvailability.objects.select_for_update().get(pk=1)

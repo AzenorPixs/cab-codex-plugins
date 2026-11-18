@@ -40,27 +40,45 @@ def global_index_matches(project,expected):
     return result.returncode==0 and documents.sha(result.stdout)==expected
 
 
-def stage_global(job,path,expected):
-    """Indexe uniquement le global CAB avant de libérer son écrivain."""
+def document_index_matches(project,relative,expected):
+    from cab_platform.git_commit_remove import context,run
+    options,env=context(project)
+    result=run(project,options,env,'show',':'+relative)
+    return result.returncode==0 and documents.sha(result.stdout)==expected
+
+
+def stage_document(job,path,expected):
     from cab_platform.project_git import probe
     from cab_platform.git_commit_remove import context,run
-    project=job.project
-    commands.require(Path(path)==Path(project.root)/'STATISTICS.md','statistics-target-invalid')
-    available=probe(project)
-    commands.require(available is not None,'statistics-git-unavailable')
-    receipt={'path':'STATISTICS.md','sha256':expected,'state':'SKIPPED' if available==0 else 'RUNNING'}
-    job.result={**job.result,'global_index':receipt};job.save(update_fields=['result','updated'])
+    project=job.project;root=Path(project.root);path=Path(path)
+    commands.require(path.is_relative_to(root),'statistics-target-invalid')
+    relative=str(path.relative_to(root))
+    commands.require(relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name in ('STATISTICS.md','BLOCKERS.md'),'statistics-target-invalid')
+    available=probe(project);commands.require(available is not None,'statistics-git-unavailable')
+    receipt={'path':relative,'sha256':expected,'state':'SKIPPED' if available==0 else 'RUNNING'}
+    indexed={**job.result.get('indexed_documents',{}),relative:receipt}
+    job.result={**job.result,'indexed_documents':indexed}
+    if relative=='STATISTICS.md':job.result['global_index']=receipt
+    job.save(update_fields=['result','updated'])
     if available==0:return
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     try:
         commands.require(file_hash(project,path)==expected,'statistics-global-index-divergent')
         options,env=context(project)
-        result=run(project,options,{**env,'GIT_LITERAL_PATHSPECS':'1'},'add','--','STATISTICS.md')
+        result=run(project,options,{**env,'GIT_LITERAL_PATHSPECS':'1'},'add','--',relative)
         commands.require(result.returncode==0,'statistics-global-index-unconfirmed')
-        commands.require(file_hash(project,path)==expected and global_index_matches(project,expected),'statistics-global-index-divergent')
-        job.result={**job.result,'global_index':{**receipt,'state':'COMPLETED'}};job.save(update_fields=['result','updated'])
+        commands.require(file_hash(project,path)==expected and document_index_matches(project,relative,expected),'statistics-global-index-divergent')
+        receipt={**receipt,'state':'COMPLETED'}
+        job.result={**job.result,'indexed_documents':{**job.result.get('indexed_documents',{}),relative:receipt}}
+        if relative=='STATISTICS.md':job.result['global_index']=receipt
+        job.save(update_fields=['result','updated'])
     finally:
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def stage_global(job,path,expected):
+    commands.require(Path(path)==Path(job.project.root)/'STATISTICS.md','statistics-target-invalid')
+    return stage_document(job,path,expected)
 
 
 def recover_lock(lock):
@@ -76,6 +94,9 @@ def recover_lock(lock):
     if indexed and indexed.get('state') not in ('COMPLETED','SKIPPED'):
         if file_hash(job.project,Path(job.project.root)/'STATISTICS.md')!=indexed.get('sha256') or not global_index_matches(job.project,indexed.get('sha256')):raise commands.Refused('statistics-effect-unknown')
         job.result={**job.result,'global_index':{**indexed,'state':'COMPLETED','recovered':True}}
+    for relative,item in job.result.get('indexed_documents',{}).items():
+        if item.get('state') in ('PENDING','RUNNING'):
+            if file_hash(job.project,Path(job.project.root)/relative)!=item.get('sha256') or not document_index_matches(job.project,relative,item.get('sha256')):raise commands.Refused('statistics-effect-unknown')
     job.state='FAILED';job.result={**job.result,'recovered':'writer-stopped-files-verified'};job.save();lock.owner=None;lock.save()
 
 @contextmanager
@@ -97,6 +118,8 @@ def guarded(project,action,request_id):
     except (OSError,ValueError,commands.Refused,subprocess.SubprocessError) as error:
         known=getattr(error,'code','') in {'statistics-local-conflict','statistics-target-invalid','statistics-target-unsafe'} or not job.expected
         job.state='FAILED' if known else 'UNKNOWN';job.result={**job.result,'error':getattr(error,'code',type(error).__name__)};job.save()
+        if any(item.get('state') in ('PENDING','RUNNING') for item in job.result.get('indexed_documents',{}).values()):
+            known=False;job.state='UNKNOWN';job.save(update_fields=['state','updated'])
         if known:StatisticsLock.objects.filter(project=project,owner=job).update(owner=None)
         raise
     else:
@@ -105,7 +128,6 @@ def guarded(project,action,request_id):
     finally:ACTIVE.discard(job.pk)
 
 def write(job,path,content):
-    if Path(path)!=Path(job.project.root)/'STATISTICS.md':return _write_locked(job,path,content)
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     try:return _write_locked(job,path,content)
     finally:
@@ -114,8 +136,12 @@ def write(job,path,content):
 
 def _write_locked(job,path,content):
     project=job.project;root=Path(project.root);path=Path(path);expected=file_hash(project,path);desired=documents.sha(content.encode())
-    if expected==desired:return desired
-    job.expected={**job.expected,str(path):{'before':expected,'after':desired}};job.save(update_fields=['expected','updated'])
+    if expected==desired:
+        stage_document(job,path,desired);return desired
+    relative=str(path.relative_to(root))
+    pending={'path':relative,'sha256':desired,'state':'PENDING'}
+    job.result={**job.result,'indexed_documents':{**job.result.get('indexed_documents',{}),relative:pending}}
+    job.expected={**job.expected,str(path):{'before':expected,'after':desired}};job.save(update_fields=['expected','result','updated'])
     if path==root/'STATISTICS.md':
         job.result={**job.result,'global_index':{'path':'STATISTICS.md','sha256':desired,'state':'PENDING'}};job.save(update_fields=['result','updated'])
     try:info=path.stat();uid=info.st_uid;gid=info.st_gid;mode=info.st_mode&0o777
@@ -132,7 +158,7 @@ def _write_locked(job,path,content):
         if result.get('error') in {'statistics-local-conflict','statistics-target-invalid','statistics-target-unsafe'}:raise commands.Refused(result['error'])
         commands.require(process.returncode==0 and result.get('ok') and result['result']['sha256']==desired,'statistics-publication-unconfirmed')
         commands.require(file_hash(project,path)==desired,'statistics-publication-divergent')
-        if path==root/'STATISTICS.md':stage_global(job,path,desired)
+        stage_document(job,path,desired)
         return desired
     finally:
         if process.poll() is None:process.kill();process.communicate()
@@ -263,6 +289,19 @@ def retire_file_lock(project):
         path.unlink()
     finally:os.close(fd)
 
+def stage_blockers(job):
+    from .models import GitFileReservation
+    for source in ChangeSource.objects.filter(change__project=job.project,present=True).select_related('change'):
+        relative=source.path+'/BLOCKERS.md';path=Path(job.project.root)/relative
+        if not path.is_file():continue
+        owners=list(Run.objects.filter(change_record=source.change,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','ACCEPTED','REVIEW_PENDING'],suspension='',configuration__terminal_git__required=True))
+        reservation=GitFileReservation.objects.filter(project=job.project,path=relative,active=True).select_related('git_index').first()
+        if reservation:owners=[run for run in owners if run.coding_session_id==reservation.git_index.session_id]
+        if len(owners)!=1:continue
+        digest=file_hash(job.project,path)
+        if digest:stage_document(job,path,digest)
+
+
 def sync(project,request_id=None,generate=None,full=False,automatic=False):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
@@ -276,7 +315,14 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False):
         if automatic:
             targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
             targets.update(Change.objects.filter(pk__in=open_before,source_state='archived').values_list('identifier',flat=True))
-        for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():generate_change(job,change)
+        for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():
+            report=generate_change(job,change)
+            if report is not None and report.status=='ready':
+                relative=report.source.path+'/STATISTICS.md'
+                indexed=job.result.get('indexed_documents',{}).get(relative,{})
+                if indexed.get('state')!='COMPLETED' or indexed.get('sha256')!=report.sha256:
+                    stage_document(job,Path(project.root)/relative,report.sha256)
+        stage_blockers(job)
         state=generate_global(job)
         if full or state.next_full_sync is None:
             state.last_full_sync=timezone.now();state.next_full_sync=state.last_full_sync+timedelta(seconds=43200+secrets.randbelow(43201));state.save(update_fields=['last_full_sync','next_full_sync'])

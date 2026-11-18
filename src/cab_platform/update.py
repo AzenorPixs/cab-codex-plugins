@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import re
 from urllib.request import Request,urlopen
+from urllib.error import HTTPError
 from . import __version__
 from .client import ClientError
 from .paths import STATE,atomic_json,private_dir
@@ -24,9 +25,24 @@ def update(package=None,version=None,progress=None):
             if not path.is_file():raise ClientError('debian-package-missing')
         else:
             stage('RESOLVING')
-            endpoint='tags/v'+version if version else 'latest'
+            endpoint='tags/'+version if version else 'latest'
             request=Request('https://api.github.com/repos/AzenorPixs/cab-codex-plugins/releases/'+endpoint,headers={'Accept':'application/vnd.github+json','User-Agent':'CAB/'+__version__})
-            with urlopen(request,timeout=30) as response:release=json.load(response)
+            try:
+                with urlopen(request,timeout=30) as response:release=json.load(response)
+            except HTTPError as error:
+                if error.code!=404 or not version:raise
+                # Relire les noms réellement publiés, sans construire un tag préfixé.
+                from .versioning import historical_version,VersionError
+                listing=Request('https://api.github.com/repos/AzenorPixs/cab-codex-plugins/releases?per_page=100',headers={'Accept':'application/vnd.github+json','User-Agent':'CAB/'+__version__})
+                with urlopen(listing,timeout=30) as response:historical=json.load(response)
+                release=None
+                for candidate in historical if isinstance(historical,list) else []:
+                    if not isinstance(candidate,dict) or candidate.get('draft') or candidate.get('prerelease'):continue
+                    try:matched=historical_version(candidate.get('tag_name'))==version
+                    except VersionError:continue
+                    if matched:release=candidate;break
+                if release is None:raise ClientError('release-version-unavailable')
+
             assets=[a for a in release.get('assets',[]) if a.get('name','').startswith('cab_') and a['name'].endswith('_amd64.deb')]
             if len(assets)!=1:raise ClientError('release-debian-asset-ambiguous')
             asset=assets[0];expected=asset.get('digest','')

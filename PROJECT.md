@@ -1432,3 +1432,8 @@ les opérations au service ; Git et la mise à jour PROJECT_VERSION appartiennen
 builds DIU sur le projet courant et les éventuelles releases différées.
 Le global STATISTICS.md reste une production partagée de CAB, indexée après
 chaque écriture avant libération de sa réservation.
+
+La finalisation des sessions inclut un dernier commit des statistiques et des
+blocages, envoyé et vérifié avant CLOSED ou BLOCKED. CAB y déplace le tag de
+version sans préfixe v. Le service porte cette logique, ses réservations et ses
+reçus ; les skills en décrivent l'usage sans exécuter Git à sa place.

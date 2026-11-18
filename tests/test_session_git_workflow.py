@@ -112,4 +112,6 @@ class DiuBuildTests(unittest.TestCase):
         self.assertEqual(error.exception.code,'session-delivery-diu-execution-unknown')
         spawn.assert_called_once()
 
+from test_terminal_git import TerminalVersionTests,TerminalGitTests
+
 if __name__=='__main__':unittest.main()

@@ -591,3 +591,21 @@ class Maintenance(models.Model):
     state=models.CharField(max_length=24)
     evidence=models.JSONField(default=dict)
     created=models.DateTimeField(auto_now_add=True)
+
+
+class TerminalGitCommit(models.Model):
+    run=models.OneToOneField(Run,null=True,on_delete=models.SET_NULL,related_name='terminal_git')
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    origin=models.JSONField(default=dict)
+    branch=models.CharField(max_length=16)
+    state=models.CharField(max_length=24,default='INTENT')
+    executor=models.JSONField(default=dict)
+    index_path=models.CharField(max_length=1500,blank=True)
+    base_head=models.CharField(max_length=64,blank=True)
+    commit_oid=models.CharField(max_length=64,blank=True)
+    snapshot=models.JSONField(default=dict)
+    remote_plan=models.JSONField(default=list)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='terminal_git_commits'

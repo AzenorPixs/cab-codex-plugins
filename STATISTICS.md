@@ -30688,6 +30688,119 @@ Aucune consultation web documentaire utilisée pour ce change.
 | Activation runtime | Non revendiquée dans ce rapport ; CABU 2.1.62 reste distinct. |
 
 
+## Change `finalize-coding-session-git` — openspec/changes/archive/2026-11-18-finalize-coding-session-git/STATISTICS.md
+
+
+# Statistiques du change — finalize-coding-session-git
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `finalize-coding-session-git` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:0debcd596a78f836cdef3aa44e2dcd0b0ff5c381557222dcaa3468c3177bca66
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 34 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 34 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 6 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+
+Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
+
+| RUN | SID | Compteur | Incrément observé | Couverture |
+| --- | --- | --- | --- | --- |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 26118784 | bounded |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 26134691 | bounded |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 61796 | bounded |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 46017 | bounded |
+| SCM-CAB-TERMINAL-GIT-20261118 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 26196487 | bounded |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6e35628c680ae3358d9c0d39fc89efdc22d5382d758669ac042873e18c524bac", "generated_at": "2026-11-18T09:12:21.111685+00:00", "revision": "6e35628c680ae3358d9c0d39fc89efdc22d5382d758669ac042873e18c524bac", "scope": "change"} -->
+
+
 ## Change `finalize-debian-installation-cabu` — openspec/changes/archive/2026-11-12-finalize-debian-installation-cabu/STATISTICS.md
 
 
@@ -38814,14 +38927,14 @@ Change : `manage-session-git-and-cicd` · état local : `archived`. Les valeurs 
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 32364.582887 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 32364.582887 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 294598182 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 573421 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 379538 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 294151808 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 295171603 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -38835,7 +38948,7 @@ Change : `manage-session-git-and-cicd` · état local : `archived`. Les valeurs 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:25c08cf52ced80ebb1befb8fff47ca0d7de0bd27d1810317c2fb2ce6ad4aac2b
+Provenance : change-periods:ce9e82929cc81a3af8fafe58c0b975eac6b8836f1f5e7b4b4d66437c9481c32f
 
 ## 2. Messages et outils
 
@@ -38897,21 +39010,8 @@ Provenance : change-periods:25c08cf52ced80ebb1befb8fff47ca0d7de0bd27d1810317c2fb
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_read | 293189760 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_cache_write | 0 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_input | 293635692 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_output | 572434 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_reasoning | 378722 | bounded |
-| SCM-CAB-GIT-SESSIONS-20261117 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | tokens_total | 294208126 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4801597be17a2a7b9b9e4352c0581e2d7cbfb4e34994b8e3d707905de8282b12", "generated_at": "2026-11-18T07:30:06.033735+00:00", "revision": "4801597be17a2a7b9b9e4352c0581e2d7cbfb4e34994b8e3d707905de8282b12", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "668082776630690380dacbafd3eae5861bd6a220777bac52b8f11c4aed8c325c", "generated_at": "2026-11-18T07:31:10.780248+00:00", "revision": "668082776630690380dacbafd3eae5861bd6a220777bac52b8f11c4aed8c325c", "scope": "change"} -->
 
 
 ## Change `migrate-cab-to-system-platform` — openspec/changes/archive/2026-11-11-migrate-cab-to-system-platform/STATISTICS.md
@@ -70069,4 +70169,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "18bdf33733842433aab1616ec590f23b66e32c55b7989f5ade0ed71ff2e201f5", "generated_at": "2026-11-18T07:30:07.635734+00:00", "revision": "18bdf33733842433aab1616ec590f23b66e32c55b7989f5ade0ed71ff2e201f5", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "eb28652ef370737c305dffc3325fe7b60f13fa76022fb0be77e5920f664d1716", "generated_at": "2026-11-18T09:12:22.496988+00:00", "revision": "eb28652ef370737c305dffc3325fe7b60f13fa76022fb0be77e5920f664d1716", "scope": "project"} -->

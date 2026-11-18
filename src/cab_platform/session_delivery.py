@@ -6,11 +6,14 @@ from .core.commands import Refused, require
 from .forge_settings import file_operation
 
 VERSION = re.compile(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2,3}\Z')
-ASSIGNMENT = re.compile(r'''^([ \t]*PROJECT_VERSION[ \t]*=[ \t]*)(?:("[0-9]+(?:\.[0-9]+){2,3}")|('[0-9]+(?:\.[0-9]+){2,3}')|([0-9]+(?:\.[0-9]+){2,3}))([ \t]*(?:[ \t]\#[^\r\n]*)?)(\r?\n)?$''')
+ASSIGNMENT = re.compile(r'''^([ \t]*PROJECT_VERSION[ \t]*=[ \t]*)(?:("[vV]?[0-9]+(?:\.[0-9]+){2,3}")|('[vV]?[0-9]+(?:\.[0-9]+){2,3}')|([vV]?[0-9]+(?:\.[0-9]+){2,3}))([ \t]*(?:[ \t]\#[^\r\n]*)?)(\r?\n)?$''')
 KEY = re.compile(r'^[ \t]*(?:export[ \t]+)?PROJECT_VERSION[ \t]*=')
 
 
 def version_tuple(value):
+    from .versioning import canonical_version,VersionError
+    try:canonical_version(value)
+    except VersionError as error:raise Refused(str(error),400) from None
     require(isinstance(value, str) and len(value) <= 64 and VERSION.fullmatch(value) is not None, 'session-delivery-version-invalid', 400)
     return tuple(int(part) for part in value.split('.'))
 
@@ -30,6 +33,8 @@ def replace_version(raw, version):
         position, match = matches[0]
         original = next(part for part in match.groups()[1:4] if part is not None)
         old = original.strip('\"\'')
+        from .versioning import historical_version
+        old=historical_version(old)
         require(version_tuple(version) > version_tuple(old), 'session-delivery-version-not-new', 409)
         quote = original[0] if original[0] in ('\"', "'") else ''
         lines[position] = match.group(1) + quote + version + quote + match.group(5) + (match.group(6) or '')
@@ -185,6 +190,23 @@ def unstaged_code_paths(snapshot):
     return {entry['path'] for entry in snapshot['entries'] if not managed_statistics_path(entry['path']) and (entry['status']=='??' or len(entry['status'])>1 and entry['status'][1]!='.')}
 
 
+def retired_statistics_snapshots(project,change_id,options,env):
+    """Suppression du seul ancien rapport CAB lors d'un archivage."""
+    from pathlib import Path
+    from .core.models import Change,StatisticsJob
+    from .session_git import shared_scope_digest
+    change=Change.objects.get(pk=change_id,project=project)
+    if not change.local_sources.filter(present=True,archived=True).exists():return []
+    path='openspec/changes/'+change.identifier+'/STATISTICS.md'
+    if (Path(project.root)/path).exists():return []
+    previous=_git(project,options,env,'show',':'+path)
+    if previous.returncode!=0:previous=_git(project,options,env,'show','HEAD:'+path)
+    if previous.returncode!=0:return []
+    sha=hashlib.sha256(previous.stdout).hexdigest()
+    if not StatisticsJob.objects.filter(project=project,result__indexed_documents__contains={path:{'state':'COMPLETED','sha256':sha}}).exists():return []
+    return [{'path':path,'sha256':None,'removed':True,'entry_digest':shared_scope_digest(project,options,env,[path])}]
+
+
 def include_change_statistics(project,index,options,env,own_env):
     """Fige les rapports CAB du change sans absorber une réservation étrangère."""
     from pathlib import Path
@@ -203,13 +225,20 @@ def include_change_statistics(project,index,options,env,own_env):
         except (OSError,ValueError):continue
         sha=hashlib.sha256(raw).hexdigest()
         if sha!=document.sha256:continue
+        from .session_git import shared_scope_digest
+        staged=_git(project,options,env,'show',':'+path)
+        if staged.returncode==0:require(hashlib.sha256(staged.stdout).hexdigest()==sha,'session-delivery-shared-index-conflict',409)
+        entry_digest=shared_scope_digest(project,options,env,[path])
         blob=_git(project,options,env,'hash-object','-w','--stdin',data=raw)
         require(blob.returncode==0,'session-delivery-statistics-unavailable',409)
         oid=blob.stdout.decode('ascii','strict').strip();require(OID.fullmatch(oid),'session-delivery-statistics-unavailable',409)
         mode='100755' if info.st_mode&0o111 else '100644'
         added=_git(project,options,own_env,'update-index','--add','--cacheinfo',mode+','+oid+','+path)
         require(added.returncode==0,'session-delivery-statistics-unavailable',409)
-        reports.append({'path':path,'sha256':sha})
+        reports.append({'path':path,'sha256':sha,'entry_digest':entry_digest})
+    for retired in retired_statistics_snapshots(project,index.change_id,options,env):
+        require(_git(project,options,own_env,'update-index','--force-remove','--',retired['path']).returncode==0,'session-delivery-statistics-unavailable',409)
+        reports.append(retired)
     return reports
 
 
@@ -234,7 +263,7 @@ def preflight_commit(project,index,version,reservations):
     require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
     staged=_changed_paths(project,options,env,head)
     from .session_git import shared_index_allowed
-    require(shared_index_allowed(project,options,env,names,staged,index.origin.get('adoption')),'session-delivery-shared-index-conflict',409)
+    require(shared_index_allowed(project,options,env,[path for path in names if not managed_statistics_path(path)],staged,index.origin.get('adoption')),'session-delivery-shared-index-conflict',409)
     unmerged=_git(project,options,env,'ls-files','--unmerged','-z')
     require(unmerged.returncode==0 and not unmerged.stdout,'session-delivery-shared-index-conflict',409)
     tag=_git(project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version)
@@ -369,7 +398,10 @@ def _prepare_shared_index(project, options, env, plan):
         require(unmerged.returncode==0 and not unmerged.stdout,'session-delivery-shared-index-conflict',409)
         existing=_changed_paths(project,options,env,plan['head'])
         from .session_git import shared_index_allowed
-        require(shared_index_allowed(project,options,env,[path for path in plan['paths'] if path!='STATISTICS.md'],existing,plan.get('adoption')),'session-delivery-shared-index-conflict',409)
+        require(shared_index_allowed(project,options,env,[path for path in plan['paths'] if path!='STATISTICS.md' and path not in {report['path'] for report in plan.get('system_reports',[])}],existing,plan.get('adoption')),'session-delivery-shared-index-conflict',409)
+        from .session_git import shared_scope_digest
+        for report in plan.get('system_reports',[]):
+            require(shared_scope_digest(project,options,env,[report['path']])==report['entry_digest'],'session-delivery-shared-index-conflict',409)
         if plan.get('global_statistics'):
             from .session_git import shared_scope_digest
             require(shared_scope_digest(project,options,env,['STATISTICS.md'])==plan['global_statistics']['entry_digest'],'session-delivery-shared-index-conflict',409)
@@ -716,7 +748,8 @@ def delivery_preflight(project, version, *, defer_releases=False):
             remote,tags,_=refs(project,forge,owner,group,options,env,url,branch)
             validate_remote_tags(version,tags)
             forges.append({'name':forge,'branch':branch,'remote':remote,'signature':signature})
-    return {'project_id':project_id,'forges':forges,'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','defer_releases':defer_releases}
+    from .versioning import release_metadata
+    return {'project_id':project_id,'forges':forges,'release_metadata':release_metadata(version),'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','defer_releases':defer_releases}
 
 
 def verify_version(project, forge, version, commit, tag_oid, expected_signature, expected_branch):
@@ -1110,7 +1143,7 @@ def _delivery_worker(delivery_id):
         if plan['docker'] or plan['debian']:
             require(plan.get('defer_releases') is True,'session-delivery-release-policy-invalid',409)
             for target in plan['forges']:
-                _set_step(delivery_id,'release:'+target['name'],'SKIPPED',{'reason':'developer-deferred','executed':False})
+                _set_step(delivery_id,'release:'+target['name'],'SKIPPED',{'reason':'developer-deferred','executed':False,'version':version,'tag':version})
         for target in plan['forges']:
             key='verify:'+target['name'];_set_step(delivery_id,key,'RUNNING')
             try:

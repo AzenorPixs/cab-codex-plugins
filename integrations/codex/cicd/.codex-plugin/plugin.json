@@ -1,6 +1,6 @@
 {
   "name": "CICD",
-  "version": "3.2.16",
+  "version": "3.2.17",
   "description": "Déclencher et suivre la livraison CI/CD du projet par CAB.",
   "author": {
     "name": "CAB"

@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.16
+# CAB 3.2.17
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -150,3 +150,8 @@ restent intacts. Attendre/consulter le même état ; aucun rejeu ni demande syst
 au parent. autonomous_recovery expose le motif si une preuve manque. Un processus
 vivant, un atelier invérifiable, un test externe ou host_authorization garde ses
 protections. La validation des sources actuelles reste distincte du résultat perdu.
+
+Le moteur CAB déplace automatiquement le tag de version sans v sur le dernier
+commit de clôture des statistiques et de BLOCKERS.md éventuel. La branche et
+le tag sont envoyés atomiquement et vérifiés. Ce comportement est dans le code
+CAB ; le LLM ne déplace pas le tag et ne réalise aucun commit ou push parallèle.

@@ -56,12 +56,19 @@ def read_tag(project, name):
     return {'name': name, 'description': description, 'object_id': obj, 'commit': head.stdout.decode('ascii').strip(), 'annotated': annotated}
 
 
+def valid_new_name(project,options,env,name):
+    from .versioning import validate_new_tag,VersionError
+    try:validate_new_tag(name)
+    except VersionError as error:raise Refused(str(error),400) from None
+    valid_name(project,options,env,name)
+
+
 def create_tag(project_id, name, description, expected_commit):
     require(isinstance(description, str) and len(description) <= 16000 and '\0' not in description, 'git-tag-invalid', 400)
     require(isinstance(expected_commit, str) and re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', expected_commit) is not None, 'git-tag-changed', 409)
     project = Project.objects.get(pk=project_id)
     options, env = git_context(project)
-    valid_name(project, options, env, name)
+    valid_new_name(project, options, env, name)
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
     try:
@@ -98,7 +105,7 @@ def edit_tag(project_id, name, new_name, description, expected_oid, expected_com
     valid_name(project, options, env, name)
     require(isinstance(new_name, str), 'git-tag-invalid', 400)
     if new_name:
-        valid_name(project, options, env, new_name)
+        valid_new_name(project, options, env, new_name)
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_advisory_lock(%s, %s)', [7348501, 7348502])
     try:

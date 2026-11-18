@@ -30,6 +30,9 @@ def close_normal(actor,data,*,automatic=False):
     commands.require(candidate_report.name=='STATISTICS.md' and candidate.change in candidate_report.parent.name,'closure-report-outside-change')
     commands.require(hashlib.sha256(candidate_report.read_bytes()).hexdigest()==data['sha256'],'closure-report-stale')
     if data['branch']=='BLOQUÉ':commands.require((candidate_report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
+    from cab_platform.closure_git import complete
+    terminal=complete(candidate,data['branch'],source.path)
+    if terminal:data={**data,'sha256':terminal['documents'][data['report']]['sha256']}
     with transaction.atomic():
         r=commands.run_scope(actor,data['run_id'],data['project_id'],lock=True)
         commands.require(commands.no_pending(r) and not Lease.objects.filter(run=r,state='HELD').exists(),'closure-effects-protected')
@@ -39,8 +42,8 @@ def close_normal(actor,data,*,automatic=False):
         report=commands.safe_path(Path(r.project.root),data['report'])
         commands.require(report.name=='STATISTICS.md' and r.change in report.parent.name,'closure-report-outside-change')
         if branch=='BLOQUÉ':commands.require((report.parent/'BLOCKERS.md').is_file(),'blockers-proof-required')
-        sha=hashlib.sha256(report.read_bytes()).hexdigest();commands.require(sha==data['sha256'],'closure-report-stale')
-        receipt={'receipt_id':commands.identifier(data['receipt_id']),'branch':branch,'report':data['report'],'sha256':sha}
+        sha=data['sha256'] if terminal else hashlib.sha256(report.read_bytes()).hexdigest();commands.require(sha==data['sha256'],'closure-report-stale')
+        receipt={'receipt_id':commands.identifier(data['receipt_id']),'branch':branch,'report':data['report'],'sha256':sha,'terminal_git':terminal}
         previous=r.review.get('closure');commands.require(previous is None or previous==receipt,'closure-receipt-conflict')
         r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.stage=11 if branch=='TERMINÉ' else r.stage;r.suspension='';r.save();commands.event(r,'run-closed',receipt)
         return receipt

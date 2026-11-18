@@ -101,8 +101,9 @@ def event(run,kind,data):
     Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)
     if run:projection(run)
 
-def no_pending(run):
-    from .models import GitDelivery,GitSessionEffect
+def no_pending(run,*,terminal_git=False):
+    from .models import GitDelivery,GitSessionEffect,TerminalGitCommit
+    if not terminal_git and TerminalGitCommit.objects.filter(run=run).exclude(state='COMPLETED').exists():return False
     return not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists() and not GitSessionEffect.objects.filter(run=run,state__in=['INTENT','RUNNING','UNKNOWN']).exists() and not GitDelivery.objects.filter(run=run,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists()
 
 def resolve_native(actor,project,session_id,data,run=None):
@@ -198,6 +199,7 @@ def begin_run(actor,data):
     require(r.change_record_id is not None,'session-git-change-unavailable',409)
     from cab_platform.session_git import capture_initial
     capture_initial(r)
+    r.configuration={**r.configuration,'terminal_git':{'required':True}};r.save(update_fields=['configuration'])
     return r
 
 @transaction.atomic

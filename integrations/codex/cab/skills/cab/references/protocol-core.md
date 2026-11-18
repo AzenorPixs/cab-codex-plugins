@@ -37,3 +37,19 @@ session_delivery_status. Un résultat COMPLETED ne transforme pas une release
 SKIPPED en publication : présenter les étapes effectivement exécutées et leur
 résultat. Les builds DIU opèrent sur le projet courant, qui peut inclure des
 modifications postérieures au commit. L'installation relève séparément de CABU.
+
+## Clôture Git obligatoire
+
+Les nouveaux RUN attendent la publication du dernier snapshot de métadonnées :
+STATISTICS.md du change, STATISTICS.md global et BLOCKERS.md pour une sortie
+bloquée. CAB indexe immédiatement ces documents et conserve un reçu du commit
+et de chaque forge. Le code non validé et les réservations étrangères ne sont
+pas absorbés. Une sortie bloquée ne vaut pas réussite et ne ferme pas le change.
+Les anciens RUN nécessitent une habilitation explicite ; leurs preuves et
+mandats ne sont pas migrés silencieusement. Le commit final est exécuté par CAB,
+pas par le LLM. Une réponse perdue impose la lecture du même reçu, sans rejeu.
+
+Versions du projet, tags de version Git, tags et versions de release sont
+produits sans v. Le défaut est PROJECT_VERSION ; une nouvelle version transmise
+prime sur ce défaut. La compatibilité de lecture des anciens tags ne constitue
+pas une autorisation d'en créer de nouveaux avec ce préfixe.

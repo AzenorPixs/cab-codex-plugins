@@ -2375,3 +2375,20 @@ réellement envoyé, après vérification des étapes. Un ancien producteur peut
 L'adoption d'une session antérieure à la migration 0030 est administrative,
 bornée à sa liste de fichiers et enregistrée comme legacy-adoption ; elle ne
 remplace jamais une capture initiale historique.
+
+## Commit terminal — CAB 3.2.17
+
+La table terminal_git_commits conserve un reçu unique par RUN, ses documents
+figés, le parent, le commit, le tag et les résultats de chaque forge. Le moteur
+modifie branche et tag dans une transaction de références locale puis les envoie
+atomiquement avec leurs valeurs attendues. CLOSED ou BLOCKED attend leur
+confirmation ; une incertitude protège le RUN sans rejouer l'effet.
+Les rapports du change et le global sont indexés après écriture ; BLOCKERS.md
+est indexé dès son observation si son attribution est non ambiguë. La clôture
+bloquée conserve le change actif et le code non livré. Les nouveaux RUN adoptent
+la barrière ; un ancien RUN doit être habilité explicitement.
+
+Le module versioning impose les écritures sans préfixe v pour les versions du
+projet et de release et les nouveaux tags de version. Le défaut est la version
+du projet. Les lecteurs des données historiques restent compatibles et CABU
+n'invente pas de préfixe dans ses recherches de release.

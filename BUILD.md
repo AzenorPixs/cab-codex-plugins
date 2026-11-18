@@ -1557,3 +1557,12 @@ un ancien paquet sans outil MCP passe une fois par l’update administratif exis
 Les versions3.2.0 partiellement configurées ne sont pas des succès CABU.
 
 La surveillance Git utilise inotify et le paquet `inotify-tools` déclaré au manifeste. Les délais sont initialisés dans PostgreSQL et modifiables à chaud dans Administration / Git.
+
+## Clôture Git 3.2.17
+
+La migration additive 0037 crée le journal terminal sans modifier les données
+existantes. Elle utilise le rôle migrateur CAB ; le compte applicatif ne reçoit
+pas de permission de création de schéma. Après les builds et publications Git,
+CAB fige les statistiques et le BLOCKERS.md éventuel, puis publie le commit
+terminal et déplace son tag de version sans v. La clôture attend les reçus.
+Pour 3.2.17, les releases DIU restent différées sur choix explicite du développeur.
