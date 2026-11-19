@@ -29,7 +29,7 @@ Change : `recover-unobserved-mcp-relays` · état local : `working`. Les valeurs
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:f9008a3109231eb9b5b3c87c7ea0665439077cbf31847bb698fe3ef60894d767
+Provenance : change-periods:f51154b1834eee73d426ced426d15268b36dd0e17b861dc198dc0d8ea5601697
 
 ## 2. Messages et outils
 
@@ -91,13 +91,5 @@ Provenance : change-periods:f9008a3109231eb9b5b3c87c7ea0665439077cbf31847bb698fe
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-MCP-RELAY-RECOVERY-20261119 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4420bc91abb1bde918c1bf6eb8bfcf4fed5fe610cec882dd2d9f6a7fa3487ac2", "generated_at": "2026-11-19T21:37:01.784909+00:00", "revision": "4420bc91abb1bde918c1bf6eb8bfcf4fed5fe610cec882dd2d9f6a7fa3487ac2", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7dfa92e0bd7d822b9681931f79f18bc80e7f2c22cdad69b8fe9165a16ba9020b", "generated_at": "2026-11-19T21:38:54.842899+00:00", "revision": "7dfa92e0bd7d822b9681931f79f18bc80e7f2c22cdad69b8fe9165a16ba9020b", "scope": "change"} -->
