@@ -53305,7 +53305,7 @@ Change : `recover-cabu-public-payload-and-stopped-statistics` · état local : `
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:0ec7b84f30acd6035fceb2db9b0601e184bdfedd4e5a476fc39849681f1940a2
+Provenance : change-periods:b72f5fae9e8533eee9383bd508aa40d1eacd2c7b5cd92127ce15a821466d1dcc
 
 ## 2. Messages et outils
 
@@ -53367,16 +53367,8 @@ Provenance : change-periods:0ec7b84f30acd6035fceb2db9b0601e184bdfedd4e5a476fc398
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CAB-MAINTENANCE-20261119 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "14da7cefee8366bcdd8438e0b84b464de7feec72dfbf32455bc9dedc422dec29", "generated_at": "2026-11-19T06:07:32.414441+00:00", "revision": "14da7cefee8366bcdd8438e0b84b464de7feec72dfbf32455bc9dedc422dec29", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0580b7a375d45c97f2b38d61e402b841ddd917aa80446b6a36495f1139defe4b", "generated_at": "2026-11-19T06:10:17.146447+00:00", "revision": "0580b7a375d45c97f2b38d61e402b841ddd917aa80446b6a36495f1139defe4b", "scope": "change"} -->
 
 
 ## Change `recover-finalization-checks-autonomously` — openspec/changes/archive/2026-11-14-recover-finalization-checks-autonomously/STATISTICS.md
@@ -70860,4 +70852,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "55b0b529831277f75baba0ed02903aa1867e6accd1de769522ef5b61de5d9e7a", "generated_at": "2026-11-19T06:07:33.520988+00:00", "revision": "55b0b529831277f75baba0ed02903aa1867e6accd1de769522ef5b61de5d9e7a", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c8d2e798176c7a3dba99a1be4e05ed8d362397deeffe37b846db9610cf10d056", "generated_at": "2026-11-19T06:10:21.364623+00:00", "revision": "c8d2e798176c7a3dba99a1be4e05ed8d362397deeffe37b846db9610cf10d056", "scope": "project"} -->
