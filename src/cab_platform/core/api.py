@@ -878,6 +878,14 @@ def project_incident_registry(request,project_id:str,page:int=1,page_size:int=25
     from .project_incidents import project_incidents
     return project_incidents(request,project_id,page,page_size)
 
+class IncidentPurgeRequest(Schema):
+    expected_revision:str
+
+@api.post('/projects/{project_id}/incidents/{incident_id}/purge')
+def project_incident_purge(request,project_id:str,incident_id:str,payload:IncidentPurgeRequest):
+    from .project_incidents import purge_project_incident
+    return purge_project_incident(request,project_id,incident_id,payload.expected_revision)
+
 @api.get('/incidents')
 def incidents(request,project_id:str|None=None):
     actor=principal(request);rows=Incident.objects.all() if actor.role=='admin' else Incident.objects.filter(project__in=actor.projects.all())

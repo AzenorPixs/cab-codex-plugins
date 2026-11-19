@@ -1,7 +1,12 @@
-"""Consultation paginée des déclarations CCAB d’un projet."""
+"""Consultation et suppression manuelle des déclarations CCAB d’un projet."""
+from django.db import transaction
 from .auth import principal
-from .commands import require, scope
-from .models import Incident, Project
+from .commands import Refused, digest, require, scope
+from .models import Event, Incident, Project
+
+
+def purge_revision(row: Incident) -> str:
+    return digest([row.incident_id, row.project_id, row.created.isoformat(), row.state, row.resolution])
 
 
 def project_incidents(request, project_id: str, page: int = 1, page_size: int = 25):
@@ -24,5 +29,24 @@ def project_incidents(request, project_id: str, page: int = 1, page_size: int = 
         'claim': row.claim,
         'resolution': row.resolution,
         'created': row.created,
+        'purge_revision': purge_revision(row) if actor.role == 'admin' and row.state == 'RESOLVED' else None,
     } for row in rows[offset:offset + page_size]]
     return {'incidents': incidents, 'total': total, 'page': page, 'page_size': page_size, 'has_next': offset + page_size < total}
+
+
+@transaction.atomic
+def purge_project_incident(request, project_id: str, incident_id: str, expected_revision: str):
+    actor = principal(request, admin=True)
+    project = Project.objects.filter(pk=project_id).first()
+    require(project is not None, 'incident-not-found', 404)
+    scope(actor, project)
+    try:
+        row = Incident.objects.select_for_update().get(pk=incident_id, project=project)
+    except Incident.DoesNotExist:
+        raise Refused('incident-not-found', 404) from None
+    require(row.state == 'RESOLVED', 'incident-unresolved', 409)
+    require(purge_revision(row) == expected_revision, 'incident-snapshot-stale', 409)
+    row.delete()
+    Event.objects.create(project=project, kind='ccab-incident-purged',
+                         data={'incident_id': incident_id, 'actor': actor.pk})
+    return {'status': 'PURGED_TREATED'}

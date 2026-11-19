@@ -6,6 +6,9 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'incident-not-found':'Cette déclaration ne figure plus dans le registre de ce projet.',
+  'incident-unresolved':'La déclaration doit être résolue avant de pouvoir être supprimée.',
+  'incident-snapshot-stale':'La déclaration a changé. Fermez la fenêtre et vérifiez son état avant de recommencer.',
   'session-archives-page-invalid':'Le numéro de page des archives est invalide.',
   'git-commit-edit-unavailable':'Impossible de lire ou modifier les métadonnées de ce commit.',
   'git-commit-edit-invalid':'La demande d’édition du commit est invalide.',
