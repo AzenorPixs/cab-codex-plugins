@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.30
+# CAB 3.2.31
 
 CAB réconcilie seul une publication statistique arrêtée sur preuves complètes
 d'état avant fichier et index, sous verrous. FAILED_NO_CHANGE conserve l'UNKNOWN
@@ -29,7 +29,7 @@ Tous les critères doivent être couverts. Les autres essais autorisés restent
 autonomes. Cadrer des chemins sources précis sans les dépendances régénérables.
 Le service capture les reçus, assemble le dossier et finalise périodes/stats
 et CLOSED11 sans submit, statistics_end ou run.close du LLM en fin de session.
-Les pauses explicites gardent leur parcours. En piloté le parent décide la revue.
+Un change OpenSpec actif interdit une clôture réussie. Archiver après résolution complète des tâches. Si une dépendance empêche de terminer, appeler `run_block` avec les dépendances concrètes. CAB produit `BLOCKERS.md` et enregistre `BLOCKED`. Les pauses explicites gardent leur parcours. En piloté le parent décide la revue.
 Un outil natif hors CAB exige un producteur attestant explicitement autorisé ;
 un journal de tokens ou une déclaration de l'agent ne prouve pas son exécution.
 finalization_status expose les manques. finalization_configure autorise

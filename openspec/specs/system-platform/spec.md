@@ -2390,3 +2390,27 @@ Le worker MUST reprendre le même verrou Git, réobserver le CAS admis et normal
 #### Scenario: Continuation et parcours normal
 - **WHEN** le commit unique est confirmé
 - **THEN** forges, build, vérification et clôture sont poursuivis une seule fois dans le même reçu
+
+### Requirement: Suppression manuelle d’une déclaration CCAB résolue
+
+Un administrateur MUST pouvoir supprimer une seule déclaration résolue depuis le tableau Incidents du projet après confirmation nominative. Le serveur MUST vérifier le projet, l’état et la révision sous verrou. Il MUST conserver une trace de l’action.
+
+#### Scenario: Déclaration résolue et confirmée
+- **WHEN** l’administrateur confirme une déclaration résolue dont la révision est inchangée
+- **THEN** CAB retire cette seule déclaration et actualise le tableau
+
+#### Scenario: Déclaration ouverte, différente ou modifiée
+- **WHEN** l’utilisateur cible une déclaration non résolue, rattachée à un autre projet ou modifiée depuis la confirmation
+- **THEN** CAB refuse la suppression
+
+### Requirement: Clôture d’un RUN avec un change OpenSpec
+
+Un RUN de codage MUST NOT passer à CLOSED tant que son change OpenSpec est actif ou que son archive ne prouve pas la résolution de toutes ses tâches. Les preuves de livraison MUST NOT remplacer l’archive. Une clôture historique incohérente MUST garder son reçu et signaler l’écart.
+
+#### Scenario: Livraison terminée et change actif
+- **WHEN** les vérifications et la livraison ont réussi mais le change OpenSpec existe encore
+- **THEN** CAB conserve le RUN ouvert et signale l’archive attendue
+
+#### Scenario: Dépendance non satisfaisante
+- **WHEN** le responsable arrête le RUN et identifie ses dépendances non satisfaites
+- **THEN** CAB produit BLOCKERS.md pour le change actif et enregistre BLOCKED avec le chemin et l’empreinte du rapport

@@ -1126,8 +1126,11 @@ def command(request,body:Command):
         candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
         plan=FinalizationPlan.objects.filter(run=candidate).exclude(policy={}).first()
         if plan and data.get('branch')=='TERMINÉ':
-            from .run_finalization import process
-            if plan.receipt:return plan.receipt
+            from .run_finalization import process,view
+            if plan.receipt:
+                status=view(candidate,plan)
+                commands.require(status['phase']=='CLOSED','change-still-open')
+                return plan.receipt
             receipt=process(candidate.pk);commands.require(receipt,'finalization-proof-required');return receipt
         from .run_closure import close_normal
         return close_normal(actor,data)

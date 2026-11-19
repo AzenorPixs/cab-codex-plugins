@@ -58,7 +58,7 @@ def retirement_proof(run):
 
 @transaction.atomic
 def retire_technical(actor,data):
-    from .run_lifecycle import scoped,guard
+    from .run_lifecycle import scoped,guard,require_closed_change
     from cab_platform.legacy_closure import binding_proof
     c.require(actor.role=='admin' and data.get('developer_authorized') is True,'technical-retirement-authorization-required',403)
     run=scoped(actor,data,lock=True);key=c.identifier(data['request_id']);fingerprint=c.digest(data)
@@ -67,6 +67,7 @@ def retire_technical(actor,data):
         c.require(previous.data.get('input_digest')==fingerprint,'technical-retirement-request-conflict')
         return retirement_proof(run)
     guard(run)
+    require_closed_change(run)
     c.require(run.mode=='direct' and run.suspension=='IMPORT_PROTECTED' and not run.actor.active and run.state in ('UNKNOWN','WORKING','FINALIZATION_PENDING'),'technical-retirement-not-applicable')
     c.require(not run.operation_set.exists(),'technical-retirement-operations-present')
     c.require(not Run.objects.filter(session_id=run.session_id,suspension='',state__in=['WORKING','FINALIZATION_PENDING','REVIEW_PENDING']).exclude(pk=run.pk).exists(),'technical-retirement-active-session')

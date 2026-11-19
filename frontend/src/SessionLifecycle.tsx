@@ -47,7 +47,8 @@ export function reasonText(code:string){
   if(code.startsWith('artifact:'))return 'Les preuves ne concernent pas le même artefact.'
   return reasons[code]||code
 }
-export function runStateLabel(state:string){return state==='FINALIZATION_PENDING'?'Finalisation en attente':state==='FINALIZING'?'Finalisation en cours':state}
+const runStates:Record<string,string>={FINALIZATION_PENDING:'Finalisation en attente',FINALIZING:'Finalisation en cours',CLOSURE_INVALID:'Clôture à régulariser',BLOCKING:'Arrêt en cours',BLOCKED:'Bloquée'}
+export function runStateLabel(state:string){return runStates[state]||state}
 export function useEvaluations(projectId:string){return useQuery({queryKey:['closures',projectId],queryFn:()=>api<{evaluations:Evaluation[]}>('closures?'+new URLSearchParams({project_id:projectId})),refetchInterval:5000})}
 export function SessionActions({projectId,runId,evaluation}:{projectId:string;runId:string;evaluation?:Evaluation}){
   const client=useQueryClient();const dialog=useRef<HTMLDialogElement>(null);const [view,setView]=useState<Evaluation>();const [pending,setPending]=useState(false);const [error,setError]=useState('');const [reason,setReason]=useState('');const [authorized,setAuthorized]=useState(false)

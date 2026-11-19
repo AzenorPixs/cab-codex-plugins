@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CAB
-version: 3.2.30
+version: 3.2.31
 ---
 
 Répondre en français. Charger le skill CAB distribué avec le plugin du même nom.

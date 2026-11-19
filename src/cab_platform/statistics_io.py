@@ -1,16 +1,20 @@
-"""Publication fixe de STATISTICS.md sous UID légitime, sans verrou fichier."""
+"""Publication des rapports CAB sous l’UID du projet."""
 import hashlib
 import json
 import os
 from pathlib import Path
 import secrets
+import re
 import stat
 import sys
 from .native_sources import directory
 
 def publish(packet):
     root=Path(packet['root']);path=Path(packet['path'])
-    if root.resolve()!=root or not path.is_relative_to(root) or path.name!='STATISTICS.md' or path.resolve()!=path:raise ValueError('statistics-target-invalid')
+    if root.resolve()!=root or not path.is_relative_to(root) or path.resolve()!=path:raise ValueError('statistics-target-invalid')
+    relative=path.relative_to(root).as_posix()
+    blocker=re.fullmatch(r'openspec/changes/(?!archive/)[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}/BLOCKERS\.md',relative)
+    if path.name!='STATISTICS.md' and not blocker:raise ValueError('statistics-target-invalid')
     parent=directory(path.parent);temporary='.cab-statistics-'+secrets.token_hex(12)
     def current():
         try:fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)

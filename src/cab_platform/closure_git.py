@@ -113,6 +113,9 @@ def complete(run,branch,source_path):
     try:
         with transaction.atomic():
             current=Run.objects.select_for_update().select_related('project','actor').get(pk=run.pk)
+            if branch=='TERMINÉ':
+                from .core.run_lifecycle import require_closed_change
+                require_closed_change(current)
             row=TerminalGitCommit.objects.select_for_update().filter(run=current).first()
             if row is not None:
                 c.require(row.branch==branch,'closure-git-branch-conflict',409)

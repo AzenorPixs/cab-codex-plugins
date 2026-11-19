@@ -1,6 +1,6 @@
 ---
 description: CCAB — mandat correctif CAB sous SCM/CICD
-version: 3.2.30
+version: 3.2.31
 ---
 
 L'invocation explicite de CCAB autorise les correctifs CAB nécessaires sous

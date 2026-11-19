@@ -7,7 +7,7 @@ from .models import EvidenceProducer,FinalizationPlan,Operation,Run,GitFileReser
 from cab_platform.finalization_contract import next_actions
 
 def dossier(run,plan,*,allow_terminal_git=False):
-    from .run_lifecycle import archive_state,guard
+    from .run_lifecycle import archive_state,guard,require_closed_change
     missing=[];selected=[];archive=None;boundary=False
     if not plan.policy:return {'missing':['finalization-contract-required'],'proofs':[],'boundary':False}
     c.require(c.digest(plan.policy)==plan.digest,'finalization-policy-divergent')
@@ -15,12 +15,21 @@ def dossier(run,plan,*,allow_terminal_git=False):
         guard(run,allow_measurement=True,allow_terminal_git=allow_terminal_git);c.require(not run.suspension,'run-suspended')
         c.require(run.actor.active,'finalization-owner-inactive')
     except c.Refused as error:missing.append(error.code)
-    if plan.policy['nature']=='development':
-        try:archive,_=archive_state(run);boundary=True
-        except (c.Refused,OSError,ValueError) as error:
-            missing.append(getattr(error,'code','finalization-archive-unavailable'))
-            boundary=not (Path(run.project.root)/'openspec/changes'/run.change).exists()
-    else:boundary=True
+    nature=plan.policy['nature']
+    try:
+        require_closed_change(run)
+        has_source=run.change_record_id and run.change_record.local_sources.exists()
+        root=Path(run.project.root)
+        has_archive=any((root/'openspec/changes/archive').glob('????-??-??-'+run.change))
+        if nature=='development' or run.mode!='service' and (has_source or has_archive):
+            archive,_=archive_state(run)
+        elif nature=='delivery':
+            from cab_platform.canonical_statistics import eligible
+            c.require(eligible(run),'archive-missing-or-ambiguous')
+        boundary=True
+    except (c.Refused,OSError,ValueError) as error:
+        missing.append(getattr(error,'code','finalization-archive-unavailable'))
+        boundary=False
     if run.configuration.get('host_completion') and GitFileReservation.objects.filter(git_index__change_id=run.change_record_id,git_index__session_id=run.coding_session_id,active=True).exists():missing.append('session-git-reservations-active')
     current=c.revision(run);revisions={current}
     if archive:revisions.add(c.revision(run,{'openspec/changes/'+run.change:archive}))
@@ -55,9 +64,19 @@ def dossier(run,plan,*,allow_terminal_git=False):
 
 def view(run,plan=None):
     plan=plan or FinalizationPlan.objects.get(run=run)
+    from .run_lifecycle import require_closed_change
+    if run.state in ('CLOSED','CLOSURE_INVALID') and plan.receipt:
+        try:
+            require_closed_change(run)
+            c.require(run.state!='CLOSURE_INVALID','archive-missing-or-ambiguous')
+        except (c.Refused,OSError,ValueError) as error:
+            missing=[getattr(error,'code','finalization-archive-unavailable')]
+            return {'phase':'WAITING','missing':missing,'next_actions':next_actions(missing,plan.policy),'policy_digest':plan.digest,'previous_receipt':plan.receipt}
     if run.state=='CLOSED' and plan.receipt:return {'phase':'CLOSED','missing':[],'next_actions':[],'policy_digest':plan.digest,'receipt':plan.receipt}
     if run.state=='BLOCKED' and run.review.get('closure'):
         return {'phase':'BLOCKED','missing':['dependency-unsatisfied'],'next_actions':[],'policy_digest':plan.digest,'receipt':run.review['closure']}
+    if run.state=='BLOCKING':
+        return {'phase':'BLOCKING','missing':['blockers-finalization-pending'],'next_actions':[],'policy_digest':plan.digest}
     try:result=dossier(run,plan)
     except (c.Refused,OSError,ValueError) as error:result={'missing':[getattr(error,'code','finalization-source-unavailable')],'proofs':[],'boundary':False}
     finalizing=run.state=='FINALIZING' and plan.phase=='FINALIZING'
@@ -82,7 +101,7 @@ def prepare_review(run,plan,result):
 
 def process(run_id):
     run=Run.objects.select_related('actor','project').get(pk=run_id);plan=FinalizationPlan.objects.get(run=run)
-    if run.state in ('CLOSED','BLOCKED'):return
+    if run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING') or plan.receipt:return
     if not plan.policy:
         path=Path(run.project.root)/'openspec/changes/archive'
         if any(path.glob('????-??-??-'+run.change)) and run.state=='WORKING':
@@ -94,7 +113,7 @@ def process(run_id):
     with transaction.atomic():
         run=Run.objects.select_for_update().select_related('actor','project').get(pk=run_id)
         plan=FinalizationPlan.objects.select_for_update().get(run=run)
-        if run.state in ('CLOSED','BLOCKED'):return
+        if run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING') or plan.receipt:return
         result=dossier(run,plan,allow_terminal_git=run.state=='FINALIZING')
         if result['missing']:
             changed=plan.missing!=result['missing'] or plan.phase!='WAITING'
@@ -117,7 +136,10 @@ def process(run_id):
     report=None;report_sha=None
     try:
         statistics_service.discover(run.project)
-        source=run.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
+        from .run_lifecycle import require_closed_change
+        require_closed_change(run)
+        source=run.change_record.local_sources.filter(present=True,path=result['archive_path']).first()
+        if result['archive_path']:c.require(source is not None,'closure-archive-required')
         canonical=None
         if source is None and enabled(run):
             from cab_platform.canonical_statistics import eligible,directory

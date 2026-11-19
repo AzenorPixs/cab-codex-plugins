@@ -164,6 +164,11 @@ def run_inspect_historical(project_id:str,run_id:str,archive_path:str)->dict:
     """Inspecte les preuves locales pour une régularisation historique explicite."""
     return client().command('run.inspect_historical',locals())
 @public_tool()
+def run_block(project_id:str,run_id:str,receipt_id:str,dependencies:list[str])->dict:
+    """Arrêter sur des dépendances non satisfaites et produire BLOCKERS.md sans archiver le change."""
+    return client().command('run.close',{**locals(),'branch':'BLOQUÉ'})
+
+@public_tool()
 def run_close_historical(project_id:str,run_id:str,archive_path:str,evidence_digest:str,receipt_id:str,authorization:str,reason:str,developer_authorized:bool)->dict:
     """Clôture historique autorisée ; aucun test rejoué ni acceptation reconstruite."""
     return client().command('run.close_historical',locals())

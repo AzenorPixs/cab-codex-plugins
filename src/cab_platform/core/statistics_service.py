@@ -356,7 +356,7 @@ def stage_blockers(job):
         if digest:stage_document(job,path,digest)
 
 
-def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None):
+def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
     open_before=set(Change.objects.filter(project=project,source_state='open').values_list('pk',flat=True))
@@ -365,6 +365,19 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False,*,cano
     with guarded(project,'sync',request_id or 'SYNC-'+secrets.token_hex(12)) as (job,previous):
         if previous:return {'job_id':previous.pk,'state':previous.state,'result':previous.result}
         retire_file_lock(project)
+        if blocker:
+            relative,content=blocker
+            path=commands.safe_path(Path(project.root),relative,exists=False)
+            with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+            try:
+                if path.exists():
+                    raw,_=documents.read_source(Path(project.root),path,1024*1024)
+                    commands.require(raw.strip(),'blockers-proof-required')
+                    stage_document(job,path,documents.sha(raw))
+                else:
+                    _write_locked(job,path,content)
+            finally:
+                with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
         targets={generate} if isinstance(generate,str) else set(generate or [])
         if automatic:
             targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
