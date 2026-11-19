@@ -65627,14 +65627,14 @@ Agent coder : codex, modèle N/A, raisonnement N/A.
 -->
 
 
-## Change `show-project-ccab-incidents-table` — openspec/changes/show-project-ccab-incidents-table/STATISTICS.md
+## Change `show-project-ccab-incidents-table` — openspec/changes/archive/2026-11-19-show-project-ccab-incidents-table/STATISTICS.md
 
 
 # Statistiques du change — show-project-ccab-incidents-table
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `show-project-ccab-incidents-table` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `show-project-ccab-incidents-table` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -65699,7 +65699,7 @@ Provenance : change-periods:ef347e4dbd2cfad2ec7ac3f0785dfef49eedb10677627d696a6e
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 6 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -65728,16 +65728,16 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_read | 70052992 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_read | 85890304 | bounded |
 | SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_input | 70244444 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_output | 90214 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_reasoning | 51833 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_total | 70334658 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_input | 86417943 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_output | 119979 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_reasoning | 63657 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_total | 86537922 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b9a9e5372cc2dd3d0a5f420da32b673cc75e9cb8d7f54f70103624ccc4d1a9f4", "generated_at": "2026-11-19T17:03:48.884146+00:00", "revision": "b9a9e5372cc2dd3d0a5f420da32b673cc75e9cb8d7f54f70103624ccc4d1a9f4", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "68a08bd5bce1cd6a35302075336068f01b3e33373d74e3aebfa867fbd075d9d5", "generated_at": "2026-11-19T18:25:22.777145+00:00", "revision": "68a08bd5bce1cd6a35302075336068f01b3e33373d74e3aebfa867fbd075d9d5", "scope": "change"} -->
 
 
 ## Change `simplify-cab-readme-and-maintenance-guidance` — openspec/changes/archive/2026-11-07-simplify-cab-readme-and-maintenance-guidance/STATISTICS.md
@@ -71365,4 +71365,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "cdf849ce7d79e926445fc66c1f623ccdcc807c6dbe59115175ac986dd4f51a12", "generated_at": "2026-11-19T17:14:45.508641+00:00", "revision": "cdf849ce7d79e926445fc66c1f623ccdcc807c6dbe59115175ac986dd4f51a12", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "1ed1cd7872ffab9d4715893f398331fd4bcc1398e7d77b3f77002eb08e489ab8", "generated_at": "2026-11-19T18:25:23.961899+00:00", "revision": "1ed1cd7872ffab9d4715893f398331fd4bcc1398e7d77b3f77002eb08e489ab8", "scope": "project"} -->

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.2.25
+- Tableau paginé des incidents de chaque projet et consultation détaillée en lecture seule avec preuves, prise en charge, résolution et déclaration JSON complète.
+- Conservation du registre CCAB existant dans la table PostgreSQL `ccab`, sans perte des identifiants, relations ou baux.
+
 ## 3.2.24
 - Clôture des RUN canoniques sans faux dossier de change : rapport statistique réel du RUN, projection PG, global et commit terminal vérifié.
 - Visibilité des blocages postérieurs au dossier de preuves ; états UNKNOWN et documents modifiés ou étrangers protégés.

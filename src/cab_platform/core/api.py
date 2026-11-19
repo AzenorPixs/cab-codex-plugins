@@ -873,6 +873,11 @@ def metrics(request,project_id:str,run_id:str,after:int=0):
     from .measurements import run_statistics
     return run_statistics(actor,r,after)
 
+@api.get('/projects/{project_id}/incidents')
+def project_incident_registry(request,project_id:str,page:int=1,page_size:int=25):
+    from .project_incidents import project_incidents
+    return project_incidents(request,project_id,page,page_size)
+
 @api.get('/incidents')
 def incidents(request,project_id:str|None=None):
     actor=principal(request);rows=Incident.objects.all() if actor.role=='admin' else Incident.objects.filter(project__in=actor.projects.all())

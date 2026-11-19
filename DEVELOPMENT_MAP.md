@@ -1,5 +1,18 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Tableau des incidents CCAB — 19 novembre 2026
+
+`show-project-ccab-incidents-table`, code non attribué : tableau paginé par projet,
+consultation structurée en lecture seule et déclaration JSON complète.
+Validation directe sur l’hôte : huit déclarations conservées après renommage en
+`ccab`, empreinte SHA256 complète identique avant/après ; compatibilité de l’API
+CCAB et périmètre projet vérifiés. Tableau et détail vérifiés dans le navigateur,
+affichage mobile sans débordement et tableau large en 3840×2160.
+La livraison et l’activation 3.2.25 sont attestées séparément par les reçus du RUN
+`SCM-CCAB-TABLE-20261119` ; leur préparation ne prouve pas leur réussite.
+Source : [change archivé](openspec/changes/archive/2026-11-19-show-project-ccab-incidents-table/).
+
+
 ## CCAB — fichiers préexistants autorisés, 19 novembre2026
 
 `authorize-preexisting-session-files`, code non attribué : mandat d’invocation

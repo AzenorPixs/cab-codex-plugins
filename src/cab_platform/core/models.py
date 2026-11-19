@@ -412,6 +412,8 @@ class Incident(models.Model):
     claim=models.JSONField(default=dict)
     resolution=models.JSONField(default=dict)
     created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='ccab'
 
 class Metric(models.Model):
     run=models.ForeignKey(Run,on_delete=models.PROTECT)

@@ -200,6 +200,8 @@ transfert vers le projet reste soumis à la validation de l’orchestrateur.
 
 ## Statistiques, incidents et nettoyage
 
+La page Incidents de chaque projet présente les déclarations CCAB dans un tableau paginé. L’identifiant ouvre une fenêtre en lecture seule contenant le résumé, les preuves, la prise en charge, la résolution et la déclaration complète. Tous les états conservés du registre restent consultables dans le périmètre autorisé du projet.
+
 SGS collecte les mesures natives disponibles, dont les tokens, le cache,
 les modèles et la chronologie des rôles. Les mesures indisponibles restent
 signalées comme telles. La vue Stats du Web Monitor lit SGS.

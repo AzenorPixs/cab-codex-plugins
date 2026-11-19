@@ -1,3 +1,5 @@
+La migration `0039_ccab_incident_table` renomme la table des incidents en `ccab`. Elle conserve les identifiants, relations, preuves, claims et résolutions. Sauvegarder avant migration et vérifier l’empreinte canonique complète du registre avant/après à une frontière coordonnée.
+
 # BUILD.md — Codex Approval Bridge (CAB)
 
 Les RUN de livraison cadrés sur une spécification canonique peuvent publier
