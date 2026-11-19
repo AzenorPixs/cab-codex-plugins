@@ -29,7 +29,7 @@ Change : `respect-git-filemode-on-clean-reservation` · état local : `archived`
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:edecc63aa7a8a96186a33552bd17817f1ccbf98dd2dd87b343c8c2811949313f
+Provenance : change-periods:f4608d8704e841424996008369c9adf857b88c558932292ea76983a425a5859b
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:edecc63aa7a8a96186a33552bd17817f1ccbf98dd2dd87b343c8
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 1473792 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 1481639 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 7104 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 1085 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 1488743 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "2785074014460c2507704f8fb9c46acb11a4445884de0b535a082d2b8bb5ff39", "generated_at": "2026-11-19T16:33:51.736657+00:00", "revision": "2785074014460c2507704f8fb9c46acb11a4445884de0b535a082d2b8bb5ff39", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c596af97388796c22796a712b03fb5cb929a488e061e990f978e3bd43f3a4909", "generated_at": "2026-11-19T16:34:29.734724+00:00", "revision": "c596af97388796c22796a712b03fb5cb929a488e061e990f978e3bd43f3a4909", "scope": "change"} -->

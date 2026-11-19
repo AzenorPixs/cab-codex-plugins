@@ -57365,7 +57365,7 @@ Change : `respect-git-filemode-on-clean-reservation` · état local : `archived`
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:edecc63aa7a8a96186a33552bd17817f1ccbf98dd2dd87b343c8c2811949313f
+Provenance : change-periods:f4608d8704e841424996008369c9adf857b88c558932292ea76983a425a5859b
 
 ## 2. Messages et outils
 
@@ -57427,21 +57427,8 @@ Provenance : change-periods:edecc63aa7a8a96186a33552bd17817f1ccbf98dd2dd87b343c8
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 1355264 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 1362711 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 6845 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 1039 | bounded |
-| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 1369556 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "fab266304c0c96b7e92164b3a976612bc299206c66830a2c34809a572c5436dd", "generated_at": "2026-11-19T16:33:42.493018+00:00", "revision": "fab266304c0c96b7e92164b3a976612bc299206c66830a2c34809a572c5436dd", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c596af97388796c22796a712b03fb5cb929a488e061e990f978e3bd43f3a4909", "generated_at": "2026-11-19T16:34:29.734724+00:00", "revision": "c596af97388796c22796a712b03fb5cb929a488e061e990f978e3bd43f3a4909", "scope": "change"} -->
 
 
 ## Change `restore-approved-native-operations` — openspec/changes/archive/2026-11-02-restore-approved-native-operations/STATISTICS.md
@@ -71278,4 +71265,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "23ef469d615006b9344cd19ec4c9ea73f673fda62aec402ff0b454d2f6743d93", "generated_at": "2026-11-19T16:33:44.130985+00:00", "revision": "23ef469d615006b9344cd19ec4c9ea73f673fda62aec402ff0b454d2f6743d93", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4ed6b71e5663e6205b56d82d98edcd35acb6fa7a0bcd3685249f154a49000d46", "generated_at": "2026-11-19T16:34:31.479593+00:00", "revision": "4ed6b71e5663e6205b56d82d98edcd35acb6fa7a0bcd3685249f154a49000d46", "scope": "project"} -->
