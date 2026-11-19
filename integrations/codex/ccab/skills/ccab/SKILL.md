@@ -1,9 +1,28 @@
 ---
 name: CCAB
-description: Déclarer et traiter les incidents CAB avec preuves et claim durable.
+description: Déclarer et corriger les incidents CAB sous SCM/CICD, avec mandat porté par l’invocation CCAB.
 ---
 
-# CCAB 3.2.21
+# CCAB 3.2.22
+
+## Mandat correctif de l'invocation
+
+L'invocation explicite de CCAB, par son plugin, son skill ou sa commande,
+vaut mandat développeur pour les correctifs CAB nécessaires au traitement
+des incidents. Elle autorise leur cadrage et les écritures OpenSpec, le code,
+les tests, les documentations et intégrations distribuées, puis SCM avec CICD
+(commit, version, tag, envois et builds) et l'activation CABU nécessaire.
+Ne pas redemander une confirmation générique pour chaque correctif, fichier,
+écriture OpenSpec ou étape dans ce périmètre.
+
+Les restrictions explicites du développeur, les permissions techniques,
+les identités natives, les réservations, les effets UNKNOWN, les gels et les
+reçus restent applicables. Un blocage technique ne se contourne pas en SQL
+ou par un rejeu. L'invocation ne modifie pas le mandat métier d'un projet
+déclarant et ne s'attribue pas implicitement ses fichiers préexistants.
+Les actes hors de ce périmètre nécessitent leur autorisation propre,
+avec leur motif précis. Le retour vérifié du déclarant reste obligatoire ;
+la purge globale conserve sa demande explicite distincte.
 
 Utiliser le serveur MCP `cab` ou `/usr/bin/cab call` ; le service porte le registre.
 Déclarer par `incident_report` avec projet, résumé et empreintes de preuves.

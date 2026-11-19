@@ -980,6 +980,9 @@ def command(request,body:Command):
         commands.require(set(data)=={'id'},'notification-fields-invalid',400)
         receipt=NotificationReceipt.objects.filter(pk=UUID(str(data['id']))).first()
         return receipt_view(receipt) if receipt else {'id':data['id'],'state':'PENDING'}
+    if name in ('session.git.inspect_preexisting','session.git.authorize_preexisting'):
+        from cab_platform.preexisting_git import inspect_preexisting,authorize_preexisting
+        return (inspect_preexisting if name=='session.git.inspect_preexisting' else authorize_preexisting)(actor,data)
     if name=='session.git.adopt':
         from cab_platform.session_git import adopt_files
         return adopt_files(actor,data)

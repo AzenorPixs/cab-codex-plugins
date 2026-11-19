@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.21
+# CAB 3.2.22
 
 CAB réconcilie seul une publication statistique arrêtée sur preuves complètes
 d'état avant fichier et index, sous verrous. FAILED_NO_CHANGE conserve l'UNKNOWN
@@ -70,6 +70,12 @@ l'index isolé et les références internes qui conservent ses objets jusqu'à l
 livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
+
+Un préexistant explicitement autorisé peut être inspecté puis admis par
+l’administrateur via `session.git.inspect_preexisting` et
+`session.git.authorize_preexisting`, sans réécriture de baseline. Reprendre
+ensuite la réservation native ; un grant périmé ou une protection ne se force
+pas. Un ancien dirty réellement propre à HEAD est reconnu automatiquement.
 
 Pour un travail demandé sans CI/CD ni livraison, après les derniers contrôles,
 le report source et leur indexation, appeler `session_git_release` avant de

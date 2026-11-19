@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## CCAB — fichiers préexistants autorisés, 19 novembre2026
+
+`authorize-preexisting-session-files`, code non attribué : mandat d’invocation
+CCAB sous SCM/CICD et admission administrative CAS sans réécriture de baseline.
+Implémentation en cours ; premiers tests PostgreSQL/Git réussis sur fixtures.
+Livraison, activation et retour des déclarants restent distincts et à vérifier
+sur les reçus du RUN SCM-CCAB-CORRECTIONS-20261119 et du registre CCAB.
+Source : [change](openspec/changes/authorize-preexisting-session-files/).
+
 ## Confirmation de déconnexion MCP — 16 novembre 2026
 
 `confirm-stopped-mcp-relay`, code non attribué : constat administratif audité d’une liaison arrêtée et conservation des preuves ; change archivé, vérifié sur l’hôte. Livraison distincte.

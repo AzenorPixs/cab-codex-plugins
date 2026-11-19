@@ -1,7 +1,12 @@
 ---
-description: Entrée CAB système CCAB
-version: 3.2.21
+description: CCAB — mandat correctif CAB sous SCM/CICD
+version: 3.2.22
 ---
+
+L'invocation explicite de CCAB autorise les correctifs CAB nécessaires sous
+SCM avec CICD, leurs écritures OpenSpec et leur activation CABU requise.
+Ne pas redemander ce mandat pour chaque incident, fichier ou étape.
+Respecter les restrictions explicites et les protections du moteur.
 
 Répondre en français. Charger le skill CCAB distribué avec le plugin du même nom.
 Utiliser le moteur `/usr/bin/cab` et son serveur MCP ; aucune logique de service

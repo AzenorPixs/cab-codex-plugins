@@ -1,7 +1,7 @@
 {
   "name": "CCAB",
-  "version": "3.2.21",
-  "description": "Déclarer et traiter les incidents CAB avec preuves et claim durable.",
+  "version": "3.2.22",
+  "description": "Déclarer et corriger les incidents CAB sous SCM/CICD, avec mandat porté par l’invocation CCAB.",
   "author": {
     "name": "CAB"
   },

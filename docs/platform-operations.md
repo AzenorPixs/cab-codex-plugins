@@ -617,3 +617,44 @@ préférence change, sans appel fournisseur ni nouvelle génération. Les repris
 en attente sont revérifiées sous verrou avant dispatch. Un effet UNKNOWN, une
 instance divergente ou une révocation bloque sans rejeu. Un ancien reçu sans
 observation kernel n'acquiert aucune autorité rétroactive par simple lecture.
+
+
+## Mandat CCAB et fichiers préexistants autorisés
+
+L’invocation explicite de CCAB porte le mandat développeur des correctifs CAB
+nécessaires sous SCM avec CICD : spécifications, réalisation, qualification,
+intégrations distribuées et activation requise. Ne pas redemander ce mandat
+pour chaque incident ou écriture dans ce périmètre. Une restriction explicite,
+une permission technique ou une opération hors du périmètre reste applicable.
+Le projet déclarant conserve son mandat métier et l’autorisation de ses fichiers.
+
+Un fichier préexistant explicitement autorisé peut être pris en charge sans
+remplacer sa baseline ni utiliser l’adoption legacy :
+
+1. L’administrateur authentifié appelle `session.git.inspect_preexisting` avec
+   `project_id`, `run_id` et les `paths` littéraux déjà cadrés. L’inspection
+   retourne `expected_state` : contexte et empreintes, aucun contenu de fichier.
+2. Il appelle `session.git.authorize_preexisting` avec ces mêmes identités,
+   `paths`, `expected_state`, un `request_id` stable et `authorization` contenant
+   la référence de l’autorisation développeur applicable. Le reçu conserve
+   `grant_id` et `observation_digest`. Une répétition identique lit le même reçu ;
+   ne pas changer la requête pour contourner un résultat incertain.
+3. Le codeur reprend `session_git_reserve` depuis sa connexion native réelle.
+   CAB revérifie fichier, HEAD, cadrage, baseline et index ciblé, puis journalise
+   l’autorisation utilisée. Il suit ensuite les validations et la livraison
+   normales ; aucune preuve antérieure n’est reconstruite.
+
+L’interface locale commune est `sudo cab call --admin <commande>` avec le JSON
+sur stdin ; les credentials restent traités par le Client local. Cette
+autorisation n’accorde pas le rôle administrateur au codeur. L’inspection et
+l’admission ne changent aucun fichier ou entrée d’index et ne font aucun commit.
+Le manifeste est limité à128fichiers et64Mio ; liens, renommages, fichiers
+ignorés/protégés, contenu déjà modifié dans l’index partagé, réservations
+concurrentes, gel/import/revue/clôture, baux et effets indécis sont refusés.
+Une modification du chemin ou du contexte après autorisation empêche sa prise
+en charge ; un nouvel état requiert une nouvelle inspection et un autre reçu.
+
+Un statut dirty seulement historique se traite automatiquement si le chemin
+actuel correspond aux octets et au mode du blob de HEAD. Le constat est tracé
+dans `clean_initial_paths` ; un statut clean masquant d’autres octets ne suffit
+pas. La baseline initiale reste inchangée dans les deux parcours.

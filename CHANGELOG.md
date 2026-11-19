@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.2.22
+- L’invocation CCAB mandate les correctifs CAB sous SCM/CICD, avec OpenSpec, distribution et activation nécessaires, sans confirmations génériques répétées.
+- Admission administrative ciblée de fichiers préexistants explicitement autorisés, avec CAS, reçus idempotents et baseline conservée.
+- Réservation des chemins historiquement dirty désormais réellement propres à HEAD, sans absorption de contenu étranger.
+
 ## 3.2.21
 - CABU conserve une autorisation de reprise nécessaire par demandeur, UID, instance observée et version, sans confirmation supplémentaire.
 - Révocation auditée et revérification avant reprise native ; reçus, états inconnus et frontières sûres restent protégés.

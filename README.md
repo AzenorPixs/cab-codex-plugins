@@ -176,7 +176,7 @@ décrivent le contrat applicable aux agents.
 - `/CAB start`, `/CAB run` et `/CAB resume` suivent les mandats de pilotage.
 - `/CABU` lance la procédure de mise à jour et vérifie les composants actifs.
 - `/SGS` donne accès au traitement des statistiques selon le mode demandé.
-- `/CCAB` déclare, consulte ou traite les incidents sous le mandat applicable.
+- `/CCAB` porte le mandat des correctifs CAB nécessaires sous SCM avec CICD, jusqu’à leur activation requise et vérification par le déclarant.
 
 Pour une session Codex directe, demander explicitement CAB en mode direct.
 SGS et le Web Monitor suivent alors cette session sans créer de session
@@ -203,6 +203,12 @@ transfert vers le projet reste soumis à la validation de l’orchestrateur.
 SGS collecte les mesures natives disponibles, dont les tokens, le cache,
 les modèles et la chronologie des rôles. Les mesures indisponibles restent
 signalées comme telles. La vue Stats du Web Monitor lit SGS.
+
+L’invocation explicite du plugin, du skill ou de la commande CCAB autorise les
+correctifs CAB nécessaires : OpenSpec, code, tests, documentation, SCM/CICD
+et activation CABU requise. Aucune confirmation générique supplémentaire
+n’est demandée par correctif, fichier ou étape dans ce périmètre ; les
+restrictions explicites et protections techniques restent applicables.
 
 CCAB propose une file FIFO par défaut, avec regroupement justifié des
 incidents de cause commune. Le correcteur se coordonne avec les déclarants,

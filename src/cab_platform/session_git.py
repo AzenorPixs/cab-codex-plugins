@@ -152,7 +152,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
         require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
         prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
         current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
-        relocated_paths=[]
+        relocated_paths=[];preexisting_authorizations=[];clean_initial_paths=[]
         for path in sorted(paths):
             key = hashlib.sha256(path.encode('utf-8')).hexdigest()
             existing = GitFileReservation.objects.select_for_update().filter(project=project, path_digest=key, active=True).first()
@@ -160,15 +160,20 @@ def _reserve_files_locked(actor, data, connector_id=None):
                 require(existing.path == path and existing.git_index_id == index.pk, 'session-git-reserved', 409)
                 continue
             if path in prior_dirty or path in current_dirty:
+                from .preexisting_git import clean_at_head,matching_authorization
                 candidates=GitFileReservation.objects.filter(project=project,path_digest=key,active=False,git_index__state='RELEASED',git_index__session_id=current.coding_session_id,git_index__initial_run__actor_id=actor.pk).select_related('git_index').order_by('-released')[:10]
                 relocated=reconciled_archive_owned(current,index,path)
-                require(relocated or any(item.path==path and released_index_matches(project,item.git_index,path) for item in candidates),'session-git-file-preexisting',409)
+                clean=path in prior_dirty and path not in current_dirty and clean_at_head(current,path,snapshot)
+                granted=matching_authorization(current,index,path,snapshot) if not clean and not relocated else None
+                require(clean or granted or relocated or any(item.path==path and released_index_matches(project,item.git_index,path) for item in candidates),'session-git-file-preexisting',409)
                 if relocated:relocated_paths.append(path)
+                if granted:preexisting_authorizations.append(granted)
+                if clean:clean_initial_paths.append(path)
             GitFileReservation.objects.create(project=project, git_index=index, path=path, path_digest=key)
         if reopening:
             index.state='OPEN';index.save(update_fields=['state','updated']);event(current,'git-index-reopened',{'request_id':request_id,'previous_release':index.origin.get('release',{})})
         receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change, 'session_id': current.session_id}
-        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths})
+        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths,'preexisting_authorizations':preexisting_authorizations,'clean_initial_paths':clean_initial_paths})
         return receipt
 
 
