@@ -29,7 +29,7 @@ Change : `authorize-necessary-cabu-recovery` · état local : `archived`. Les va
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:e2c5b93f29562ee27c80e39cca8e05ec9a69b661357fbef1204513cd95f534e5
+Provenance : change-periods:123fca1295b17c2a86c1d83906e8e0cfcca231da947951d8b3e7112d9e54c4b8
 
 ## 2. Messages et outils
 
@@ -91,13 +91,5 @@ Provenance : change-periods:e2c5b93f29562ee27c80e39cca8e05ec9a69b661357fbef12045
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CABU-RECOVERY-POLICY-20261119 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c5fb35c9a4eeb98d991ef87c4078ad7972bf1ed71824d3ea4a38849905f6afa9", "generated_at": "2026-11-19T15:30:51.868533+00:00", "revision": "c5fb35c9a4eeb98d991ef87c4078ad7972bf1ed71824d3ea4a38849905f6afa9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f0c985cd55a27dc54f774715e5e7066276e84135d1609b0d43ba27c92e180107", "generated_at": "2026-11-19T15:31:48.672680+00:00", "revision": "f0c985cd55a27dc54f774715e5e7066276e84135d1609b0d43ba27c92e180107", "scope": "change"} -->
