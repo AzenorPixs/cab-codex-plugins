@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.2.24
+- Clôture des RUN canoniques sans faux dossier de change : rapport statistique réel du RUN, projection PG, global et commit terminal vérifié.
+- Visibilité des blocages postérieurs au dossier de preuves ; états UNKNOWN et documents modifiés ou étrangers protégés.
+- Les statistiques de succès des tests restent N/A lorsqu’un bilan ne démontre pas un plain OK sans tests ignorés ou échecs attendus.
+
 ## 3.2.23
 - Réservation des fichiers identiques à HEAD dans les dépôts core.filemode=false sans normaliser les permissions ni masquer des octets étrangers.
 - Conservation du refus des modes suivis divergents et des configurations instables.

@@ -53,7 +53,10 @@ def stage_document(job,path,expected):
     project=job.project;root=Path(project.root);path=Path(path)
     commands.require(path.is_relative_to(root),'statistics-target-invalid')
     relative=str(path.relative_to(root))
-    commands.require(relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name in ('STATISTICS.md','BLOCKERS.md'),'statistics-target-invalid')
+    if relative.startswith('statistics/runs/'):
+        from cab_platform.canonical_statistics import check_target
+        check_target(project,relative)
+    else:commands.require(relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name in ('STATISTICS.md','BLOCKERS.md'),'statistics-target-invalid')
     available=probe(project);commands.require(available is not None,'statistics-git-unavailable')
     receipt={'path':relative,'sha256':expected,'state':'SKIPPED' if available==0 else 'RUNNING'}
     indexed={**job.result.get('indexed_documents',{}),relative:receipt}
@@ -94,7 +97,9 @@ def before_publication_evidence(job):
         if not path.is_relative_to(root) or path.resolve()!=path:return None
         relative=str(path.relative_to(root))
         if relative not in indexed or indexed[relative].get('sha256')!=expected.get('after'):return None
-        if not (relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name=='STATISTICS.md'):return None
+        if not (relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name=='STATISTICS.md'):
+            from cab_platform.canonical_statistics import owner
+            if owner(job.project,relative) is None:return None
         if file_hash(job.project,path)!=expected.get('before'):return None
         paths[relative]=expected.get('before')
     if set(paths)!=set(indexed):return None
@@ -309,6 +314,8 @@ def generate_global(job):
     for source in ChangeSource.objects.filter(change__project=project,present=True).select_related('change','statistics').order_by('change__identifier','path'):
         document=import_document(source)
         entries.append({'change':source.change.identifier,'path':source.path+'/STATISTICS.md','content':document.content,'sha256':document.sha256,'status':document.status})
+    from cab_platform.canonical_statistics import entries as canonical_entries
+    entries.extend(canonical_entries(project))
     state=ProjectStatistics.objects.get(project=project)
     commands.require(state.inventory_complete,'statistics-inventory-incomplete')
     text=documents.global_document(project.identifier or project.name or Path(project.root).name,entries)
@@ -349,7 +356,7 @@ def stage_blockers(job):
         if digest:stage_document(job,path,digest)
 
 
-def sync(project,request_id=None,generate=None,full=False,automatic=False):
+def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
     open_before=set(Change.objects.filter(project=project,source_state='open').values_list('pk',flat=True))
@@ -369,6 +376,10 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False):
                 indexed=job.result.get('indexed_documents',{}).get(relative,{})
                 if indexed.get('state')!='COMPLETED' or indexed.get('sha256')!=report.sha256:
                     stage_document(job,Path(project.root)/relative,report.sha256)
+        if canonical_run is not None:
+            from cab_platform.canonical_statistics import generate as generate_canonical
+            report=generate_canonical(job,canonical_run,canonical_proofs or [])
+            job.result={**job.result,'canonical_report':report};job.save(update_fields=['result','updated'])
         stage_blockers(job)
         state=generate_global(job)
         if full or state.next_full_sync is None:

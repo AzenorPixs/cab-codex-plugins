@@ -20,10 +20,14 @@ def enabled(run):
     return run.configuration.get('terminal_git',{}).get('required') is True
 
 
-def document_paths(source_path,branch):
+def document_paths(source_path,branch,run=None):
     c.require(branch in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
     parts=Path(source_path).parts
-    c.require(len(parts)>=3 and parts[:2]==('openspec','changes') and '..' not in parts,'closure-documents-invalid',400)
+    if parts[:2]==('statistics','runs'):
+        from .canonical_statistics import directory,check_target
+        c.require(run is not None and branch=='TERMINÉ' and source_path==directory(run),'closure-documents-invalid',400)
+        check_target(run.project,source_path+'/STATISTICS.md')
+    else:c.require(len(parts)>=3 and parts[:2]==('openspec','changes') and '..' not in parts,'closure-documents-invalid',400)
     paths=[source_path+'/STATISTICS.md','STATISTICS.md']
     if branch=='BLOQUÉ':paths.append(source_path+'/BLOCKERS.md')
     return paths
@@ -54,7 +58,7 @@ def view(run):
 
 def frozen_documents(run,source_path,branch):
     result={}
-    for path in document_paths(source_path,branch):
+    for path in document_paths(source_path,branch,run):
         c.safe_path(Path(run.project.root),path)
         foreign=GitFileReservation.objects.filter(project=run.project,path=path,active=True).exclude(git_index__session_id=run.coding_session_id).exists()
         c.require(not foreign,'closure-document-reserved',409)

@@ -1,5 +1,11 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Les RUN de livraison cadrés sur une spécification canonique peuvent publier
+leur rapport réel sous statistics/runs/<identité>/STATISTICS.md, sans migration
+ni faux change. L’activation du paquet précède la reprise automatique de ces
+clôtures ; une livraison déjà confirmée ne doit pas être rejouée. Le reçu
+terminal conserve les documents, empreintes et destinations vérifiés.
+
 La demande CABU porte une autorité de reprise nécessaire liée à son pair Unix
 réel, son compte et sa version. Le reçu conserve ce périmètre ; le contrôle natif
 le revérifie avant dispatch. Une révocation ne change pas la configuration du

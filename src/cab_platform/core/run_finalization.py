@@ -60,9 +60,11 @@ def view(run,plan=None):
         return {'phase':'BLOCKED','missing':['dependency-unsatisfied'],'next_actions':[],'policy_digest':plan.digest,'receipt':run.review['closure']}
     try:result=dossier(run,plan)
     except (c.Refused,OSError,ValueError) as error:result={'missing':[getattr(error,'code','finalization-source-unavailable')],'proofs':[],'boundary':False}
+    finalizing=run.state=='FINALIZING' and plan.phase=='FINALIZING'
+    if finalizing:result['missing']=sorted(set(result['missing'])|set(plan.missing))
     pending=list(run.operation_set.exclude(state__in=c.TERMINAL).values('request_id','state'))
     from cab_platform.closure_git import view as terminal_view
-    return {**result,'terminal_git':terminal_view(run),'next_actions':next_actions(result['missing'],plan.policy),'pending_operations':pending,'check_revisions':plan.check_revisions,'phase':'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
+    return {**result,'terminal_git':terminal_view(run),'next_actions':next_actions(result['missing'],plan.policy),'pending_operations':pending,'check_revisions':plan.check_revisions,'phase':'FINALIZING' if finalizing else 'REVIEW' if result['missing']==['reserved-review-required'] and run.state=='REVIEW_PENDING' else 'WAITING' if result['missing'] else 'READY','policy_digest':plan.digest,'nature':plan.policy.get('nature')}
 
 def prepare_review(run,plan,result):
     tests=[]
@@ -111,19 +113,31 @@ def process(run_id):
     from .measurements import end_if_open
     from . import statistics_service
     end_if_open(run.actor,run)
-    statistics_service.discover(run.project)
-    source=run.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
-    job='AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest(result['proofs'])[:16]
-    statistics_service.sync(run.project,job,generate=run.change if source else None)
-    report=None;report_sha=None
-    if source:
-        report=source.path+'/STATISTICS.md'
-        from cab_platform.statistics_documents import read_source,sha
-        raw,_=read_source(Path(run.project.root),Path(run.project.root)/report);report_sha=sha(raw)
     from cab_platform.closure_git import complete,enabled
-    if source is None and enabled(run):
-        FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=['closure-report-required']);return
-    try:terminal=complete(run,'TERMINÉ',source.path) if source else None
+    report=None;report_sha=None
+    try:
+        statistics_service.discover(run.project)
+        source=run.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
+        canonical=None
+        if source is None and enabled(run):
+            from cab_platform.canonical_statistics import eligible,directory
+            c.require(eligible(run),'closure-canonical-source-required')
+            canonical=run
+        descriptor=directory(run) if canonical else None
+        job='AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest({'proofs':result['proofs'],'canonical':descriptor})[:16] if canonical else 'AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest(result['proofs'])[:16]
+        kwargs={'canonical_run':run,'canonical_proofs':result['proofs']} if canonical else {}
+        publication=statistics_service.sync(run.project,job,generate=run.change if source else None,**kwargs)
+        if canonical:c.require(publication['state']=='COMPLETED','closure-statistics-job-unconfirmed')
+        if source or canonical:
+            report=(source.path if source else descriptor)+'/STATISTICS.md'
+            from cab_platform.statistics_documents import read_source,sha
+            raw,_=read_source(Path(run.project.root),Path(run.project.root)/report);report_sha=sha(raw)
+            if canonical:c.require(publication['result'].get('canonical_report',{}).get('sha256')==report_sha,'closure-report-changed')
+    except c.Refused as error:
+        FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);raise
+    except (OSError,ValueError):
+        FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=['closure-report-unavailable']);raise
+    try:terminal=complete(run,'TERMINÉ',source.path if source else descriptor) if source or canonical else None
     except c.Refused as error:
         FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);return
     if terminal and report:report_sha=terminal['documents'][report]['sha256']
