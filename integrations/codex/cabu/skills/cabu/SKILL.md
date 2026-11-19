@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.25
+# CABU 3.2.26
 
 CABU vérifie automatiquement les modes des seuls chemins publics du paquet et
 ses versions embarquées avant APT. Un payload privatisé ou périmé est refusé

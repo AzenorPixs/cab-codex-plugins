@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.25
+# CAB 3.2.26
 
 CAB réconcilie seul une publication statistique arrêtée sur preuves complètes
 d'état avant fichier et index, sous verrous. FAILED_NO_CHANGE conserve l'UNKNOWN
@@ -221,3 +221,9 @@ préférence change, sans appel fournisseur ni nouvelle génération. Les repris
 en attente sont revérifiées sous verrou avant dispatch. Un effet UNKNOWN, une
 instance divergente ou une révocation bloque sans rejeu. Un ancien reçu sans
 observation kernel n'acquiert aucune autorité rétroactive par simple lecture.
+
+Un commit de livraison FAILED avant références se traite avec CCAB et le
+parcours administratif borné décrit dans le skill CICD. Conserver la même
+livraison, version, RUN/SID et les reçus ; aucune relance start ni substitution
+d’identité. L’inspection et le CAS ne sont pas une permission de choisir un
+code divergent : seules les résolutions exactes explicitement revues sont admises.

@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.2.26
+- Reprise administrative sous CAS du seul commit échoué avant références, dans la même livraison et sans rejouer version/projection.
+- Résolution automatique des seuls scalaires de version ; résolutions de code limitées aux blobs et diffs explicitement revus.
+- Échec original conservé, nouvelle tentative corrélée et contrôle du contexte sous verrou avant effet ; états UNKNOWN protégés.
+
 ## 3.2.25
 - Tableau paginé des incidents de chaque projet et consultation détaillée en lecture seule avec preuves, prise en charge, résolution et déclaration JSON complète.
 - Conservation du registre CCAB existant dans la table PostgreSQL `ccab`, sans perte des identifiants, relations ou baux.

@@ -687,3 +687,39 @@ et n’est jamais réémis comme nouvelle livraison.
 La consultation expose la phase FINALIZING et ses blocages postérieurs au dossier,
 notamment un rapport indisponible ou une publication indécise ; elle n’annonce
 plus READY sur la seule validité des preuves préalables.
+
+## Reprise administrative avant commit
+
+Une livraison PARTIAL dont le commit a échoué avant déplacement des références
+ne se relance pas avec un nouveau start, une nouvelle version ou un autre RUN.
+Le moteur expose à l’administrateur système local les actions strictes
+`inspect_precommit`, `resume_precommit` et `status_precommit` sous la commande
+`session.delivery.policy`. Les champs habituels de politique de publication
+restent inchangés quand aucune action de reprise n’est fournie.
+
+L’inspection prend `project_id`, `run_id`, `delivery_id` et éventuellement
+`resolutions` ; elle retourne `expected_state` et `effects_issued=false`.
+La reprise ajoute un `request_id` stable, cet état exact et une justification.
+Le statut relit le même identifiant ; une réponse perdue n’autorise aucun rejeu.
+Seul le commit FAILED connu avant références est admissible ; version et
+projection doivent déjà être COMPLETED et toute étape aval encore PENDING.
+CLOSED/BLOCKED/FINALIZING, effet UNKNOWN, bail, gel ou source divergente protègent
+la session. Le worker revérifie le CAS sous le verrou Git avant tout effet.
+
+La résolution automatique traite uniquement les scalaires de version déclarés
+si les autres octets et données, ainsi que le mode, sont identiques à HEAD.
+Les autres conflits restent refusés. Une résolution manuelle nécessite les
+chemins réservés et leurs OID/modes HEAD et staged, le SHA256 de chaque diff,
+ainsi que `resolution_approval` avec `paths_digest`, `owner_reference` et
+`reviewer_reference`. Le propriétaire et le responsable doivent avoir relu ces
+deltas exacts ; une référence libre ne constitue pas une preuve native nouvelle.
+L’administrateur porte cette décision explicite et la conserve avec le CAS.
+Aucun choix ours implicite ni modification du fichier de travail/index source
+n’est effectué pour cette résolution ; seul l’index candidat reçoit les blobs
+exactement approuvés. Toute divergence refuse l’admission ou son dispatch.
+
+L’échec original et son reçu restent inchangés ; un événement immuable conserve
+le snapshot de l’étape FAILED. La nouvelle tentative de commit est corrélée,
+et la continuation reprend les seules étapes aval jamais émises. Le PID encore
+vivant d’un service n’est pas une preuve d’activité d’un worker logiquement terminé.
+Les opérations Git restent exclusivement exécutées par CAB.

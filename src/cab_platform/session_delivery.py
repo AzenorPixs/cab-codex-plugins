@@ -401,15 +401,12 @@ def prepare_commit(project, index, version, reservations):
     temporary=[]
     try:
         if head!=index.base_head:
-            patch=_git(project,options,source_env,'diff','--cached','--binary','--full-index','--no-ext-diff','--no-textconv','--no-renames',index.base_head,'--',timeout=60)
-            require(patch.returncode==0 and len(patch.stdout)<=33554432,'session-delivery-rebase-unavailable',409)
             own_index=_temp_index(os.path.dirname(expected),project);temporary.append(own_index);os.unlink(own_index)
             own_env={**env,'GIT_INDEX_FILE':own_index}
             read=_git(project,options,own_env,'read-tree',head)
             require(read.returncode==0,'session-delivery-rebase-unavailable',409)
-            applied=_git(project,options,own_env,'apply','--cached','--3way','--whitespace=nowarn','-',data=patch.stdout,timeout=60)
-            require(applied.returncode==0,'session-delivery-rebase-conflict',409)
-            require(set(_changed_paths(project,options,own_env,head))==set(names),'session-delivery-rebase-conflict',409)
+            from .delivery_recovery import rebase_index
+            rebase_index(project,options,env,source_env,own_env,index.base_head,head,names,version)
         else:
             own_index=_temp_index(os.path.dirname(expected),project);temporary.append(own_index)
             _copy_session_index(expected,own_index,project.owner_uid)
@@ -871,7 +868,10 @@ def attest_delivery(delivery_id):
 
 
 def configure_delivery_policy(actor,data):
-    """Décision de publication bornée à un RUN et une version."""
+    """Politique de publication et reprise administrative strictement bornée."""
+    if isinstance(data,dict) and "action" in data:
+        from .delivery_recovery import dispatch
+        return dispatch(actor,data)
     from django.db import transaction
     from .core import commands as c
     from .core.models import Event,EvidenceProducer
@@ -1180,58 +1180,7 @@ def _delivery_worker(delivery_id):
             row=GitDelivery.objects.select_for_update().get(pk=delivery_id)
             row.commit_oid=receipt['commit'];row.tag_oid=receipt['tag_oid'];row.save(update_fields=['commit_oid','tag_oid','updated'])
         _set_step(delivery_id,'commit','COMPLETED',receipt)
-        failures=[]
-        for target in plan['forges']:
-            key='forge:'+target['name'];_set_step(delivery_id,key,'RUNNING');prepared=[]
-            def before_push(value):
-                _update_step_receipt(delivery_id,key,value)
-                prepared.append(True)
-            try:
-                current=Project.objects.get(pk=project.pk)
-                sent=push_version(current,target['name'],version,receipt['commit'],receipt['tag_oid'],before_push,target['remote'],target['signature'],target['branch'])
-            except Refused as error:
-                state='UNKNOWN' if prepared else 'FAILED'
-                _set_step(delivery_id,key,state,{'error':error.code});failures.append(state)
-            else:
-                _set_step(delivery_id,key,'COMPLETED',sent)
-        if failures:
-            _set_delivery_state(delivery_id,'UNKNOWN' if 'UNKNOWN' in failures else 'PARTIAL')
-            return
-        for kind in ('docker','debian'):
-            if not plan[kind]:continue
-            key='build:'+kind;_set_step(delivery_id,key,'RUNNING');started=[]
-            def before_build(value):
-                _update_step_receipt(delivery_id,key,value);started.append(True)
-            try:built=execute_diu_build(project,kind,version,before_build)
-            except Refused as error:
-                uncertain=bool(started) and error.code!='session-delivery-diu-not-started'
-                state='UNKNOWN' if uncertain else 'FAILED'
-                _set_step(delivery_id,key,state,{'error':error.code})
-                _set_delivery_state(delivery_id,'UNKNOWN' if uncertain else 'PARTIAL');return
-            if built['exit_code']!=0:
-                _set_step(delivery_id,key,'FAILED',built)
-                _set_delivery_state(delivery_id,'PARTIAL');return
-            _set_step(delivery_id,key,'COMPLETED',built)
-        if plan['docker'] or plan['debian']:
-            require(plan.get('defer_releases') is True,'session-delivery-release-policy-invalid',409)
-            for target in plan['forges']:
-                _set_step(delivery_id,'release:'+target['name'],'SKIPPED',{'reason':'developer-deferred','executed':False,'version':version,'tag':version})
-        for target in plan['forges']:
-            key='verify:'+target['name'];_set_step(delivery_id,key,'RUNNING')
-            try:
-                current=Project.objects.get(pk=project.pk)
-                verified=verify_version(current,target['name'],version,receipt['commit'],receipt['tag_oid'],target['signature'],target['branch'])
-            except Refused as error:
-                state='FAILED' if error.code in ('session-delivery-remote-changed','session-delivery-config-changed') else 'UNKNOWN'
-                _set_step(delivery_id,key,state,{'error':error.code});failures.append(state)
-            else:
-                _set_step(delivery_id,key,'COMPLETED',verified)
-        if failures:
-            _set_delivery_state(delivery_id,'UNKNOWN' if 'UNKNOWN' in failures else 'PARTIAL')
-            return
-        _retire_index(delivery_id)
-        attest_delivery(delivery_id)
-        _set_delivery_state(delivery_id,'COMPLETED')
+        _continue_after_commit(delivery_id,receipt)
     except Exception as error:
         log.error('Livraison interrompue',extra={'code':type(error).__name__})
         try:_set_delivery_state(delivery_id,'UNKNOWN')
@@ -1266,3 +1215,62 @@ def delivery_status(actor, run, version, connector_id, *, administrator=None):
             changed=True
     _publish_delivery(delivery.pk)
     return _delivery_view(delivery)
+
+
+def _continue_after_commit(delivery_id,receipt):
+    from .core.models import GitDelivery,Project
+    from django.db import transaction
+    delivery=GitDelivery.objects.select_related('project','run').get(pk=delivery_id)
+    project=delivery.project;run=delivery.run;version=delivery.version;plan=delivery.plan
+    failures=[]
+    for target in plan['forges']:
+        key='forge:'+target['name'];_set_step(delivery_id,key,'RUNNING');prepared=[]
+        def before_push(value):
+            _update_step_receipt(delivery_id,key,value)
+            prepared.append(True)
+        try:
+            current=Project.objects.get(pk=project.pk)
+            sent=push_version(current,target['name'],version,receipt['commit'],receipt['tag_oid'],before_push,target['remote'],target['signature'],target['branch'])
+        except Refused as error:
+            state='UNKNOWN' if prepared else 'FAILED'
+            _set_step(delivery_id,key,state,{'error':error.code});failures.append(state)
+        else:
+            _set_step(delivery_id,key,'COMPLETED',sent)
+    if failures:
+        _set_delivery_state(delivery_id,'UNKNOWN' if 'UNKNOWN' in failures else 'PARTIAL')
+        return
+    for kind in ('docker','debian'):
+        if not plan[kind]:continue
+        key='build:'+kind;_set_step(delivery_id,key,'RUNNING');started=[]
+        def before_build(value):
+            _update_step_receipt(delivery_id,key,value);started.append(True)
+        try:built=execute_diu_build(project,kind,version,before_build)
+        except Refused as error:
+            uncertain=bool(started) and error.code!='session-delivery-diu-not-started'
+            state='UNKNOWN' if uncertain else 'FAILED'
+            _set_step(delivery_id,key,state,{'error':error.code})
+            _set_delivery_state(delivery_id,'UNKNOWN' if uncertain else 'PARTIAL');return
+        if built['exit_code']!=0:
+            _set_step(delivery_id,key,'FAILED',built)
+            _set_delivery_state(delivery_id,'PARTIAL');return
+        _set_step(delivery_id,key,'COMPLETED',built)
+    if plan['docker'] or plan['debian']:
+        require(plan.get('defer_releases') is True,'session-delivery-release-policy-invalid',409)
+        for target in plan['forges']:
+            _set_step(delivery_id,'release:'+target['name'],'SKIPPED',{'reason':'developer-deferred','executed':False,'version':version,'tag':version})
+    for target in plan['forges']:
+        key='verify:'+target['name'];_set_step(delivery_id,key,'RUNNING')
+        try:
+            current=Project.objects.get(pk=project.pk)
+            verified=verify_version(current,target['name'],version,receipt['commit'],receipt['tag_oid'],target['signature'],target['branch'])
+        except Refused as error:
+            state='FAILED' if error.code in ('session-delivery-remote-changed','session-delivery-config-changed') else 'UNKNOWN'
+            _set_step(delivery_id,key,state,{'error':error.code});failures.append(state)
+        else:
+            _set_step(delivery_id,key,'COMPLETED',verified)
+    if failures:
+        _set_delivery_state(delivery_id,'UNKNOWN' if 'UNKNOWN' in failures else 'PARTIAL')
+        return
+    _retire_index(delivery_id)
+    attest_delivery(delivery_id)
+    _set_delivery_state(delivery_id,'COMPLETED')
