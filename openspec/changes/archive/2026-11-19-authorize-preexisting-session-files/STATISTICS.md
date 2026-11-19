@@ -29,7 +29,7 @@ Change : `authorize-preexisting-session-files` · état local : `archived`. Les 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:5919cd792d7691c2b72ab5a57180fc13416a1537d7967554b295c1d2734c6892
+Provenance : change-periods:221d4633825a5efb78f715b0de916955ba227b25d3d4996fda124711d616c184
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:5919cd792d7691c2b72ab5a57180fc13416a1537d7967554b295
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 17494272 | bounded |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 17748811 | bounded |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 72077 | bounded |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 48955 | bounded |
-| SCM-CCAB-CORRECTIONS-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 17820888 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "3cde68ba8bf567a9d374bd22dcb6c2494e31e5aa952eb9e3a04be2586acb7047", "generated_at": "2026-11-19T16:26:15.101294+00:00", "revision": "3cde68ba8bf567a9d374bd22dcb6c2494e31e5aa952eb9e3a04be2586acb7047", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "bd9a2be519b320e80e945b199487123cb7c8f3f495c9e19271e9c3c7a1779e84", "generated_at": "2026-11-19T16:27:00.278782+00:00", "revision": "bd9a2be519b320e80e945b199487123cb7c8f3f495c9e19271e9c3c7a1779e84", "scope": "change"} -->
