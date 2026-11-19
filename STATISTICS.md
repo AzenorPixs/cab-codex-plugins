@@ -53671,14 +53671,14 @@ Provenance : change-periods:b72f5fae9e8533eee9383bd508aa40d1eacd2c7b5cd92127ce15
 <!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0580b7a375d45c97f2b38d61e402b841ddd917aa80446b6a36495f1139defe4b", "generated_at": "2026-11-19T06:10:17.146447+00:00", "revision": "0580b7a375d45c97f2b38d61e402b841ddd917aa80446b6a36495f1139defe4b", "scope": "change"} -->
 
 
-## Change `recover-failed-precommit-delivery` — openspec/changes/recover-failed-precommit-delivery/STATISTICS.md
+## Change `recover-failed-precommit-delivery` — openspec/changes/archive/2026-11-19-recover-failed-precommit-delivery/STATISTICS.md
 
 
 # Statistiques du change — recover-failed-precommit-delivery
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `recover-failed-precommit-delivery` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `recover-failed-precommit-delivery` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -53705,7 +53705,7 @@ Change : `recover-failed-precommit-delivery` · état local : `working`. Les val
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:dba563745ce3df37b67d4d2bcabadb16226a626b28b7286361f23a31799640a0
+Provenance : change-periods:c56ef5915069c094a53c72f1d3affb748aaacb32f119da837bb09be5892aebea
 
 ## 2. Messages et outils
 
@@ -53735,9 +53735,9 @@ Provenance : change-periods:dba563745ce3df37b67d4d2bcabadb16226a626b28b7286361f2
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 18 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 18 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -53767,16 +53767,8 @@ Provenance : change-periods:dba563745ce3df37b67d4d2bcabadb16226a626b28b7286361f2
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-PRECOMMIT-RECOVERY-20261119 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "8c206ad9fd5b216d3d7d964bdb3e0df7c024583c398585d6cabc13aca1bc191a", "generated_at": "2026-11-19T18:45:33.785730+00:00", "revision": "8c206ad9fd5b216d3d7d964bdb3e0df7c024583c398585d6cabc13aca1bc191a", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ac7bebe9b4c6b3d92f05400ce3bc9edf0d91483749c42390dce3ca9e578e1a7b", "generated_at": "2026-11-19T18:49:09.285413+00:00", "revision": "ac7bebe9b4c6b3d92f05400ce3bc9edf0d91483749c42390dce3ca9e578e1a7b", "scope": "change"} -->
 
 
 ## Change `recover-finalization-checks-autonomously` — openspec/changes/archive/2026-11-14-recover-finalization-checks-autonomously/STATISTICS.md
@@ -71460,4 +71452,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c6b34751c6e186b56bb64526a70d364d018f100041bfa6655320e874a5cee098", "generated_at": "2026-11-19T18:45:35.560989+00:00", "revision": "c6b34751c6e186b56bb64526a70d364d018f100041bfa6655320e874a5cee098", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "48df152420c7c4c78218b253d7fc9bd950a2d7277f9e30c1e871aaedde47a397", "generated_at": "2026-11-19T18:49:11.010703+00:00", "revision": "48df152420c7c4c78218b253d7fc9bd950a2d7277f9e30c1e871aaedde47a397", "scope": "project"} -->
