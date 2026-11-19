@@ -1874,19 +1874,28 @@ CAB MUST indexer chaque rapport statistique après son écriture, avant libérat
 - **THEN** les seuls documents concernés sont indexés et leurs empreintes sont conservées.
 
 ### Requirement: Dernier commit confirmé avant clôture
-Avant de déclarer une session achevée ou bloquée, CAB MUST créer et envoyer un dernier commit limité aux rapports du change, au global et au BLOCKERS.md éventuel. Les documents et destinations MUST être liés au RUN par des reçus durables ; un effet incertain MUST rester protégé sans être rejoué.
+Lorsqu'une livraison Git est requise, CAB MUST publier un dernier commit limité
+aux rapports du change, au global et au BLOCKERS.md éventuel avant clôture. Les
+reçus MUST lier documents et destinations au RUN et protéger les effets incertains.
+Un développement explicitement autorisé en clôture hôte sans livraison MUST
+conserver archive, preuves et rapports sans commit ni envoi.
 
 #### Scenario: Clôture achevée
-- **WHEN** les critères et la livraison applicables sont confirmés
+- **WHEN** les critères et la livraison Git applicables sont confirmés
 - **THEN** CAB termine les statistiques, vérifie le dernier commit local et ses envois distants, puis seulement rend CLOSED.
 
 #### Scenario: Clôture bloquée
-- **WHEN** une session s'arrête pour une dépendance non satisfaite avec BLOCKERS.md
+- **WHEN** une session avec livraison Git s'arrête pour une dépendance non satisfaite avec BLOCKERS.md
 - **THEN** CAB publie les mêmes documents finaux et le fichier de blocage avant de rendre BLOCKED, en conservant le change ouvert et le code non livré.
 
 #### Scenario: Échec ou réponse perdue
 - **WHEN** un commit ou un envoi ne peut pas être confirmé
 - **THEN** CAB expose l'étape et son reçu, ne déclare pas la clôture réussie et ne répète pas un effet confirmé ou incertain.
+
+#### Scenario: Clôture hôte sans livraison
+- **WHEN** ce mode de développement direct est autorisé explicitement avec index libéré et aucune obligation de publication
+- **THEN** CAB vérifie archive et preuves courantes, indexe les rapports et rend CLOSED sans commit ni envoi
+- **AND** le reçu distingue l'absence de livraison d'une publication réussie
 
 ### Requirement: Mesures terminales non récursives
 CAB MUST générer les rapports finaux à partir des snapshots de fin des périodes closes. Le commit et les envois des métadonnées MUST NOT provoquer une boucle de régénération et de commits du même bilan.
@@ -1896,7 +1905,10 @@ CAB MUST générer les rapports finaux à partir des snapshots de fin des pério
 - **THEN** les observations postérieures ne modifient pas rétroactivement cette période et une reprise conserve le même reçu.
 
 ### Requirement: Tag de version déplacé par le moteur à la clôture
-CAB MUST déplacer automatiquement le tag de version sur le commit terminal, sans changer le numéro de version ni ajouter de v. Le code du moteur MUST modifier la branche et le tag atomiquement, protéger leurs valeurs attendues et vérifier les deux références sur chaque forge avant la clôture.
+Lorsqu'un commit terminal est requis, CAB MUST déplacer automatiquement le tag
+de version sur ce commit sans changer la version ni ajouter de v. Branche et tag
+MUST être modifiés atomiquement avec valeurs attendues et vérification distante.
+La clôture hôte explicitement sans livraison MUST NOT déplacer un tag.
 
 #### Scenario: Commit terminal et tag concordants
 - **WHEN** le dernier commit des statistiques et du BLOCKERS.md éventuel est créé
@@ -1971,3 +1983,236 @@ répartition. Une version imposée par le développeur MUST primer.
 - **WHEN** l'orchestrateur déclare une version pour le RUN piloté
 - **THEN** seul ce numéro peut être livré par le codeur
 - **AND** la déclaration d'un autre numéro par le codeur est refusée avant toute opération Git
+
+### Requirement: Libération après travail hôte sans livraison
+CAB MUST permettre au codeur de libérer les réservations de son RUN après
+validation et indexation des fichiers, sans commit ni push. Le service MUST
+vérifier leur concordance avec l'index isolé, conserver cet index et ses objets,
+et refuser une libération si une livraison ou un effet incertain existe.
+
+#### Scenario: Commit manuel après validation hôte
+- **WHEN** le codeur libère ses fichiers validés et indexés sans CI/CD
+- **THEN** CAB retire uniquement ses réservations actives et conserve un reçu idempotent
+- **AND** le commit manuel ne reste plus bloqué par ces réservations
+- **AND** les réservations des autres sessions restent protégées
+
+#### Scenario: Modifications pas encore indexées
+- **WHEN** un fichier réservé diffère de l'index de session ou n'y figure pas
+- **THEN** CAB refuse de libérer les réservations
+
+### Requirement: Édition des métadonnées depuis le détail d'un commit
+CAB MUST proposer Éditer à côté de Fermer dans le détail d'un commit local.
+L'overview MUST permettre de modifier message, auteur, courriel, date avec
+fuseau, tag et description du tag. Message et description du tag MUST être
+distincts. L'historique parent MUST rester ouvert et être actualisé après édition.
+
+#### Scenario: Édition d'un commit de l'historique
+- **WHEN** le développeur valide le formulaire d'édition
+- **THEN** CAB réécrit le commit choisi et ses descendants sur la branche locale
+- **AND** les arbres des commits, l'index et les fichiers de travail restent identiques
+- **AND** les autres branches et dépôts distants restent inchangés
+- **AND** les tags locaux concernés suivent les nouveaux commits
+
+#### Scenario: Édition ou création d'un tag
+- **WHEN** un nom et une description de tag sont fournis
+- **THEN** CAB crée ou modifie le tag choisi avec cette description
+- **AND** un nom vide supprime le tag choisi et une description sans nom est refusée
+
+#### Scenario: Éditeur commun depuis la ligne Tag
+- **WHEN** le développeur clique sur un tag du bloc Git ou sur l'ajout d'un tag
+- **THEN** CAB ouvre le même overview complet de métadonnées que depuis l'historique
+- **AND** le tag cliqué est présélectionné ou le nom proposé suit le défaut du projet
+- **AND** la corbeille conserve son parcours de suppression directe du tag
+- **AND** le sélecteur Tag à éditer reste visible sans tag existant avec le choix Créer un nouveau tag
+
+#### Scenario: Édition depuis le dernier commit
+- **WHEN** le développeur clique sur Éditer dans l'overview Dernier commit
+- **THEN** CAB ouvre l'éditeur commun dans un second overview
+- **AND** fermer ou annuler ce second overview conserve le détail du commit ouvert
+- **AND** après enregistrement le détail du commit est actualisé
+
+#### Scenario: Métadonnées du futur commit
+- **WHEN** le développeur ouvre Nouveau commit depuis le titre du bloc Git
+- **THEN** CAB propose message, auteur, courriel, date, tag et description du tag
+- **AND** l'auteur et le courriel proviennent du projet et la date est préremplie
+- **AND** les valeurs saisies s'appliquent au commit créé et à son tag
+- **AND** message du commit et description du tag restent indépendants
+- **AND** le suivi console et la confirmation de déplacement d'un tag existant sont conservés
+
+#### Scenario: Concurrence ou signature protégée
+- **WHEN** HEAD, branche ou tags ont changé depuis la lecture, ou une signature serait invalidée
+- **THEN** CAB refuse l'édition avant de déplacer une référence
+- **AND** un reçu incertain n'est pas rejoué automatiquement
+
+### Requirement: Navigation de l'accueil Projets
+La page /projects MUST remplacer son titre central Projets par une maison
+cliquable vers cette même page, dans une barre de navigation utilisant la même
+présentation et le même séparateur horizontal que les pages d'un projet.
+
+#### Scenario: Accueil de la zone
+- **WHEN** le développeur ouvre /projects sans projet sélectionné
+- **THEN** la maison remplace le titre central et renvoie vers /projects
+- **AND** le séparateur horizontal reprend la présentation des menus d'un projet
+
+### Requirement: Retour depuis le titre latéral Projets
+Le libellé Projets du menu latéral MUST être un lien vers /projects sur toutes
+les pages qui utilisent cette barre latérale.
+
+#### Scenario: Retour à la liste
+- **WHEN** le développeur clique sur Projets dans la colonne gauche d'un projet ou d'une sous-page
+- **THEN** CAB revient à /projects sans modifier le projet
+
+### Requirement: Tableau global des sessions de projets
+CAB MUST proposer Sessions dans le menu de /projects et exposer la page
+/projects/sessions. Cette page MUST reprendre le tableau des sessions par projet
+avec une colonne Projets contenant son identifiant cliquable vers son accueil.
+
+#### Scenario: Sessions de plusieurs projets
+- **WHEN** le développeur ouvre /projects/sessions
+- **THEN** les sessions non archivées des projets accessibles apparaissent dans le tableau
+- **AND** la colonne Projets mène à l'accueil de chaque projet
+- **AND** les liens RUN et actions restent rattachés au bon projet
+- **AND** les pages de sessions par projet conservent leur présentation
+
+### Requirement: Portée et actualisation des sessions globales
+Le flux Electric global MUST être authentifié et calculer sa portée côté
+serveur. Les acteurs non administrateurs MUST recevoir uniquement les projets
+autorisés. Les sessions MUST être actualisées sans rechargement de la page.
+
+#### Scenario: Acteur limité
+- **WHEN** un acteur demande le flux global avec des paramètres de table ou de filtre arbitraires
+- **THEN** CAB conserve la projection et le filtre de projets autorisés calculés côté serveur
+- **AND** aucun projet autorisé implique un résultat vide
+- **AND** une demande non authentifiée ne transmet aucune requête à Electric
+
+#### Scenario: Changement d'étape
+- **WHEN** une session visible change d'étape en base
+- **THEN** la ligne correspondante est actualisée par Electric sans rechargement
+
+### Requirement: Nouvelle réservation d'un snapshot libéré
+CAB MUST pouvoir réserver un fichier déjà libéré par le même acteur et la même
+session native si son index protégé, son empreinte et le contenu du fichier
+correspondent toujours au reçu de libération. Les modifications nouvelles et
+les réservations étrangères MUST rester protégées.
+
+#### Scenario: Évolution hôte successive
+- **WHEN** une nouvelle évolution réserve un fichier modifié mais déjà validé et libéré dans cette session
+- **THEN** CAB autorise la reprise seulement après vérification de son snapshot conservé
+- **AND** un contenu changé depuis sa libération est refusé
+
+### Requirement: Archives globales des projets
+CAB MUST proposer /projects/archives dans le menu commun et reprendre le tableau
+des archives avec une colonne Projets affichant l'identifiant cliquable vers son
+accueil. Liens RUN et actions MUST rester rattachés au bon projet.
+
+#### Scenario: Archives de plusieurs projets
+- **WHEN** le développeur ouvre Archives dans le menu Projets
+- **THEN** les archives de ses projets accessibles sont affichées
+- **AND** Projets mène à l'accueil correspondant et les pages par projet restent disponibles
+
+### Requirement: Pagination à dix lignes
+Les listes Sessions et Archives, globales et par projet, MUST afficher au plus
+dix lignes par page avec Premier, Précédent, Page X / Y, Suivant et Dernier.
+Les archives MUST être paginées côté serveur après filtrage des autorisations.
+
+#### Scenario: Parcours complet
+- **WHEN** plus de dix éléments existent
+- **THEN** les pages permettent de parcourir tous les éléments autorisés sans omission
+- **AND** les commandes indisponibles sont désactivées et une page devenue inexistante est ramenée à la dernière
+
+### Requirement: Portée des archives et actualisation
+CAB MUST filtrer les archives et leur flux Electric selon les projets autorisés
+de l'acteur actif. Le client MUST NOT pouvoir remplacer le filtre serveur.
+
+#### Scenario: Consultation et changements
+- **WHEN** une archive est ajoutée ou retirée dans le périmètre autorisé
+- **THEN** le tableau est actualisé via Electric avec le rafraîchissement de secours existant
+- **AND** les acteurs inactifs, non authentifiés ou sans projet n'obtiennent aucune archive
+
+### Requirement: Clôture hôte validée sans livraison
+Sur autorisation administrative explicite, un RUN direct de développement sans
+obligation de publication ou installation MUST pouvoir être déclaré sans
+livraison après libération de son index. Archive, preuves courantes et rapports
+MUST rester obligatoires. Le reçu CLOSED MUST déclarer delivered=false.
+
+#### Scenario: Travail hôte achevé
+- **WHEN** l'autorité déclare ce mode sur un index libéré sans effet protégé ni livraison commencée
+- **THEN** le processeur normal clôture seulement après vérification des preuves et de l'archive
+- **AND** les rapports sont indexés, l'index est conservé et aucun commit, tag ou push n'est effectué
+
+#### Scenario: Réservation pendant la préparation d'archive
+- **WHEN** des fichiers restent réservés par le RUN
+- **THEN** la clôture attend leur indexation puis leur libération
+- **AND** une reprise explicite d'un index libéré n'est admise que si son snapshot conservé est inchangé
+
+### Requirement: Révision des critères avant qualification
+Une autorité administrative MUST pouvoir réviser les critères avant toute
+opération ou preuve avec empreintes attendues et motif explicite. L'ancien
+contrat MUST être conservé ; commandes, producteurs et revue MUST rester inchangés.
+
+#### Scenario: Précision de la demande avant contrôle
+- **WHEN** le développeur précise dix lignes au lieu de vingt-cinq avant toute qualification
+- **THEN** CAB conserve le contrat précédent et exige une nouvelle preuve du contrat révisé
+- **AND** opération, preuve, gel, import, revue ou effet protégé interdisent cette révision
+- **AND** un doublon identique conserve le reçu tandis qu'un contenu contradictoire est refusé
+
+### Requirement: Annulation prouvée d'une initialisation d'index non publiée
+Un administrateur MUST pouvoir régulariser un essai d'indexation UNKNOWN limité
+à la préparation si l'index est identique à sa base et aucune référence de
+snapshot n'existe. Le reçu original MUST rester intact et l'index de base MUST
+être conservé en sauvegarde. Ce parcours MUST NOT rejouer l'essai original.
+
+#### Scenario: Aucun fichier n'a été indexé
+- **WHEN** l'administrateur cible l'effet avec empreinte attendue et autorisation explicite
+- **THEN** CAB vérifie absence de verrou, de snapshot et d'autres effets protégés
+- **AND** il conserve le reçu original, annule cet essai et permet un nouvel essai distinct
+- **AND** toute donnée indexée ou référence existante interdit cette annulation
+
+### Requirement: Liaison native et connecteur distingués
+CAB MUST retourner séparément la liaison du journal natif et celle du connecteur authentifié. Il MUST NOT présenter une liaison de journal seule comme une autorisation Git. Une réparation MUST préserver les identités et les effets indécis, sans rejouer de requête métier.
+
+#### Scenario: Journal lié sans worker reconnu
+- **WHEN** le journal est vérifié mais le worker appelant ne correspond à aucun connecteur vivant authentifié
+- **THEN** `native.bind` indique `connector_bound=false` et les opérations Git restent refusées.
+
+#### Scenario: Worker réel reconnu
+- **WHEN** le worker appelant appartient au relais authentifié enregistré et la liaison de RUN est admissible
+- **THEN** `native.bind` indique `connector_bound=true` et le contexte Git identifie ce seul RUN.
+
+#### Scenario: Récupération du couple réel sans heartbeat observé
+- **WHEN** le worker authentifié et son parent CAB sont vérifiés par UID, agent, PPID, PID/start/boot, sans registre concurrent ni liaison de RUN incompatible
+- **THEN** CAB peut créer une observation conservatrice `OBSERVED` permettant le rattachement du RUN vérifié ; versions et catalogue restent inconnus, incertitude vraie, sans prétendre à un heartbeat ou une disponibilité CABU.
+
+#### Scenario: Heartbeat réel après récupération
+- **WHEN** le parent authentifié fournit ensuite son vrai heartbeat pour le même couple kernel
+- **THEN** CAB adopte atomiquement la liaison dans le registre du heartbeat, conserve l'ancienne observation `SUPERSEDED` et garantit un seul connecteur sélectionnable.
+
+### Requirement: Contestation administrative d'un contrôle non probant
+CAB MUST permettre à un administrateur authentifié de contester une preuve CAB de contrôle courant en désignant RUN, check, opération, preuve et leurs empreintes exactes. Il MUST conserver les originaux, l'autorité, la raison et l'autorisation dans un événement durable, exclure cette preuve et incrémenter la révision du seul contrôle après correction de son argv. Critères, producteurs et revue MUST rester inchangés. La contestation MUST NOT exécuter de commande ni lever une protection.
+
+#### Scenario: Contrôle réussi sans test découvert
+- **WHEN** l'administrateur démontre que la réussite courante ne mesure pas le critère et transmet un argv corrigé
+- **THEN** CAB conserve le reçu initial intact, exclut la preuve contestée et exige une nouvelle exécution à la nouvelle révision ; la seule preuve contestée ne permet aucune clôture.
+
+#### Scenario: Répétition et concurrence
+- **WHEN** une demande identique est répétée ou une demande concurrente porte une empreinte périmée
+- **THEN** CAB retourne le même reçu dans le premier cas et refuse le second ; aucun autre contrôle n'est modifié.
+
+#### Scenario: Frontière protégée
+- **WHEN** un effet est indécis, un bail détenu, le RUN gelé, importé, revu ou clôturé
+- **THEN** CAB refuse la contestation et conserve toutes les protections et preuves.
+
+### Requirement: Récupération autonome bornée du parcours de livraison
+CAB MUST permettre une correction administrative de préqualification `development` vers `delivery` uniquement avant toute opération ou preuve et si une publication est déjà cadrée. Les critères, checks, producteurs et revue MUST rester inchangés ; empreintes, historique et protections MUST être conservés. CAB MUST inclure les rapports CAB vérifiés des archives validées appartenant explicitement au lot de la même session, sans réservation ou édition des statistiques par le LLM.
+
+#### Scenario: Admission de livraison corrigée avant qualification
+- **WHEN** l'administrateur transmet les empreintes exactes, l'autorisation et `nature=delivery` avant opération, preuve, effet, bail, revue, gel ou import, avec publication déjà cadrée
+- **THEN** CAB conserve le contrat initial, corrige seulement la nature, exige les nouvelles preuves et refuse toute autre transition.
+
+#### Scenario: Rapports générés des archives du lot
+- **WHEN** des archives de RUN CLOSED prouvés du même projet, acteur et SID ont proposal.md et tasks.md réservés dans l'index courant
+- **THEN** CAB inclut leurs rapports générés prêts, sans override, dont le SHA entier correspond au fichier vérifié ; une réservation contradictoire ou un contenu modifié empêche son adoption et aucun rapport étranger n'est absorbé.
+
+#### Scenario: Réservation après archivage vérifié
+- **WHEN** la réconciliation officielle du même RUN constate une archive unique réelle et l'absence de la source, avec les anciens chemins réservés dans le même index, acteur et session
+- **THEN** CAB reconnaît automatiquement les mêmes fichiers relatifs sous leur chemin d'archive, conserve la provenance dans le reçu de réservation et refuse toute cible non régulière, étrangère ou concurrente ; les captures initiales restent intactes.

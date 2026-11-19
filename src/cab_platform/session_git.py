@@ -144,20 +144,31 @@ def _reserve_files_locked(actor, data, connector_id=None):
         snapshot = git_snapshot(project)
         require(snapshot['available'] and snapshot['branch'] != '(detached)', 'session-git-unavailable', 409)
         index, created = GitSessionIndex.objects.get_or_create(change=change, session_id=current.coding_session_id, defaults={'initial_run': current, 'base_head': snapshot['head'] or '', 'index_path': '', 'state': 'PENDING', **_origin_if_supported(GitSessionIndex,current,session=True)})
-        require(index.state in ('PENDING', 'OPEN'), 'session-git-index-unavailable', 409)
+        require(index.state in ('PENDING', 'OPEN', 'RELEASED'), 'session-git-index-unavailable', 409)
+        reopening=index.state=='RELEASED'
+        if reopening:
+            previous_paths=list(GitFileReservation.objects.filter(git_index=index,active=False).values_list('path',flat=True).distinct())
+            require(previous_paths and verify_releasable_index(project,index.index_path,previous_paths)==index.origin.get('release',{}).get('index_sha256'),'session-git-release-unstaged',409)
         require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
         prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
         current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
+        relocated_paths=[]
         for path in sorted(paths):
             key = hashlib.sha256(path.encode('utf-8')).hexdigest()
             existing = GitFileReservation.objects.select_for_update().filter(project=project, path_digest=key, active=True).first()
             if existing is not None:
                 require(existing.path == path and existing.git_index_id == index.pk, 'session-git-reserved', 409)
                 continue
-            require(path not in prior_dirty and path not in current_dirty, 'session-git-file-preexisting', 409)
+            if path in prior_dirty or path in current_dirty:
+                candidates=GitFileReservation.objects.filter(project=project,path_digest=key,active=False,git_index__state='RELEASED',git_index__session_id=current.coding_session_id,git_index__initial_run__actor_id=actor.pk).select_related('git_index').order_by('-released')[:10]
+                relocated=reconciled_archive_owned(current,index,path)
+                require(relocated or any(item.path==path and released_index_matches(project,item.git_index,path) for item in candidates),'session-git-file-preexisting',409)
+                if relocated:relocated_paths.append(path)
             GitFileReservation.objects.create(project=project, git_index=index, path=path, path_digest=key)
+        if reopening:
+            index.state='OPEN';index.save(update_fields=['state','updated']);event(current,'git-index-reopened',{'request_id':request_id,'previous_release':index.origin.get('release',{})})
         receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change, 'session_id': current.session_id}
-        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt})
+        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths})
         return receipt
 
 
@@ -519,3 +530,35 @@ def release_files(actor,data,connector_id=None):
             return receipt
     finally:
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def reconciled_archive_owned(current,index,path):
+    """Une archive vérifiée conserve l'attribution de ses fichiers réservés."""
+    from pathlib import Path
+    from .core.models import Event,GitFileReservation
+    root=Path(current.project.root)
+    if index.change_id!=current.change_record_id or index.session_id!=current.coding_session_id or index.initial_run.actor_id!=current.actor_id:return False
+    if (root/'openspec/changes'/current.change).exists():return False
+    for record in current.mandate.get('archive_reconciliations',[]):
+        archive=record.get('archive_path','')
+        if not archive or not path.startswith(archive+'/'):continue
+        if not Event.objects.filter(run=current,kind='mandate-archive-reconciled',data__archive_path=archive,data__source_revision=record.get('source_revision')).exists():continue
+        archives=list((root/'openspec/changes/archive').glob('????-??-??-'+current.change))
+        if len(archives)!=1 or str(archives[0].relative_to(root))!=archive:continue
+        previous='openspec/changes/'+current.change+path[len(archive):]
+        target=root/path
+        if (root/previous).exists() or not target.is_file() or target.resolve()!=target:continue
+        if GitFileReservation.objects.filter(project=current.project,git_index=index,path=previous,active=True).exists():return True
+    return False
+
+
+def released_index_matches(project,index,path):
+    """Reconnaît uniquement un snapshot libéré inchangé, jamais des travaux nouveaux."""
+    expected=index.origin.get('release',{}).get('index_sha256')
+    if index.state!='RELEASED' or not expected or not index.keep_ref or not index.keep_oid:return False
+    try:
+        if verify_releasable_index(project,index.index_path,[path])!=expected:return False
+        options,env=context(project)
+        kept=run(project,options,env,'rev-parse','--verify',index.keep_ref)
+        return kept.returncode==0 and kept.stdout.decode('ascii').strip()==index.keep_oid
+    except (Refused,OSError,UnicodeError):return False

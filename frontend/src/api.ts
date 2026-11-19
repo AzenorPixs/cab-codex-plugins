@@ -6,6 +6,7 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'session-archives-page-invalid':'Le numéro de page des archives est invalide.',
   'git-commit-edit-unavailable':'Impossible de lire ou modifier les métadonnées de ce commit.',
   'git-commit-edit-invalid':'La demande d’édition du commit est invalide.',
   'git-commit-edit-changed':'La branche, le commit ou les tags ont changé. Fermez puis rouvrez l’éditeur.',

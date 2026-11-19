@@ -3,7 +3,7 @@ name: cicd
 description: Déclencher la CI/CD autorisée du projet via CAB avec une version, puis suivre le même reçu de livraison.
 ---
 
-# CICD 3.2.18
+# CICD 3.2.19
 
 Utiliser ce skill pour une demande de livraison CI/CD par CAB. En session directe,
 le LLM de codage choisit et transmet la nouvelle version avec discernement : lire

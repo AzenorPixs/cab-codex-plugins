@@ -3,7 +3,15 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.18
+# CAB 3.2.19
+
+Une réussite ne mesurant aucun test ne devient pas une preuve valable par son
+seul code0. Le codeur signale la preuve exacte ; l'administrateur peut utiliser
+`finalization.contest_check` selon references/finalization.md. Les originaux sont
+conservés, exclus de la sélection et une nouvelle exécution est obligatoire.
+Ne pas élargir `finalization.revise_check` pour contourner un succès protégé.
+Après `native.bind`, vérifier aussi `connector_bound` et `session_git_context` ;
+`bound=true` seul atteste uniquement la liaison du journal natif.
 
 Au cadrage d'un nouveau RUN, transmettre `finalization` à run_begin : nature,
 checks (id, argv exact, critères couverts), preuves attendues et revue réservée.
@@ -63,7 +71,21 @@ rendre la main. CAB exige que les fichiers correspondent à l'index validé et
 ne libère que les réservations du RUN. L'index isolé et ses objets restent
 conservés en état RELEASED ; aucun commit, tag ou push n'est créé. Un effet
 incertain ou une livraison commencée interdit cette libération. Une reprise
-d'écriture doit repasser par une nouvelle réservation dans un nouveau parcours.
+d'écriture doit repasser par une nouvelle réservation ; un index libéré n'est
+rouvert que si son snapshot conservé est inchangé. La clôture attend la
+libération de toutes les réservations du RUN.
+
+Pour obtenir CLOSED sans livraison, l'autorité administrative déclare
+`finalization.host_completion` avec les empreintes de politique/cadrage attendues
+et l'autorisation développeur. Seul un RUN direct de développement sans obligation
+de publication/installation et avec index libéré est admis. Archiver OpenSpec,
+exécuter les contrôles sur les sources courantes puis laisser CAB générer les
+rapports et produire son reçu CLOSED livré=false, sans commit, tag ni push.
+La déclaration seule ne clôture rien et ne dispense d'aucune preuve.
+Un changement explicite de critères avant toute opération ou preuve passe par
+`run.reframe_prequalification` ; il conserve l'ancien contrat et n'autorise
+aucune modification de commandes, producteurs ou revue. Ce parcours ne remplace
+pas la contestation d'une preuve existante.
 
 Pour une CI/CD autorisée, charger le skill CICD. En direct, le codeur choisit
 avec discernement une version cohérente avec le projet sans la redemander au

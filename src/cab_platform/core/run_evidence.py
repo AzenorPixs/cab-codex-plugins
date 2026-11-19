@@ -59,6 +59,59 @@ def configure(actor,data):
     c.event(run,'finalization-configured',{'policy_digest':plan.digest,'authorizer':actor.pk,'old_policy':old_policy,'old_digest':old_digest,'policy':value,'previous_framing_digest':previous_framing,'framing_digest':run.mandate['framing_digest'],'preflight_correction':bool(old_policy)})
     return {'policy':plan.policy,'digest':plan.digest}
 
+def contested_evidence_ids(run):
+    """Les exclusions sont des événements ; les preuves originales restent intactes."""
+    return set(Event.objects.filter(run=run,kind='finalization-check-contested').values_list('data__evidence_id',flat=True))
+
+
+@transaction.atomic
+def contest_check(actor,data):
+    c.require(actor.active and actor.role=='admin','administrator-required',403)
+    fields={'project_id','run_id','request_id','expected_policy_digest','check_id','operation_id','evidence_id','expected_evidence_digest','expected_receipt_digest','argv','reason','authorization'}
+    c.require(set(data)==fields,'finalization-contest-fields-invalid',400)
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    key=c.identifier(data['request_id']);fingerprint=c.digest(data)
+    previous=Event.objects.filter(run=run,kind='finalization-check-contested',data__request_id=key).first()
+    if previous:
+        c.require(previous.data['input_digest']==fingerprint,'finalization-contest-request-conflict')
+        return previous.data['receipt']
+    c.working(run)
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'finalization-contest-protected')
+    plan=FinalizationPlan.objects.select_for_update().filter(run=run).first()
+    c.require(plan and plan.policy and not plan.receipt,'finalization-contract-required')
+    c.require(plan.digest==data['expected_policy_digest'] and plan.digest==c.digest(plan.policy),'finalization-contest-stale')
+    for field in ('reason','authorization'):
+        value=data[field]
+        c.require(isinstance(value,str) and 10<=len(value.strip())<=4000,'finalization-contest-'+field+'-required',400)
+    c.require(type(data['operation_id']) is int and type(data['evidence_id']) is int,'finalization-contest-identity-invalid',400)
+    check=next((item for item in plan.policy['checks'] if item['id']==data['check_id']),None)
+    c.require(check is not None,'finalization-check-unknown',400)
+    version=plan.check_revisions.get(check['id'],1)
+    proof=RunEvidence.objects.select_for_update().filter(run=run,pk=data['evidence_id'],source='cab-operation').first()
+    operation=Operation.objects.select_for_update().filter(run=run,pk=data['operation_id']).first()
+    c.require(proof is not None and operation is not None,'finalization-contest-proof-not-found')
+    c.require(proof.pk not in contested_evidence_ids(run),'finalization-evidence-already-contested')
+    current=run.finalization_evidence.filter(source='cab-operation',payload__rule_id=check['id']).exclude(pk__in=contested_evidence_ids(run)).order_by('-pk').first()
+    c.require(current is not None and current.pk==proof.pk,'finalization-contest-proof-not-current')
+    c.require(proof.digest==data['expected_evidence_digest']==c.digest(proof.payload),'finalization-contest-proof-stale')
+    payload=proof.payload
+    c.require(payload.get('scope')==identity(run) and payload.get('rule_id')==check['id'] and payload.get('check_revision',1)==version and payload.get('operation_id')==operation.pk,'finalization-contest-proof-divergent')
+    c.require(payload.get('source_revision')==c.revision(run),'finalization-contest-source-stale')
+    c.require(operation.state=='COMPLETED' and operation.receipt.get('exit_code')==0 and payload.get('result')=='passed','finalization-contest-success-required')
+    c.require(operation.receipt_digest==data['expected_receipt_digest']==payload.get('receipt_digest')==c.digest(operation.receipt),'finalization-contest-receipt-stale')
+    c.require(operation.request.get('argv')==check['argv'] and payload.get('source_revision')==operation.source_revision and payload.get('source_after')==operation.source_revision,'finalization-contest-operation-divergent')
+    try:value=replace_check_argv(plan.policy,check['id'],data['argv'])
+    except ContractError as error:raise c.Refused(str(error),400) from error
+    value=validate_policy(run,value);old_policy=copy.deepcopy(plan.policy);old_digest=plan.digest
+    plan.policy=value;plan.digest=c.digest(value);plan.check_revisions={**plan.check_revisions,check['id']:version+1}
+    plan.phase='WAITING';plan.missing=['evidence:'+check['id']+':contested'];plan.save()
+    receipt={'request_id':key,'check_id':check['id'],'operation_id':operation.pk,'evidence_id':proof.pk,'evidence_digest':proof.digest,'receipt_digest':operation.receipt_digest,'previous_policy_digest':old_digest,'policy_digest':plan.digest,'check_revision':version+1,'new_execution_required':True,'effects_issued':False}
+    c.event(run,'finalization-check-contested',{'request_id':key,'input_digest':fingerprint,'actor':actor.pk,'reason':data['reason'],'authorization':data['authorization'],'evidence_id':proof.pk,'evidence_digest':proof.digest,'old_policy':old_policy,'new_policy':value,'receipt':receipt})
+    return receipt
+
+
 @transaction.atomic
 def revise_check(actor,data):
     c.require(set(data)=={'project_id','run_id','request_id','expected_policy_digest','check_id','argv','reason'},'finalization-revision-fields-invalid',400)
@@ -81,7 +134,7 @@ def revise_check(actor,data):
     value=validate_policy(run,value)
     check=next(item for item in plan.policy['checks'] if item['id']==data['check_id'])
     version=plan.check_revisions.get(check['id'],1)
-    latest=run.finalization_evidence.filter(source='cab-operation',payload__rule_id=check['id']).order_by('-pk').first()
+    latest=run.finalization_evidence.filter(source='cab-operation',payload__rule_id=check['id']).exclude(pk__in=contested_evidence_ids(run)).order_by('-pk').first()
     current=c.revision(run)
     c.require(not (latest and latest.payload.get('check_revision',1)==version and latest.payload.get('result')=='passed' and latest.payload.get('source_revision')==current),'finalization-check-already-passed')
     old_policy=plan.policy;old_digest=plan.digest

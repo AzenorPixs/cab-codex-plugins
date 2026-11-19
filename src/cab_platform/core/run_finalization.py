@@ -3,7 +3,7 @@ from pathlib import Path
 from django.db import transaction
 from django.utils import timezone
 from . import commands as c,run_evidence as evidence
-from .models import EvidenceProducer,FinalizationPlan,Operation,Run
+from .models import EvidenceProducer,FinalizationPlan,Operation,Run,GitFileReservation
 from cab_platform.finalization_contract import next_actions
 
 def dossier(run,plan,*,allow_terminal_git=False):
@@ -21,12 +21,13 @@ def dossier(run,plan,*,allow_terminal_git=False):
             missing.append(getattr(error,'code','finalization-archive-unavailable'))
             boundary=not (Path(run.project.root)/'openspec/changes'/run.change).exists()
     else:boundary=True
+    if run.configuration.get('host_completion') and GitFileReservation.objects.filter(git_index__change_id=run.change_record_id,git_index__session_id=run.coding_session_id,active=True).exists():missing.append('session-git-reservations-active')
     current=c.revision(run);revisions={current}
     if archive:revisions.add(c.revision(run,{'openspec/changes/'+run.change:archive}))
     groups={}
     for rule in plan.policy['checks']+plan.policy['requirements']:
         source='cab-operation' if 'argv' in rule else 'cab-update' if rule['producer']=='cab-update' else 'producer:'+rule['producer']
-        row=run.finalization_evidence.filter(source=source,payload__rule_id=rule['id']).order_by('-pk').first()
+        row=run.finalization_evidence.filter(source=source,payload__rule_id=rule['id']).exclude(pk__in=evidence.contested_evidence_ids(run)).order_by('-pk').first()
         reason=None
         if row is None:reason='missing'
         elif row.digest!=c.digest(row.payload):reason='integrity'
@@ -133,6 +134,9 @@ def process(run_id):
         current=dossier(run,plan,allow_terminal_git=True)
         c.require(not current['missing'] and current['proofs']==result['proofs'] and current['source_revision']==result['source_revision'],'finalization-proof-changed')
         receipt={'receipt_id':'POLICY-FINALIZE-'+str(run.pk),'kind':'policy','branch':'TERMINÉ','policy_digest':plan.digest,'nature':plan.policy['nature'],'proofs':current['proofs'],'source_revision':current['source_revision'],'artifact_groups':current['artifact_groups'],'report':report,'sha256':report_sha,'at':timezone.now().isoformat(),'authority':'cab-policy','llm_submission_required':False,'terminal_git':terminal}
+        if terminal is None and run.configuration.get('host_completion'):
+            receipt['host_completion']=run.configuration['host_completion']
+            receipt['delivered']=False
         plan.receipt=receipt;plan.phase='CLOSED';plan.missing=[];plan.save()
         run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=11;run.phase='CLOSED';run.save(update_fields=['review','state','stage','phase','updated'])
         c.event(run,'run-closed',receipt)

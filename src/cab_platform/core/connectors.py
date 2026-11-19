@@ -27,21 +27,61 @@ def worker_connector(actor,peer):
     worker=identity(peer.get('pid',0))
     if not worker or cab_process(worker['pid'],'mcp-worker')!=actor.agent:
         return None
-    matches=[row for row in McpConnector.objects.filter(actor=actor) if row.worker==worker and alive(row.process)]
+    matches=[row for row in McpConnector.objects.filter(actor=actor).exclude(state='SUPERSEDED') if row.worker==worker and alive(row.process)]
     c.require(len(matches)<=1,'connector-worker-ambiguous',409)
     return matches[0] if matches else None
+
+
+def observe_native_worker(actor,run,peer):
+    """Observation kernel, sans inventer version, catalogue ou heartbeat."""
+    if not peer or peer.get('uid')!=actor.uid or not actor.active:return None
+    worker=identity(peer.get('pid',0))
+    if not worker or worker['uid']!=actor.uid or cab_process(worker['pid'],'mcp-worker')!=actor.agent:return None
+    parent=identity(worker['parent_pid'])
+    if not parent or parent['uid']!=actor.uid or cab_process(parent['pid'],'mcp')!=actor.agent:return None
+    from .run_lifecycle import guard
+    guard(run,allow_measurement=True)
+    c.require(not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'native-worker-observation-protected',409)
+    # Ce verrou sérialise aussi le premier heartbeat du relais réel.
+    Actor.objects.select_for_update().get(pk=actor.pk)
+    existing=worker_connector(actor,peer)
+    if existing is not None:return existing
+    c.require(not McpConnector.objects.filter(actor=actor,process=parent).exclude(state='SUPERSEDED').exists(),'connector-parent-observation-divergent',409)
+    c.require(identity(worker['pid'])==worker and identity(parent['pid'])==parent,'connector-process-changed',409)
+    key=c.digest({'actor':actor.pk,'parent':parent,'worker':worker})[:32]
+    row=McpConnector.objects.create(pk=key,actor=actor,agent=actor.agent,process=parent,worker=worker,state='OBSERVED',uncertain=True,pending=0,error='native-worker-observed-without-heartbeat')
+    project_connector(row)
+    c.event(run,'native-worker-observed',{'connector_id':row.pk,'process':parent,'worker':worker,'loaded_version_observed':False,'catalog_observed':False})
+    return row
+
+
+def adopt_native_observation(actor,row):
+    from .models import McpRunBinding
+    observed=McpConnector.objects.select_for_update().filter(actor=actor,process=row.process,worker=row.worker,state='OBSERVED').exclude(pk=row.pk)
+    for previous in observed:
+        binding=McpRunBinding.objects.select_for_update().filter(connector=previous).first()
+        target=McpRunBinding.objects.select_for_update().filter(connector=row).first()
+        if binding:
+            c.require(target is None or target.run_id==binding.run_id,'connector-binding-adoption-conflict',409)
+            if target is None:McpRunBinding.objects.filter(pk=binding.pk).update(connector=row)
+            else:binding.delete()
+            from .models import Event
+            # Pas de FK RUN : aucun verrou RUN après les verrous de connecteur.
+            Event.objects.create(project_id=binding.run.project_id,kind='native-worker-heartbeat-adopted',data={'project_id':binding.run.project_id,'run_pk':binding.run_id,'run_id':binding.run.run_id,'session_id':binding.run.session_id,'provenance':'authenticated-parent-heartbeat','previous_connector_id':previous.pk,'connector_id':row.pk,'worker':row.worker})
+        previous.state='SUPERSEDED';previous.error='native-worker-observation-adopted';previous.save(update_fields=['state','error','seen']);project_connector(previous)
 
 
 @transaction.atomic
 def bind_worker_run(actor,data,peer):
     from .models import McpRunBinding
-    connector=worker_connector(actor,peer)
-    if connector is None:
-        return False
+    Actor.objects.select_for_update().get(pk=actor.pk)
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
     c.require(bool(run.mandate.get('native_source')),'native-source-not-bound',409)
+    connector=worker_connector(actor,peer)
+    if connector is None:connector=observe_native_worker(actor,run,peer)
+    if connector is None:return False
     connector=McpConnector.objects.select_for_update().get(pk=connector.pk)
-    c.require(connector.actor_id==actor.pk and connector.worker==identity(peer['pid']) and alive(connector.process),'connector-owner-divergent',403)
+    c.require(connector.state!='SUPERSEDED' and connector.actor_id==actor.pk and connector.worker==identity(peer['pid']) and alive(connector.process),'connector-owner-divergent',403)
     previous=McpRunBinding.objects.select_for_update().select_related('run').filter(connector=connector).first()
     if previous is not None and previous.run_id!=run.pk:
         c.require(c.no_pending(previous.run),'session-connector-busy',409)
@@ -54,7 +94,7 @@ def bind_worker_run(actor,data,peer):
 def lock_worker_binding(actor,connector_id,run):
     """Fige la liaison pendant l'admission d'un effet Git."""
     from .models import McpRunBinding
-    connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).first()
+    connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).exclude(state='SUPERSEDED').first()
     c.require(connector is not None and alive(connector.process) and alive(connector.worker),'session-connector-unbound',409)
     binding=McpRunBinding.objects.select_for_update().filter(connector=connector,run=run).first()
     c.require(binding is not None,'session-connector-run-divergent',403)
@@ -84,6 +124,9 @@ def heartbeat(actor,data,peer):
     version=data.get('loaded_version');c.require(isinstance(version,str) and re.fullmatch(r'\d+\.\d+\.\d+',version),'connector-version-invalid',400)
     c.require(type(data.get('pending')) is int and 0<=data['pending']<=10000,'connector-pending-invalid',400)
     state=data.get('state');c.require(state in ('READY','BUSY','RELOADING','CATALOG_PENDING','FAILED'),'connector-state-invalid',400)
+    Actor.objects.select_for_update().get(pk=actor.pk)
+    others=McpConnector.objects.filter(actor=actor,process=process).exclude(pk=key).exclude(state='SUPERSEDED')
+    c.require(not others.exclude(state='OBSERVED',worker=worker).exists(),'connector-process-already-registered',409)
     row,created=McpConnector.objects.select_for_update().get_or_create(pk=key,defaults={'actor':actor,'agent':actor.agent,'process':process})
     c.require(row.actor_id==actor.pk and row.process==process,'connector-owner-divergent',403)
     changed=row.worker!=worker
@@ -96,6 +139,7 @@ def heartbeat(actor,data,peer):
     row.relay_version=relay
     if data.get('catalog_version')==version:row.catalog_version=version
     row.error=str(data.get('error',''))[:100];row.save()
+    adopt_native_observation(actor,row)
     project_connector(row)
     return {'connector_id':row.pk,'generation':row.generation,'loaded_version':row.loaded_version,'catalog_version':row.catalog_version}
 
@@ -142,7 +186,7 @@ def stop_report(actor,data,peer):
 
 def snapshot():
     rows=[];managed=[]
-    for row in McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)):
+    for row in McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(state='SUPERSEDED'):
         if not alive(row.process):continue
         managed.append(row.process);rows.append({'kind':'managed','connector_id':row.pk,'agent':row.agent,'process':row.process,'owner':identity(row.process['parent_pid']),'generation':row.generation,'loaded_version':row.loaded_version})
     allowed=set(Actor.objects.filter(active=True,agent__in=['codex','codex-cli','opencode']).values_list('uid','agent'))
@@ -150,7 +194,7 @@ def snapshot():
     return rows
 
 def assess(targets,version,confirmed_disconnected=()):
-    outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)))
+    outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(state='SUPERSEDED'))
     original_ids={target.get('connector_id') for target in targets if target.get('kind')=='managed'}
     for target in targets:
         state='RECONNECTING';detail='';row=None

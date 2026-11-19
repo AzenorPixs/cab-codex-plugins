@@ -805,10 +805,10 @@ def closure_evaluations(request,project_id:str):
     return {'evaluations':[evaluate(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
 
 @api.get('/session-archives')
-def session_archives(request,project_id:str):
-    actor=principal(request);p=Project.objects.get(pk=project_id);commands.scope(actor,p)
-    from .models import SessionArchive
-    return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in SessionArchive.objects.filter(run__project=p).select_related('run','run__change_record').order_by('-created')[:500]]}
+def session_archives(request,project_id:str='',page:int=1):
+    from cab_platform.archive_listing import archive_page
+    rows,pagination=archive_page(principal(request),project_id,page)
+    return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in rows],**pagination}
 
 @api.get('/run')
 def run_status(request,project_id:str,run_id:str):
@@ -904,6 +904,10 @@ def command(request,body:Command):
     if name=='connector.native_reload':
         from .native_control import request_connector
         return request_connector(actor,data,getattr(request,'cab_peer',None))
+    if name=='finalization.contest_check':
+        principal(request,admin=True)
+        from .run_evidence import contest_check
+        return contest_check(actor,data)
     if name in ('finalization.configure','finalization.revise_check','finalization.retarget_release','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
         return {'finalization.configure':run_evidence.configure,'finalization.revise_check':run_evidence.revise_check,'finalization.retarget_release':run_evidence.retarget_release,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
@@ -992,6 +996,10 @@ def command(request,body:Command):
             return delivery_status(current.actor,current,data['version'],None,administrator=actor)
         current,connector_id=administrative_run(actor,data)
         return start_delivery(current.actor,current,data['version'],connector_id)
+    if name in ('run.reframe_prequalification','finalization.host_completion','session.git.cancel_unpublished_stage'):
+        principal(request,admin=True)
+        from cab_platform.host_completion import reframe_prequalification,declare_host_completion,cancel_unpublished_stage
+        return {'run.reframe_prequalification':reframe_prequalification,'finalization.host_completion':declare_host_completion,'session.git.cancel_unpublished_stage':cancel_unpublished_stage}[name](actor,data)
     if name in ('terminal.git.authorize','terminal.git.status'):
         from cab_platform.closure_git import authorize,view
         if name=='terminal.git.authorize':return authorize(actor,data)
@@ -1035,9 +1043,16 @@ def command(request,body:Command):
     if name=='native.bind':
         from .connectors import bind_worker_run
         with transaction.atomic():
+            Actor.objects.select_for_update().get(pk=actor.pk)
             result=commands.bind_native(actor,data)
-            bind_worker_run(actor,data,getattr(request,'cab_peer',None))
-            return result
+            peer=getattr(request,'cab_peer',None)
+            connector_bound=bind_worker_run(actor,data,peer)
+            if not connector_bound:
+                from cab_platform.connector_process import identity,cab_process
+                process=identity(peer['pid']) if peer else None
+                run=commands.run_scope(actor,data['run_id'],data['project_id'])
+                commands.event(run,'native-connector-binding-unavailable',{'peer':peer,'process':process,'worker_agent':cab_process(peer['pid'],'mcp-worker') if peer else None,'parent_agent':cab_process(process['parent_pid'],'mcp') if process else None})
+            return {**result,'connector_bound':connector_bound}
     if name in ('statistics.begin','statistics.end','statistics.change'):
         from . import measurements
         if name=='statistics.change':

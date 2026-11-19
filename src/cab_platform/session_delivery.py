@@ -251,6 +251,28 @@ def retired_statistics_snapshots(project,change_id,options,env):
     return [{'path':path,'sha256':None,'removed':True,'entry_digest':shared_scope_digest(project,options,env,[path])}]
 
 
+def bundled_statistics_changes(project,index):
+    """Le lot inclut seulement des archives validées de cette même session."""
+    from .core.models import Run,ChangeSource
+    from .core.run_lifecycle import archive_state
+    from .git_commit_remove import context
+    changes={index.change_id}
+    if index.initial_run_id is None or index.session_id is None:return changes
+    paths=set(index.reservations.filter(active=True).values_list('path',flat=True))
+    candidates=Run.objects.filter(project=project,actor_id=index.initial_run.actor_id,coding_session_id=index.session_id,state='CLOSED',finalization_plan__isnull=False).exclude(finalization_plan__receipt={})
+    options,env=context(project)
+    for run in candidates:
+        for source in ChangeSource.objects.filter(change_id=run.change_record_id,change__project=project,archived=True,present=True):
+            documents=[source.path+'/proposal.md',source.path+'/tasks.md']
+            if not set(documents).issubset(paths):continue
+            archive,_=archive_state(run)
+            require(archive==source.path,'session-delivery-bundled-archive-divergent',409)
+            staged=_git(project,options,{**env,'GIT_INDEX_FILE':index.index_path},'ls-files','--error-unmatch','--',*documents)
+            require(staged.returncode==0,'session-delivery-bundled-archive-not-staged',409)
+            changes.add(source.change_id)
+    return changes
+
+
 def include_change_statistics(project,index,options,env,own_env):
     """Fige les rapports CAB du change sans absorber une réservation étrangère."""
     from pathlib import Path
@@ -258,8 +280,8 @@ def include_change_statistics(project,index,options,env,own_env):
     from .core.commands import safe_path
     from .statistics_documents import read_source
     from .git_commit_remove import OID
-    reports=[]
-    documents=StatisticsDocument.objects.filter(source__change_id=index.change_id,source__present=True,status='ready',manual_override=False).exclude(generated_block_sha='').select_related('source')
+    reports=[];included=set();changes=bundled_statistics_changes(project,index)
+    documents=StatisticsDocument.objects.filter(source__change_id__in=changes,source__present=True,status='ready',manual_override=False).exclude(generated_block_sha='').select_related('source')
     for document in documents:
         path=document.source.path+'/STATISTICS.md'
         if not path.startswith('openspec/changes/') or not managed_statistics_path(path):continue
@@ -279,10 +301,12 @@ def include_change_statistics(project,index,options,env,own_env):
         mode='100755' if info.st_mode&0o111 else '100644'
         added=_git(project,options,own_env,'update-index','--add','--cacheinfo',mode+','+oid+','+path)
         require(added.returncode==0,'session-delivery-statistics-unavailable',409)
-        reports.append({'path':path,'sha256':sha,'entry_digest':entry_digest})
-    for retired in retired_statistics_snapshots(project,index.change_id,options,env):
-        require(_git(project,options,own_env,'update-index','--force-remove','--',retired['path']).returncode==0,'session-delivery-statistics-unavailable',409)
-        reports.append(retired)
+        reports.append({'path':path,'sha256':sha,'entry_digest':entry_digest});included.add(document.source.change_id)
+    require((changes-{index.change_id}).issubset(included),'session-delivery-bundled-statistics-unavailable',409)
+    for change_id in changes:
+        for retired in retired_statistics_snapshots(project,change_id,options,env):
+            require(_git(project,options,own_env,'update-index','--force-remove','--',retired['path']).returncode==0,'session-delivery-statistics-unavailable',409)
+            reports.append(retired)
     return reports
 
 

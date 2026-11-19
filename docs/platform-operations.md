@@ -557,3 +557,22 @@ Le reçu UNKNOWN et son hash restent intacts. Aucun résultat de test n'est vali
 aucune commande n'est rejouée ; seuls les baux de l'opération prouvée arrêtée sont
 libérés. operation/status expose autonomous_recovery avec le motif si le cas
 reste protégé. Les motifs identiques ne produisent pas un événement à chaque tour.
+# Contestation d'une preuve de contrôle
+
+L'administrateur authentifié utilise `finalization.contest_check` pour un contrôle
+courant réussi qui ne mesure pas le critère. Le RUN, le check, l'opération et la
+preuve sont désignés explicitement avec les empreintes de politique, de preuve
+et de reçu attendues. La demande fournit un request_id stable, un argv corrigé,
+une justification et la référence de l'autorisation développeur. CAB conserve
+le reçu original et une exclusion durable, augmente la révision du check et
+exige une nouvelle preuve. Il ne lance aucune commande et ne modifie pas les
+critères, producteurs, exigences, autorités de revue ni protections existantes.
+Les preuves contestées restent consultables mais ne sont plus sélectionnables.
+Un retour à l'ancien argv exige encore une nouvelle exécution.
+
+Pour diagnostiquer un rattachement, `native.bind` expose `connector_bound` en
+complément du journal `bound`. Si le worker ne peut être reconnu, CAB conserve
+un événement `native-connector-binding-unavailable` contenant uniquement les
+identités publiques du pair et les classifications des processus. Cette trace
+ne lit ni mémoire, ni secrets, ni contenu des pipes.
+

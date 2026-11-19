@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 3.2.19 — 2026-11-19
+
+- Rattachement autonome du worker MCP réel sur preuves kernel, avec versions inconnues conservées et adoption atomique d'un heartbeat ultérieur, sans rejeu.
+- Distinction explicite entre journal natif lié et connecteur réellement rattaché.
+- Contestation administrative d'une réussite non probante : originaux conservés, preuve exclue et nouvelle révision/exécution obligatoires.
+- Livraison regroupée des évolutions DCAB validées : navigation Projets, métadonnées des commits, listes Sessions/Archives à10lignes et clôture hôte sans livraison.
+
 ## 3.2.17 — 2026-11-18
 
 - Clôture achevée ou bloquée retenue jusqu'au dernier commit des statistiques et de BLOCKERS.md éventuel, puis confirmation des envois Git.
