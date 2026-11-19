@@ -160,8 +160,13 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if any(str(value).endswith(('/cgpt-approval-bridge-broker.mjs','/cgpt_approval_bridge_server.py')) for value in literals):
                 removed=subprocess.run([executable,'mcp','remove',name],env=env,capture_output=True,text=True,timeout=30,**options)
                 if removed.returncode:raise ClientError('codex-legacy-mcp-removal-failed')
-        result=subprocess.run([executable,'mcp','add','cab','--','/usr/bin/cab','mcp','--agent',agent],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
-        if result.returncode:raise ClientError('codex-mcp-registration-failed')
+        from . import __version__
+        from .mcp_epoch import codex_epoch
+        existing=old.get('mcp_servers',{}).get('cab',{})
+        if not isinstance(existing,dict):raise ClientError('codex-mcp-config-conflict')
+        if existing.get('command')!='/usr/bin/cab' or existing.get('args')!=['mcp','--agent',agent]:
+            result=subprocess.run([executable,'mcp','add','cab','--env','CAB_MCP_PACKAGE_VERSION='+__version__,'--','/usr/bin/cab','mcp','--agent',agent],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
+            if result.returncode:raise ClientError('codex-mcp-registration-failed')
         text=read_user_file(target,user.pw_uid).decode()
         match=re.search(r'(?m)^\[mcp_servers\.cab\]\s*$',text)
         if not match:raise ClientError('codex-cab-table-missing')
@@ -169,7 +174,8 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
         section=text[match.end():end];section=re.sub(r'(?m)^tool_timeout_sec\s*=.*\n?','',section)
         text=text[:match.end()]+'\ntool_timeout_sec = 86430\n'+section+text[end:]
         if tomllib.loads(text)['mcp_servers']['cab']['tool_timeout_sec']!=86430:raise ClientError('codex-tool-timeout-invalid')
-        write_user_file(target,text.encode(),env,options)
+        changed=codex_epoch(text.encode(),__version__)
+        write_user_file(target,changed,env,options)
         previous=old.get('features',{}).get('mcp_tool_list_changed')
         if previous is False:catalog_refresh='explicitly-disabled'
         elif previous is True:catalog_refresh='enabled'

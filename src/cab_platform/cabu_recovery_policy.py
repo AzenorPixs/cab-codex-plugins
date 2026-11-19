@@ -30,7 +30,7 @@ def capture(actor,peer,request_id: str,version: str) -> dict:
 
 def authorization(job,owner=None,*,frontend=False) -> dict:
     """Lire les protections courantes ; l'exécuteur revérifie avant son effet."""
-    from .core.models import Actor,Operation,Lease,Maintenance,McpConnector,NativeReload
+    from .core.models import Actor,Operation,Lease,Maintenance,McpConnector,NativeReload,GitSessionEffect,GitDelivery,TerminalGitCommit
     from .core import commands as c
     from .paths import runtime_config
     result={'policy':POLICY,'request_id':job.pk,'additional_confirmation_required':False,'replay':False,'state':'BLOCKED'}
@@ -52,6 +52,15 @@ def authorization(job,owner=None,*,frontend=False) -> dict:
         elif Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():reason='maintenance-in-progress'
         elif Operation.objects.filter(run__actor__in=protected_actors).exclude(state__in=c.TERMINAL).exists() or Lease.objects.filter(run__actor__in=protected_actors,state='HELD').exists():reason='native-control-effects-protected'
         elif NativeReload.objects.filter(actor__in=protected_actors,state__in=['DISPATCHED','UNKNOWN','AUTO_OC_DISPATCHED','AUTO_OC_WAITING','AUTO_OC_UNKNOWN']).exists():reason='native-control-outcome-uncertain'
-        elif any(row.pending or row.uncertain for row in McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED']) if frontend or row.process.get('parent_pid')==scope['instance']['pid']):reason='native-control-client-busy'
+        elif frontend and NativeReload.objects.filter(actor__in=protected_actors,state='QUEUED').exists():reason='native-control-pending'
+        elif frontend and (
+            GitSessionEffect.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','FAILED_TO_START','CANCELLED']).exists()
+            or GitDelivery.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
+            or TerminalGitCommit.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
+        ):reason='cabu-recovery-git-effects-protected'
+        elif any(row.pending or (row.uncertain and not (
+            frontend and row.state == 'OBSERVED' and row.error == 'native-worker-observed-without-heartbeat'
+            and row.process.get('parent_pid') == scope['instance']['pid']
+        )) for row in McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED']) if frontend or row.process.get('parent_pid') == scope['instance']['pid']):reason='native-control-client-busy'
     result.update(state='BLOCKED' if reason else 'AUTHORIZED',reason=reason or None,instance=scope.get('frontend') if frontend else scope.get('instance'),target_version=job.result.get('version') or job.target_version)
     return result

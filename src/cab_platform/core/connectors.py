@@ -193,8 +193,12 @@ def snapshot():
     rows.extend(legacy_processes(allowed,managed))
     return rows
 
-def assess(targets,version,confirmed_disconnected=()):
+def assess(targets,version,confirmed_disconnected=(),*,recovery=None):
     outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(state='SUPERSEDED'))
+    from cab_platform.cabu_recovery_policy import same_instance
+    recovery = recovery or {}
+    replacement = recovery.get('replacement')
+    used = set()
     original_ids={target.get('connector_id') for target in targets if target.get('kind')=='managed'}
     for target in targets:
         state='RECONNECTING';detail='';row=None
@@ -219,6 +223,21 @@ def assess(targets,version,confirmed_disconnected=()):
             ready=[r for r in candidates if r.loaded_version==version and r.catalog_version==version]
             row=ready[0] if ready else candidates[0] if candidates else None
             if row is None:state='DISCONNECTED' if not alive(target['owner']) else 'RELOAD_REQUIRED';detail='native-replacement-not-observed'
+        if recovery and same_instance(target.get('owner'), recovery.get('backend')):
+            row = None
+            state = 'RELOAD_REQUIRED'
+            detail = 'frontend-recovery-' + recovery['state'].lower().replace('_', '-')
+            if replacement and alive(replacement):
+                for candidate in current:
+                    if (candidate.pk in used or candidate.pk in original_ids or candidate.agent != target['agent']
+                        or candidate.process['uid'] != replacement['uid'] or not alive(candidate.process)):
+                        continue
+                    owner = identity(candidate.process['parent_pid'])
+                    if owner and owner['uid'] == replacement['uid'] and owner['parent_pid'] == replacement['pid']:
+                        if candidate.loaded_version == version and candidate.catalog_version == version and candidate.state in ('READY','BUSY') and not candidate.uncertain and alive(candidate.worker):
+                            row = candidate
+                            used.add(row.pk)
+                            break
         if row:
             ready=row.loaded_version==version and row.catalog_version==version and row.state in ('READY','BUSY') and not row.uncertain and alive(row.worker)
             state='READY' if ready else 'RECONNECTING'

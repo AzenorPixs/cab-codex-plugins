@@ -74,6 +74,7 @@ def finish(job,state,result):
 
 def refresh_connectors(request_id):
     from .core.connectors import assess
+    from .frontend_recovery import observation
     from .core.native_control import ensure_update
     ensure_update(SystemUpdate.objects.get(pk=request_id))
     with transaction.atomic():
@@ -81,8 +82,10 @@ def refresh_connectors(request_id):
         if job.state not in ('OK','RECONNECTING','RELOAD_REQUIRED') or job.result.get('verified') is not True:return data(job)
         reload=ConnectorReload.objects.select_for_update().get(update=job)
         if job.state=='OK' and reload.state=='OK':return data(job)
-        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]))
+        recovery=observation(job)
+        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]),recovery=recovery)
         result={**job.result,'connector_targets':reload.targets,'package_state':'OK','connectors':outcomes}
+        if recovery:result['frontend_recovery']=recovery
         reload.version=job.result['version'];reload.state=state;reload.observations=outcomes;reload.save()
         if state!=job.state or result!=job.result:
             job.state=state;job.result=result;job.active_slot=None if state=='OK' else 1
@@ -123,6 +126,14 @@ def confirm_disconnected(actor,data):
 def dispatch():
     # Cette fonction est appelée par le superviseur, jamais par le client MCP.
     for key in ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').values_list('update_id',flat=True)[:20]:refresh_connectors(key)
+    pending=SystemUpdate.objects.filter(active_slot=1,state__in=['RECONNECTING','RELOAD_REQUIRED']).first()
+    if pending:
+        refresh_connectors(pending.pk)
+        pending.refresh_from_db()
+        if pending.state == 'RELOAD_REQUIRED':
+            from .frontend_recovery import recover
+            recover(pending)
+        return
     with transaction.atomic():
         job=SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
         if not job:return
@@ -158,7 +169,9 @@ def worker():
     try:
         c.require(job.actor.active,'update-requester-inactive',403)
         from .update import update
-        result=update(version=job.target_version or None,progress=progress)
+        result=verified_local_installation(job.target_version)
+        if result is None:
+            result=update(version=job.target_version or None,progress=progress)
         c.require(result.get('verified') is True and bool(result.get('version')) and (not job.target_version or result['version']==job.target_version),'update-verification-failed')
         return finish(job,'OK',result)
     except subprocess.TimeoutExpired:
@@ -166,3 +179,23 @@ def worker():
     except (ClientError,c.Refused,OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
         code=str(error) if isinstance(error,(ClientError,c.Refused)) else type(error).__name__
         return finish(job,'FAILED',{'error':code[:160]})
+
+
+def verified_local_installation(version):
+    """Rattacher une demande native explicite à une installation CABU déjà vérifiée."""
+    from .client import Client
+    if not version:
+        return None
+    prior = read_json(STATE / 'last-update.json', {})
+    if (prior.get('version') != version or prior.get('verified') is not True
+            or not re.fullmatch('[a-f0-9]{64}', prior.get('package_sha256', ''))):
+        return None
+    installed = subprocess.check_output(
+        ['/usr/bin/dpkg-query', '-W', '-f=${Status}|${Version}', 'cab'], text=True, timeout=10
+    ).strip()
+    if installed != 'install ok installed|' + version:
+        return None
+    health = Client(admin=True).get('health')
+    if health.get('state') == 'READY' and health.get('version') == version:
+        return prior
+    return None

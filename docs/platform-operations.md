@@ -611,6 +611,17 @@ supervision indépendante et sortie prouvée avant relance. Aucun arrêt arbitra
 ni injection dans un canal privé. L'absence de mécanisme qualifié est un blocage
 technique explicite, pas une raison de redemander l'autorisation déjà donnée.
 
+Le superviseur relance l'instance graphique identifiée avec `runuser` et
+le gestionnaire systemd du compte d'origine. Après un SIGTERM sans sortie
+au bout de 15 secondes, CAB peut envoyer SIGKILL au même PIDFD. Le reçu
+`frontend_recovery` consigne les signaux et la nouvelle instance. CABU reste
+en attente jusqu'à ce que les relais rattachés à cette instance observent le
+moteur et le catalogue de la version installée.
+Une demande native portant sur une version déjà installée via CABU local
+réutilise le reçu de cette installation si dpkg et la santé du service
+confirment encore la même version. La réconciliation des relais garde son
+propre reçu et n’exige pas une seconde installation.
+
 Le propriétaire ou l'administrateur peut révoquer cette autorité par
 `native.control.configure` avec `cabu_recovery_authorized=false` ; seule cette
 préférence change, sans appel fournisseur ni nouvelle génération. Les reprises
