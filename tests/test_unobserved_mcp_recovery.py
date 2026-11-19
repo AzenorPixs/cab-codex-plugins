@@ -113,4 +113,34 @@ class FrontendRecoveryTests(unittest.TestCase):
             client.return_value.get.return_value['version'] = '3.2.27'
             self.assertIs(system_updates.verified_local_installation('3.2.27'), receipt)
 
+    def test_graphical_executable_replaced_on_disk(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from cab_platform.cabu_recovery_policy import frontend_executable
+        expected = Path('/usr/lib/chatgpt/ChatGPT')
+        with patch('os.readlink', return_value=f'{expected} (deleted)'), patch.object(
+            Path, 'resolve', return_value=expected
+        ), patch.object(Path, 'stat', return_value=SimpleNamespace(st_uid=0, st_mode=0o100755)) as metadata:
+            self.assertEqual(frontend_executable(42), expected)
+            metadata.return_value.st_mode = 0o100775
+            self.assertIsNone(frontend_executable(42))
+
+    def test_dead_observation_cannot_mask_a_genuine_uncertain_effect(self):
+        import os
+        import django
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from cab_platform.cabu_recovery_policy import connector_protected
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cab_platform.settings')
+        django.setup()
+        row = SimpleNamespace(pending=0, uncertain=True, state='OBSERVED',
+                              error='native-worker-observed-without-heartbeat',
+                              process={'pid': 42, 'parent_pid': 10}, worker={'pid': 43})
+        with patch('cab_platform.core.connectors.observed_dead', return_value=True), patch(
+            'cab_platform.cabu_recovery_policy.identity', return_value=None
+        ):
+            self.assertFalse(connector_protected(row, {'pid': 99}))
+            row.state = 'FAILED'
+            self.assertTrue(connector_protected(row, {'pid': 99}))
+
 if __name__=='__main__':unittest.main(verbosity=2)

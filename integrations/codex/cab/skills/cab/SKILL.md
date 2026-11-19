@@ -3,7 +3,7 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.27
+# CAB 3.2.28
 
 CAB réconcilie seul une publication statistique arrêtée sur preuves complètes
 d'état avant fichier et index, sous verrous. FAILED_NO_CHANGE conserve l'UNKNOWN

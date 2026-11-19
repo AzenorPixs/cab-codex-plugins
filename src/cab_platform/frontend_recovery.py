@@ -9,7 +9,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
-from .cabu_recovery_policy import authorization, same_instance
+from .cabu_recovery_policy import authorization, frontend_executable, same_instance
 from .connector_process import cab_process, identity
 from .paths import STATE, atomic_json, read_json
 
@@ -116,8 +116,8 @@ def recover(job):
                     if (worker and worker['uid'] == app['uid'] and worker['parent_pid'] == saved['pid']
                             and cab_process(worker['pid'], 'mcp-worker') == target['agent']):
                         relay_fds.append((worker['pid'], open_process(stack, worker)))
-            executable = proc_file(app['pid'], 'exe').resolve(strict=True)
-            if executable.name not in ('ChatGPT', 'Codex', 'codex-desktop'):
+            executable = frontend_executable(app['pid'])
+            if executable is None:
                 return
             account = pwd.getpwuid(app['uid'])
             if not account.pw_uid:

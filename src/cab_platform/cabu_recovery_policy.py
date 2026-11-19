@@ -1,4 +1,6 @@
 """Autorité CABU bornée ; aucune exécution ni signal dans cette politique."""
+import os
+import stat
 from pathlib import Path
 from .connector_process import identity,cab_process
 
@@ -6,6 +8,37 @@ def same_instance(left,right):
     return bool(left and right) and all(left.get(key)==right.get(key) for key in ('pid','uid','start','boot'))
 
 POLICY='cabu-necessary-recovery-v1'
+
+def frontend_executable(pid):
+    """Identifier le binaire de remplacement, même si l'ancien inode est ouvert."""
+    try:
+        path = Path(os.readlink(Path('/proc', str(pid), 'exe')).removesuffix(' (deleted)'))
+        if not path.is_absolute() or path.name not in ('ChatGPT', 'Codex', 'codex-desktop'):
+            return None
+        canonical = path.resolve(strict=True)
+        for parent in (canonical, *canonical.parents):
+            info = parent.stat()
+            if info.st_uid != 0 or info.st_mode & 0o022:
+                return None
+        if stat.S_ISREG(canonical.stat().st_mode):
+            return canonical
+    except OSError:
+        return None
+
+
+def connector_protected(row, backend):
+    from .core.connectors import observed_dead
+    if row.pending:
+        return True
+    if not row.uncertain:
+        return False
+    if (backend is None or row.state != 'OBSERVED'
+            or row.error != 'native-worker-observed-without-heartbeat'):
+        return True
+    if row.process.get('parent_pid') == backend['pid']:
+        return False
+    return any(same_instance(identity(saved.get('pid', 0)), saved) or not observed_dead(saved)
+               for saved in (row.process, row.worker))
 
 def describe() -> dict:
     return {'id':POLICY,'additional_confirmation_required':False,'scope':['request_id','actor','uid','instance','target_version'],'revocation':'native.control.configure:cabu_recovery_authorized','authorization_is_reconnection':False,'unknown_replay':False}
@@ -22,10 +55,8 @@ def capture(actor,peer,request_id: str,version: str) -> dict:
     if not owner or owner['uid']!=actor.uid:return scope
     scope['instance']=owner
     frontend=identity(owner['parent_pid'])
-    if frontend and frontend['uid']==actor.uid:
-        try:name=Path('/proc',str(frontend['pid']),'exe').resolve(strict=True).name
-        except OSError:name=''
-        if name in ('ChatGPT','Codex','codex-desktop'):scope['frontend']=frontend
+    if frontend and frontend['uid']==actor.uid and frontend_executable(frontend['pid']):
+        scope['frontend']=frontend
     return scope
 
 def authorization(job,owner=None,*,frontend=False) -> dict:
@@ -58,9 +89,8 @@ def authorization(job,owner=None,*,frontend=False) -> dict:
             or GitDelivery.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
             or TerminalGitCommit.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
         ):reason='cabu-recovery-git-effects-protected'
-        elif any(row.pending or (row.uncertain and not (
-            frontend and row.state == 'OBSERVED' and row.error == 'native-worker-observed-without-heartbeat'
-            and row.process.get('parent_pid') == scope['instance']['pid']
-        )) for row in McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED']) if frontend or row.process.get('parent_pid') == scope['instance']['pid']):reason='native-control-client-busy'
+        elif any(connector_protected(row, backend if frontend else None)
+                 for row in McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED'])
+                 if frontend or row.process.get('parent_pid') == scope['instance']['pid']):reason='native-control-client-busy'
     result.update(state='BLOCKED' if reason else 'AUTHORIZED',reason=reason or None,instance=scope.get('frontend') if frontend else scope.get('instance'),target_version=job.result.get('version') or job.target_version)
     return result

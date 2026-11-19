@@ -27,6 +27,23 @@ def status(actor,request_id):
     if ConnectorReload.objects.filter(update=job).exists() and job.state in ('OK','RECONNECTING','RELOAD_REQUIRED'):return refresh_connectors(job.pk)
     return data(job)
 
+def release_obsolete_slot(actor, version, request_id):
+    """Libérer le créneau d'une version remplacée, en conservant son reçu."""
+    from .frontend_recovery import observation
+    from .session_delivery import version_tuple
+    active = SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
+    if active is None:
+        return
+    old = active.result.get('version')
+    admissible = (version and old and active.actor_id == actor.pk
+                  and active.state == 'RELOAD_REQUIRED' and active.result.get('verified') is True
+                  and version_tuple(old) < version_tuple(version) and not observation(active)
+                  and verified_local_installation(version) is not None)
+    c.require(admissible, 'update-already-active')
+    active.result = {**active.result, 'superseded_by': request_id}
+    active.active_slot = None
+    active.save(update_fields=['result', 'active_slot', 'updated'])
+
 def request(actor,request_id,version='',peer=None):
     c.require(actor.active,'update-not-authorized',403)
     c.identifier(request_id)
@@ -39,7 +56,7 @@ def request(actor,request_id,version='',peer=None):
                 c.require(prior.target_version==version,'update-request-conflict')
                 return status(actor,request_id)
             c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
-            c.require(not SystemUpdate.objects.filter(active_slot=1).exists(),'update-already-active')
+            release_obsolete_slot(actor, version, request_id)
             c.require(not ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').exists(),'connector-reload-pending')
             from .core.connectors import snapshot
             from .cabu_recovery_policy import capture
@@ -76,9 +93,12 @@ def refresh_connectors(request_id):
     from .core.connectors import assess
     from .frontend_recovery import observation
     from .core.native_control import ensure_update
-    ensure_update(SystemUpdate.objects.get(pk=request_id))
+    existing=SystemUpdate.objects.get(pk=request_id)
+    if existing.result.get('superseded_by'):return data(existing)
+    ensure_update(existing)
     with transaction.atomic():
         job=SystemUpdate.objects.select_for_update().get(pk=request_id)
+        if job.result.get('superseded_by'):return data(job)
         if job.state not in ('OK','RECONNECTING','RELOAD_REQUIRED') or job.result.get('verified') is not True:return data(job)
         reload=ConnectorReload.objects.select_for_update().get(update=job)
         if job.state=='OK' and reload.state=='OK':return data(job)

@@ -3,7 +3,7 @@ name: CCAB
 description: Déclarer et corriger les incidents CAB sous SCM/CICD, avec mandat porté par l’invocation CCAB.
 ---
 
-# CCAB 3.2.27
+# CCAB 3.2.28
 
 ## Mandat correctif de l'invocation
 
