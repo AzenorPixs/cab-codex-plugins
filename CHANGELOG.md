@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 3.2.20 — 2026-11-19
+
+- Récupération autonome d’une publication statistique arrêtée quand fichier et index restent à l’état avant, avec UNKNOWN original conservé et classement FAILED_NO_CHANGE sans rejeu.
+- Umask022 limitée au subprocess de build DIU et modes explicites des seuls payloads publics générés.
+- Prévol CABU des permissions publiques et des versions embarquées du.deb avant APT ; refus des payloads privatisés ou périmés.
+- Acquittement de négociation MCP par le premier appel après initialize réussi, et reprise du seul worker possédé confirmé arrêté sans API frontend ni rejeu métier.
+
 ## 3.2.19 — 2026-11-19
 
 - Rattachement autonome du worker MCP réel sur preuves kernel, avec versions inconnues conservées et adoption atomique d'un heartbeat ultérieur, sans rejeu.

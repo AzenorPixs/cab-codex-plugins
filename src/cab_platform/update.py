@@ -1,5 +1,7 @@
 """CABU Debian : publication officielle, intégrité de l’asset et même reçu système."""
 import hashlib
+import ast
+import tarfile
 import json
 import os
 from pathlib import Path
@@ -11,6 +13,47 @@ from urllib.error import HTTPError
 from . import __version__
 from .client import ClientError
 from .paths import STATE,atomic_json,private_dir
+
+PUBLIC_TREES=('usr/lib/cab/python','usr/lib/cab/web','usr/lib/cab/plugins','usr/lib/cab/commands','usr/lib/cab/.agents','usr/share/doc/cab')
+PUBLIC_FILES={'usr/bin/cab':0o755,'usr/lib/cab/runtime-manifest.json':0o644,'usr/lib/cab/python-vendor.tar.xz':0o644,'usr/lib/cab/electric.tar.xz':0o644}
+
+
+def preflight_package(path,version):
+    """Contrôler le payload public avant APT, sans toucher aux données privées."""
+    required={'usr/bin/cab','usr/lib/cab/python/cab_platform/__init__.py','usr/lib/cab/python/cab_platform/cli.py','usr/lib/cab/web/index.html','usr/lib/cab/runtime-manifest.json'}
+    seen=set();public=0;embedded={}
+    process=subprocess.Popen(['/usr/bin/dpkg-deb','--fsys-tarfile',str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    try:
+        with tarfile.open(fileobj=process.stdout,mode='r|') as archive:
+            for item in archive:
+                name=item.name.removeprefix('./').rstrip('/')
+                selected=name=='usr/lib/cab' or name in PUBLIC_FILES or any(name==root or name.startswith(root+'/') for root in PUBLIC_TREES)
+                if not selected:continue
+                if '..' in Path(name).parts or name.startswith('/') or not (item.isdir() or item.isfile()):raise ClientError('debian-public-payload-type-invalid')
+                wanted=0o755 if item.isdir() else PUBLIC_FILES.get(name,0o644)
+                if item.mode!=wanted or item.uid!=0 or item.gid!=0:raise ClientError('debian-public-payload-permissions-invalid')
+                public+=1;seen.add(name)
+                if name in ('usr/lib/cab/python/cab_platform/__init__.py','usr/lib/cab/runtime-manifest.json'):
+                    stream=archive.extractfile(item)
+                    raw=stream.read(262145)
+                    if len(raw)>262144:raise ClientError('debian-payload-version-invalid')
+                    embedded[name]=raw
+    except (OSError,ValueError,SyntaxError,tarfile.TarError) as error:
+        raise ClientError('debian-public-payload-invalid') from error
+    finally:
+        process.stdout.close()
+        try:code=process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill();process.wait();raise ClientError('debian-payload-inspection-timeout') from None
+    if code!=0 or not required.issubset(seen) or not set(PUBLIC_TREES).issubset(seen):raise ClientError('debian-public-payload-incomplete')
+    try:
+        module=ast.parse(embedded['usr/lib/cab/python/cab_platform/__init__.py'].decode('utf-8'))
+        versions=[ast.literal_eval(node.value) for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='__version__' for target in node.targets)]
+        manifest=json.loads(embedded['usr/lib/cab/runtime-manifest.json'])
+    except (ValueError,SyntaxError,UnicodeError) as error:raise ClientError('debian-payload-version-invalid') from error
+    if versions!=[version] or manifest.get('version')!=version:raise ClientError('debian-payload-version-invalid')
+    return {'public_paths_verified':public,'embedded_version_verified':version,'private_paths_modified':False}
+
 
 def update(package=None,version=None,progress=None):
     if os.getuid()!=0:raise ClientError('root-administration-required')
@@ -60,6 +103,7 @@ def update(package=None,version=None,progress=None):
         if not re.fullmatch(r'\d+\.\d+\.\d+',target) or version and target!=version:raise ClientError('debian-package-version-invalid')
         if subprocess.run(['/usr/bin/dpkg','--compare-versions',target,'lt',previous],capture_output=True).returncode==0:raise ClientError('update-downgrade-refused')
         sha=hashlib.sha256(path.read_bytes()).hexdigest()
+        payload=preflight_package(path,target)
         # apt/dpkg réalise preinst/postinst et conserve leurs reçus de maintenance.
         stage('INSTALLING')
         completed=subprocess.run(['/usr/bin/apt-get','install','-y',str(path)],capture_output=True,text=True,timeout=1500)
@@ -73,5 +117,5 @@ def update(package=None,version=None,progress=None):
         from .client import Client
         health=Client(admin=True).get('health')
         if installed!='install ok installed|'+target or not result.get('verified') or result.get('version')!=target or health.get('state')!='READY' or health.get('version')!=target:raise ClientError('update-activation-not-verified')
-        result['package_sha256']=sha;result['previous_version']=previous
+        result['package_sha256']=sha;result['previous_version']=previous;result['payload_preflight']=payload
         atomic_json(STATE/'last-update.json',result);return result

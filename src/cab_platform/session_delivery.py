@@ -773,7 +773,7 @@ def execute_diu_build(project,kind,version,before_execute):
     before_execute({'kind':kind,'source_mode':'working-tree','version':version,'phase':'prepared'})
     process=None
     try:
-        process=subprocess.Popen([program,*args],cwd='/',env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','USER':'root','LOGNAME':'root','LANG':'C.UTF-8'},stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+        process=subprocess.Popen([program,*args],cwd='/',env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','USER':'root','LOGNAME':'root','LANG':'C.UTF-8'},stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True,umask=0o022)
         before_execute({'kind':kind,'source_mode':'working-tree','version':version,'phase':'started','child':identity(process.pid)})
         code=process.wait(timeout=3600)
     except OSError as error:raise Refused('session-delivery-diu-execution-unknown' if process is not None else 'session-delivery-diu-not-started',409) from error

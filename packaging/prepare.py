@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import stat
 import tarfile
 import tomllib
 
@@ -39,6 +40,16 @@ def archive(source,destination):
         for path in sorted(source.iterdir()):stream.add(path,arcname=path.name,recursive=True)
     return {'file':destination.name,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest()}
 
+def public_modes(root):
+    """Seul le payload public généré reçoit ses modes de distribution."""
+    for path in [root,*root.rglob('*')]:
+        info=path.lstat()
+        if stat.S_ISLNK(info.st_mode):raise RuntimeError('public-payload-symlink-refused')
+        if stat.S_ISDIR(info.st_mode):path.chmod(0o755)
+        elif stat.S_ISREG(info.st_mode):path.chmod(0o644)
+        else:raise RuntimeError('public-payload-type-invalid')
+
+
 def main():
     version=validate_versions(ROOT)
     OUT.mkdir(parents=True,exist_ok=True)
@@ -47,7 +58,9 @@ def main():
     for source in (ROOT/'src/cab_platform').rglob('*.py'):
         if source.is_symlink():raise RuntimeError('source-symlink-refused')
         dest=target/source.relative_to(ROOT/'src/cab_platform');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,dest);dest.chmod(0o644)
+    public_modes(target.parent)
     if not (OUT/'web/index.html').is_file():raise RuntimeError('frontend-build-required')
+    public_modes(OUT/'web')
     public=OUT/'electric-public'
     if not (public/'bin/entrypoint').is_file():raise RuntimeError('pinned-electric-image-extraction-required')
     vendor=OUT/'python-vendor'

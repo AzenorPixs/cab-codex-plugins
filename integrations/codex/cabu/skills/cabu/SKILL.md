@@ -3,7 +3,15 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.19
+# CABU 3.2.20
+
+CABU vérifie automatiquement les modes des seuls chemins publics du paquet et
+ses versions embarquées avant APT. Un payload privatisé ou périmé est refusé
+avant installation ; ne pas relancer l'installation pour contourner ce refus.
+Les données privées, secrets et profils restent hors de ces contrôles de modes.
+Un nouveau relais peut remplacer son worker confirmé arrêté après négociation
+observée, même sans notification initialized. Cela ne prouve pas la première
+adoption d'un ancien relais encore en mémoire : vérifier le consommateur réel.
 
 Le reçu distingue paquet/service vérifiés et connecteurs MCP. RECONNECTING
 attend la frontière sûre ou le catalogue ; RELOAD_REQUIRED indique une reprise

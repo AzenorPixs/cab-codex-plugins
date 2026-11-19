@@ -81,6 +81,43 @@ def stage_global(job,path,expected):
     return stage_document(job,path,expected)
 
 
+def before_publication_evidence(job):
+    """Constat d'état initial, jamais une reconstruction d'écriture réussie."""
+    from cab_platform.git_commit_remove import context,run
+    from cab_platform.session_git import shared_scope_digest
+    if not job.expected or job.action not in ('sync','generate'):return None
+    indexed=job.result.get('indexed_documents',{})
+    if not indexed or any(item.get('state') not in ('PENDING','RUNNING') for item in indexed.values()):return None
+    root=Path(job.project.root);paths={}
+    for absolute,expected in job.expected.items():
+        path=Path(absolute)
+        if not path.is_relative_to(root) or path.resolve()!=path:return None
+        relative=str(path.relative_to(root))
+        if relative not in indexed or indexed[relative].get('sha256')!=expected.get('after'):return None
+        if not (relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name=='STATISTICS.md'):return None
+        if file_hash(job.project,path)!=expected.get('before'):return None
+        paths[relative]=expected.get('before')
+    if set(paths)!=set(indexed):return None
+    options,env=context(job.project)
+    lockpath=run(job.project,options,env,'rev-parse','--path-format=absolute','--git-path','index.lock')
+    if lockpath.returncode!=0:return None
+    if Path(lockpath.stdout.decode().strip()).exists():return None
+    digest=shared_scope_digest(job.project,options,env,sorted(paths))
+    for relative,before in paths.items():
+        entries=run(job.project,options,env,'ls-files','--stage','-z','--',relative)
+        if entries.returncode!=0:return None
+        if before is None:
+            if entries.stdout:return None
+        elif not document_index_matches(job.project,relative,before):return None
+    if Path(lockpath.stdout.decode().strip()).exists() or shared_scope_digest(job.project,options,env,sorted(paths))!=digest:return None
+    if any(file_hash(job.project,root/path)!=before for path,before in paths.items()):return None
+    child=job.result.get('child',{})
+    owner_alive=alive(job.owner_pid,job.owner_start)
+    if owner_alive and (job.owner_pid!=os.getpid() or job.pk in ACTIVE):return None
+    if alive(child.get('pid',0),child.get('start','')):return None
+    return {'classification':'FAILED_NO_CHANGE','scope_digest':digest,'before':paths,'writer_stopped':True,'owner_stopped':not owner_alive,'owner_process_stopped':not owner_alive,'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False}
+
+
 def recover_lock(lock):
     job=lock.owner
     if not job:return
@@ -88,6 +125,16 @@ def recover_lock(lock):
     if alive(job.owner_pid,job.owner_start) and (job.owner_pid!=os.getpid() or job.pk in ACTIVE):raise commands.Refused('statistics-project-busy')
     child=job.result.get('child',{})
     if alive(child.get('pid',0),child.get('start','')):raise commands.Refused('statistics-effect-unknown')
+    commands.require(connection.in_atomic_block,'statistics-recovery-transaction-required')
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s,%s)',[7348501,7348502])
+    before=before_publication_evidence(job)
+    if before:
+        from .models import Event
+        original={'state':job.state,'expected':job.expected,'result':job.result}
+        original_digest=commands.digest(original)
+        Event.objects.create(project=job.project,kind='statistics-stopped-before-publication',data={'job_id':job.pk,'request_id':job.request_id,'original_receipt':original,'original_receipt_digest':original_digest,'evidence':before})
+        job.state='FAILED';job.result={**job.result,'recovery':{**before,'original_receipt_digest':original_digest}};job.save(update_fields=['state','result','updated'])
+        lock.owner=None;lock.save(update_fields=['owner']);return
     for path,expected in job.expected.items():
         if file_hash(job.project,path) not in (expected['before'],expected['after']):raise commands.Refused('statistics-effect-unknown')
     indexed=job.result.get('global_index',{})

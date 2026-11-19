@@ -3,7 +3,12 @@ name: cicd
 description: Déclencher la CI/CD autorisée du projet via CAB avec une version, puis suivre le même reçu de livraison.
 ---
 
-# CICD 3.2.19
+# CICD 3.2.20
+
+Le moteur borne l'umask au seul subprocess de build DIU, sans changer celle du
+service. Les données publiques du paquet restent lisibles ; CABU contrôle le.deb
+avant installation. Un échec de prévol ne doit jamais être présenté comme une
+activation réussie ou contourné par une réinstallation.
 
 Utiliser ce skill pour une demande de livraison CI/CD par CAB. En session directe,
 le LLM de codage choisit et transmet la nouvelle version avec discernement : lire

@@ -3,7 +3,13 @@ name: CAB
 description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
 ---
 
-# CAB 3.2.19
+# CAB 3.2.20
+
+CAB réconcilie seul une publication statistique arrêtée sur preuves complètes
+d'état avant fichier et index, sous verrous. FAILED_NO_CHANGE conserve l'UNKNOWN
+original et ne constitue pas un succès ou un rejeu. Consulter la clôture normale ;
+ne modifier ni statut SQL ni fichier pour fabriquer une preuve. Les divergences
+et écrivains vivants restent protégés.
 
 Une réussite ne mesurant aucun test ne devient pas une preuve valable par son
 seul code0. Le codeur signale la preuve exacte ; l'administrateur peut utiliser

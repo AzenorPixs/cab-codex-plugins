@@ -1,5 +1,13 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Le build DIU lancé par CAB reçoit une umask022 limitée à ce subprocess ; l'umask
+du service reste inchangée. La préparation fixe les modes des seuls payloads
+publics générés (Python et Web) à0755 pour les répertoires et0644 pour les fichiers.
+CABU contrôle les chemins publics du.deb, leur propriétaire et les versions
+Python/manifeste avant toute invocation APT. Un payload privatisé ou périmé est
+refusé avant installation. Ces contrôles ne modifient ni secrets, ni configuration
+locale, ni profils utilisateurs et n'imposent aucune normalisation des projets.
+
 La migration additive 0038 crée `cab_notifications` et
 `cab_notification_receipts`. Sauvegarder avant migration. L'installation et la
 mise à niveau publient uniquement la table des notifications dans Electric ;

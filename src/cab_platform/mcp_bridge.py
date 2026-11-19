@@ -53,8 +53,13 @@ class Bridge:
         self.reader_task=asyncio.create_task(self.read_worker(self.child))
         self.worker_identity=identity(self.child.pid)
 
+    def acknowledge_client(self,message):
+        if message.get('method')=='notifications/initialized':self.initialized=True
+        elif self.initial is not None and self.version and 'id' in message and message.get('method') in ('tools/list','tools/call'):
+            self.initialized=True
+
     def quiet(self):
-        return not self.pending and not self.server_pending and not ((self.uncertain or self.write_uncertain) and self.child and identity(self.child.pid))
+        return not self.pending and not self.server_pending and not ((self.uncertain or self.write_uncertain) and self.child and self.child.returncode is None and identity(self.child.pid))
 
     async def stop_worker(self,process):
         import importlib
@@ -125,7 +130,7 @@ class Bridge:
         async with self.lock:
             if not self.quiet() or not self.initialized:return
             self.state='RELOADING';old=self.child;task=self.reader_task
-            if old:
+            if old and old.returncode is None:
                 report=await self.stop_worker(old)
                 if report['state']!='STOPPED':
                     self.state='FAILED';self.error=report['reason'];return
@@ -166,6 +171,12 @@ class Bridge:
                     except ClientError:health={}
                     if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):
                         try:
+                            # Un fils dont l’arrêt est confirmé n'exige aucun arrêt ni API frontend.
+                            if self.child is None or self.child.returncode is not None:
+                                await self.reload()
+                                await self.heartbeat()
+                                await asyncio.sleep(1)
+                                continue
                             policy=await asyncio.to_thread(self.client.get,'connectors/policy',connector_id=self.connector_id,version=target)
                             native=policy.get('native_control',{'mode':'fallback'})
                             if native['mode']=='request-native':
@@ -208,7 +219,7 @@ class Bridge:
                 message=json.loads(line)
                 if not isinstance(message,dict):raise ValueError('mcp-client-frame-invalid')
                 if message.get('method')=='initialize':self.initial=copy.deepcopy(message.get('params',{}))
-                if message.get('method')=='notifications/initialized':self.initialized=True
+                self.acknowledge_client(message)
                 if message.get('method')=='notifications/cancelled':
                     task=self.control.get(key(message.get('params',{}).get('requestId')))
                     if task:task.cancel();continue

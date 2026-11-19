@@ -559,6 +559,27 @@ libérés. operation/status expose autonomous_recovery avec le motif si le cas
 reste protégé. Les motifs identiques ne produisent pas un événement à chaque tour.
 # Contestation d'une preuve de contrôle
 
+Une publication statistique interrompue peut être réconciliée automatiquement
+quand l'écrivain est arrêté, l'exécution propriétaire terminée et tous les fichiers et entrées
+d'index concernés correspondent encore exactement à l'état avant. Le verrou
+de projet et le verrou transactionnel Git protègent le constat jusqu'au commit.
+CAB conserve le reçu original et son digest dans l'événement
+`statistics-stopped-before-publication`, classe séparément `FAILED_NO_CHANGE`,
+puis laisse la finalisation normale poursuivre. Ce constat ne prouve pas une
+réussite passée ni l'absence universelle de tout effet transitoire. Une divergence
+ou un écrivain vivant conserve UNKNOWN ; le LLM ne force aucun statut ni verrou.
+Un propriétaire local de même PID/start hors ACTIVE peut être réconcilié sans
+redémarrage ; le constat distingue processus vivant et exécution terminée.
+Un propriétaire extérieur vivant ou un job encore ACTIVE reste protégé.
+
+Après une réponse initialize réussie observée, le premier tools/list ou tools/call
+du client acquitte aussi la négociation pour le relais, même si la notification
+initialized manque. Un fils confirmé arrêté peut être remplacé sans arrêt ni
+API du frontend, avec sa seule négociation et sans rejeu métier. Un moteur vivant
+conserve le contrôle natif prioritaire et ses protections. Un ancien relais déjà
+chargé en mémoire ne reçoit pas ce code par simple remplacement du fichier ;
+sa première reprise réelle reste à vérifier séparément.
+
 L'administrateur authentifié utilise `finalization.contest_check` pour un contrôle
 courant réussi qui ne mesure pas le critère. Le RUN, le check, l'opération et la
 preuve sont désignés explicitement avec les empreintes de politique, de preuve
