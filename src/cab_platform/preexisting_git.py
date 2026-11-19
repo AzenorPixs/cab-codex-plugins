@@ -186,10 +186,15 @@ def clean_at_head(current, path, snapshot):
     header, name = entries[0].split(b'\t', 1)
     fields = header.split()
     mode = b'100755' if observed['mode'] & 0o111 else b'100644'
-    if len(fields) != 3 or fields[0] != mode or fields[1] != b'blob' or name.decode('utf-8', 'strict') != path:
+    filemode = git_run(current.project, options, env, 'config', '--type=bool', '--get', 'core.filemode')
+    if filemode.returncode not in (0, 1) or (filemode.returncode == 0 and filemode.stdout.strip() not in (b'true', b'false')):
+        return False
+    tracks_mode = filemode.returncode != 0 or filemode.stdout.strip() != b'false'
+    if len(fields) != 3 or fields[0] not in (b'100644', b'100755') or (tracks_mode and fields[0] != mode) or fields[1] != b'blob' or name.decode('utf-8', 'strict') != path:
         return False
     size = git_run(current.project, options, env, 'cat-file', '-s', fields[2].decode('ascii'))
     if size.returncode != 0 or size.stdout.strip() != str(observed['size']).encode('ascii'):
         return False
     blob = git_run(current.project, options, env, 'cat-file', 'blob', fields[2].decode('ascii'))
-    return blob.returncode == 0 and hashlib.sha256(blob.stdout).hexdigest() == observed['sha256'] and observed == fingerprint(current.project.root, path)
+    final_filemode = git_run(current.project, options, env, 'config', '--type=bool', '--get', 'core.filemode')
+    return blob.returncode == 0 and hashlib.sha256(blob.stdout).hexdigest() == observed['sha256'] and observed == fingerprint(current.project.root, path) and (filemode.returncode, filemode.stdout) == (final_filemode.returncode, final_filemode.stdout)

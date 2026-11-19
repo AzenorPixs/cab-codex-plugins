@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.2.23
+- Réservation des fichiers identiques à HEAD dans les dépôts core.filemode=false sans normaliser les permissions ni masquer des octets étrangers.
+- Conservation du refus des modes suivis divergents et des configurations instables.
+
 ## 3.2.22
 - L’invocation CCAB mandate les correctifs CAB sous SCM/CICD, avec OpenSpec, distribution et activation nécessaires, sans confirmations génériques répétées.
 - Admission administrative ciblée de fichiers préexistants explicitement autorisés, avec CAS, reçus idempotents et baseline conservée.

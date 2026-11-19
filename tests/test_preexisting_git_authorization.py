@@ -248,6 +248,39 @@ class PreexistingAuthorizationTests(unittest.TestCase):
         with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
             self.reserve()
 
+    def test_ignored_executable_bit_preserves_modes_and_baseline(self):
+        self.git('add', 'DEVOPS.md')
+        self.git('commit', '-qm', 'prior work delivered')
+        self.git('config', 'core.filemode', 'false')
+        path = self.root / 'DEVOPS.md'
+        path.chmod(0o770)
+        before = admission.fingerprint(self.root, 'DEVOPS.md')
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertEqual(self.reserve()['reserved_count'], 1)
+        self.assertEqual(admission.fingerprint(self.root, 'DEVOPS.md'), before)
+        self.assertEqual(GitChange.objects.get(change=self.run.change_record).baseline, self.baseline)
+        self.assertEqual(Event.objects.get(run=self.run, kind='git-files-reserved').data['clean_initial_paths'], ['DEVOPS.md'])
+
+    def test_tracked_executable_bit_difference_is_refused(self):
+        self.git('add', 'DEVOPS.md')
+        self.git('commit', '-qm', 'prior work delivered')
+        self.git('config', 'core.filemode', 'true')
+        (self.root / 'DEVOPS.md').chmod(0o770)
+        self.assertFalse(admission.clean_at_head(self.run, 'DEVOPS.md', session.git_snapshot(self.project)))
+        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
+            self.reserve()
+
+    def test_ignored_mode_cannot_hide_different_bytes(self):
+        self.git('add', 'DEVOPS.md')
+        self.git('commit', '-qm', 'prior work delivered')
+        self.git('config', 'core.filemode', 'false')
+        self.git('update-index', '--assume-unchanged', 'DEVOPS.md')
+        (self.root / 'DEVOPS.md').write_text('hidden external content\n')
+        (self.root / 'DEVOPS.md').chmod(0o770)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
+            self.reserve()
+
     def test_grant_cannot_leak_to_another_run(self):
         admission.authorize_preexisting(self.admin, self.payload())
         other = c.begin_run(self.owner, {**self.run.mandate, 'run_id': 'OTHER', 'session_id': 'OTHER-SID', 'change': 'other'})

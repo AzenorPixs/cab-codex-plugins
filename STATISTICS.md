@@ -57331,6 +57331,119 @@ Qualification source15tests ; livraison et activation contrôlées séparément.
 -->
 
 
+## Change `respect-git-filemode-on-clean-reservation` — openspec/changes/archive/2026-11-19-respect-git-filemode-on-clean-reservation/STATISTICS.md
+
+
+# Statistiques du change — respect-git-filemode-on-clean-reservation
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `respect-git-filemode-on-clean-reservation` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:edecc63aa7a8a96186a33552bd17817f1ccbf98dd2dd87b343c8c2811949313f
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 46 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 46 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+
+Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
+
+| RUN | SID | Compteur | Incrément observé | Couverture |
+| --- | --- | --- | --- | --- |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 1355264 | bounded |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 1362711 | bounded |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 6845 | bounded |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 1039 | bounded |
+| SCM-CCAB-FILEMODE-20261119 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 1369556 | bounded |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "fab266304c0c96b7e92164b3a976612bc299206c66830a2c34809a572c5436dd", "generated_at": "2026-11-19T16:33:42.493018+00:00", "revision": "fab266304c0c96b7e92164b3a976612bc299206c66830a2c34809a572c5436dd", "scope": "change"} -->
+
+
 ## Change `restore-approved-native-operations` — openspec/changes/archive/2026-11-02-restore-approved-native-operations/STATISTICS.md
 
 
@@ -65528,16 +65641,16 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_read | 67183488 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_read | 68804480 | bounded |
 | SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_input | 67358219 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_output | 85599 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_reasoning | 50632 | bounded |
-| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_total | 67443818 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_input | 68990801 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_output | 88755 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_reasoning | 51636 | bounded |
+| SCM-CCAB-TABLE-20261119 | 01a1e334-8a00-7313-a510-f2ce62ed8ccd | tokens_total | 69079556 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7d912fdeead919284e5e8fca9855851ecc97165b11433cf20593affcbe835410", "generated_at": "2026-11-19T16:26:14.701452+00:00", "revision": "7d912fdeead919284e5e8fca9855851ecc97165b11433cf20593affcbe835410", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "00b4a0a02b9d8aae4832cc622e904aa7041062312a934c11d5f5e6e4e5679bdd", "generated_at": "2026-11-19T16:31:14.157656+00:00", "revision": "00b4a0a02b9d8aae4832cc622e904aa7041062312a934c11d5f5e6e4e5679bdd", "scope": "change"} -->
 
 
 ## Change `simplify-cab-readme-and-maintenance-guidance` — openspec/changes/archive/2026-11-07-simplify-cab-readme-and-maintenance-guidance/STATISTICS.md
@@ -71165,4 +71278,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "8e2784a7d1eccdf117f74b4ac7482d04b972d81f240be21ddfdd61023682116e", "generated_at": "2026-11-19T16:27:01.884722+00:00", "revision": "8e2784a7d1eccdf117f74b4ac7482d04b972d81f240be21ddfdd61023682116e", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "23ef469d615006b9344cd19ec4c9ea73f673fda62aec402ff0b454d2f6743d93", "generated_at": "2026-11-19T16:33:44.130985+00:00", "revision": "23ef469d615006b9344cd19ec4c9ea73f673fda62aec402ff0b454d2f6743d93", "scope": "project"} -->

@@ -655,6 +655,9 @@ Une modification du chemin ou du contexte après autorisation empêche sa prise
 en charge ; un nouvel état requiert une nouvelle inspection et un autre reçu.
 
 Un statut dirty seulement historique se traite automatiquement si le chemin
-actuel correspond aux octets et au mode du blob de HEAD. Le constat est tracé
+actuel correspond aux octets du blob de HEAD et au mode exécutable lorsque
+Git le suit. Depuis3.2.23, core.filemode=false conserve les permissions du disque
+sans bloquer cette réservation ; les octets restent comparés intégralement et
+une configuration invalide ou instable refuse la prise en charge. Le constat est tracé
 dans `clean_initial_paths` ; un statut clean masquant d’autres octets ne suffit
 pas. La baseline initiale reste inchangée dans les deux parcours.
