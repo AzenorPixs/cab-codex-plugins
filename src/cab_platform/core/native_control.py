@@ -42,8 +42,15 @@ def public(row):return {'request_id':row.pk,'actor_id':row.actor_id,'state':row.
 @transaction.atomic
 def configure(caller,data):
     actor=target_actor(caller,data)
-    allowed={'actor_id','control_socket','control_binary','pid','url','password_file','username'}
+    allowed={'actor_id','control_socket','control_binary','pid','url','password_file','username','cabu_recovery_authorized'}
     c.require(not set(data)-allowed,'native-control-fields-invalid',400)
+    actor=Actor.objects.select_for_update().get(pk=actor.pk)
+    if 'cabu_recovery_authorized' in data:
+        c.require(type(data['cabu_recovery_authorized']) is bool,'cabu-recovery-consent-invalid',400)
+        c.event(None,'cabu-recovery-consent-updated',{'actor_id':actor.pk,'caller_id':caller.pk,'previous':actor.native.get('cabu_recovery_authorized',True),'authorized':data['cabu_recovery_authorized']})
+        if set(data)<={'actor_id','cabu_recovery_authorized'}:
+            actor.native={**actor.native,'cabu_recovery_authorized':data['cabu_recovery_authorized']};actor.save(update_fields=['native'])
+            return {'actor_id':actor.pk,'state':'CONSENT_UPDATED','authorized':data['cabu_recovery_authorized'],'credentials_exposed':False}
     native={**actor.native,**{key:value for key,value in data.items() if key!='actor_id'}}
     if actor.agent=='opencode':
         owner=identity(native.get('pid',0));c.require(owner and owner['uid']==actor.uid,'native-instance-divergent')
@@ -60,7 +67,7 @@ def configure(caller,data):
     return {'actor_id':actor.pk,'state':state,'owner':owner,'credentials_exposed':False}
 
 @transaction.atomic
-def request(caller,data,expected=None):
+def request(caller,data,expected=None,*,update=None):
     actor=target_actor(caller,data);key=c.identifier(data['request_id']);version=data.get('version',__version__)
     c.require(version==__version__,'native-control-version-divergent',400)
     fingerprint=c.digest({'actor_id':actor.pk,'version':version,'expected_owner':instance_key(expected)})
@@ -74,8 +81,13 @@ def request(caller,data,expected=None):
     except NativeFailure as error:raise c.Refused(error.code,409) from error
     c.require(not NativeReload.objects.filter(actor=actor,owner__pid=owner['pid'],owner__uid=owner['uid'],owner__start=owner['start'],owner__boot=owner['boot'],state__in=PENDING).exists(),'native-control-pending')
     # L'admission peut être en attente ; la frontière est revérifiée au dispatch.
+    authorization={}
+    if update is not None:
+        from cab_platform.cabu_recovery_policy import authorization as recovery_authorization
+        authorization=recovery_authorization(update,owner)
+        c.require(actor.pk==update.actor_id and authorization['state']=='AUTHORIZED',authorization.get('reason') or 'cabu-recovery-owner-divergent')
     before=[{'id':r.pk,'generation':r.generation,'worker':r.worker} for r in McpConnector.objects.filter(actor=actor) if r.process.get('parent_pid')==owner['pid'] and alive(r.process)]
-    row=NativeReload.objects.create(pk=key,actor=actor,target_version=version,owner=owner,input_digest=fingerprint,result={'before':before})
+    row=NativeReload.objects.create(pk=key,actor=actor,target_version=version,owner=owner,input_digest=fingerprint,result={'before':before,**({'cabu_recovery':authorization} if update is not None else {})})
     return public(row)
 
 def status(caller,data):
@@ -89,7 +101,16 @@ def work_one():
         from django.db import connection
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         try:
+            row.actor=Actor.objects.select_for_update().get(pk=row.actor_id)
             owner=endpoint(row.actor,row.owner);boundary(row.actor,owner)
+            if row.result.get('cabu_recovery'):
+                from .models import SystemUpdate
+                from cab_platform.cabu_recovery_policy import authorization as recovery_authorization
+                update=SystemUpdate.objects.get(pk=row.result['cabu_recovery']['request_id'])
+                authority=recovery_authorization(update,owner)
+                if authority['state']!='AUTHORIZED':
+                    row.state='UNAVAILABLE';row.result={**row.result,'cabu_recovery':authority,'error':authority['reason'],'mutation_dispatched':False};row.save();return
+
         except c.Refused as error:
             row.result={**row.result,'waiting_reason':error.code,'mutation_dispatched':False};row.save();return
         except NativeFailure as error:
@@ -124,9 +145,9 @@ def ensure_update(update):
     if not record:return
     for item in record.targets:
         connector=McpConnector.objects.filter(pk=item.get('connector_id')).select_related('actor').first()
-        if not connector or not connector.actor.native:continue
+        if not connector or connector.actor_id!=update.actor_id or not connector.actor.native:continue
         owner=item.get('owner');key=automatic_key(connector.actor,owner,record.version)
-        try:request(connector.actor,{'request_id':key,'version':record.version},expected=owner)
+        try:request(connector.actor,{'request_id':key,'version':record.version},expected=owner,update=update)
         except (NativeFailure,c.Refused):continue
 
 def automatic_key(actor,owner,version):return 'NATIVE-'+c.digest([actor.pk,instance_key(owner),version,actor.native.get('control_generation',0)])

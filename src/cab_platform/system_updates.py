@@ -15,7 +15,8 @@ TERMINAL={'OK','FAILED','UNKNOWN','RELOAD_REQUIRED'}
 UNIT='cab-update.service'
 
 def data(job):
-    return {'request_id':job.pk,'state':job.state,'target_version':job.target_version or None,**job.result}
+    from .cabu_recovery_policy import authorization
+    return {'request_id':job.pk,'state':job.state,'target_version':job.target_version or None,**job.result,'recovery_authorization':authorization(job),'frontend_recovery_authorization':authorization(job,frontend=True)}
 
 def receipt_path(job):return STATE/('system-update-'+hashlib.sha256(job.pk.encode()).hexdigest()+'.json')
 
@@ -26,7 +27,7 @@ def status(actor,request_id):
     if ConnectorReload.objects.filter(update=job).exists() and job.state in ('OK','RECONNECTING','RELOAD_REQUIRED'):return refresh_connectors(job.pk)
     return data(job)
 
-def request(actor,request_id,version=''):
+def request(actor,request_id,version='',peer=None):
     c.require(actor.active,'update-not-authorized',403)
     c.identifier(request_id)
     c.require(isinstance(version,str) and (not version or bool(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',version))) and len(version)<=100,'update-version-invalid',400)
@@ -41,7 +42,8 @@ def request(actor,request_id,version=''):
             c.require(not SystemUpdate.objects.filter(active_slot=1).exists(),'update-already-active')
             c.require(not ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').exists(),'connector-reload-pending')
             from .core.connectors import snapshot
-            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot()})
+            from .cabu_recovery_policy import capture
+            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot(),'recovery_context':capture(actor,peer,request_id,version)})
             ConnectorReload.objects.create(update=job,targets=job.result['connector_targets'],version=version)
             return data(job)
     except IntegrityError:raise c.Refused('update-admission-conflict') from None
@@ -52,6 +54,8 @@ def finish(job,state,result):
     with transaction.atomic():
         current=SystemUpdate.objects.select_for_update().get(pk=job.pk)
         if current.state in ('OK','FAILED'):return data(current)
+        if 'recovery_context' in current.result:public['recovery_context']=current.result['recovery_context']
+        receipt.update(public)
         reload,_=ConnectorReload.objects.get_or_create(update=current,defaults={'targets':current.result.get('connector_targets',[]),'version':public.get('version','')})
         public['connector_targets']=reload.targets
         if state=='OK':

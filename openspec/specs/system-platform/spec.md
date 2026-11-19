@@ -1249,14 +1249,11 @@ séparer installation vérifiée et reconnexion effective des connecteurs actifs
 - **THEN** le relais recharge son moteur sans réadmettre le job ni perdre sa réponse
 
 ### Requirement: Compatibilité et protections des anciens connecteurs
-CAB MUST détecter les anciens connecteurs connus par métadonnées bornées et
-signaler RELOAD_REQUIRED si aucune reprise native sûre n'est disponible.
-Il MUST NOT tuer un client ou injecter des requêtes dans son canal privé.
-SID/RUN, générations de codage, secrets et reçus MUST rester conservés.
+CAB MUST détecter les anciens connecteurs et signaler RELOAD_REQUIRED si aucune reprise sûre n'est disponible. Une reprise contrôlée du client MAY utiliser l’autorité bornée de sa demande CABU vérifiée, sans confirmation supplémentaire, avec identité kernel, quiescence, PIDFD et reçu durable. CAB MUST NOT arrêter arbitrairement un client ni injecter des requêtes dans son canal privé. SID/RUN, générations, secrets et reçus MUST rester conservés.
 
 #### Scenario: Ancien connecteur sans interface de rechargement
 - **WHEN** un processus déjà chargé n'a ni relais ni interface native accessible
-- **THEN** CAB conserve sa session et indique la reprise native requise sans faux succès
+- **THEN** CAB expose la reprise contrôlée nécessaire et son autorité, sans prétendre que son exécution ou sa reconnexion sont prouvées
 
 ### Requirement: Actualisation native du catalogue Codex
 L'intégration CAB MAY activer mcp_tool_list_changed via la CLI native si elle
@@ -2245,3 +2242,18 @@ Après une réponse initialize réussie observée, CAB MUST reconnaître un prem
 #### Scenario: Client sans notification initialized
 - **WHEN** le client négocie avec succès puis envoie tools/list sans notification initialized
 - **THEN** le relais reste capable de recharger son worker arrêté à frontière sûre sans rejouer une requête métier.
+
+### Requirement: Autorisation de reprise nécessaire à CABU
+Une demande CABU authentifiée MUST autoriser les reprises nécessaires de son instance observée, pour son UID et sa version, sans confirmation supplémentaire. Le service MUST conserver ce périmètre et sa provenance dans le reçu. Une autorisation révoquée, une instance divergente ou un effet incertain MUST bloquer la reprise sans rejeu. L’autorisation MUST NOT prouver la disponibilité technique ni la reconnexion.
+
+#### Scenario: Reprise dans la mise à jour autorisée
+- **WHEN** le paquet est vérifié et la même instance atteint une frontière sûre
+- **THEN** CAB admet sa reprise nécessaire sans nouvelle confirmation et conserve un reçu corrélé
+
+#### Scenario: Révocation avant dispatch
+- **WHEN** le demandeur révoque cabu_recovery_authorized avant une reprise en attente
+- **THEN** CAB bloque son dispatch sans changer la génération fournisseur ni rejouer un effet
+
+#### Scenario: Ancien reçu ou instance étrangère
+- **WHEN** le reçu ne porte pas d’instance observée ou la cible diffère
+- **THEN** CAB expose le motif technique sans inventer d’autorisation ni demander une confirmation répétitive

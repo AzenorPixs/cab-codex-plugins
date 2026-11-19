@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.2.21
+- CABU conserve une autorisation de reprise nécessaire par demandeur, UID, instance observée et version, sans confirmation supplémentaire.
+- Révocation auditée et revérification avant reprise native ; reçus, états inconnus et frontières sûres restent protégés.
+
 ## 3.2.20 — 2026-11-19
 
 - Récupération autonome d’une publication statistique arrêtée quand fichier et index restent à l’état avant, avec UNKNOWN original conservé et classement FAILED_NO_CHANGE sans rejeu.

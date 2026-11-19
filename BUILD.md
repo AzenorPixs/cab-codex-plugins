@@ -1,5 +1,10 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La demande CABU porte une autorité de reprise nécessaire liée à son pair Unix
+réel, son compte et sa version. Le reçu conserve ce périmètre ; le contrôle natif
+le revérifie avant dispatch. Une révocation ne change pas la configuration du
+fournisseur. Aucune confirmation répétitive ne remplace les gardes techniques.
+
 Le build DIU lancé par CAB reçoit une umask022 limitée à ce subprocess ; l'umask
 du service reste inchangée. La préparation fixe les modes des seuls payloads
 publics générés (Python et Web) à0755 pour les répertoires et0644 pour les fichiers.

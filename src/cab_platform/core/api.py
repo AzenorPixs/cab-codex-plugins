@@ -923,7 +923,7 @@ def command(request,body:Command):
     if name in ('system.update','system.update.status'):
         commands.require(set(data)<=({'request_id','version'} if name=='system.update' else {'request_id'}),'update-fields-invalid',400)
         from cab_platform import system_updates
-        return system_updates.request(actor,data.get('request_id'),data.get('version','')) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
+        return system_updates.request(actor,data.get('request_id'),data.get('version',''),peer=getattr(request,'cab_peer',None)) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
     if name=='operation.reconcile_stopped':
         from .operation_recovery import reconcile_stopped
         return reconcile_stopped(actor,data)

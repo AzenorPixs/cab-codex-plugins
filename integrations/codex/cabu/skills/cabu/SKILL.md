@@ -3,7 +3,7 @@ name: CABU
 description: Actualiser le paquet Debian CAB et vérifier le service sur le même reçu.
 ---
 
-# CABU 3.2.20
+# CABU 3.2.21
 
 CABU vérifie automatiquement les modes des seuls chemins publics du paquet et
 ses versions embarquées avant APT. Un payload privatisé ou périmé est refusé
@@ -16,7 +16,7 @@ adoption d'un ancien relais encore en mémoire : vérifier le consommateur réel
 Le reçu distingue paquet/service vérifiés et connecteurs MCP. RECONNECTING
 attend la frontière sûre ou le catalogue ; RELOAD_REQUIRED indique une reprise
 native nécessaire pour un ancien connecteur sans relais. Garder le même
-request_id, ne pas réinstaller et ne pas tuer Codex/OpenCode. La première reprise
+request_id et ne pas réinstaller. La première reprise
 d'un ancien programme déjà en mémoire ne peut pas être fabriquée par CAB.
 Les connecteurs supervisés rechargent leur moteur sans rejouer les appels ;
 le relais maintient l'attente CABU pendant son propre remplacement.
@@ -60,3 +60,23 @@ Un effet natif UNKNOWN conserve la protection sans rejeu ni escalade. L'état
 COMPLETED du contrôle technique ne suffit pas : CABU observe aussi moteur et
 catalogue cible. Les Codex déjà ouverts en stdio exigent une première adoption
 du socket ; cab native-prepare ne fabrique pas ce raccordement.
+
+## Reprise nécessaire à CABU
+
+Une demande CABU autorisée couvre aussi la reprise nécessaire de son instance
+observée, pour le même demandeur, UID, request_id et version. Ne pas redemander
+une confirmation pour cette seule reprise. Lire recovery_authorization dans
+le même reçu ; AUTHORIZED est une autorité bornée, pas une preuve de reconnexion.
+La préférence native reste prioritaire. Une reprise administrative contrôlée
+du frontend n'est admise qu'en dernier recours RELOAD_REQUIRED, avec identité
+kernel stable, frontière sûre de tous les acteurs du compte, PIDFD, reçu durable,
+supervision indépendante et sortie prouvée avant relance. Aucun arrêt arbitraire
+ni injection dans un canal privé. L'absence de mécanisme qualifié est un blocage
+technique explicite, pas une raison de redemander l'autorisation déjà donnée.
+
+Le propriétaire ou l'administrateur peut révoquer cette autorité par
+`native.control.configure` avec `cabu_recovery_authorized=false` ; seule cette
+préférence change, sans appel fournisseur ni nouvelle génération. Les reprises
+en attente sont revérifiées sous verrou avant dispatch. Un effet UNKNOWN, une
+instance divergente ou une révocation bloque sans rejeu. Un ancien reçu sans
+observation kernel n'acquiert aucune autorité rétroactive par simple lecture.
