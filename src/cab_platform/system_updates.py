@@ -27,17 +27,21 @@ def status(actor,request_id):
     if ConnectorReload.objects.filter(update=job).exists() and job.state in ('OK','RECONNECTING','RELOAD_REQUIRED'):return refresh_connectors(job.pk)
     return data(job)
 
-def release_obsolete_slot(actor, version, request_id):
+def release_obsolete_slot(actor, version, request_id, scope):
     """Libérer le créneau d'une version remplacée, en conservant son reçu."""
     from .frontend_recovery import observation
+    from .cabu_recovery_policy import same_instance
     from .session_delivery import version_tuple
     active = SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
     if active is None:
         return
     old = active.result.get('version')
+    recovery = observation(active)
+    settled_relaunch = recovery.get('state') == 'WAITING_MCP' and same_instance(
+        recovery.get('replacement'), scope.get('frontend'))
     admissible = (version and old and active.actor_id == actor.pk
                   and active.state == 'RELOAD_REQUIRED' and active.result.get('verified') is True
-                  and version_tuple(old) < version_tuple(version) and not observation(active)
+                  and version_tuple(old) < version_tuple(version) and (not recovery or settled_relaunch)
                   and verified_local_installation(version) is not None)
     c.require(admissible, 'update-already-active')
     active.result = {**active.result, 'superseded_by': request_id}
@@ -56,11 +60,12 @@ def request(actor,request_id,version='',peer=None):
                 c.require(prior.target_version==version,'update-request-conflict')
                 return status(actor,request_id)
             c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
-            release_obsolete_slot(actor, version, request_id)
+            from .cabu_recovery_policy import capture
+            scope=capture(actor,peer,request_id,version)
+            release_obsolete_slot(actor, version, request_id, scope)
             c.require(not ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').exists(),'connector-reload-pending')
             from .core.connectors import snapshot
-            from .cabu_recovery_policy import capture
-            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot(),'recovery_context':capture(actor,peer,request_id,version)})
+            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot(),'recovery_context':scope})
             ConnectorReload.objects.create(update=job,targets=job.result['connector_targets'],version=version)
             return data(job)
     except IntegrityError:raise c.Refused('update-admission-conflict') from None

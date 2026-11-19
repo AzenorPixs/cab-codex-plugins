@@ -43,7 +43,11 @@ def main(argv=None):
             run(args.agent);return 0
         elif args.action=='mcp-worker':
             from .mcp import run
-            os.environ['CAB_AGENT']=args.agent;run();return 0
+            os.environ['CAB_AGENT']=args.agent
+            startup=os.environ.pop('CAB_MCP_WORKER_STARTUP', '')
+            if startup:
+                print(json.dumps({'cab_worker_startup':startup,'version':__version__}),flush=True)
+            run();return 0
         elif args.action=='bootstrap-token':
             if os.getuid()!=0:raise ClientError('root-administration-required')
             from .paths import secret

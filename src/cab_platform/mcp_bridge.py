@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 import time
@@ -32,6 +33,8 @@ class Bridge:
         self.lock=asyncio.Lock();self.output_lock=asyncio.Lock();self.bootstrap=None;self.stopped=False
         self.client_factory=Client;self.client=self.client_factory()
         self.uncertain=False;self.client_closed=False;self.worker_identity=None;self.stop_reports=[];self.write_uncertain=set()
+        self.startup_nonce=None
+        self.catalog_seen=False
 
     async def output(self,message):
         if self.client_closed:return
@@ -49,9 +52,27 @@ class Bridge:
             raise ConnectionError('mcp-worker-write-outcome-unconfirmed') from error
 
     async def spawn(self):
-        self.child=await asyncio.create_subprocess_exec('/usr/bin/cab','mcp-worker','--agent',self.agent,stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=None,limit=MAX_LINE+1)
-        self.reader_task=asyncio.create_task(self.read_worker(self.child))
+        self.startup_nonce=secrets.token_hex(16)
+        self.catalog_seen=False
+        self.version=''
+        self.child=await asyncio.create_subprocess_exec('/usr/bin/cab','mcp-worker','--agent',self.agent,
+            env={**os.environ,'CAB_MCP_WORKER_STARTUP':self.startup_nonce},
+            stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=None,limit=MAX_LINE+1)
         self.worker_identity=identity(self.child.pid)
+        self.reader_task=asyncio.create_task(self.read_worker(self.child))
+
+    def observe_worker_startup(self,message):
+        if 'cab_worker_startup' not in message:
+            return False
+        version=message.get('version')
+        if (not self.startup_nonce or message['cab_worker_startup']!=self.startup_nonce
+                or not isinstance(version,str) or not re.fullmatch(r'\d+\.\d+\.\d+',version)):
+            raise ValueError('mcp-worker-startup-invalid')
+        self.startup_nonce=None
+        self.version=version
+        if self.catalog_seen:
+            self.catalog=version
+        return True
 
     def acknowledge_client(self,message):
         if message.get('method')=='notifications/initialized':self.initialized=True
@@ -95,6 +116,7 @@ class Bridge:
                 if len(line)>MAX_LINE:raise ValueError('mcp-worker-frame-too-large')
                 message=json.loads(line)
                 if process is not self.child:return
+                if self.observe_worker_startup(message):continue
                 if self.bootstrap and message.get('id')==self.bootstrap[0]:
                     future=self.bootstrap[1];self.bootstrap=None
                     if not future.done():future.set_result(message)
@@ -107,9 +129,14 @@ class Bridge:
                     if original:
                         method=original.get('method')
                         if method=='initialize' and 'result' in message:
-                            self.version=message['result'].get('serverInfo',{}).get('version','')
+                            negotiated=message['result'].get('serverInfo',{}).get('version')
+                            if negotiated and self.version and negotiated!=self.version:
+                                raise ValueError('mcp-worker-version-divergent')
+                            self.version=negotiated or self.version
+                            if self.catalog_seen:self.catalog=self.version
                             message['result'].setdefault('capabilities',{}).setdefault('tools',{})['listChanged']=True
-                        if method=='tools/list' and 'result' in message and not message['result'].get('nextCursor'):
+                        if method=='tools/list' and 'result' in message and isinstance(message['result'].get('tools'),list) and not message['result'].get('nextCursor'):
+                            self.catalog_seen=True
                             self.catalog=self.version
                 await self.output(message)
         except (OSError,ValueError,asyncio.LimitOverrunError) as error:
