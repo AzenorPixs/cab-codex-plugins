@@ -24,12 +24,12 @@ def timestamp():
 
 class Receipt:
     """Le reçu local survit à une panne de la base et interdit le rejeu."""
-    def __init__(self, key, label):
+    def __init__(self, key, label, *, recover_interrupted=True):
         self.path = STATE / f'recovery-{key}.json'
         self.label = label
         self.next_publication = 0
         self.data = read_json(self.path, {}) or {}
-        if self.data.get('state') == 'ATTEMPTING':
+        if recover_interrupted and self.data.get('state') == 'ATTEMPTING':
             self.finish(False, 'Reprise interrompue, résultat non confirmé.')
 
     def save(self):

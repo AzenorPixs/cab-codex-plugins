@@ -84,7 +84,21 @@ def file_state(current, path, snapshot, options, env):
     c.require(ignored.returncode == 1, 'session-git-ignored', 409)
     staged = git_run(current.project, options, literal, 'diff', '--cached', '--name-only', '-z', 'HEAD', '--', path)
     c.require(staged.returncode == 0 and not staged.stdout, 'session-git-preexisting-shared-index-conflict', 409)
-    return {'file': fingerprint(current.project.root, path), 'entries': entries, 'shared_index_digest': shared_scope_digest(current.project, options, env, [path])}
+    target=c.safe_path(Path(current.project.root),path,exists=False)
+    if target.exists():
+        observed=fingerprint(current.project.root,path)
+    else:
+        c.require(len(entries)==1 and entries[0]['status']=='.D','session-git-preexisting-status-unsupported',409)
+        baseline=git_run(current.project, options, literal, 'ls-tree', '-z', snapshot['head'], '--', path)
+        c.require(baseline.returncode==0,'session-git-unavailable',409)
+        metadata,separator,name=baseline.stdout.rstrip(b'\0').partition(b'\t')
+        fields=metadata.split()
+        c.require(separator and name==path.encode('utf-8') and len(fields)==3
+                  and fields[0] in (b'100644',b'100755') and fields[1]==b'blob',
+                  'session-git-preexisting-status-unsupported',409)
+        c.require(not target.exists(),'session-git-preexisting-source-changed',409)
+        observed={'absent':True,'size':0,'mode':fields[0].decode(),'head_oid':fields[2].decode()}
+    return {'file': observed, 'entries': entries, 'shared_index_digest': shared_scope_digest(current.project, options, env, [path])}
 
 
 def observe(current, paths):
@@ -98,7 +112,7 @@ def observe(current, paths):
     c.require(index is None or index.state in ('PENDING', 'OPEN'), 'session-git-preexisting-index-protected', 409)
     for path in paths:
         c.require(any(path == scope or path.startswith(scope + '/') for scope in current.mandate['paths']), 'session-git-outside-mandate', 403)
-        c.safe_path(Path(current.project.root), path)
+        c.safe_path(Path(current.project.root), path, exists=False)
     c.require(not GitFileReservation.objects.filter(project=current.project, active=True, path__in=paths).exists(), 'session-git-reserved', 409)
     snapshot = git_snapshot(current.project)
     c.require(snapshot['available'] and snapshot['head'] and snapshot['branch'] != '(detached)', 'session-git-unavailable', 409)

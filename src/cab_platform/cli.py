@@ -16,6 +16,7 @@ def main(argv=None):
     sub.add_parser('status')
     sub.add_parser('finalize')
     sub.add_parser('update-worker')
+    sub.add_parser('daemon-recovery')
     serve=sub.add_parser('serve');serve.add_argument('--port',type=int,default=8790)
     mcp=sub.add_parser('mcp');mcp.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
     worker=sub.add_parser('mcp-worker');worker.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
@@ -58,6 +59,11 @@ def main(argv=None):
         elif args.action=='finalize':
             from .finalization import finalize
             result=finalize()
+        elif args.action=='daemon-recovery':
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
+            import django;django.setup()
+            from .component_recovery import recover_daemon
+            recover_daemon();return 0
         elif args.action=='update-worker':
             os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
             import django;django.setup()

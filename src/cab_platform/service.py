@@ -154,12 +154,30 @@ def run(port=8790):
         log.info('Inventaire des binaires : %s', 'conservé pour la mise à jour' if retained else 'réinitialisé')
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
-    context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
+    from .component_recovery import ChildRecovery, api_ready, electric_ready, observe_daemon
+    context=multiprocessing.get_context('spawn')
+
+    def spawn_api():
+        child=context.Process(target=api_process,args=(port,))
+        child.start()
+        return child
+
+    def spawn_electric():
+        args,env,cwd=electric_command()
+        child=subprocess.Popen(args,env=env,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
+        threading.Thread(target=relay,args=(child.stdout,),daemon=True).start()
+        return child
+
+    api_recovery=ChildRecovery('cab-api','API CAB',spawn_api,lambda child:child.is_alive(),
+                               lambda child:api_ready(pid=child.pid))
+    electric_recovery=ChildRecovery('electric','Electric',spawn_electric,lambda child:child.poll() is None,electric_ready)
+    api=api_recovery.tick()
+    next_daemon_report=0
     from .service_recovery import InotifyMonitor,PostgresMonitor
     postgres_monitor=PostgresMonitor(was_ready=pg_qualification.get('state') in ('QUALIFIED','MIGRATED'))
     postgres_thread=threading.Thread(target=postgres_monitor.run,args=(stop,),name='cab-postgres-watch',daemon=True)
     postgres_thread.start()
-    electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
+    electric=None;tasks={};recovered=False;next_collect=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
     update_future=None;availability_future=None;native_future=None;next_native=0
@@ -190,18 +208,25 @@ def run(port=8790):
                 native_future=native_pool.submit(background_native);next_native=time.monotonic()+1
             if reload_requested.is_set():
                 try:
-                    level=configure();os.kill(api.pid,signal.SIGHUP);log.info('configuration reloaded: %s',level)
+                    level=configure()
+                    if api and api.is_alive():os.kill(api.pid,signal.SIGHUP)
+                    log.info('configuration reloaded: %s',level)
                     log.debug('diagnostic logging enabled')
                 except (OSError,ValueError,RuntimeError) as error:
                     log.error('configuration reload refused',extra={'code':type(error).__name__})
                 finally:reload_requested.clear()
-            if not api.is_alive():raise RuntimeError('cab-api-process-exited')
+            api=api_recovery.tick()
             if not config().get('initialized'):continue
+            electric=electric_recovery.tick()
+            if time.monotonic()>=next_daemon_report:
+                next_daemon_report=time.monotonic()+5
+                observe_daemon()
             if time.monotonic()>=next_process_inventory:
                 try:
                     if not registry_initialized:
                         process_registry.initialize();registry_initialized=True
-                    supervised={os.getpid():'cab',api.pid:'cab-api'}
+                    supervised={os.getpid():'cab'}
+                    if api and api.is_alive():supervised[api.pid]='cab-api'
                     if (postgres_pid:=postgres_monitor.pid):supervised[postgres_pid]='postgresql'
                     if electric is not None and electric.poll() is None:supervised[electric.pid]='electric'
                     process_registry.refresh(supervised)
@@ -297,13 +322,6 @@ def run(port=8790):
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:
                         if len(tasks)>=4:break
                         if op.pk not in tasks:tasks[op.pk]=pool.submit(execute_operation,op.pk)
-                if (electric is None or electric.poll() is not None) and time.monotonic()>=next_electric_start:
-                    next_electric_start=time.monotonic()+10
-                    args,env,cwd=electric_command()
-                    if Path(args[0]).is_file():
-                        electric=subprocess.Popen(args,env=env,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
-                        threading.Thread(target=relay,args=(electric.stdout,),daemon=True).start();log.info('Electric started')
-                    else:log.error('Electric executable missing',extra={'code':'electric-unavailable'})
                 if metadata is not None and metadata.done():
                     try:metadata.result()
                     except Exception as error:log.warning('metadata refresh unavailable',extra={'code':type(error).__name__})
@@ -335,6 +353,6 @@ def run(port=8790):
             os.killpg(electric.pid,signal.SIGTERM)
             try:electric.wait(timeout=10)
             except subprocess.TimeoutExpired:os.killpg(electric.pid,signal.SIGKILL);electric.wait()
-        if api.is_alive():api.terminate();api.join(20)
-        if api.is_alive():api.kill();api.join()
+        if api and api.is_alive():api.terminate();api.join(20)
+        if api and api.is_alive():api.kill();api.join()
         log.info('service stopped')

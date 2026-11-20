@@ -2414,3 +2414,59 @@ Un RUN de codage MUST NOT passer à CLOSED tant que son change OpenSpec est acti
 #### Scenario: Dépendance non satisfaisante
 - **WHEN** le responsable arrête le RUN et identifie ses dépendances non satisfaites
 - **THEN** CAB produit BLOCKERS.md pour le change actif et enregistre BLOCKED avec le chemin et l’empreinte du rapport
+
+### Requirement: Version du worker observée au démarrage
+Le relais MUST publier la version attestée par son worker courant. Il MUST obtenir un catalogue réel avant l’état READY.
+
+#### Scenario: Moteur lancé avant catalogue
+- **WHEN** le worker courant fournit sa version avant la fin de la lecture du catalogue
+- **THEN** le heartbeat publie cette version et le statut CATALOG_PENDING
+
+#### Scenario: Mise à jour suivante après relance confirmée
+- **WHEN** le même frontend relancé demande une version plus récente vérifiée et l’ancien reçu attend les connexions
+- **THEN** CAB conserve le reçu antérieur et admet la nouvelle demande sans rejouer l’ancien effet
+
+### Requirement: Reprise d’une instance dont l’exécutable a été remplacé
+CABU MUST conserver l’identité noyau de l’instance ciblée et vérifier le chemin de son binaire installé avant relance. Il MUST préserver les effets incertains et les anciens reçus.
+
+#### Scenario: Ancien exécutable marqué supprimé par Linux
+- **WHEN** le processus graphique conserve l’ancien inode et que le binaire de remplacement est installé à un chemin système protégé
+- **THEN** CAB conserve l’identité du processus à arrêter et utilise le binaire de remplacement pour sa relance
+
+#### Scenario: Nouveau paquet après une reprise non commencée
+- **WHEN** le même demandeur demande la reprise d’une version plus récente déjà installée et vérifiée
+- **THEN** CAB peut libérer le créneau du reçu antérieur bloqué si aucun redémarrage n’a été engagé, et conserve le reçu initial
+
+### Requirement: Génération de paquet dans la définition MCP
+CAB MUST conserver CAB_MCP_PACKAGE_VERSION dans l’environnement de sa déclaration MCP gérée. La valeur MUST être stable à version inchangée et suivre la version du paquet. Les autres données et secrets MUST rester préservés. Le marqueur MUST NOT valoir preuve de reconnexion ; une session d’origine MUST fournir une nouvelle négociation et un catalogue réellement observés avant READY.
+
+#### Scenario: Nouvelle version
+- **WHEN** CAB active une nouvelle version du paquet
+- **THEN** sa définition MCP porte la nouvelle génération et le client peut renouveler la connexion à sa frontière native sûre
+
+#### Scenario: Réconciliation idempotente
+- **WHEN** la même version est réconciliée à nouveau
+- **THEN** la définition effective reste identique, sans nonce aléatoire ni boucle de reconnexion
+
+#### Scenario: Donnée étrangère ou format ambigu
+- **WHEN** la déclaration appartient à une autre commande ou son format ne peut être modifié sans ambiguïté
+- **THEN** CAB refuse l’écriture et préserve toutes les données antérieures
+
+#### Scenario: Rafraîchissement non observé
+- **WHEN** le marqueur est écrit mais aucun nouveau moteur/catalogue n’est observé
+- **THEN** CAB conserve l’attente de reconnexion sans fabriquer de version ni de succès
+
+### Requirement: Reprise graphique autonome après mise à jour CABU
+CABU MUST essayer le parcours natif en priorité. Quand un relais de l’instance graphique authentifiée qui a demandé la mise à jour reste en RELOAD_REQUIRED, le superviseur MAY arrêter cette instance, son moteur et les relais identifiés sous le même compte après vérification du mandat et des protections actives. CAB MUST confier la relance au gestionnaire de services du compte d’origine.
+
+#### Scenario: Arrêt d’un processus ciblé
+- **WHEN** la mise à jour est vérifiée et le redémarrage de l’instance identifiée est admis
+- **THEN** CAB écrit son reçu avant l’effet, envoie SIGTERM via PIDFD, puis SIGKILL sur le même PIDFD uniquement si la sortie n’est pas observée avant le délai
+
+#### Scenario: Résultat d’arrêt ou de reprise incertain
+- **WHEN** la sortie ou la relance reste incertaine
+- **THEN** CAB conserve le reçu et ne rejoue pas l’effet
+
+#### Scenario: Nouveau frontend actif
+- **WHEN** l’ancienne instance a quitté et le compte d’origine a relancé le frontend
+- **THEN** CAB attend les heartbeats de relais rattachés au nouveau frontend attestant le moteur et le catalogue de la version cible

@@ -5,6 +5,7 @@ import pwd
 import re
 
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from .agent_runtime import processes
@@ -12,11 +13,22 @@ from . import __version__
 from .connector_process import cab_process, identity
 from .core.commands import digest
 from .core.connectors import observed_dead
-from .core.models import Actor, Maintenance, ObservedBinary
+from .core.models import Actor, BinaryCounts, Maintenance, ObservedBinary
 from .native_api import same_instance
 from .paths import STATE, read_json
 
 
+def project_counts():
+    counts = ObservedBinary.objects.aggregate(
+        inactive=Count('pk', filter=Q(active=False)),
+        active=Count('pk', filter=Q(active=True)),
+    )
+    row,created = BinaryCounts.objects.get_or_create(pk=1, defaults=counts)
+    if not created and (row.inactive!=counts['inactive'] or row.active!=counts['active']):
+        BinaryCounts.objects.filter(pk=1).update(**counts)
+
+
+@transaction.atomic
 def initialize():
     """Conserver l'inventaire si ce démarrage appartient à une mise à jour vérifiée en cours."""
     receipt = read_json(STATE/'maintenance-receipt.json', {})
@@ -26,6 +38,7 @@ def initialize():
                         and Maintenance.objects.filter(pk=key, state__in=['PREPARED','INSTALLING']).exists())
     if not packaged_upgrade:
         ObservedBinary.objects.all().delete()
+    project_counts()
     return packaged_upgrade
 
 
@@ -76,3 +89,4 @@ def refresh(supervised):
             continue
         if not unchanged and (current is not None or observed_dead(row.process)):
             ObservedBinary.objects.filter(pk=row.pk).update(active=False, stopped=now)
+    project_counts()

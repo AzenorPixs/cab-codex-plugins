@@ -7,6 +7,8 @@ import {api} from './api'
 import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle} from './Appearance'
 import {GitMonitorSettings} from './GitMonitorSettings'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
+import {BinaryCounters} from './BinaryCounters'
+import {BinaryList,type BinaryStatus} from './BinaryList'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
 import {ProjectForges} from './ProjectForges'
@@ -116,7 +118,13 @@ const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const projectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/archives',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} archives/>}</Projects></Gate>})
 const newProjectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/new',component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><div className="project-content"><CreateProjectForm/></div></div>}</Projects></Gate>})
-const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>Administration</h1></div></div></section></AdministrationShell>})
+const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>Administration</h1></div></div><BinaryCounters/></section></AdministrationShell>})
+const administrationBinariesRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/administration/binaries',
+  validateSearch:(search:Record<string,unknown>):{status?:BinaryStatus}=>search.status==='active'||search.status==='inactive'?{status:search.status}:{},
+  component:()=> <AdministrationShell><Gate><BinaryList status={administrationBinariesRoute.useSearch().status??'active'} login={<Login/>}/></Gate></AdministrationShell>,
+})
 const agentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/agents',component:()=> <Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate>})
 const agentPages=([['codex','codex_desktop'],['codex-cli','codex'],['opencode','opencode']] as const).map(([path,agent])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${path}`,component:()=> <Gate><ConfigurationAccess section="agents" selectedAgent={agent} login={<Login/>}/></Gate>}))
 const legacyAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <Navigate to="/agents" replace/>})
@@ -124,6 +132,6 @@ const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/ad
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectDetailRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectDetailRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

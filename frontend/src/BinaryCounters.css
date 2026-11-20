@@ -1,0 +1,125 @@
+.binary-counters {
+  width: min(100%, 20rem);
+  margin-block-start: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.binary-counters h2 {
+  margin: 0;
+  padding: .65rem .9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: calc(1rem * var(--font-scale, 1));
+}
+
+.binary-counters dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.binary-counters dl > div {
+  position: relative;
+  padding: .65rem .75rem;
+  text-align: center;
+}
+
+.binary-counters dl > div + div {
+  border-inline-start: 1px solid var(--border);
+}
+
+.binary-counters dt {
+  color: var(--muted);
+}
+
+.binary-counters dd {
+  margin: .1rem 0 0;
+  font-size: calc(clamp(1.5rem, 1.15rem + 1.1vw, 2.1rem) * var(--font-scale, 1));
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.binary-counters dt a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.binary-counters dl > div:hover,
+.binary-counters dl > div:focus-within {
+  background: var(--surface-alt);
+}
+
+.binary-counters .binary-active dd {
+  color: var(--accent-text);
+}
+
+.binary-counters .binary-inactive dd {
+  color: var(--danger);
+}
+
+.binary-tabs {
+  display: flex;
+  gap: .5rem;
+  margin-block: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.binary-tabs a {
+  padding: .6rem .9rem;
+  border-bottom: 2px solid transparent;
+}
+
+.binary-tabs a[aria-current="page"] {
+  color: var(--accent-text);
+  border-color: currentColor;
+  font-weight: 700;
+}
+
+.binary-list td.binary-executable {
+  overflow-wrap: anywhere;
+}
+
+.binary-list tbody tr:nth-child(even) {
+  background: var(--surface-alt);
+}
+
+.binary-list thead th {
+  background: #215e54;
+  color: #fff;
+}
+
+@media (width > 1300px) {
+  .binary-list tbody td {
+    padding-block: 15px;
+  }
+}
+
+@media (max-width: 1300px) {
+  .binary-list tbody td:first-child {
+    padding-block-start: 5px;
+  }
+
+  .binary-list tbody td:last-child {
+    padding-block-end: 5px;
+  }
+}
+
+.binary-sort {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .35em;
+  padding: .15rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.binary-sort:hover,
+.binary-sort:focus-visible {
+  text-decoration: underline;
+}

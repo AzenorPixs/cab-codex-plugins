@@ -2,6 +2,7 @@
 Description=Plateforme Codex Approval Bridge
 After=network.target postgresql.service
 Wants=postgresql.service
+OnFailure=cab-recovery.service
 
 [Service]
 Type=simple
@@ -9,8 +10,7 @@ User=root
 Group=root
 ExecStart=/usr/bin/cab serve
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=3s
+Restart=no
 TimeoutStopSec=90s
 KillMode=mixed
 UMask=0077

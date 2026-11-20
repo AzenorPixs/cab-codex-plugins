@@ -124,7 +124,7 @@ class RecoveryTests(unittest.TestCase):
 
 if __name__=='__main__':
     with transaction.atomic():
-        migration=('cab_core','0040_mcp_disconnect_recovery')
+        migration=('cab_core','0041_binary_counts')
         executor=MigrationExecutor(connection)
         if migration not in executor.loader.applied_migrations:
             executor.migrate([migration])

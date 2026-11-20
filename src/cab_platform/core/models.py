@@ -171,6 +171,15 @@ class ObservedBinary(models.Model):
 
     class Meta:db_table='cab_observed_binaries'
 
+
+class BinaryCounts(models.Model):
+    id=models.PositiveSmallIntegerField(primary_key=True,default=1)
+    inactive=models.PositiveIntegerField(default=0)
+    active=models.PositiveIntegerField(default=0)
+
+    class Meta:db_table='cab_binary_counts'
+
+
 class McpStopAttempt(models.Model):
     id=models.CharField(primary_key=True,max_length=64)
     connector=models.ForeignKey(McpConnector,on_delete=models.PROTECT)
