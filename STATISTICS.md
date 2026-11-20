@@ -20492,9 +20492,9 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 2 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 2 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -20525,7 +20525,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "44246468a40b61e7002128931108543417505aa34c610c48728f2277a06c8d70", "generated_at": "2026-11-20T10:06:40.410386+00:00", "revision": "44246468a40b61e7002128931108543417505aa34c610c48728f2277a06c8d70", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "acd65f743dc7c9ef8860abb1bdbe2b271c8251fb5980dd37167e528cce6e62c0", "generated_at": "2026-11-20T10:07:46.233091+00:00", "revision": "acd65f743dc7c9ef8860abb1bdbe2b271c8251fb5980dd37167e528cce6e62c0", "scope": "change"} -->
 
 
 ## Change `coordinate-cab-coding-incidents` — openspec/changes/archive/2026-10-30-coordinate-cab-coding-incidents/STATISTICS.md
@@ -72554,4 +72554,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "37eddb51f204bcc439ba3dbc16ba8bcde78ee66f219d7827129b97a4556faa73", "generated_at": "2026-11-20T10:06:41.676575+00:00", "revision": "37eddb51f204bcc439ba3dbc16ba8bcde78ee66f219d7827129b97a4556faa73", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f0fab06d4385f045f63b588a5747f12706443bb9812657824ce8506cecdac95f", "generated_at": "2026-11-20T10:07:48.170741+00:00", "revision": "f0fab06d4385f045f63b588a5747f12706443bb9812657824ce8506cecdac95f", "scope": "project"} -->
