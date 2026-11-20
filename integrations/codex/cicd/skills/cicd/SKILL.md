@@ -3,7 +3,7 @@ name: cicd
 description: Déclencher la CI/CD autorisée du projet via CAB avec une version, puis suivre le même reçu de livraison.
 ---
 
-# CICD 3.2.34
+# CICD 3.2.35
 
 Le moteur borne l'umask au seul subprocess de build DIU, sans changer celle du
 service. Les données publiques du paquet restent lisibles ; CABU contrôle le.deb

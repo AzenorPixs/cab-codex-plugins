@@ -137,7 +137,8 @@ def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
     from .postgresql import ensure as ensure_postgresql
-    log.info('PostgreSQL qualification: %s',ensure_postgresql())
+    pg_qualification=ensure_postgresql()
+    log.info('PostgreSQL qualification: %s',pg_qualification)
     # Le parent des sockets est traversable ; les requêtes exigent ensuite
     # l’identité du pair et son jeton. Les autres états restent0700.
     created=False
@@ -154,6 +155,10 @@ def run(port=8790):
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
+    from .service_recovery import InotifyMonitor,PostgresMonitor
+    postgres_monitor=PostgresMonitor(was_ready=pg_qualification.get('state') in ('QUALIFIED','MIGRATED'))
+    postgres_thread=threading.Thread(target=postgres_monitor.run,args=(stop,),name='cab-postgres-watch',daemon=True)
+    postgres_thread.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
@@ -197,6 +202,7 @@ def run(port=8790):
                     if not registry_initialized:
                         process_registry.initialize();registry_initialized=True
                     supervised={os.getpid():'cab',api.pid:'cab-api'}
+                    if (postgres_pid:=postgres_monitor.pid):supervised[postgres_pid]='postgresql'
                     if electric is not None and electric.poll() is None:supervised[electric.pid]='electric'
                     process_registry.refresh(supervised)
                 except (DatabaseError,OSError,ValueError,RuntimeError) as error:
@@ -271,20 +277,23 @@ def run(port=8790):
                     if closure_future is None and time.monotonic()>=next_closure:
                         closure_future=closure_pool.submit(background_closure);next_closure=time.monotonic()+5
                     from .statistics_watch import Watcher,synchronize
-                    if statistics_watcher is None:statistics_watcher=Watcher()
+                    if statistics_watcher is None:
+                        statistics_watcher=InotifyMonitor(Watcher,'inotify-statistics','Surveillance inotify Statistiques')
                     if statistics_future is not None and statistics_future.done():
                         try:statistics_future.result()
                         except Exception as error:log.warning('statistics synchronization unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
                         statistics_future=None
                     due=statistics_watcher.tick()
-                    env_due=[key for key,at in statistics_watcher.env_dirty.items() if time.monotonic()-at>=.3]
-                    if statistics_future is None and env_due:
-                        from .project_metadata import synchronize as synchronize_metadata
-                        project_id=env_due[0];statistics_watcher.env_dirty.pop(project_id,None)
-                        statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
-                    elif statistics_future is None and due:
-                        statistics_project=due[0];statistics_watcher.dirty.pop(statistics_project,None)
-                        statistics_future=statistics_pool.submit(synchronize,statistics_project)
+                    observed=statistics_watcher.watcher
+                    if due is not None and observed is not None:
+                        env_due=[key for key,at in observed.env_dirty.items() if time.monotonic()-at>=.3]
+                        if statistics_future is None and env_due:
+                            from .project_metadata import synchronize as synchronize_metadata
+                            project_id=env_due[0];observed.env_dirty.pop(project_id,None)
+                            statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
+                        elif statistics_future is None and due:
+                            statistics_project=due[0];observed.dirty.pop(statistics_project,None)
+                            statistics_future=statistics_pool.submit(synchronize,statistics_project)
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:
                         if len(tasks)>=4:break
                         if op.pk not in tasks:tasks[op.pk]=pool.submit(execute_operation,op.pk)
@@ -311,6 +320,7 @@ def run(port=8790):
     finally:
         stop.set()
         if git_monitor_thread is not None:git_monitor_thread.join(timeout=30)
+        postgres_thread.join(timeout=10)
         forge_version_pool.shutdown(wait=True,cancel_futures=True)
         agent_config_pool.shutdown(wait=True,cancel_futures=True)
         agents_pool.shutdown(wait=True,cancel_futures=True)

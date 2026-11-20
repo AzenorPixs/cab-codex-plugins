@@ -147,8 +147,19 @@ def _ensure(cfg: dict) -> dict:
     if cfg.get('postgresql') and cfg['postgresql'] != current:
         raise PostgreSQLError('postgres-reference-divergent')
     if source['status'] == 'down':
-        command(['/usr/bin/pg_ctlcluster', str(source['major']), 'cab', 'start'])
-    qualify(cfg, source['major'])
+        from .service_recovery import Receipt
+        recovery = Receipt('postgresql','PostgreSQL CAB')
+        if not recovery.begin():
+            raise PostgreSQLError('postgres-start-attempt-already-recorded')
+        try:
+            command(['/usr/bin/pg_ctlcluster', str(source['major']), 'cab', 'start'])
+            qualify(cfg, source['major'])
+        except (OSError,ValueError,RuntimeError):
+            recovery.finish(False,'Le démarrage du cluster CAB n’a pas été qualifié.')
+            raise
+        recovery.finish(True,'Le démarrage du cluster CAB a été qualifié par SQL.')
+    else:
+        qualify(cfg, source['major'])
     if not cfg.get('postgresql'):
         cfg['postgresql'] = current
         atomic_json(CONFIG, cfg)
