@@ -33,6 +33,19 @@ def archive_state(run):
     return str(path.relative_to(root)),observed
 
 
+def closed_change_issue(run):
+    """Contrôler les archives présentes, y compris celles des RUN importés."""
+    if run.mode=='service' or not run.change:return None
+    try:
+        require_closed_change(run)
+        parent=Path(run.project.root)/'openspec/changes/archive'
+        if any(parent.glob('????-??-??-'+run.change)):
+            archive_state(run)
+    except (c.Refused,OSError,ValueError) as error:
+        return getattr(error,'code','finalization-archive-unavailable')
+    return None
+
+
 def guard(run,*,allow_measurement=False,allow_terminal_git=False):
     c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     c.require(c.no_pending(run,terminal_git=allow_terminal_git) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
@@ -61,7 +74,8 @@ def normal_valid(run):
 
 def terminal_proof(run):
     guard(run)
-    require_closed_change(run)
+    issue=closed_change_issue(run)
+    c.require(issue is None,issue)
     if run.mandate.get('legacy_snapshot_id'):
         if run.review.get('closure',{}).get('kind') in ('legacy-service-retirement','legacy-technical-retirement'):
             c.require(run.suspension=='IMPORT_PROTECTED','legacy-protection-divergent')
@@ -81,7 +95,7 @@ def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
     from .models import FinalizationPlan
     if run.state == 'CLOSURE_INVALID':
-        result['reasons']=['change-still-open']
+        result['reasons']=[closed_change_issue(run) or 'archive-missing-or-ambiguous']
         result['evaluation_digest']=c.digest(result)
         return result
     plan=FinalizationPlan.objects.filter(run=run).first()
@@ -95,7 +109,9 @@ def evaluate(run):
         return {**result,'action':'finalize' if status['phase']=='READY' else 'waiting','reasons':status['missing'],'finalization':status}
     try:
         guard(run)
-        if run.state == 'CLOSED':require_closed_change(run)
+        if run.state == 'CLOSED':
+            issue=closed_change_issue(run)
+            c.require(issue is None,issue)
         if SessionArchive.objects.filter(run=run).exists():result['action']='archived';return result
         if run.mode=='service':
             result['tasks_applicable']=False
@@ -191,10 +207,11 @@ def reconcile_closed_change(run):
     """Corriger un état affiché sans réécrire ni rejouer son reçu historique."""
     current=Run.objects.select_for_update().select_related('project').get(pk=run.pk)
     if current.mode=='service' or current.state not in ('CLOSED','CLOSURE_INVALID'):return current
-    if current.state=='CLOSED' and active_change(current).exists():
+    issue=closed_change_issue(current)
+    if current.state=='CLOSED' and issue:
         current.state='CLOSURE_INVALID'
         current.save(update_fields=['state','updated'])
-        c.event(current,'run-closure-inconsistent',{'reason':'change-still-open','receipt_id':current.review.get('closure',{}).get('receipt_id')})
+        c.event(current,'run-closure-inconsistent',{'reason':issue,'receipt_id':current.review.get('closure',{}).get('receipt_id')})
     elif current.state=='CLOSURE_INVALID':
         try:archive,_=archive_state(current)
         except (c.Refused,OSError,ValueError):return current

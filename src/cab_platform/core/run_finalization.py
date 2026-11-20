@@ -64,10 +64,11 @@ def dossier(run,plan,*,allow_terminal_git=False):
 
 def view(run,plan=None):
     plan=plan or FinalizationPlan.objects.get(run=run)
-    from .run_lifecycle import require_closed_change
+    from .run_lifecycle import closed_change_issue
     if run.state in ('CLOSED','CLOSURE_INVALID') and plan.receipt:
         try:
-            require_closed_change(run)
+            issue=closed_change_issue(run)
+            c.require(issue is None,issue)
             c.require(run.state!='CLOSURE_INVALID','archive-missing-or-ambiguous')
         except (c.Refused,OSError,ValueError) as error:
             missing=[getattr(error,'code','finalization-archive-unavailable')]
