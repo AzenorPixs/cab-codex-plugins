@@ -84,14 +84,12 @@ class DeliveryScopeTests(unittest.TestCase):
             return 0
         with patch('cab_platform.project_metadata.read_metadata', return_value={'state':'ready','values':values}), \
                 patch.dict('cab_platform.project_artifacts.BUILDERS', {'debian':build}), \
-                patch('cab_platform.project_artifacts.refresh') as refresh, \
-                patch.object(session_delivery, 'diu_program') as diu:
+                patch('cab_platform.project_artifacts.refresh') as refresh:
             receipt = session_delivery.execute_native_build(project,'debian','2.0.0',records.append)
             self.assertEqual(receipt['builder'], 'cab')
             self.assertEqual(receipt['exit_code'], 0)
             self.assertEqual(records[0]['child']['pid'], 10)
             refresh.assert_called_once_with(project,'debian')
-            diu.assert_not_called()
             with self.assertRaisesRegex(Refused,'session-delivery-build-config-changed'):
                 session_delivery.execute_native_build(project,'debian','2.0.1',records.append)
 

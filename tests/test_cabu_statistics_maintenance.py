@@ -136,7 +136,7 @@ class PublicPayloadTests(unittest.TestCase):
 
 class BuildUmaskTests(unittest.TestCase):
     def test_child_build_umask_is_public_and_parent_077_is_preserved(self):
-        from cab_platform import session_delivery as d
+        from cab_platform import artifact_builders as builders
         with tempfile.TemporaryDirectory(prefix='cab-build-umask-') as folder:
             root=Path(folder);public=root/'public';public.mkdir();public.chmod(0o755);(public/'code.py').write_text('# public');(public/'code.py').chmod(0o644)
             target=root/'payload';observed=root/'umask';program=root/'diu-fixture'
@@ -144,10 +144,9 @@ class BuildUmaskTests(unittest.TestCase):
             program.write_text('#!'+sys.executable+'\n'+body);program.chmod(0o755)
             previous=os.umask(0o077)
             try:
-                with patch.object(d,'diu_program',return_value=str(program)):
-                    receipt=d.execute_diu_build(types.SimpleNamespace(identifier='fixture'),'debian','3.2.20',lambda value:None)
+                code=builders.execute([str(program)],lambda value:None)
                 current=os.umask(0o077)
-                self.assertEqual(current,0o077);self.assertEqual(receipt['exit_code'],0)
+                self.assertEqual(current,0o077);self.assertEqual(code,0)
                 self.assertEqual(observed.read_text(),'0o22');self.assertEqual(stat.S_IMODE(target.stat().st_mode),0o755);self.assertEqual(stat.S_IMODE((target/'code.py').stat().st_mode),0o644)
             finally:os.umask(previous)
 

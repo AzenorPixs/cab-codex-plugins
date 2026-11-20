@@ -92,26 +92,6 @@ class LegacyAdoptionTests(unittest.TestCase):
         self.assertFalse(session_git.shared_index_allowed(object(),{}, {},['src/b.py'],['src/b.py'],origin))
 
 
-class DiuBuildTests(unittest.TestCase):
-    def test_commande_debian_bornee_et_recu(self):
-        from unittest.mock import Mock
-        process=Mock(pid=123);process.wait.return_value=0;receipts=[]
-        with patch.object(session_delivery,'diu_program',return_value='/fixture/diu'),patch('subprocess.Popen',return_value=process) as spawn,patch('cab_platform.connector_process.identity',return_value={'pid':123}):
-            receipt=session_delivery.execute_diu_build(types.SimpleNamespace(identifier='fixture'),'debian','3.2.16',receipts.append)
-        self.assertEqual(spawn.call_args.args[0],['/fixture/diu','projects','build','debian','fixture'])
-        self.assertEqual([item['phase'] for item in receipts],['prepared','started'])
-        self.assertEqual(receipt['exit_code'],0)
-        self.assertEqual(receipt['source_mode'],'working-tree')
-
-    def test_timeout_ne_relance_pas_le_build(self):
-        import subprocess
-        from unittest.mock import Mock
-        process=Mock(pid=123);process.wait.side_effect=subprocess.TimeoutExpired('fixture',3600)
-        with patch.object(session_delivery,'diu_program',return_value='/fixture/diu'),patch('subprocess.Popen',return_value=process) as spawn,patch('cab_platform.connector_process.identity',return_value={'pid':123}):
-            with self.assertRaises(Refused) as error:session_delivery.execute_diu_build(types.SimpleNamespace(identifier='fixture'),'docker','3.2.16',lambda value:None)
-        self.assertEqual(error.exception.code,'session-delivery-diu-execution-unknown')
-        spawn.assert_called_once()
-
 from test_terminal_git import TerminalVersionTests,TerminalGitTests
 
 if __name__=='__main__':unittest.main()

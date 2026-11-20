@@ -747,58 +747,6 @@ def push_version(project, forge, version, expected_commit, expected_tag, before_
     return {'branch':branch,'commit':expected_commit,'tag':version,'verified':True}
 
 
-def diu_program(project):
-    """Vérifie DIU et sa configuration de racine sans évaluation shell."""
-    import os,pwd,shutil,stat
-    from pathlib import Path
-    executable=shutil.which('diu',path='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin')
-    require(executable is not None and os.geteuid()==0,'session-delivery-diu-unavailable',409)
-    script=Path(executable).resolve()
-    try:
-        info=script.stat()
-        require(stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode & 0o022,'session-delivery-diu-unavailable',409)
-        fd=os.open(script.parent/'config/environnements.env',os.O_RDONLY|os.O_NOFOLLOW)
-        with os.fdopen(fd,'r',encoding='utf-8') as stream:
-            info=os.fstat(stream.fileno())
-            require(stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode & 0o002 and (not info.st_mode & 0o020 or info.st_gid==0) and info.st_size<=1048576,'session-delivery-diu-config-invalid',409)
-            values={}
-            for line in stream:
-                key=re.match(r'^\s*(?:export\s+)?(ENV_DEVOPS_USER|ENV_DEVOPS_PROJECTS_ROOT)\s*=',line)
-                if not key:continue
-                name=key.group(1);require(name not in values,'session-delivery-diu-config-invalid',409)
-                value=line[key.end():].strip()
-                if value[:1] in ('"',"'"):
-                    require(len(value)>=2 and value[-1]==value[0],'session-delivery-diu-config-invalid',409)
-                    value=value[1:-1]
-                values[name]=value
-        user=pwd.getpwuid(project.owner_uid).pw_name
-        require(values.get('ENV_DEVOPS_USER')==user,'session-delivery-diu-project-mismatch',409)
-        root=values.get('ENV_DEVOPS_PROJECTS_ROOT','').replace('${ENV_DEVOPS_USER}',user).replace('$ENV_DEVOPS_USER',user)
-        require(root and not any(char in root for char in '$`\\\n\r') and Path(root).is_absolute() and Path(root).resolve()==Path(root),'session-delivery-diu-config-invalid',409)
-        require(Path(project.root).parent==Path(root) and Path(project.root).name==project.identifier,'session-delivery-diu-project-mismatch',409)
-    except (OSError,UnicodeError,KeyError) as error:raise Refused('session-delivery-diu-unavailable',409) from error
-    return str(script)
-
-
-def execute_diu_build(project,kind,version,before_execute):
-    """Exécute un build DIU ; son reçu ne prouve pas une publication."""
-    import subprocess
-    from .connector_process import identity
-    version_tuple(version)
-    require(kind in ('debian','docker'),'session-delivery-build-invalid',400)
-    program=diu_program(project)
-    args=['projects','build','debian',project.identifier] if kind=='debian' else ['projects','docker','build',project.identifier]
-    before_execute({'kind':kind,'source_mode':'working-tree','version':version,'phase':'prepared'})
-    process=None
-    try:
-        process=subprocess.Popen([program,*args],cwd='/',env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','USER':'root','LOGNAME':'root','LANG':'C.UTF-8'},stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True,umask=0o022)
-        before_execute({'kind':kind,'source_mode':'working-tree','version':version,'phase':'started','child':identity(process.pid)})
-        code=process.wait(timeout=3600)
-    except OSError as error:raise Refused('session-delivery-diu-execution-unknown' if process is not None else 'session-delivery-diu-not-started',409) from error
-    except subprocess.TimeoutExpired as error:raise Refused('session-delivery-diu-execution-unknown',409) from error
-    return {'kind':kind,'source_mode':'working-tree','version':version,'exit_code':code,'executed':True}
-
-
 def execute_native_build(project,kind,version,before_execute):
     import subprocess
     from .project_artifacts import BUILDERS, enabled, refresh
@@ -829,43 +777,48 @@ def execute_native_build(project,kind,version,before_execute):
     return {**receipt,'exit_code':code,'executed':started}
 
 
-def diu_release_program(project, compatible_version):
+def execute_native_publication(project,target,version,plan,before_execute):
     import subprocess
-    version_tuple(compatible_version)
+    import httpx
+    from .forge_publish_artifacts import PUBLISHERS,local_plan
+    from .forge_repository import identity,refresh_one
+    from .project_metadata import read_metadata
+    source=read_metadata(project.root)
+    values=source['values']
+    forge=target['name']
+    require(source['state']=='ready' and values.get('PROJECT_VERSION')==version and
+            identity(project,values,forge)==target['signature'] and
+            (forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==target.get('registry','')),
+            'session-delivery-config-changed',409)
+    selected=local_plan(project,values,version=version)
+    kinds={kind for kind in ('debian','docker') if plan[kind]}
+    require(kinds.issubset(selected),
+            'session-delivery-version-artifact-missing',409)
+    selected={kind:selected[kind] for kind in sorted(kinds)}
+    receipt={'publisher':'cab','version':version,'tag':version}
+    issued=False
+
+    def mark():
+        nonlocal issued
+        if not issued:
+            before_execute({**receipt,'executed':True})
+            issued=True
+
     try:
-        installed=subprocess.run(['/usr/bin/dpkg-query','-W','-f=${Version}','diu'],
-                                 capture_output=True,text=True,timeout=5)
-    except (OSError,subprocess.SubprocessError) as error:
-        raise Refused('session-delivery-diu-unavailable',409) from error
-    require(installed.returncode==0 and version_tuple(installed.stdout.strip())>=version_tuple(compatible_version),
-            'session-delivery-diu-incompatible',409)
-    return diu_program(project)
-
-
-def execute_diu_release(project,forge,version,compatible_version,before_execute):
-    import subprocess
-    from .connector_process import identity
-    require(forge in ('FORGEJO','GITHUB','GITLAB'),'session-delivery-plan-invalid',409)
-    program=diu_release_program(project,compatible_version)
+        PUBLISHERS[forge](project,values,selected,mark)
+    except (Refused,httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
+        if isinstance(error,Refused):
+            raise
+        raise Refused('session-delivery-artifact-publication-unconfirmed' if issued else
+                      'session-delivery-artifact-publication-failed',409) from error
     try:
-        process=subprocess.Popen([program,'projects',forge.lower(),'release',project.identifier],cwd='/',
-                                 env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-                                      'HOME':'/root','USER':'root','LOGNAME':'root','LANG':'C.UTF-8'},
-                                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-                                 start_new_session=True,umask=0o022)
-    except OSError as error:
-        raise Refused('session-delivery-diu-not-started',409) from error
-    receipt={'publisher':'diu','version':version,'tag':version,'executed':True}
-    before_execute({**receipt,'child':identity(process.pid)})
-    try:
-        code=process.wait(timeout=3600)
-    except subprocess.TimeoutExpired as error:
-        raise Refused('session-delivery-result-unknown',409) from error
-    require(code==0,'session-delivery-result-unknown',409)
-    return {**receipt,'exit_code':code}
+        refresh_one(project.pk,forge,wait=True,automatic=False)
+    except (OSError,Refused):
+        pass
+    return {**receipt,'exit_code':0,'executed':issued}
 
 
-def delivery_preflight(project, version, *, defer_releases=True, diu_release_version=''):
+def delivery_preflight(project, version, *, defer_releases=False):
     """Vérifie identité, version, forges et capacités sans publier ni écrire."""
     from pathlib import Path
     from .forge_push import FORGES,context
@@ -885,9 +838,6 @@ def delivery_preflight(project, version, *, defer_releases=True, diu_release_ver
     original=file_operation(project,{'op':'env-read'})
     raw=base64.b64decode(original['content'],validate=True)
     replace_version(raw,version)
-    if any(flags.values()) and not defer_releases:
-        require(diu_release_version,'session-delivery-release-policy-required',409)
-        diu_release_program(project,diu_release_version)
     forges=[]
     for forge in FORGES:
         prefix='REMOTE_'+forge+'_'
@@ -899,9 +849,10 @@ def delivery_preflight(project, version, *, defer_releases=True, diu_release_ver
             _,owner,branch,url,group,options,env=context(project,forge)
             remote,tags,_=refs(project,forge,owner,group,options,env,url,branch)
             validate_remote_tags(version,tags)
-            forges.append({'name':forge,'branch':branch,'remote':remote,'signature':signature})
+            forges.append({'name':forge,'branch':branch,'remote':remote,'signature':signature,
+                           **({'registry':values.get('REMOTE_GITLAB_REGISTRY','')} if forge=='GITLAB' else {})})
     from .versioning import release_metadata
-    return {'project_id':project_id,'forges':forges,'release_metadata':release_metadata(version),'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','builder':'cab','defer_releases':defer_releases,'diu_release_version':diu_release_version}
+    return {'project_id':project_id,'forges':forges,'release_metadata':release_metadata(version),'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','builder':'cab','publisher':'cab','defer_releases':defer_releases}
 
 
 def verify_version(project, forge, version, commit, tag_oid, expected_signature, expected_branch):
@@ -966,9 +917,7 @@ def configure_delivery_policy(actor,data):
     c.require({'project_id','run_id','version','defer_releases','request_id','authorization'}<=set(data)<={'project_id','run_id','version','defer_releases','request_id','authorization','evidence_producer','diu_release_version'},'session-delivery-fields-invalid',400)
     version_tuple(data['version']);request_id=c.identifier(data['request_id'])
     deferred=data['defer_releases']
-    compatible=data.get('diu_release_version','')
-    c.require(type(deferred) is bool and (deferred or bool(compatible)),'session-delivery-release-policy-unavailable',409)
-    if not deferred:version_tuple(compatible)
+    c.require(type(deferred) is bool,'session-delivery-release-policy-unavailable',409)
     c.require(isinstance(data['authorization'],str) and 0<len(data['authorization'])<=4000,'session-delivery-authorization-required',400)
     with transaction.atomic():
         run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
@@ -980,7 +929,7 @@ def configure_delivery_policy(actor,data):
         c.working(run);c.require(c.no_pending(run),'session-git-effect-unresolved',409)
         producer_id=data.get('evidence_producer') or ensure_delivery_producer(run.project)
         c.require(EvidenceProducer.objects.filter(pk=producer_id,project=run.project,active=True,actor__active=True,actor__uid=0,actor__role='collector',kinds__contains=['publication']).exists(),'session-delivery-producer-invalid',409)
-        c.event(run,'session-delivery-policy',{'request_id':request_id,'request_digest':fingerprint,'version':data['version'],'defer_releases':deferred,'diu_release_version':compatible,'evidence_producer':producer_id,'authorization':data['authorization'],'authority':actor.pk})
+        c.event(run,'session-delivery-policy',{'request_id':request_id,'request_digest':fingerprint,'version':data['version'],'defer_releases':deferred,'evidence_producer':producer_id,'authorization':data['authorization'],'authority':actor.pk})
     return {'configured':True,'version':data['version'],'defer_releases':deferred}
 
 
@@ -1098,8 +1047,7 @@ def start_delivery(actor, run, version, connector_id, *, complete=False):
     project=Project.objects.get(pk=run.project_id)
     from .core.models import Event
     policy=Event.objects.filter(run=run,kind='session-delivery-policy',data__version=version).order_by('-pk').first()
-    plan=delivery_preflight(project,version,defer_releases=policy is None or policy.data.get('defer_releases') is True,
-                            diu_release_version=policy.data.get('diu_release_version','') if policy else '')
+    plan=delivery_preflight(project,version,defer_releases=bool(policy and policy.data.get('defer_releases') is True))
     plan['evidence_producer']=(policy.data.get('evidence_producer') if policy else None) or ensure_delivery_producer(project)
     from .core.models import EvidenceProducer
     require(EvidenceProducer.objects.filter(pk=plan['evidence_producer'],project=project,active=True,actor__active=True,actor__uid=0,actor__role='collector',kinds__contains=['publication']).exists(),'session-delivery-producer-invalid',409)
@@ -1345,15 +1293,12 @@ def _continue_after_commit(delivery_id,receipt):
         return
     for kind in ('docker','debian'):
         if not plan[kind]:continue
-        key='build:'+kind;_set_step(delivery_id,key,'RUNNING');started=[]
+        key='build:'+kind;_set_step(delivery_id,key,'RUNNING')
         def before_build(value):
-            _update_step_receipt(delivery_id,key,value);started.append(True)
-        native=plan.get('builder')=='cab'
-        build=execute_native_build if native else execute_diu_build
-        try:built=build(project,kind,version,before_build)
+            _update_step_receipt(delivery_id,key,value)
+        try:built=execute_native_build(project,kind,version,before_build)
         except Refused as error:
-            uncertain=(error.code=='session-delivery-artifact-outcome-uncertain' if native else
-                       bool(started) and error.code!='session-delivery-diu-not-started')
+            uncertain=error.code=='session-delivery-artifact-outcome-uncertain'
             state='UNKNOWN' if uncertain else 'FAILED'
             _set_step(delivery_id,key,state,{'error':error.code})
             _set_delivery_state(delivery_id,'UNKNOWN' if uncertain else 'PARTIAL');return
@@ -1365,16 +1310,15 @@ def _continue_after_commit(delivery_id,receipt):
         for target in plan['forges']:
             key='release:'+target['name']
             if plan.get('defer_releases') is True:
-                _set_step(delivery_id,key,'SKIPPED',{'reason':'developer-deferred','publisher':'diu','executed':False,'version':version,'tag':version})
+                _set_step(delivery_id,key,'SKIPPED',{'reason':'developer-deferred','publisher':'cab','executed':False,'version':version,'tag':version})
                 continue
-            require(plan.get('diu_release_version'),'session-delivery-release-policy-invalid',409)
             _set_step(delivery_id,key,'RUNNING');started=[]
             def mark_release(value):
                 _update_step_receipt(delivery_id,key,value);started.append(True)
-            try:published=execute_diu_release(project,target['name'],version,plan['diu_release_version'],mark_release)
+            try:published=execute_native_publication(Project.objects.get(pk=project.pk),target,version,plan,mark_release)
             except Refused as error:
                 state='UNKNOWN' if started else 'FAILED'
-                _set_step(delivery_id,key,state,{'publisher':'diu','error':error.code})
+                _set_step(delivery_id,key,state,{'publisher':'cab','error':error.code})
                 _set_delivery_state(delivery_id,'UNKNOWN' if started else 'PARTIAL');return
             _set_step(delivery_id,key,'COMPLETED',published)
     for target in plan['forges']:

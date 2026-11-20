@@ -1803,24 +1803,6 @@ Lorsque la CI/CD est autorisée, CAB MUST recevoir la version, mettre à jour `P
 - **AND THEN** CAB préserve les index isolés des autres sessions et refuse les conflits ou effets incertains
 - **AND THEN** le reçu conserve le périmètre choisi sur cette version
 
-### Requirement: Builds et releases DIU orchestrés par CAB
-CAB MUST construire les artefacts activés avec ses constructeurs natifs. CAB MUST déléguer la publication des artefacts à DIU lorsque la politique de livraison l’autorise et qu’une version DIU compatible est vérifiée. CAB MUST conserver les reçus de chaque étape et ne pas rejouer un effet confirmé ou incertain.
-
-#### Scenario: Construction sur le projet courant
-- **WHEN** un projet active Debian ou Docker
-- **THEN** CAB construit le format correspondant avec la recette du projet et actualise l’inventaire des artefacts observés
-- **AND THEN** le reçu précise que la construction utilise le dossier de travail courant
-
-#### Scenario: Publication conditionnelle
-- **WHEN** la publication DIU est différée ou n’est pas autorisée avec une version compatible
-- **THEN** CAB conserve l’étape de publication comme non exécutée
-- **AND THEN** aucun tag supplémentaire de compatibilité n’est créé
-
-#### Scenario: Report explicite des releases DIU
-- **WHEN** le développeur diffère les releases pour ce RUN et cette version
-- **THEN** CAB conserve le report, livre Git, construit les artefacts et inscrit les étapes DIU comme SKIPPED
-- **AND THEN** la décision ne s’applique qu’à ce RUN et cette version
-
 ### Requirement: Autorisation interprojets générique
 CAB MUST vérifier une autorisation explicite liée à la session native, au projet cible et aux chemins concernés avant d'accepter un rattachement interprojets. Cette autorisation MUST être persistée et révocable, sans nom ou chemin de projet particulier codé dans CAB.
 
@@ -2488,3 +2470,20 @@ CABU MUST essayer le parcours natif en priorité. Quand un relais de l’instanc
 #### Scenario: Nouveau frontend actif
 - **WHEN** l’ancienne instance a quitté et le compte d’origine a relancé le frontend
 - **THEN** CAB attend les heartbeats de relais rattachés au nouveau frontend attestant le moteur et le catalogue de la version cible
+
+### Requirement: Construction et publication natives des artefacts de livraison
+CAB MUST construire et publier les artefacts activés dans les parcours CICD et CICDF à l’aide de ses fonctions natives. Il MUST conserver un reçu par format et par forge, et protéger les résultats indéterminés contre le rejeu.
+
+#### Scenario: Construction des formats activés
+- **WHEN** le projet active des artefacts Debian ou Docker
+- **THEN** CAB construit ces artefacts avec la recette locale et actualise leur inventaire
+- **AND THEN** une image Docker reçoit les tags `<ID>:latest` et `<ID>:<VERSION>`
+
+#### Scenario: Publication de la version livrée
+- **WHEN** les envois Git et les constructions sont confirmés
+- **THEN** CAB appelle la fonction de chaque forge présente dans la livraison pour les seuls formats construits et la version livrée
+- **AND THEN** le moteur conserve les réponses incertaines et relit les artefacts confirmés
+
+#### Scenario: Report explicite de publication
+- **WHEN** le développeur diffère les publications d’un RUN et d’une version
+- **THEN** CAB conserve la décision sur ce seul reçu, avec les étapes de publication comme non exécutées
