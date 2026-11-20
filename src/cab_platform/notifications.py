@@ -107,7 +107,8 @@ def create(actor,data):
 
 
 def delivery_notification(delivery,view):
-    terminal=view['state'] in ('COMPLETED','FAILED','PARTIAL','UNKNOWN')
+    if view['state'] not in ('COMPLETED','FAILED','PARTIAL','UNKNOWN'):
+        return None
     states={'PENDING':'En attente','RUNNING':'En cours','COMPLETED':'Terminé','SKIPPED':'Différé','FAILED':'Échec','UNKNOWN':'Résultat indéterminé','PARTIAL':'Partiel'}
     def label(key):
         if key.startswith('forge:'):return 'Envoi '+key.split(':',1)[1]
@@ -121,4 +122,4 @@ def delivery_notification(delivery,view):
         error=step['receipt'].get('error')
         if isinstance(error,str):line+=' · '+error
         lines.append(line)
-    return publish('delivery:'+str(delivery.pk)+(':'+view['state'] if terminal else ':progress'),project=delivery.project,title='Livraison '+delivery.version,body='\n'.join(lines))
+    return publish('delivery:'+str(delivery.pk)+':'+view['state'],project=delivery.project,title='Livraison '+delivery.version,body='\n'.join(lines))

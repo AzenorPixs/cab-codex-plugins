@@ -145,6 +145,7 @@ class McpDisconnectRecovery(models.Model):
     project=models.ForeignKey(Project,null=True,on_delete=models.SET_NULL)
     anchor=models.JSONField(default=dict)
     baseline=models.JSONField(default=list)
+    purpose=models.CharField(max_length=16,default='loss')
     state=models.CharField(max_length=24,default='QUEUED')
     native_request=models.CharField(max_length=200,blank=True)
     report=models.JSONField(default=dict)
@@ -154,6 +155,13 @@ class McpDisconnectRecovery(models.Model):
     class Meta:
         db_table='mcp_disconnect_recoveries'
         constraints=[models.UniqueConstraint(fields=['connector'],condition=models.Q(finished__isnull=True),name='mcp_disconnect_one_active')]
+
+
+class McpConvergence(models.Model):
+    scope=models.CharField(primary_key=True,max_length=100)
+    incident=models.JSONField(default=dict)
+
+    class Meta:db_table='mcp_convergence'
 
 
 class ObservedBinary(models.Model):

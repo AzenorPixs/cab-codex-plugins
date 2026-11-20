@@ -1946,13 +1946,16 @@ question du centre. Une réponse MUST NOT exécuter une commande arbitraire.
 - **AND** une tentative concurrente contradictoire est refusée
 
 ### Requirement: Livraisons dans les notifications
-CAB MUST supprimer l'affichage du journal CI/CD dans le bloc Git et présenter
-ses étapes publiques dans une notification attribuée au projet concerné.
+CAB MUST supprimer l’affichage du journal CI/CD dans le bloc Git. CAB MUST présenter les étapes publiques et le résultat terminal de la livraison dans une notification attribuée au projet concerné. Il MUST NOT créer de notification ni de reçu de lecture pour un état en attente ou en cours.
 
 #### Scenario: Résultat de livraison après lecture de son avancement
-- **WHEN** une livraison évolue après lecture de sa notification d'avancement
-- **THEN** son résultat terminal est publié en notification non lue distincte
-- **AND** les détails de livraison ne sont plus affichés dans le bloc Git
+- **WHEN** un administrateur a consulté l’avancement dans le suivi de la livraison et celle-ci atteint un résultat terminal
+- **THEN** seul le résultat terminal est publié dans le centre, avec les étapes et son horodatage
+- **AND THEN** les détails de livraison ne sont plus affichés dans le bloc Git
+
+#### Scenario: Mise à niveau avec anciennes notifications d’avancement
+- **WHEN** une ancienne notification d’avancement ou son reçu reste en base
+- **THEN** CAB retire ces seuls enregistrements et conserve les bilans terminaux
 
 ### Requirement: Nom du change dans le commit final
 Le moteur CAB MUST utiliser l'identifiant du change comme message du commit

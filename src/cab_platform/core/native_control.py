@@ -67,7 +67,7 @@ def configure(caller,data):
     return {'actor_id':actor.pk,'state':state,'owner':owner,'credentials_exposed':False}
 
 @transaction.atomic
-def request(caller,data,expected=None,*,update=None,disconnect_recovery=None):
+def request(caller,data,expected=None,*,update=None,disconnect_recovery=None,convergence_scope=None):
     actor=target_actor(caller,data);key=c.identifier(data['request_id']);version=data.get('version',__version__)
     c.require(version==__version__,'native-control-version-divergent',400)
     fingerprint=c.digest({'actor_id':actor.pk,'version':version,'expected_owner':instance_key(expected)})
@@ -89,6 +89,7 @@ def request(caller,data,expected=None,*,update=None,disconnect_recovery=None):
     before=[{'id':r.pk,'generation':r.generation,'worker':r.worker} for r in McpConnector.objects.filter(actor=actor) if r.process.get('parent_pid')==owner['pid'] and alive(r.process)]
     flags={'cabu_recovery':authorization} if update is not None else {}
     if disconnect_recovery is not None:flags['disconnect_recovery']=disconnect_recovery
+    if convergence_scope is not None:flags['convergence_scope']=convergence_scope
     row=NativeReload.objects.create(pk=key,actor=actor,target_version=version,owner=owner,input_digest=fingerprint,result={'before':before,**flags})
     return public(row)
 
@@ -104,6 +105,11 @@ def work_one():
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         try:
             row.actor=Actor.objects.select_for_update().get(pk=row.actor_id)
+            if row.result.get('convergence_scope'):
+                from cab_platform.mcp_convergence import admit_topology
+                if not admit_topology(row):
+                    row.state='CANCELLED';row.result={**row.result,'mutation_dispatched':False}
+                    row.save(update_fields=['state','result','updated']);return
             if row.result.get('disconnect_recovery') is not None:
                 from cab_platform.mcp_disconnect_recovery import admit_native
                 if not admit_native(row):

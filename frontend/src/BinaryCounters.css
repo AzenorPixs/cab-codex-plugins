@@ -93,17 +93,17 @@
 
 @media (width > 1300px) {
   .binary-list tbody td {
-    padding-block: 15px;
+    padding-block: 14px;
   }
 }
 
 @media (max-width: 1300px) {
   .binary-list tbody td:first-child {
-    padding-block-start: 5px;
+    padding-block-start: 4px;
   }
 
   .binary-list tbody td:last-child {
-    padding-block-end: 5px;
+    padding-block-end: 4px;
   }
 }
 

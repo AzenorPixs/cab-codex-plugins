@@ -76,15 +76,18 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(n.identifier('a'),n.identifier('a'))
         self.assertNotEqual(n.identifier('a'),n.identifier('b'))
 
-    def test_resultat_de_livraison_distinct_de_son_avancement(self):
+    def test_notification_de_livraison_uniquement_au_resultat(self):
         delivery=types.SimpleNamespace(pk=17,project=object(),version='3.2.18')
         view={'state':'RUNNING','steps':[{'key':'release:GITHUB','state':'SKIPPED','receipt':{'reason':'developer-deferred'}}]}
         with patch.object(n,'publish') as publish:
-            n.delivery_notification(delivery,view)
-            progress=publish.call_args
+            self.assertIsNone(n.delivery_notification(delivery,{**view,'state':'PENDING'}))
+            self.assertIsNone(n.delivery_notification(delivery,view))
+            publish.assert_not_called()
             n.delivery_notification(delivery,{**view,'state':'COMPLETED'})
+            publish.assert_called_once()
             terminal=publish.call_args
-        self.assertNotEqual(progress.args[0],terminal.args[0])
+        self.assertEqual(terminal.args[0],'delivery:17:COMPLETED')
+        self.assertEqual(terminal.kwargs['body'].splitlines()[0],'Terminé')
         self.assertIs(terminal.kwargs['project'],delivery.project)
         self.assertIn('report demandé',terminal.kwargs['body'])
 

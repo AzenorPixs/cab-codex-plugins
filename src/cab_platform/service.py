@@ -88,7 +88,8 @@ def background_native():
     from .core.native_control import recover,queue_mismatched,work_one
     from .opencode_recovery import sweep as recover_opencode
     from .mcp_disconnect_recovery import sweep as recover_connections
-    try:recover();recover_connections();queue_mismatched();work_one();recover_opencode()
+    from .mcp_convergence import sweep as converge
+    try:recover();converge();recover_connections();queue_mismatched();work_one();recover_opencode()
     finally:close_old_connections()
 
 def background_agents():

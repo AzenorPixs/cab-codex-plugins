@@ -56,7 +56,7 @@ def capture_anchor(connector):
     return {'owner': owner, 'location': hashlib.sha256(os.fsencode(cwd)).hexdigest()}
 
 
-def enqueue(connector):
+def enqueue(connector,purpose='loss'):
     binding = McpRunBinding.objects.filter(connector=connector).select_related('run').first()
     record = McpDisconnectRecovery.objects.filter(connector=connector, finished__isnull=True).first()
     if record is None:
@@ -64,6 +64,7 @@ def enqueue(connector):
             connector=connector, project_id=binding.run.project_id if binding else None,
             anchor=connector.recovery_anchor,
             baseline=list(McpConnector.objects.filter(actor=connector.actor).values_list('pk', flat=True)),
+            purpose=purpose,
         )
 
 
@@ -108,7 +109,7 @@ def finish(record, state, reason, restored=None, *, notify=True):
     }
     record.state, record.finished = state, now
     record.save(update_fields=['report', 'state', 'finished'])
-    if notify:
+    if notify and record.purpose=='loss':
         label = 'réussie' if restored else 'échouée'
         body = (f'Agent : {record.connector.agent}\nConnecteur : {record.connector_id}\n'
                 f'Début : {record.report["started_at"]}\nFin : {record.report["finished_at"]}\n'
