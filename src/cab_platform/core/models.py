@@ -58,6 +58,33 @@ class Project(models.Model):
     class Meta:
         db_table='projects'
 
+class ProjectArtifact(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    kind=models.CharField(max_length=12)
+    artifact_key=models.CharField(max_length=200)
+    generated_at=models.DateTimeField()
+    metadata=models.JSONField(default=dict)
+
+    class Meta:
+        db_table='project_artifacts'
+        constraints=[models.UniqueConstraint(fields=['project','kind','artifact_key'],name='project_latest_artifact')]
+
+
+class ProjectArtifactBuild(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    kind=models.CharField(max_length=12)
+    version=models.CharField(max_length=100)
+    state=models.CharField(max_length=16,default='PENDING')
+    executor=models.JSONField(default=dict)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table='project_artifact_builds'
+        constraints=[models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN']),name='project_artifact_one_active_build')]
+
+
 class GitProject(models.Model):
     project=models.OneToOneField(Project,on_delete=models.CASCADE,primary_key=True)
     state=models.JSONField(default=dict)

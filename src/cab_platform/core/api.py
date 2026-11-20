@@ -315,6 +315,30 @@ def add_existing_project(request,body:ExistingProject):
     project,created=add_existing_project(actor,body.project_path)
     return {**project_data(project),'created':created}
 
+@api.get('/projects/{project_id}/artifacts')
+def read_project_artifacts(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.project_artifacts import snapshot
+    return snapshot(project)
+
+
+class ArtifactBuildInput(Schema):
+    request_id: str
+
+
+@api.post('/projects/{project_id}/artifacts/{kind}/build')
+def build_project_artifact(request,project_id:str,kind:str,body:ArtifactBuildInput):
+    actor=principal(request,admin=True)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.project_artifacts import request_build
+    return request_build(project,kind,body.request_id)
+
+
 @api.get('/projects/{project_id}/git/files/{kind}')
 def project_git_files(request,project_id:str,kind:str):
     actor=principal(request)
@@ -1211,8 +1235,9 @@ def maintenance_command(actor,name,data):
         from django.db import connection
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         commands.require(not Operation.objects.filter(state__in=['RUNNING','INTENT']).exists(),'maintenance-boundary-busy')
-        from .models import AgentUser
+        from .models import AgentUser,ProjectArtifactBuild
         commands.require(not AgentUser.objects.filter(reconcile_state='RUNNING').exists(),'maintenance-boundary-busy')
+        commands.require(not ProjectArtifactBuild.objects.filter(state='RUNNING').exists(),'maintenance-boundary-busy')
         commands.require(not Maintenance.objects.exclude(pk=key).filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-transaction-conflict')
         row,created=Maintenance.objects.get_or_create(pk=key,defaults={'state':'PREPARED','evidence':data.get('evidence',{})})
         return {'state':row.state,'transaction_id':key}

@@ -125,6 +125,13 @@ def update_agent_mcp():
             if changed:row.save(update_fields=changed)
 
 
+def background_updates():
+    from .system_updates import dispatch
+    from .project_artifacts import dispatch as dispatch_artifact
+    dispatch()
+    dispatch_artifact()
+
+
 def background_forge_updates():
     from .forge_version import sweep as sweep_versions
     from .forge_repository import sweep as sweep_repositories
@@ -132,6 +139,8 @@ def background_forge_updates():
         sweep_versions()
     finally:
         sweep_repositories()
+    from .project_artifacts import sweep as sweep_artifacts
+    sweep_artifacts()
 
 
 def run(port=8790):
@@ -265,13 +274,12 @@ def run(port=8790):
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1
                 if time.monotonic()>=next_update:
-                    from .system_updates import dispatch
                     from .update_availability import check as check_update
                     for future in (update_future,availability_future):
                         if future is not None and future.done():
                             try:future.result()
                             except Exception as error:log.warning('update worker unavailable',extra={'code':type(error).__name__})
-                    if update_future is None or update_future.done():update_future=update_pool.submit(dispatch)
+                    if update_future is None or update_future.done():update_future=update_pool.submit(background_updates)
                     if availability_future is None or availability_future.done():availability_future=update_pool.submit(check_update)
                     next_update=time.monotonic()+2
                 recover_receipts()

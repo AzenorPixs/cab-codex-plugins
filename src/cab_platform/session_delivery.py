@@ -1016,8 +1016,10 @@ def start_delivery(actor, run, version, connector_id):
     require(executor is not None,'session-delivery-worker-unavailable',409)
     try:
         with transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[run.project_id])
+            Project.objects.select_for_update(no_key=True).get(pk=run.project_id)
+            from .project_artifacts import require_available
+            if plan['debian'] or plan['docker']:
+                require_available(project)
             current=run_scope(actor,run.run_id,run.project_id,lock=True);working(current)
             from .core.connectors import lock_worker_binding
             lock_worker_binding(actor,connector_id,current)
