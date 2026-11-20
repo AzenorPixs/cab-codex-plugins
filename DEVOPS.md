@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-19T21:41:35Z
+Début du relevé (UTC) : 2026-11-20T13:26:26Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -208,7 +208,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
   * Cython : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
-    * Déclaration : Cython ==3.3.0
+    * Déclaration : Cython ==3.4.0
     * Source : pyproject.toml — [build-system].requires
   * Nuitka : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv

@@ -143,4 +143,56 @@ class FrontendRecoveryTests(unittest.TestCase):
             row.state = 'FAILED'
             self.assertTrue(connector_protected(row, {'pid': 99}))
 
-if __name__=='__main__':unittest.main(verbosity=2)
+class StoppedPendingCounterTests(unittest.TestCase):
+    def test_frontend_helper_must_have_same_identity_and_executable(self):
+        from unittest.mock import patch
+        from cab_platform.cabu_recovery_policy import frontend_owns
+
+        frontend={'pid':10,'uid':42}
+        helper={'pid':11,'parent_pid':10,'uid':42}
+        backend={'pid':12,'parent_pid':11,'uid':42}
+        executable=Path('/usr/lib/chatgpt/ChatGPT')
+        with patch('cab_platform.cabu_recovery_policy.identity', return_value=helper), patch(
+            'cab_platform.cabu_recovery_policy.frontend_executable', return_value=executable,
+        ) as binary:
+            self.assertTrue(frontend_owns(backend,frontend))
+            self.assertFalse(frontend_owns(backend,{**frontend,'pid':9}))
+            binary.side_effect=lambda pid: executable if pid==10 else Path('/usr/bin/Codex')
+            self.assertFalse(frontend_owns(backend,frontend))
+
+    def test_only_old_transport_counter_with_two_confirmed_exits_is_ignored(self):
+        from datetime import timedelta
+        import os
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import django
+        from django.utils import timezone
+
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cab_platform.settings')
+        django.setup()
+        from cab_platform.cabu_recovery_policy import stopped_pending_counter
+
+        owner = {'pid': 10, 'uid': 42, 'boot': 'fixture'}
+        row = SimpleNamespace(
+            pending=1, uncertain=False, state='BUSY', seen=timezone.now()-timedelta(minutes=2),
+            process={'pid': 21, 'parent_pid': 10, 'uid': 42, 'boot': 'fixture'},
+            worker={'pid': 22, 'parent_pid': 21, 'uid': 42, 'boot': 'fixture'},
+        )
+        with patch('cab_platform.core.connectors.observed_dead', return_value=True):
+            self.assertTrue(stopped_pending_counter(row,owner))
+            self.assertFalse(stopped_pending_counter(row,{**owner,'pid':11}))
+            row.uncertain=True
+            self.assertFalse(stopped_pending_counter(row,owner))
+            row.uncertain=False
+            with patch('cab_platform.core.connectors.observed_dead', side_effect=[True,False]):
+                self.assertFalse(stopped_pending_counter(row,owner))
+            row.seen=timezone.now()
+            self.assertFalse(stopped_pending_counter(row,owner))
+
+
+if __name__=='__main__':
+    from django.conf import settings
+    if not settings.configured:
+        settings.configure(SECRET_KEY='fixture', INSTALLED_APPS=['cab_platform.core'],
+                           DATABASES={'default':{'ENGINE':'django.db.backends.dummy'}}, USE_TZ=True)
+    unittest.main(verbosity=2)

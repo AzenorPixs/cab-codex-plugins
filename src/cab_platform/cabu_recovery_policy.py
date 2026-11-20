@@ -26,6 +26,39 @@ def frontend_executable(pid):
         return None
 
 
+def parent_frontend(child, expected_uid):
+    parent=identity(child.get('parent_pid',0)) if child else None
+    if parent and parent['uid']==expected_uid and frontend_executable(parent['pid']):
+        return parent
+    return None
+
+
+def frontend_owns(backend, frontend):
+    if not backend or backend['uid']!=frontend['uid']:
+        return False
+    if backend['parent_pid']==frontend['pid']:
+        return True
+    helper=parent_frontend(backend,frontend['uid'])
+    if not helper or helper['parent_pid']!=frontend['pid']:
+        return False
+    executable=frontend_executable(frontend['pid'])
+    return bool(executable and frontend_executable(helper['pid'])==executable
+                and identity(helper['pid'])==helper)
+
+
+def stopped_pending_counter(row, backend):
+    from django.utils import timezone
+    from .core.connectors import observed_dead
+    from .mcp_disconnect_recovery import DEADLINE
+    return bool(
+        backend and row.pending and not row.uncertain and row.state=='BUSY'
+        and row.process.get('parent_pid')==backend['pid']
+        and row.process.get('uid')==backend.get('uid') and row.process.get('boot')==backend.get('boot')
+        and row.seen<=timezone.now()-DEADLINE
+        and observed_dead(row.process) and observed_dead(row.worker)
+    )
+
+
 def connector_protected(row, backend):
     from .core.connectors import observed_dead
     if row.pending:
@@ -54,8 +87,11 @@ def capture(actor,peer,request_id: str,version: str) -> dict:
     owner=identity(process['parent_pid'])
     if not owner or owner['uid']!=actor.uid:return scope
     scope['instance']=owner
-    frontend=identity(owner['parent_pid'])
-    if frontend and frontend['uid']==actor.uid and frontend_executable(frontend['pid']):
+    frontend=parent_frontend(owner,actor.uid)
+    if frontend:
+        parent=parent_frontend(frontend,actor.uid)
+        if parent and frontend_executable(parent['pid'])==frontend_executable(frontend['pid']):
+            frontend=parent
         scope['frontend']=frontend
     return scope
 
@@ -79,7 +115,7 @@ def authorization(job,owner=None,*,frontend=False) -> dict:
         current=identity(saved.get('pid',0)) if saved else None
         backend=identity((scope.get('instance') or {}).get('pid',0)) if frontend else None
         if not same_instance(current,saved) or current['uid']!=actor.uid or owner is not None and not same_instance(owner,saved):reason='cabu-recovery-instance-divergent'
-        elif frontend and (job.state!='RELOAD_REQUIRED' or not same_instance(backend,scope['instance']) or backend['parent_pid']!=saved['pid']):reason='cabu-recovery-frontend-unavailable'
+        elif frontend and (job.state!='RELOAD_REQUIRED' or not same_instance(backend,scope['instance']) or not frontend_owns(backend,saved)):reason='cabu-recovery-frontend-unavailable'
         elif Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():reason='maintenance-in-progress'
         elif Operation.objects.filter(run__actor__in=protected_actors).exclude(state__in=c.TERMINAL).exists() or Lease.objects.filter(run__actor__in=protected_actors,state='HELD').exists():reason='native-control-effects-protected'
         elif NativeReload.objects.filter(actor__in=protected_actors,state__in=['DISPATCHED','UNKNOWN','AUTO_OC_DISPATCHED','AUTO_OC_WAITING','AUTO_OC_UNKNOWN']).exists():reason='native-control-outcome-uncertain'
@@ -89,8 +125,18 @@ def authorization(job,owner=None,*,frontend=False) -> dict:
             or GitDelivery.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
             or TerminalGitCommit.objects.filter(run__actor__in=protected_actors).exclude(state__in=['COMPLETED','FAILED','CANCELLED']).exists()
         ):reason='cabu-recovery-git-effects-protected'
-        elif any(connector_protected(row, backend if frontend else None)
-                 for row in McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED'])
-                 if frontend or row.process.get('parent_pid') == scope['instance']['pid']):reason='native-control-client-busy'
+        else:
+            rows=McpConnector.objects.filter(actor__in=protected_actors).exclude(state__in=['SUPERSEDED','DISCONNECTED'])
+            for row in rows:
+                if not frontend and row.process.get('parent_pid')!=scope['instance']['pid']:
+                    continue
+                if frontend and stopped_pending_counter(row,backend):
+                    result.setdefault('stopped_counters',[]).append({
+                        'connector_id':row.pk,'relay_pid':row.process['pid'],'worker_pid':row.worker['pid'],
+                        'pending':row.pending,'last_heartbeat':row.seen.isoformat(),'result':'unconfirmed-no-replay',
+                    })
+                elif connector_protected(row,backend if frontend else None):
+                    reason='native-control-client-busy'
+                    break
     result.update(state='BLOCKED' if reason else 'AUTHORIZED',reason=reason or None,instance=scope.get('frontend') if frontend else scope.get('instance'),target_version=job.result.get('version') or job.target_version)
     return result

@@ -228,7 +228,7 @@ def snapshot():
 
 def assess(targets,version,confirmed_disconnected=(),*,recovery=None,shared_owner=None):
     outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(state='SUPERSEDED'))
-    from cab_platform.cabu_recovery_policy import same_instance
+    from cab_platform.cabu_recovery_policy import frontend_owns,same_instance
     recovery = recovery or {}
     replacement = recovery.get('replacement')
     used = set()
@@ -238,7 +238,7 @@ def assess(targets,version,confirmed_disconnected=(),*,recovery=None,shared_owne
                 if candidate.state not in ('OBSERVED','DISCONNECTED') and alive(candidate.process)]
         for candidate in active:
             owner=identity(candidate.process.get('parent_pid',0))
-            if owner and owner['parent_pid']==replacement['pid'] and owner['uid']==replacement['uid'] and sum(
+            if frontend_owns(owner,replacement) and sum(
                     other.agent==candidate.agent for other in active)==1:
                 shared_groups.setdefault(candidate.agent,[]).append(candidate)
     needs_share=shared_owner and sum(
@@ -283,7 +283,7 @@ def assess(targets,version,confirmed_disconnected=(),*,recovery=None,shared_owne
                         or candidate.process['uid'] != replacement['uid'] or not alive(candidate.process)):
                         continue
                     owner = identity(candidate.process['parent_pid'])
-                    if owner and owner['uid'] == replacement['uid'] and owner['parent_pid'] == replacement['pid']:
+                    if frontend_owns(owner,replacement):
                         if candidate.loaded_version == version and candidate.catalog_version == version and candidate.state in ('READY','BUSY') and not candidate.uncertain and alive(candidate.worker):
                             row = candidate
                             used.add(row.pk)

@@ -154,8 +154,11 @@ def recover(job):
                     cursor.execute('SELECT pg_advisory_xact_lock(%s)', [300001])
                 current = SystemUpdate.objects.select_for_update().get(pk=job.pk)
                 Actor.objects.select_for_update().get(pk=current.actor_id)
-                if read_json(path) or authorization(current, frontend=True)['state'] != 'AUTHORIZED':
+                authority = authorization(current, frontend=True)
+                if read_json(path) or authority['state'] != 'AUTHORIZED':
                     return
+                if authority.get('stopped_counters'):
+                    attempt['stopped_counters'] = authority['stopped_counters']
                 result = maintenance_command(current.actor, 'maintenance.prepare', {
                     'transaction_id': maintenance_id, 'evidence': {'update': job.pk, 'purpose': 'cabu-frontend-recovery'},
                 })
