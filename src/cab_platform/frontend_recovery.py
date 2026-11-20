@@ -10,6 +10,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .cabu_recovery_policy import authorization, frontend_executable, same_instance
+from .client import ClientError
 from .connector_process import cab_process, identity
 from .paths import STATE, atomic_json, read_json
 
@@ -18,6 +19,24 @@ GUI_KEYS = {'DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_SESSION_TYPE'}
 
 def proc_file(pid, name):
     return Path('/proc', str(pid), name)
+
+
+def shared_profile(uid,agent):
+    if agent not in ('codex','codex-cli'):
+        return False
+    import tomllib
+    from .integration import read_user_file
+    try:
+        home=Path(pwd.getpwuid(uid).pw_dir)
+        document=tomllib.loads(read_user_file(home/'.codex/config.toml',uid).decode())
+        server=document.get('mcp_servers',{}).get('cab',{})
+        return (document.get('features',{}).get('mcp_connection_sharing') is True
+                and server.get('cwd')==str(home)
+                and server.get('command')=='/usr/bin/cab'
+                and server.get('args')==['mcp','--agent',agent]
+                and server.get('env',{}).get('CAB_MCP_SHARED_STDIO')=='1')
+    except (OSError,KeyError,ValueError,ClientError):
+        return False
 
 
 def open_process(stack, saved):
@@ -99,7 +118,8 @@ def recover(job):
         return
     unit = f'cab-codex-{token[:24]}'
     maintenance_id = f'CABU-FRONTEND-{token}'
-    attempt = {'state': 'STOPPING', 'frontend': app, 'backend': backend, 'signals': []}
+    attempt = {'state': 'STOPPING', 'frontend': app, 'backend': backend, 'signals': [],
+               'shared_stdio': shared_profile(app['uid'],job.actor.agent)}
     with ExitStack() as stack:
         try:
             app_fd = open_process(stack, app)

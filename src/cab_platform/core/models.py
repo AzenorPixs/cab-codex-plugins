@@ -306,6 +306,15 @@ class McpRunBinding(models.Model):
     bound_at=models.DateTimeField(auto_now=True)
     class Meta:db_table='mcp_run_bindings'
 
+class McpThreadBinding(models.Model):
+    connector=models.ForeignKey(McpConnector,on_delete=models.CASCADE)
+    thread=models.CharField(max_length=200)
+    run=models.ForeignKey('Run',on_delete=models.CASCADE)
+
+    class Meta:
+        db_table='mcp_thread_bindings'
+        constraints=[models.UniqueConstraint(fields=['connector','thread'],name='mcp_connector_thread_unique')]
+
 
 class GitDelivery(models.Model):
     project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='git_deliveries')

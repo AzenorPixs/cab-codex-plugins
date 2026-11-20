@@ -1,14 +1,34 @@
 """FaçadeMCP, sans règles métier et sans accès aux credentials du service."""
 import asyncio
+from contextvars import ContextVar
 import json
 import inspect
+import os
+import re
 from functools import wraps
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from .client import Client,ClientError
 from . import __version__
 
-server=MCPServer('CAB',version=__version__,instructions='CAB système. Initialiser sur http://127.0.0.1:8790 si nécessaire. Les mandats pilotés sont autonomes ; exceptions et revue finale seulement. Aucun rejeu d’une requête connue.')
+shared_thread=ContextVar('cab_native_thread',default=None)
+
+
+class ScopedMCPServer(MCPServer):
+    async def call_tool(self,name,arguments,context=None):
+        thread=None
+        if os.environ.get('CAB_MCP_SHARED_STDIO')=='1':
+            ctx=context.request_context if context is not None else None
+            meta=ctx.meta if ctx is not None else None
+            extra=meta if isinstance(meta,dict) else getattr(meta,'model_extra',None) or {}
+            value=extra.get('threadId')
+            thread=value if isinstance(value,str) and re.fullmatch(r'[0-9a-fA-F-]{36}',value) else ''
+        token=shared_thread.set(thread)
+        try:return await super().call_tool(name,arguments,context)
+        finally:shared_thread.reset(token)
+
+
+server=ScopedMCPServer('CAB',version=__version__,instructions='CAB système. Initialiser sur http://127.0.0.1:8790 si nécessaire. Les mandats pilotés sont autonomes ; exceptions et revue finale seulement. Aucun rejeu d’une requête connue.')
 
 def public_tool():
     """Conserver signatures et refus publics, y compris pour les appels async."""
@@ -26,7 +46,7 @@ def public_tool():
         return server.tool()(wrapped)
     return decorate
 
-def client():return Client()
+def client():return Client(native_thread=shared_thread.get())
 @public_tool()
 def cab_status()->dict:
     """État du service, amorçage et version ; ne lance aucun RUN."""

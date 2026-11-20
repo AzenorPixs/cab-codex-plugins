@@ -161,7 +161,7 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
                 removed=subprocess.run([executable,'mcp','remove',name],env=env,capture_output=True,text=True,timeout=30,**options)
                 if removed.returncode:raise ClientError('codex-legacy-mcp-removal-failed')
         from . import __version__
-        from .mcp_epoch import codex_epoch
+        from .mcp_epoch import codex_epoch,shared_stdio
         existing=old.get('mcp_servers',{}).get('cab',{})
         if not isinstance(existing,dict):raise ClientError('codex-mcp-config-conflict')
         if existing.get('command')!='/usr/bin/cab' or existing.get('args')!=['mcp','--agent',agent]:
@@ -175,6 +175,9 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
         text=text[:match.end()]+'\ntool_timeout_sec = 86430\n'+section+text[end:]
         if tomllib.loads(text)['mcp_servers']['cab']['tool_timeout_sec']!=86430:raise ClientError('codex-tool-timeout-invalid')
         changed=codex_epoch(text.encode(),__version__)
+        features=subprocess.run([executable,'features','list'],env=env,capture_output=True,text=True,timeout=30,**options)
+        if features.returncode==0 and any(line.split() and line.split()[0]=='mcp_connection_sharing' for line in features.stdout.splitlines()):
+            changed=shared_stdio(changed,str(home))
         write_user_file(target,changed,env,options)
         previous=old.get('features',{}).get('mcp_tool_list_changed')
         if previous is False:catalog_refresh='explicitly-disabled'

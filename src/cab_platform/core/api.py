@@ -902,6 +902,7 @@ def update_availability(request):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    native_thread=request.headers.get('X-CAB-Shared-Thread')
     if name=='connector.heartbeat':
         from .connectors import heartbeat
         return heartbeat(actor,data,getattr(request,'cab_peer',None))
@@ -1035,21 +1036,21 @@ def command(request,body:Command):
         from cab_platform.session_delivery import start_delivery,delivery_status
         commands.require(set(data)=={'version'},'session-delivery-fields-invalid',400)
         peer=getattr(request,'cab_peer',None)
-        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status')
+        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status',native_thread=native_thread)
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
         return (start_delivery if name=='session.delivery.start' else delivery_status)(actor,current,data['version'],connector.pk)
     if name=='session.git.context':
         commands.require(not data,'session-git-fields-invalid',400)
         from .connectors import current_worker_run
-        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True)
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True,native_thread=native_thread)
         from cab_platform.session_delivery import version_policy
         return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id,'version_policy':version_policy(current)}
     if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
         peer=getattr(request,'cab_peer',None)
-        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'))
+        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'),native_thread=native_thread)
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
         commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)
@@ -1065,7 +1066,7 @@ def command(request,body:Command):
             Actor.objects.select_for_update().get(pk=actor.pk)
             result=commands.bind_native(actor,data)
             peer=getattr(request,'cab_peer',None)
-            connector_bound=bind_worker_run(actor,data,peer)
+            connector_bound=bind_worker_run(actor,data,peer,native_thread=native_thread)
             if not connector_bound:
                 from cab_platform.connector_process import identity,cab_process
                 process=identity(peer['pid']) if peer else None

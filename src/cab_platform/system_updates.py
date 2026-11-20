@@ -70,6 +70,43 @@ def request(actor,request_id,version='',peer=None):
             return data(job)
     except IntegrityError:raise c.Refused('update-admission-conflict') from None
 
+def shared_owner(job):
+    scope=job.result.get('recovery_context',{})
+    if scope.get('frontend') and scope.get('actor_id')==job.actor_id:
+        from .frontend_recovery import shared_profile
+        if shared_profile(job.actor.uid,job.actor.agent):
+            return scope.get('instance')
+    return None
+
+def request_topology_recovery(row, owner, request_id):
+    """Reprendre un bureau vérifié à partir du heartbeat, sans réinstaller CAB."""
+    from . import __version__
+    from .cabu_recovery_policy import capture, same_instance
+    from .connector_process import identity
+    from .core.connectors import snapshot
+    from .frontend_recovery import shared_profile
+    actor=row.actor
+    if not same_instance(identity(row.process['pid']),row.process):
+        return None
+    scope=capture(actor,{'pid':row.process['pid'],'uid':actor.uid},request_id,__version__)
+    if not (scope['frontend'] and same_instance(scope['instance'],owner)
+            and shared_profile(actor.uid,actor.agent) and verified_local_installation(__version__)):
+        return None
+    targets=[target for target in snapshot() if target['agent']==actor.agent]
+    if not targets or any(not same_instance(target.get('owner'),owner) for target in targets):
+        return None
+    scope['provenance']='authenticated-heartbeat'
+    try:
+        with transaction.atomic():
+            if SystemUpdate.objects.filter(active_slot=1).exists():
+                return None
+            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=__version__,
+                result={'connector_targets':targets,'recovery_context':scope,'topology_only':True})
+            ConnectorReload.objects.create(update=job,targets=targets,version=__version__)
+    except IntegrityError:
+        return None
+    return job.pk
+
 def finish(job,state,result):
     public={key:value for key,value in result.items() if key in ('version','verified','package_sha256','error','finalization_id','previous_version')}
     receipt={'request_id':job.pk,'target_version':job.target_version,'state':state,**public}
@@ -77,13 +114,14 @@ def finish(job,state,result):
         current=SystemUpdate.objects.select_for_update().get(pk=job.pk)
         if current.state in ('OK','FAILED'):return data(current)
         if 'recovery_context' in current.result:public['recovery_context']=current.result['recovery_context']
+        if current.result.get('topology_only'):public['topology_only']=True
         receipt.update(public)
         reload,_=ConnectorReload.objects.get_or_create(update=current,defaults={'targets':current.result.get('connector_targets',[]),'version':public.get('version','')})
         public['connector_targets']=reload.targets
         if state=='OK':
             from .core.connectors import assess
             public['package_state']='OK'
-            state,outcomes=assess(public['connector_targets'],public['version'])
+            state,outcomes=assess(public['connector_targets'],public['version'],shared_owner=shared_owner(current))
             public['connectors']=outcomes
             reload.version=public['version'];reload.state=state;reload.observations=outcomes;reload.save()
         # Publication avant clôture SQL, sous le même verrou : une sonde tardive
@@ -108,7 +146,7 @@ def refresh_connectors(request_id):
         reload=ConnectorReload.objects.select_for_update().get(update=job)
         if job.state=='OK' and reload.state=='OK':return data(job)
         recovery=observation(job)
-        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]),recovery=recovery)
+        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]),recovery=recovery,shared_owner=shared_owner(job))
         result={**job.result,'connector_targets':reload.targets,'package_state':'OK','connectors':outcomes}
         if recovery:result['frontend_recovery']=recovery
         reload.version=job.result['version'];reload.state=state;reload.observations=outcomes;reload.save()
@@ -196,6 +234,7 @@ def worker():
         from .update import update
         result=verified_local_installation(job.target_version)
         if result is None:
+            c.require(not job.result.get('topology_only'),'topology-installation-not-verified')
             result=update(version=job.target_version or None,progress=progress)
         c.require(result.get('verified') is True and bool(result.get('version')) and (not job.target_version or result['version']==job.target_version),'update-verification-failed')
         return finish(job,'OK',result)

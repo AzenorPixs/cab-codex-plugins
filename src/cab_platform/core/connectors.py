@@ -56,7 +56,7 @@ def observe_native_worker(actor,run,peer):
 
 
 def adopt_native_observation(actor,row):
-    from .models import McpRunBinding
+    from .models import McpRunBinding,McpThreadBinding
     observed=McpConnector.objects.select_for_update().filter(actor=actor,process=row.process,worker=row.worker,state='OBSERVED').exclude(pk=row.pk)
     for previous in observed:
         binding=McpRunBinding.objects.select_for_update().filter(connector=previous).first()
@@ -68,12 +68,17 @@ def adopt_native_observation(actor,row):
             from .models import Event
             # Pas de FK RUN : aucun verrou RUN après les verrous de connecteur.
             Event.objects.create(project_id=binding.run.project_id,kind='native-worker-heartbeat-adopted',data={'project_id':binding.run.project_id,'run_pk':binding.run_id,'run_id':binding.run.run_id,'session_id':binding.run.session_id,'provenance':'authenticated-parent-heartbeat','previous_connector_id':previous.pk,'connector_id':row.pk,'worker':row.worker})
+        for item in McpThreadBinding.objects.select_for_update().filter(connector=previous):
+            other=McpThreadBinding.objects.filter(connector=row,thread=item.thread).first()
+            c.require(other is None or other.run_id==item.run_id,'connector-binding-adoption-conflict',409)
+            if other:item.delete()
+            else:item.connector=row;item.save(update_fields=['connector'])
         previous.state='SUPERSEDED';previous.error='native-worker-observation-adopted';previous.save(update_fields=['state','error','seen']);project_connector(previous)
 
 
 @transaction.atomic
-def bind_worker_run(actor,data,peer):
-    from .models import McpRunBinding
+def bind_worker_run(actor,data,peer,*,native_thread=None):
+    from .models import McpRunBinding,McpThreadBinding
     Actor.objects.select_for_update().get(pk=actor.pk)
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
     c.require(bool(run.mandate.get('native_source')),'native-source-not-bound',409)
@@ -82,6 +87,15 @@ def bind_worker_run(actor,data,peer):
     if connector is None:return False
     connector=McpConnector.objects.select_for_update().get(pk=connector.pk)
     c.require(connector.state!='SUPERSEDED' and connector.actor_id==actor.pk and connector.worker==identity(peer['pid']) and alive(connector.process),'connector-owner-divergent',403)
+    if native_thread is not None:
+        c.require(actor.agent in ('codex','codex-cli') and native_thread==run.session_id,
+                  'session-native-thread-divergent',403)
+        previous=McpThreadBinding.objects.select_for_update().select_related('run').filter(connector=connector,thread=native_thread).first()
+        if previous and previous.run_id!=run.pk:
+            c.require(c.no_pending(previous.run),'session-connector-busy',409)
+        McpThreadBinding.objects.update_or_create(connector=connector,thread=native_thread,defaults={'run':run})
+        return True
+    c.require(not McpThreadBinding.objects.filter(connector=connector).exists(),'session-native-thread-required',403)
     previous=McpRunBinding.objects.select_for_update().select_related('run').filter(connector=connector).first()
     if previous is not None and previous.run_id!=run.pk:
         c.require(c.no_pending(previous.run),'session-connector-busy',409)
@@ -93,18 +107,25 @@ def bind_worker_run(actor,data,peer):
 
 def lock_worker_binding(actor,connector_id,run):
     """Fige la liaison pendant l'admission d'un effet Git."""
-    from .models import McpRunBinding
+    from .models import McpRunBinding,McpThreadBinding
     connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).exclude(state='SUPERSEDED').first()
     c.require(connector is not None and alive(connector.process) and alive(connector.worker),'session-connector-unbound',409)
     binding=McpRunBinding.objects.select_for_update().filter(connector=connector,run=run).first()
+    if binding is None:
+        binding=McpThreadBinding.objects.select_for_update().filter(connector=connector,run=run,thread=run.session_id).first()
     c.require(binding is not None,'session-connector-run-divergent',403)
 
 
-def current_worker_run(actor,peer,*,read_only=False):
-    from .models import McpRunBinding
+def current_worker_run(actor,peer,*,read_only=False,native_thread=None):
+    from .models import McpRunBinding,McpThreadBinding
     connector=worker_connector(actor,peer)
     c.require(connector is not None,'session-connector-unbound',409)
-    binding=McpRunBinding.objects.select_related('run__project','run__actor').filter(connector=connector).first()
+    if native_thread is None:
+        c.require(not McpThreadBinding.objects.filter(connector=connector).exists(),'session-native-thread-required',403)
+        binding=McpRunBinding.objects.select_related('run__project','run__actor').filter(connector=connector).first()
+    else:
+        c.require(bool(native_thread) and actor.agent in ('codex','codex-cli'),'session-native-thread-required',403)
+        binding=McpThreadBinding.objects.select_related('run__project','run__actor').filter(connector=connector,thread=native_thread,run__session_id=native_thread).first()
     c.require(binding is not None and binding.run.actor_id==actor.pk,'session-connector-unbound',409)
     run=binding.run;c.scope(actor,run.project)
     if read_only:return run
@@ -205,12 +226,25 @@ def snapshot():
     rows.extend(legacy_processes(allowed,managed))
     return rows
 
-def assess(targets,version,confirmed_disconnected=(),*,recovery=None):
+def assess(targets,version,confirmed_disconnected=(),*,recovery=None,shared_owner=None):
     outcomes=[];current=list(McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(state='SUPERSEDED'))
     from cab_platform.cabu_recovery_policy import same_instance
     recovery = recovery or {}
     replacement = recovery.get('replacement')
     used = set()
+    shared_groups={}
+    if recovery.get('shared_stdio') and replacement and alive(replacement):
+        active=[candidate for candidate in current
+                if candidate.state not in ('OBSERVED','DISCONNECTED') and alive(candidate.process)]
+        for candidate in active:
+            owner=identity(candidate.process.get('parent_pid',0))
+            if owner and owner['parent_pid']==replacement['pid'] and owner['uid']==replacement['uid'] and sum(
+                    other.agent==candidate.agent for other in active)==1:
+                shared_groups.setdefault(candidate.agent,[]).append(candidate)
+    needs_share=shared_owner and sum(
+        same_instance(target.get('owner'),shared_owner) and alive(target['process'])
+        for target in targets
+    )>1
     original_ids={target.get('connector_id') for target in targets if target.get('kind')=='managed'}
     for target in targets:
         state='RECONNECTING';detail='';row=None
@@ -239,7 +273,11 @@ def assess(targets,version,confirmed_disconnected=(),*,recovery=None):
             row = None
             state = 'RELOAD_REQUIRED'
             detail = 'frontend-recovery-' + recovery['state'].lower().replace('_', '-')
-            if replacement and alive(replacement):
+            if recovery.get('shared_stdio'):
+                group=shared_groups.get(target['agent'],[])
+                if len(group)==1 and group[0].relay_version==version and not alive(target['process']):
+                    row=group[0]
+            elif replacement and alive(replacement):
                 for candidate in current:
                     if (candidate.pk in used or candidate.pk in original_ids or candidate.agent != target['agent']
                         or candidate.process['uid'] != replacement['uid'] or not alive(candidate.process)):
@@ -254,6 +292,9 @@ def assess(targets,version,confirmed_disconnected=(),*,recovery=None):
             ready=row.loaded_version==version and row.catalog_version==version and row.state in ('READY','BUSY') and not row.uncertain and alive(row.worker)
             state='READY' if ready else 'RECONNECTING'
             detail='' if ready else row.error if row.state=='FAILED' and row.error else 'business-request-in-flight' if row.pending else 'catalog-refresh-required' if row.loaded_version==version else 'worker-reload-pending'
+        if (not recovery and same_instance(target.get('owner'),shared_owner)
+                and (needs_share or row and row.relay_version!=version)):
+            state='RELOAD_REQUIRED';detail='shared-stdio-replacement-required'
         outcomes.append({'kind':target['kind'],'agent':target['agent'],'uid':target['process']['uid'],'original_pid':target['process']['pid'],'state':state,'reason':detail,'connector_id':row.pk if row else None,'loaded_version':row.loaded_version if row else None,'catalog_version':row.catalog_version if row else None,'generation':row.generation if row else None})
     state='RELOAD_REQUIRED' if any(r['state']=='RELOAD_REQUIRED' for r in outcomes) else 'RECONNECTING' if any(r['state']=='RECONNECTING' for r in outcomes) else 'OK'
     return state,outcomes

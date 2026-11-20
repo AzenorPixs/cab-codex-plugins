@@ -29,16 +29,11 @@ class ConvergenceTests(unittest.TestCase):
         self.connector=McpConnector.objects.create(pk=key,actor=self.actor,agent='codex',
                 process={'pid':12},worker={'pid':13},state='READY',loaded_version='3.2.20',
                 catalog_version='3.2.20',recovery_anchor={'owner':{'pid':14}})
-        self.scope='codex:'+str(self.actor.uid)
+        self.scope='codex'
 
-    def test_two_distinct_channels_are_retained_but_shared_channel_is_flagged(self):
-        rows=[self.connector,self.connector]
-        with patch.object(m,'attachment',side_effect=[('one','two'),('three','four')]):
-            self.assertFalse(m.conditions(rows,self.now)[1])
-        with patch.object(m,'attachment',side_effect=[('one','two'),('one','three')]):
-            self.assertTrue(m.conditions(rows,self.now)[1])
-        with patch.object(m,'attachment',side_effect=[None,('one','two')]):
-            self.assertTrue(m.conditions(rows,self.now)[1])
+    def test_two_channels_are_always_an_excess(self):
+        self.assertFalse(m.conditions([self.connector],self.now)[1])
+        self.assertTrue(m.conditions([self.connector,self.connector],self.now)[1])
 
     def test_retry_until_catalog_and_two_notifications_only(self):
         row=self.connector
@@ -55,7 +50,7 @@ class ConvergenceTests(unittest.TestCase):
             m.inspect(self.scope,[row],self.now+timedelta(seconds=65))
             self.assertEqual(McpDisconnectRecovery.objects.filter(connector=row).count(),2)
             self.assertEqual(notify.call_count,1)
-            row.loaded_version=__version__
+            row.relay_version=row.loaded_version=__version__
             row.catalog_version=''
             row.state='CATALOG_PENDING'
             row.seen=self.now+timedelta(seconds=66)
@@ -73,7 +68,7 @@ class ConvergenceTests(unittest.TestCase):
 
 if __name__=='__main__':
     with transaction.atomic():
-        migration=('cab_core','0043_mcp_convergence')
+        migration=('cab_core','0044_mcp_shared_binding')
         executor=MigrationExecutor(connection)
         if migration not in executor.loader.applied_migrations:
             executor.migrate([migration])

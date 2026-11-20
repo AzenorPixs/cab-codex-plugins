@@ -180,7 +180,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
 def administrative_run(actor,data,*,read_only=False):
     """Pont d'amorçage borné aux index adoptés et au relais natif vérifié."""
     from .core import commands as c
-    from .core.models import GitSessionIndex,McpRunBinding
+    from .core.models import GitSessionIndex,McpRunBinding,McpThreadBinding
     require(actor.active and actor.role=='admin','session-git-administrator-required',403)
     current=c.run_scope(actor,data['run_id'],data['project_id'],owner=False)
     if not read_only:c.working(current)
@@ -189,6 +189,8 @@ def administrative_run(actor,data,*,read_only=False):
     source=c.resolve_native(current.actor,current.project,current.session_id,{'source_file':current.mandate.get('native_source',{}).get('source_file','')},run=current)
     require(source==current.mandate.get('native_source'),'native-source-resume-required',409)
     binding=McpRunBinding.objects.select_related('connector').filter(run=current,connector__actor=current.actor).first()
+    if binding is None:
+        binding=McpThreadBinding.objects.select_related('connector').filter(run=current,thread=current.session_id,connector__actor=current.actor).first()
     require(binding is not None,'session-connector-unbound',409)
     from .connector_process import alive
     require(alive(binding.connector.process) and alive(binding.connector.worker),'session-connector-unbound',409)
