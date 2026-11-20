@@ -147,7 +147,9 @@ def heartbeat(actor,data,peer):
 def project_connector(row):
     from cab_platform.mcp_disconnect_recovery import capture_anchor,enqueue
     row=McpConnector.objects.select_for_update(of=('self',)).select_related('actor').get(pk=row.pk)
-    connected=row.seen>=timezone.now()-timedelta(seconds=15) and alive(row.process) and alive(row.worker) and row.state in ('READY','BUSY','CATALOG_PENDING')
+    connected=(row.seen>=timezone.now()-timedelta(seconds=15) and alive(row.process) and alive(row.worker)
+               and row.state in ('READY','BUSY') and not row.uncertain
+               and bool(row.loaded_version) and row.catalog_version==row.loaded_version)
     if connected:
         anchor=capture_anchor(row)
         if anchor and anchor!=row.recovery_anchor:

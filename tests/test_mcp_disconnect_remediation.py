@@ -63,12 +63,16 @@ class RecoveryTests(unittest.TestCase):
         self.connector.state='CATALOG_PENDING'
         self.connector.catalog_version=''
         self.connector.save()
+        connectors.project_connector(self.connector)
+        self.assertFalse(McpConnector.objects.get(pk=self.connector.pk).public_projection.connected)
         recovery.advance(record.pk,self.actor.pk)
         key=identifier(f'mcp-disconnect-recovery:{record.pk}')
         self.assertFalse(Notification.objects.filter(pk=key).exists())
         self.connector.state='READY'
         self.connector.catalog_version=__version__
         self.connector.save()
+        connectors.project_connector(self.connector)
+        self.assertTrue(McpConnector.objects.get(pk=self.connector.pk).public_projection.connected)
         recovery.advance(record.pk,self.actor.pk)
         recovery.advance(record.pk,self.actor.pk)
         record.refresh_from_db()
@@ -107,6 +111,15 @@ class RecoveryTests(unittest.TestCase):
             request.assert_not_called()
         record.refresh_from_db()
         self.assertEqual(record.state,'QUEUED')
+
+    def test_waiting_for_catalog_does_not_trigger_a_second_reload(self):
+        record=self.lose()
+        self.connector.state='CATALOG_PENDING'
+        self.connector.catalog_version=''
+        self.connector.save()
+        with patch.object(native_control,'request') as request:
+            recovery.advance(record.pk,self.actor.pk)
+            request.assert_not_called()
 
 
 if __name__=='__main__':

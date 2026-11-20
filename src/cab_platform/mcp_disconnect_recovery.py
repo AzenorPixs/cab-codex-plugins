@@ -155,6 +155,11 @@ def advance(key, actor_id):
         return
     if record.connector.pending or record.connector.uncertain:
         return
+    # Le relais a déjà renouvelé son moteur ; tenter une nouvelle relance
+    # effacerait l'attente du catalogue du client sans ajouter de preuve.
+    if (record.connector.state=='CATALOG_PENDING' and record.connector.seen>=now-FRESH
+            and alive(record.connector.process) and alive(record.connector.worker)):
+        return
     if record.state != 'QUEUED':
         if native and native.state=='UNAVAILABLE' and native.result.get('mutation_dispatched') is False:
             record.state='RELAY'
