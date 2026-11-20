@@ -29,7 +29,7 @@ def listeners(pid):
         ports=[]
         for row in Path('/proc/net/tcp').read_text().splitlines()[1:]:
             fields=row.split();address,port=fields[1].split(':')
-            if fields[3]=='0A' and address=='0100007F' and fields[9] in sockets:ports.append(int(port,16))
+            if fields[3]=='0A' and address in ('0100007F','00000000') and fields[9] in sockets:ports.append(int(port,16))
         return sorted(set(ports))
     except (OSError,ValueError,IndexError):return []
 
