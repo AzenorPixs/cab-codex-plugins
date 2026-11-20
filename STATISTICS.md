@@ -50468,14 +50468,14 @@ La variation de quota est partagée par le compte et n’est pas attribuable à 
 L’archivage OpenSpec a réussi. La publication Git complète et CABU sont encore en attente au moment de la rédaction de ce rapport ; ce fichier sera inclus dans la publication SCM autorisée. Aucun accès externe ni secret n’a été lu ou utilisé.
 
 
-## Change `reconcile-dead-mcp-pending-counter` — openspec/changes/reconcile-dead-mcp-pending-counter/STATISTICS.md
+## Change `reconcile-dead-mcp-pending-counter` — openspec/changes/archive/2026-11-20-reconcile-dead-mcp-pending-counter/STATISTICS.md
 
 
 # Statistiques du change — reconcile-dead-mcp-pending-counter
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `reconcile-dead-mcp-pending-counter` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `reconcile-dead-mcp-pending-counter` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -50531,15 +50531,15 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 17 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 17 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | 2 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -50564,7 +50564,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "582bbe1761105aa48feeb4945c45d6b630f2d811ae28abb2a5d95f9d68721773", "generated_at": "2026-11-20T13:33:07.385678+00:00", "revision": "582bbe1761105aa48feeb4945c45d6b630f2d811ae28abb2a5d95f9d68721773", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "cf27b86659291a24b0f97594a5e8db79d1c055c9ba6daa9c38df520ac300c4a7", "generated_at": "2026-11-20T13:55:51.234703+00:00", "revision": "cf27b86659291a24b0f97594a5e8db79d1c055c9ba6daa9c38df520ac300c4a7", "scope": "change"} -->
 
 
 ## Change `reconcile-external-preflight-failure` — openspec/changes/archive/2026-11-11-reconcile-external-preflight-failure/STATISTICS.md
@@ -73346,4 +73346,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9cd783ad55c02b7df3d4c352ba759558b61c940dbc536d2fbd7175a10bf26e32", "generated_at": "2026-11-20T13:33:08.729125+00:00", "revision": "9cd783ad55c02b7df3d4c352ba759558b61c940dbc536d2fbd7175a10bf26e32", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c48d8a59eac2bb0bd1dda8cc1a6fc6335ba3585e3c40025136c00ac7f1b08a22", "generated_at": "2026-11-20T13:55:52.873674+00:00", "revision": "c48d8a59eac2bb0bd1dda8cc1a6fc6335ba3585e3c40025136c00ac7f1b08a22", "scope": "project"} -->
