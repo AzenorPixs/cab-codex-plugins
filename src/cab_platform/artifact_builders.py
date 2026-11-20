@@ -328,8 +328,10 @@ def build_docker(project, metadata, mark):
     env = {**ENV, 'HOME': account.pw_dir}
     latest = image + ':latest'
     version = metadata.get('PROJECT_VERSION')
-    tagged = f'{image}:{version}' if version else None
-    previous = docker_image_details(tagged, options, env) if tagged else None
+    require(isinstance(version,str) and re.fullmatch(r'[0-9][A-Za-z0-9_.-]{0,99}',version),
+            'artifact-docker-version-required',409)
+    tagged = f'{image}:{version}'
+    previous = docker_image_details(tagged, options, env)
     temporary = f'{image}:cab-build-{uuid4().hex}' if previous else None
     argv = [*DOCKER, 'build', '--file', str(root / 'dockerfile'), '--tag', temporary or latest]
     if tagged and not temporary:

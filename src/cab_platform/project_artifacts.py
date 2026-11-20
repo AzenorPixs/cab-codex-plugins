@@ -146,8 +146,11 @@ def snapshot(project):
 
 
 def require_available(project):
+    from .core.models import ProjectForgeArtifactPublication
     require(not ProjectArtifactBuild.objects.filter(project=project, state__in=ACTIVE).exists(),
             'artifact-build-active', 409)
+    require(not ProjectForgeArtifactPublication.objects.filter(project=project,state__in=ACTIVE).exists(),
+            'artifact-build-active',409)
 
 
 @transaction.atomic

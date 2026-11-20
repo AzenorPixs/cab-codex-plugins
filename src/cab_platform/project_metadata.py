@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY')
-KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 
 def public_value(key,value):

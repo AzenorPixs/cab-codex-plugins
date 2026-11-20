@@ -25,6 +25,8 @@ def sync_project_archives(request):return sync_projection(request,'cab_core_sess
 
 def sync_project(request):return sync_projection(request,'project_metadata_projection')
 
+def sync_forge_artifacts(request):return sync_projection(request,'project_forge_artifacts')
+
 def sync_connectors(request):return sync_projection(request,'mcp_connector_projection')
 
 def sync_agents(request):return sync_projection(request,'agents')
@@ -77,6 +79,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
         where=("id" if table=='project_metadata_projection' else 'project_id')+" = '"+identity+"'"
     params.update(table=table,where=where,secret=cfg['electric_secret'])
     if table=='project_metadata_projection':params['columns']='id,public_metadata'
+    if table=='project_forge_artifacts':params['columns']='id,project_id,forge,source,artifacts'
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'
     if table=='cab_notifications':params['columns']='id,project_id,sender,title,body,kind,choices,read_at,created,updated'
     if table=='cab_binary_counts':params['columns']='id,inactive,active'

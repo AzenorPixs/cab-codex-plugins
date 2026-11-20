@@ -70,6 +70,32 @@ class ProjectArtifact(models.Model):
         constraints=[models.UniqueConstraint(fields=['project','kind','artifact_key'],name='project_latest_artifact')]
 
 
+class ProjectForgeArtifact(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    forge=models.CharField(max_length=12)
+    source=models.JSONField(default=list)
+    artifacts=models.JSONField(default=dict)
+
+    class Meta:
+        db_table='project_forge_artifacts'
+        constraints=[models.UniqueConstraint(fields=['project','forge'],name='project_forge_artifact_snapshot')]
+
+
+class ProjectForgeArtifactPublication(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    forge=models.CharField(max_length=12)
+    state=models.CharField(max_length=16,default='PENDING')
+    plan=models.JSONField(default=dict)
+    executor=models.JSONField(default=dict)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table='project_forge_artifact_publications'
+        constraints=[models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN']),name='project_forge_one_active_publication')]
+
+
 class ProjectArtifactBuild(models.Model):
     id=models.CharField(primary_key=True,max_length=200)
     project=models.ForeignKey(Project,on_delete=models.CASCADE)

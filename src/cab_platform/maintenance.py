@@ -24,7 +24,7 @@ def installed():
         # La publication appartient à Electric, pas au rôle de migration.
         # Seul l'installateur système administre sa liste de colonnes publiques.
         from .bootstrap import _psql
-        _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection, agents, agent_users, cab_version_projection, interface_preferences_projection, cab_notifications, cab_binary_counts, cab_observed_binaries TO cab_electric;
+        _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection, agents, agent_users, cab_version_projection, interface_preferences_projection, cab_notifications, cab_binary_counts, cab_observed_binaries, project_forge_artifacts TO cab_electric;
         ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL;
         ALTER TABLE agents REPLICA IDENTITY FULL;
         ALTER TABLE agent_users REPLICA IDENTITY FULL;
@@ -33,7 +33,11 @@ def installed():
         ALTER TABLE cab_notifications REPLICA IDENTITY FULL;
         ALTER TABLE cab_binary_counts REPLICA IDENTITY FULL;
         ALTER TABLE cab_observed_binaries REPLICA IDENTITY FULL;
+        ALTER TABLE project_forge_artifacts REPLICA IDENTITY FULL;
         DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_forge_artifacts') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE project_forge_artifacts;
+            END IF;
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_metadata_projection') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE project_metadata_projection;
             END IF;

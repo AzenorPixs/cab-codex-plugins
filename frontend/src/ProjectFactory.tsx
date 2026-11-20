@@ -19,6 +19,7 @@ const buildStatus:Record<string,string>={
 const buildErrors:Record<string,string>={
   'artifact-debian-version-conflict':'Un paquet différent existe déjà pour cette version.',
   'artifact-docker-version-conflict':'Une image différente existe déjà pour cette version.',
+  'artifact-docker-version-required':'Renseignez la version du projet pour créer les deux tags Docker.',
   'artifact-recipe-invalid':'La recette de construction est invalide.',
   'artifact-source-invalid':'Un fichier déclaré dans la recette est invalide.',
   'artifact-source-private':'La recette pointe vers un fichier privé ou temporaire.',

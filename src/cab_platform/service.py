@@ -130,6 +130,8 @@ def background_updates():
     from .project_artifacts import dispatch as dispatch_artifact
     dispatch()
     dispatch_artifact()
+    from .forge_publish_artifacts import dispatch as dispatch_publication
+    dispatch_publication()
 
 
 def background_forge_updates():

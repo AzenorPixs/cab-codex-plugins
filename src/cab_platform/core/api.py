@@ -325,8 +325,32 @@ def read_project_artifacts(request,project_id:str):
     return snapshot(project)
 
 
+@api.get('/projects/{project_id}/published-artifacts')
+def read_published_artifacts(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from .models import ProjectArtifact,ProjectForgeArtifact,ProjectForgeArtifactPublication
+    from cab_platform.forge_publish_artifacts import public
+    local_kinds=list(ProjectArtifact.objects.filter(project=project).values_list('kind',flat=True).distinct())
+    jobs=ProjectForgeArtifactPublication.objects.filter(project=project).order_by('forge','-created').distinct('forge')
+    return {'rows':list(ProjectForgeArtifact.objects.filter(project=project).values('forge','source','artifacts')),
+            'local_kinds':local_kinds,'jobs':{job.forge:public(job) for job in jobs}}
+
+
 class ArtifactBuildInput(Schema):
     request_id: str
+
+
+@api.post('/projects/{project_id}/published-artifacts/{forge}')
+def publish_project_artifacts(request,project_id:str,forge:str,body:ArtifactBuildInput):
+    actor=principal(request,admin=True)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.forge_publish_artifacts import request as enqueue
+    return enqueue(project,forge.upper(),body.request_id)
 
 
 @api.post('/projects/{project_id}/artifacts/{kind}/build')
@@ -1237,9 +1261,10 @@ def maintenance_command(actor,name,data):
         from django.db import connection
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         commands.require(not Operation.objects.filter(state__in=['RUNNING','INTENT']).exists(),'maintenance-boundary-busy')
-        from .models import AgentUser,ProjectArtifactBuild
+        from .models import AgentUser,ProjectArtifactBuild,ProjectForgeArtifactPublication
         commands.require(not AgentUser.objects.filter(reconcile_state='RUNNING').exists(),'maintenance-boundary-busy')
         commands.require(not ProjectArtifactBuild.objects.filter(state='RUNNING').exists(),'maintenance-boundary-busy')
+        commands.require(not ProjectForgeArtifactPublication.objects.filter(state='RUNNING').exists(),'maintenance-boundary-busy')
         commands.require(not Maintenance.objects.exclude(pk=key).filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-transaction-conflict')
         row,created=Maintenance.objects.get_or_create(pk=key,defaults={'state':'PREPARED','evidence':data.get('evidence',{})})
         return {'state':row.state,'transaction_id':key}

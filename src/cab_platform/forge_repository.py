@@ -64,7 +64,8 @@ def observe(project, values, forge):
         parts = urlsplit(base)
         github_public = forge == 'GITHUB' and parts.hostname.lower() == 'github.com' and parts.port in (None, 443) and parts.path in ('', '/')
         if forge == 'GITLAB':
-            root = base + '/api/v4/projects/' + quote(owner + '/' + repo, safe='')
+            api = base + '/api/v4'
+            root = api + '/projects/' + quote(owner + '/' + repo, safe='')
         else:
             api = ('https://api.github.com' if github_public else base + '/api/v3') if forge == 'GITHUB' else base + '/api/v1'
             root = api + '/repos/' + '/'.join(quote(x, safe='') for x in owner.split('/')) + '/' + quote(repo, safe='')
@@ -127,7 +128,9 @@ def observe(project, values, forge):
                     tags = None
             except (httpx.HTTPError, ValueError, TypeError, KeyError):
                 tags = None
-            return {'available': True, 'branch': branch, 'commit': sha, 'commit_time': date, 'commit_count': count, 'repository_size': size, 'versions': tags}
+            from .forge_artifacts import observe as observe_artifacts
+            artifacts = observe_artifacts(client,get_json,values,root,api,forge,owner,repo,info)
+            return {'available': True, 'branch': branch, 'commit': sha, 'commit_time': date, 'commit_count': count, 'repository_size': size, 'versions': tags, 'published_artifacts': artifacts}
     except (httpx.HTTPError, Refused, ValueError, UnicodeError, KeyError, TypeError, OSError):
         return None
 
@@ -254,8 +257,11 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
         with transaction.atomic():
             project = Project.objects.select_for_update().get(pk=project_id)
             snapshot = dict(project.public_metadata or {})
-            if identity(project, snapshot.get('values', {}), forge) != signature:
+            latest_values=snapshot.get('values',{})
+            if identity(project, latest_values, forge) != signature:
                 return
+            from .forge_artifacts import persist
+            persist(project,latest_values,forge,observed.pop('published_artifacts',{}) if observed else {})
             config = dict(project.configuration or {})
             records = dict(config.get('forge_repositories') or {})
             record = dict(records.get(forge) or {})
