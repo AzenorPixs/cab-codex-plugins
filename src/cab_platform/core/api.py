@@ -905,6 +905,9 @@ def command(request,body:Command):
     if name=='connector.heartbeat':
         from .connectors import heartbeat
         return heartbeat(actor,data,getattr(request,'cab_peer',None))
+    if name=='connector.recovery_claim':
+        from cab_platform.mcp_disconnect_recovery import claim
+        return claim(actor,data,getattr(request,'cab_peer',None))
     if name=='connector.stop_report':
         from .connectors import stop_report
         return stop_report(actor,data,getattr(request,'cab_peer',None))

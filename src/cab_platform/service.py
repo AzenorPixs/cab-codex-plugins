@@ -87,7 +87,8 @@ def background_native():
     from django.db import close_old_connections
     from .core.native_control import recover,queue_mismatched,work_one
     from .opencode_recovery import sweep as recover_opencode
-    try:recover();queue_mismatched();work_one();recover_opencode()
+    from .mcp_disconnect_recovery import sweep as recover_connections
+    try:recover();recover_connections();queue_mismatched();work_one();recover_opencode()
     finally:close_old_connections()
 
 def background_agents():
@@ -144,6 +145,12 @@ def run(port=8790):
     except FileExistsError:pass
     if created:os.chmod(RUNTIME,0o711)
     import django;django.setup();configure()
+    from django.db import DatabaseError
+    from . import process_registry
+    registry_initialized=bool(config().get('initialized'))
+    if registry_initialized:
+        retained=process_registry.initialize()
+        log.info('Inventaire des binaires : %s', 'conservé pour la mise à jour' if retained else 'réinitialisé')
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
     context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
@@ -155,7 +162,7 @@ def run(port=8790):
     agent_config_future=None;next_agent_config=0
     forge_version_future=None;next_forge_version=0
     git_monitor_thread=None;next_git_monitor=0
-    cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0
+    cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0;next_process_inventory=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -185,6 +192,16 @@ def run(port=8790):
                 finally:reload_requested.clear()
             if not api.is_alive():raise RuntimeError('cab-api-process-exited')
             if not config().get('initialized'):continue
+            if time.monotonic()>=next_process_inventory:
+                try:
+                    if not registry_initialized:
+                        process_registry.initialize();registry_initialized=True
+                    supervised={os.getpid():'cab',api.pid:'cab-api'}
+                    if electric is not None and electric.poll() is None:supervised[electric.pid]='electric'
+                    process_registry.refresh(supervised)
+                except (DatabaseError,OSError,ValueError,RuntimeError) as error:
+                    log.warning('inventaire des binaires indisponible',extra={'code':type(error).__name__})
+                next_process_inventory=time.monotonic()+3
             if (git_monitor_thread is None or not git_monitor_thread.is_alive()) and time.monotonic()>=next_git_monitor:
                 from .git_monitor import run as run_git_monitor
                 git_monitor_thread=threading.Thread(target=run_git_monitor,args=(stop,),name='cab-git-watch',daemon=True)

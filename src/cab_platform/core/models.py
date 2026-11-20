@@ -116,6 +116,7 @@ class McpConnector(models.Model):
     agent=models.CharField(max_length=24)
     process=models.JSONField()
     worker=models.JSONField(default=dict)
+    recovery_anchor=models.JSONField(default=dict)
     loaded_version=models.CharField(max_length=100,blank=True)
     catalog_version=models.CharField(max_length=100,blank=True)
     relay_version=models.CharField(max_length=100,blank=True)
@@ -137,6 +138,38 @@ class McpConnectorProjection(models.Model):
     state=models.CharField(max_length=40)
     connected=models.BooleanField(default=False)
     class Meta:db_table='mcp_connector_projection'
+
+
+class McpDisconnectRecovery(models.Model):
+    connector=models.ForeignKey(McpConnector,on_delete=models.PROTECT)
+    project=models.ForeignKey(Project,null=True,on_delete=models.SET_NULL)
+    anchor=models.JSONField(default=dict)
+    baseline=models.JSONField(default=list)
+    state=models.CharField(max_length=24,default='QUEUED')
+    native_request=models.CharField(max_length=200,blank=True)
+    report=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    finished=models.DateTimeField(null=True)
+
+    class Meta:
+        db_table='mcp_disconnect_recoveries'
+        constraints=[models.UniqueConstraint(fields=['connector'],condition=models.Q(finished__isnull=True),name='mcp_disconnect_one_active')]
+
+
+class ObservedBinary(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    pid=models.PositiveIntegerField()
+    uid=models.PositiveIntegerField()
+    username=models.CharField(max_length=256)
+    executable=models.TextField()
+    role=models.CharField(max_length=40)
+    process=models.JSONField()
+    active=models.BooleanField(default=True)
+    first_seen=models.DateTimeField(auto_now_add=True)
+    last_seen=models.DateTimeField(auto_now=True)
+    stopped=models.DateTimeField(null=True)
+
+    class Meta:db_table='cab_observed_binaries'
 
 class McpStopAttempt(models.Model):
     id=models.CharField(primary_key=True,max_length=64)

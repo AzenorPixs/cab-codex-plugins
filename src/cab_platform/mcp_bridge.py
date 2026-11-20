@@ -190,9 +190,22 @@ class Bridge:
             self.error=code
 
     async def watch(self):
+        next_recovery=0
         while not self.stopped:
             try:
                 target=await asyncio.to_thread(installed_version)
+                if self.initialized and self.quiet() and time.monotonic()>=next_recovery:
+                    next_recovery=time.monotonic()+5
+                    try:
+                        reply=await asyncio.to_thread(self.client.command,'connector.recovery_claim',
+                                                      {'connector_id':self.connector_id})
+                    except ClientError:
+                        reply={}
+                    if reply.get('reload') is True:
+                        await self.reload()
+                        await self.heartbeat()
+                        await asyncio.sleep(1)
+                        continue
                 if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
                     try:health=await asyncio.to_thread(self.client.get,'health')
                     except ClientError:health={}
