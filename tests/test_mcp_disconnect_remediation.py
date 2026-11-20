@@ -3,6 +3,7 @@ from datetime import timedelta
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -34,7 +35,7 @@ class RecoveryTests(unittest.TestCase):
         self.anchor={'owner':owner,'location':'workspace'}
         self.connector=McpConnector.objects.create(pk=key,actor=self.actor,agent='codex',state='READY',
                            process=self.process,worker={**self.process,'pid':987652},
-                           loaded_version=__version__,catalog_version=__version__)
+                           loaded_version=__version__,catalog_version=__version__,recovery_anchor=self.anchor)
         self.patches=[]
         for module,name,value in ((connectors,'alive',True),(recovery,'alive',True),
                                   (recovery,'active_owner',True),(recovery,'update_in_progress',False),
@@ -87,6 +88,29 @@ class RecoveryTests(unittest.TestCase):
             request.assert_not_called()
         record.refresh_from_db()
         self.assertEqual(record.state,'SKIPPED')
+
+    def test_healthy_replacement_settles_overlapping_losses_without_control(self):
+        replacement=McpConnector.objects.create(
+            pk=uuid4().hex, actor=self.actor, agent='codex', state='READY',
+            process={**self.process,'pid':987653}, worker={**self.process,'pid':987654},
+            recovery_anchor=self.anchor, relay_version=__version__,
+            loaded_version=__version__, catalog_version=__version__,
+        )
+        record=self.lose()
+        other=McpConnector.objects.create(pk=uuid4().hex, actor=self.actor, agent='codex',
+                                           state='DISCONNECTED', process={**self.process,'pid':987655},
+                                           recovery_anchor=self.anchor)
+        recovery.enqueue(other)
+        self.assertIn(replacement.pk,record.baseline)
+        self.assertEqual(recovery.healthy_replacement(record,timezone.now()),replacement)
+        self.assertFalse(recovery.admit_native(SimpleNamespace(result={'disconnect_recovery':record.pk})))
+        with patch.object(native_control,'request') as request:
+            recovery.advance(record.pk,self.actor.pk)
+            request.assert_not_called()
+        record.refresh_from_db()
+        self.assertEqual(record.state,'SKIPPED')
+        self.assertEqual(record.report['restored_connector'],replacement.pk)
+        self.assertFalse(Notification.objects.filter(pk=identifier(f'mcp-disconnect-recovery:{record.pk}')).exists())
 
     def test_one_relay_claim_and_failure_report_without_replay(self):
         record=self.lose()

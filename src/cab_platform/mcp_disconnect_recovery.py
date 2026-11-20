@@ -72,6 +72,19 @@ def recovery_owner(record):
     return record.anchor.get('owner', {})
 
 
+def healthy_replacement(record, now):
+    """Confirme le service rendu, indépendamment de l'attribution d'une ancienne relance."""
+    if record.purpose != 'loss' or not record.anchor:
+        return None
+    siblings = McpConnector.objects.filter(
+        actor_id=record.connector.actor_id, recovery_anchor=record.anchor, seen__gte=now-FRESH,
+        state__in=['READY', 'BUSY'], uncertain=False,
+        relay_version=__version__, loaded_version=__version__, catalog_version=__version__,
+    ).exclude(pk=record.connector_id)
+    healthy = [row for row in siblings if alive(row.process) and alive(row.worker)]
+    return healthy[0] if len(healthy)==1 else None
+
+
 def proved_connector(record, now):
     query = McpConnector.objects.filter(
         actor_id=record.connector.actor_id, seen__gte=max(record.created, now-FRESH),
@@ -141,13 +154,18 @@ def advance(key, actor_id):
         issued = record.state in ('NATIVE','DISPATCHED')
         finish(record, 'FAILED' if issued else 'SKIPPED', 'agent-not-confirmed', notify=issued)
         return
-    restored = proved_connector(record, now)
-    if restored:
-        finish(record, 'SUCCEEDED', 'heartbeat-confirmed', restored)
-        return
     native = NativeReload.objects.filter(pk=record.native_request).first() if record.native_request else None
     if native and native.state in ('UNKNOWN','AUTO_OC_UNKNOWN'):
         finish(record, 'FAILED', 'effect-uncertain')
+        return
+    replacement = healthy_replacement(record, now)
+    if replacement:
+        if native is None or native.state not in ('DISPATCHED','AUTO_OC_DISPATCHED','AUTO_OC_WAITING'):
+            finish(record, 'SKIPPED', 'healthy-replacement-already-present', replacement, notify=False)
+        return
+    restored = proved_connector(record, now)
+    if restored:
+        finish(record, 'SUCCEEDED', 'heartbeat-confirmed', restored)
         return
     if now >= record.created + DEADLINE:
         finish(record, 'FAILED', 'not-confirmed-before-deadline')
@@ -188,9 +206,10 @@ def advance(key, actor_id):
 
 def admit_native(native):
     record = McpDisconnectRecovery.objects.filter(pk=native.result['disconnect_recovery'], finished__isnull=True).select_related('connector').first()
+    now = timezone.now()
     return bool(record and not record.connector.pending and not record.connector.uncertain
                 and not update_in_progress() and active_owner(recovery_owner(record), record.connector.agent)
-                and not proved_connector(record, timezone.now()))
+                and not healthy_replacement(record, now) and not proved_connector(record, now))
 
 
 @transaction.atomic
@@ -212,7 +231,8 @@ def claim(actor, data, peer):
     owner = recovery_owner(record)
     now = timezone.now()
     if (connector.pending or connector.uncertain or now >= record.created + DEADLINE or update_in_progress()
-            or not active_owner(owner, actor.agent) or proved_connector(record, now)):
+            or not active_owner(owner, actor.agent) or healthy_replacement(record, now)
+            or proved_connector(record, now)):
         return {'reload': False}
     if NativeReload.objects.filter(actor=actor,state__in=native_control.PENDING).exists():
         return {'reload': False}
