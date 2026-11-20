@@ -210,7 +210,7 @@ def run(port=8790):
             if reload_requested.is_set():
                 try:
                     level=configure()
-                    if api and api.is_alive():os.kill(api.pid,signal.SIGHUP)
+                    if api_recovery.confirmed and api and api.is_alive():os.kill(api.pid,signal.SIGHUP)
                     log.info('configuration reloaded: %s',level)
                     log.debug('diagnostic logging enabled')
                 except (OSError,ValueError,RuntimeError) as error:
@@ -276,7 +276,7 @@ def run(port=8790):
                     next_update=time.monotonic()+2
                 recover_receipts()
                 if not recovered:
-                    configure();os.kill(api.pid,signal.SIGHUP)
+                    configure()
                     # Les opérations engagées ne sont jamais réémises après crash.
                     for op in Operation.objects.filter(state__in=['INTENT','RUNNING']):
                         op.state='UNKNOWN';op.save(update_fields=['state','updated']);commands.event(op.run,'operation-recovery-protected',{'request_id':op.request_id})
