@@ -57541,9 +57541,9 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -57574,7 +57574,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "cd2f69c3a281c9b7ae39ad71d2723816ec7e642964df5a8766b401de5f34c942", "generated_at": "2026-11-20T08:16:12.548424+00:00", "revision": "cd2f69c3a281c9b7ae39ad71d2723816ec7e642964df5a8766b401de5f34c942", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9a0b94aa12faf5849c8bbe71386f0563d5b5873f8f41a90abf54042a0f1c1fb5", "generated_at": "2026-11-20T08:17:09.385873+00:00", "revision": "9a0b94aa12faf5849c8bbe71386f0563d5b5873f8f41a90abf54042a0f1c1fb5", "scope": "change"} -->
 
 
 ## Change `require-native-recovery-preflight` — openspec/changes/archive/2026-11-01-require-native-recovery-preflight/STATISTICS.md
@@ -72245,4 +72245,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "d2c500371437aedf024cd948e0976a84a19b790b4db3b9026b745a1397d6d22e", "generated_at": "2026-11-20T08:16:13.687134+00:00", "revision": "d2c500371437aedf024cd948e0976a84a19b790b4db3b9026b745a1397d6d22e", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "fe8d04bbfe16be7566bb0c18e7548f0881bcd24c4b263a4a8cdd32f4cb90b39d", "generated_at": "2026-11-20T08:17:11.255656+00:00", "revision": "fe8d04bbfe16be7566bb0c18e7548f0881bcd24c4b263a4a8cdd32f4cb90b39d", "scope": "project"} -->
