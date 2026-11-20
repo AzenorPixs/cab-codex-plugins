@@ -67034,8 +67034,8 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 7 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 7 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 14 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 14 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -67067,7 +67067,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "2b746b96073098e7629ce88cdce248b83f0096d24a736b36f73bdc2d53a037d9", "generated_at": "2026-11-20T19:58:41.025634+00:00", "revision": "2b746b96073098e7629ce88cdce248b83f0096d24a736b36f73bdc2d53a037d9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7214e575f91db99088f856f0fb381ea5549b78a1b4e458da043f866f64d3ccc9", "generated_at": "2026-11-20T20:00:36.905180+00:00", "revision": "7214e575f91db99088f856f0fb381ea5549b78a1b4e458da043f866f64d3ccc9", "scope": "change"} -->
 
 
 ## Change `show-direct-and-piloted-runs` — openspec/changes/archive/2026-11-08-show-direct-and-piloted-runs/STATISTICS.md
@@ -73643,4 +73643,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ecea2dd597bd87509af4fc26ba120257a98c1099fca5f9c2a73f549115d0831b", "generated_at": "2026-11-20T19:59:56.276590+00:00", "revision": "ecea2dd597bd87509af4fc26ba120257a98c1099fca5f9c2a73f549115d0831b", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "18904bd5505881aacb518f55f290f58971c8db254454ac745e7d0194569c0018", "generated_at": "2026-11-20T20:00:39.001446+00:00", "revision": "18904bd5505881aacb518f55f290f58971c8db254454ac745e7d0194569c0018", "scope": "project"} -->
