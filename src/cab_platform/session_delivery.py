@@ -310,7 +310,7 @@ def include_change_statistics(project,index,options,env,own_env):
     return reports
 
 
-def preflight_commit(project,index,version,reservations):
+def preflight_commit(project,index,version,reservations,*,complete=False):
     """Vérifications Git en lecture seule avant toute mutation de version."""
     import os,stat
     from pathlib import Path
@@ -323,6 +323,13 @@ def preflight_commit(project,index,version,reservations):
     expected=str(gitdir/'cab-session-index'/(token+'.index'))
     require(index.index_path==expected,'session-delivery-index-invalid',409)
     index_digest=_index_digest(expected,project.owner_uid)
+    if complete:
+        from .delivery_scope import capture_full
+        branch,head=_head(project,options,env)
+        selected=capture_full(project,index,options,env,head,gitdir)
+        tag=_git(project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version)
+        require(tag.returncode==1,'session-delivery-tag-exists',409)
+        return {'head':head,'branch':branch,'index_digest':index_digest,'paths':selected['paths'],'full':selected}
     snap=git_snapshot(project,expected)
     dirty=unstaged_code_paths(snap)
     require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
@@ -370,7 +377,7 @@ def include_global_statistics(project,options,env,own_env):
     return {'sha256':sha,'entry_digest':snapshot}
 
 
-def prepare_commit(project, index, version, reservations):
+def prepare_commit(project, index, version, reservations, *, full=None):
     """Construit le commit et l'index commun temporaire sans déplacer de référence."""
     import os,stat
     from pathlib import Path
@@ -384,9 +391,9 @@ def prepare_commit(project, index, version, reservations):
     info=os.lstat(expected)
     require(stat.S_ISREG(info.st_mode) and info.st_uid==project.owner_uid and info.st_nlink==1,'session-delivery-index-invalid',409)
     index_digest=_index_digest(expected,project.owner_uid)
-    observed=git_snapshot(project,expected)
-    dirty=unstaged_code_paths(observed)
-    require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
+    if full is None:
+        dirty=unstaged_code_paths(git_snapshot(project,expected))
+        require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
     gitdir=_gitdir(project,options,env)
     _hooks_supported(project,options,env,gitdir)
     tagref='refs/tags/'+version
@@ -395,12 +402,22 @@ def prepare_commit(project, index, version, reservations):
     require(tag.returncode==1,'session-delivery-tag-exists',409)
     branch,head=_head(project,options,env)
     source_env={**env,'GIT_INDEX_FILE':expected}
-    names=_changed_paths(project,options,source_env,index.base_head)
-    require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
+    if full is not None:
+        require(head==full['head'],'session-delivery-head-changed',409)
+        require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}',full['tree']),'session-delivery-index-invalid',409)
+        names=full['paths']
+    else:
+        names=_changed_paths(project,options,source_env,index.base_head)
+        require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
     own_index=expected
     temporary=[]
     try:
-        if head!=index.base_head:
+        if full is not None:
+            own_index=_temp_index(os.path.dirname(expected),project);temporary.append(own_index);os.unlink(own_index)
+            own_env={**env,'GIT_INDEX_FILE':own_index}
+            require(_git(project,options,own_env,'read-tree',full['tree']).returncode==0,
+                    'session-delivery-index-invalid',409)
+        elif head!=index.base_head:
             own_index=_temp_index(os.path.dirname(expected),project);temporary.append(own_index);os.unlink(own_index)
             own_env={**env,'GIT_INDEX_FILE':own_index}
             read=_git(project,options,own_env,'read-tree',head)
@@ -414,7 +431,7 @@ def prepare_commit(project, index, version, reservations):
         system_reports=include_change_statistics(project,index,options,env,own_env)
         names=list(dict.fromkeys([*names,*[report['path'] for report in system_reports]]))
         global_statistics=include_global_statistics(project,options,env,own_env)
-        if global_statistics:names=[*names,'STATISTICS.md']
+        if global_statistics and 'STATISTICS.md' not in names:names=[*names,'STATISTICS.md']
         from .git_commit_remove import OID
         tree=_git(project,options,own_env,'write-tree')
         require(tree.returncode==0 and OID.fullmatch(tree.stdout.decode('ascii','strict').strip()),'session-delivery-index-invalid',409)
@@ -434,7 +451,7 @@ def prepare_commit(project, index, version, reservations):
         tag_id=tag_obj.stdout.decode('ascii','strict').strip()
         require(OID.fullmatch(tag_id),'session-delivery-tag-invalid',409)
         require(_index_digest(expected,project.owner_uid)==index_digest,'session-delivery-index-changed',409)
-        return {'branch':branch,'head':head,'commit':commit_id,'tag':tag_id,'tagref':tagref,'paths':names,'gitdir':str(gitdir),'index_digest':index_digest,'temporary':temporary,'adoption':index.origin.get('adoption'),'global_statistics':global_statistics,'system_reports':system_reports}
+        return {'branch':branch,'head':head,'commit':commit_id,'tag':tag_id,'tagref':tagref,'paths':names,'gitdir':str(gitdir),'index_digest':index_digest,'temporary':temporary,'adoption':full['adoption'] if full is not None else index.origin.get('adoption'),'global_statistics':global_statistics,'system_reports':system_reports}
     except Exception:
         for path in temporary:
             try:os.unlink(path)
@@ -465,6 +482,10 @@ def _prepare_shared_index(project, options, env, plan):
         from .session_git import shared_index_allowed
         require(shared_index_allowed(project,options,env,[path for path in plan['paths'] if path!='STATISTICS.md' and path not in {report['path'] for report in plan.get('system_reports',[])}],existing,plan.get('adoption')),'session-delivery-shared-index-conflict',409)
         from .session_git import shared_scope_digest
+        adoption=plan.get('adoption') or {}
+        if adoption.get('complete'):
+            require(shared_scope_digest(project,options,env,adoption['paths'])==adoption['shared_digest'],
+                    'session-delivery-shared-index-conflict',409)
         for report in plan.get('system_reports',[]):
             require(shared_scope_digest(project,options,env,[report['path']])==report['entry_digest'],'session-delivery-shared-index-conflict',409)
         if plan.get('global_statistics'):
@@ -585,7 +606,7 @@ def _finish_shared_index(shared):
     finally:os.close(fd)
 
 
-def commit_session(actor, data):
+def commit_session(actor, data, *, full=None):
     """Crée commit et tag d'une session sans incorporer l'index des autres."""
     import os
     from django.db import DatabaseError,connection,transaction
@@ -598,7 +619,7 @@ def commit_session(actor, data):
     request_id=identifier(data['request_id']);version=data['version'];version_tuple(version)
     expected_digest=data.get('expected_index_digest','')
     require(isinstance(expected_digest,str) and (not expected_digest or re.fullmatch(r'[a-f0-9]{64}',expected_digest)),'session-delivery-index-invalid',400)
-    fingerprint=digest({'operation':'commit','version':version,'expected_index_digest':expected_digest})
+    fingerprint=digest({'operation':'commit','version':version,'expected_index_digest':expected_digest,**({'full':full} if full is not None else {})})
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     effect=None;plan=None;shared=None;dispatched=False
     try:
@@ -620,7 +641,7 @@ def commit_session(actor, data):
             index.state='COMMITTING';index.save(update_fields=['state','updated'])
             project=current.project
             event(current,'git-session-commit-started',{'request_id':request_id,'version':version})
-        plan=prepare_commit(project,index,version,reservations)
+        plan=prepare_commit(project,index,version,reservations,full=full)
         options,env=context(project)
         shared=_prepare_shared_index(project,options,env,plan)
         with transaction.atomic():
@@ -778,7 +799,73 @@ def execute_diu_build(project,kind,version,before_execute):
     return {'kind':kind,'source_mode':'working-tree','version':version,'exit_code':code,'executed':True}
 
 
-def delivery_preflight(project, version, *, defer_releases=False):
+def execute_native_build(project,kind,version,before_execute):
+    import subprocess
+    from .project_artifacts import BUILDERS, enabled, refresh
+    from .project_metadata import read_metadata
+    source=read_metadata(project.root)
+    metadata=source['values']
+    require(source['state']=='ready' and enabled(metadata,kind) and metadata.get('PROJECT_VERSION')==version,
+            'session-delivery-build-config-changed',409)
+    started=False
+    receipt={'kind':kind,'source_mode':'working-tree','version':version,'builder':'cab'}
+
+    def mark(value):
+        nonlocal started
+        started=True
+        before_execute({**receipt,'phase':'started',**value})
+
+    try:
+        code=BUILDERS[kind](project,metadata,mark)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise Refused('session-delivery-artifact-outcome-uncertain' if started else
+                      'session-delivery-artifact-build-failed',409) from error
+    if code==0:
+        try:
+            refresh(project,kind)
+        except (OSError,ValueError,Refused):
+            # Une lecture indisponible sera reprise par l'inventaire périodique.
+            pass
+    return {**receipt,'exit_code':code,'executed':started}
+
+
+def diu_release_program(project, compatible_version):
+    import subprocess
+    version_tuple(compatible_version)
+    try:
+        installed=subprocess.run(['/usr/bin/dpkg-query','-W','-f=${Version}','diu'],
+                                 capture_output=True,text=True,timeout=5)
+    except (OSError,subprocess.SubprocessError) as error:
+        raise Refused('session-delivery-diu-unavailable',409) from error
+    require(installed.returncode==0 and version_tuple(installed.stdout.strip())>=version_tuple(compatible_version),
+            'session-delivery-diu-incompatible',409)
+    return diu_program(project)
+
+
+def execute_diu_release(project,forge,version,compatible_version,before_execute):
+    import subprocess
+    from .connector_process import identity
+    require(forge in ('FORGEJO','GITHUB','GITLAB'),'session-delivery-plan-invalid',409)
+    program=diu_release_program(project,compatible_version)
+    try:
+        process=subprocess.Popen([program,'projects',forge.lower(),'release',project.identifier],cwd='/',
+                                 env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+                                      'HOME':'/root','USER':'root','LOGNAME':'root','LANG':'C.UTF-8'},
+                                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                 start_new_session=True,umask=0o022)
+    except OSError as error:
+        raise Refused('session-delivery-diu-not-started',409) from error
+    receipt={'publisher':'diu','version':version,'tag':version,'executed':True}
+    before_execute({**receipt,'child':identity(process.pid)})
+    try:
+        code=process.wait(timeout=3600)
+    except subprocess.TimeoutExpired as error:
+        raise Refused('session-delivery-result-unknown',409) from error
+    require(code==0,'session-delivery-result-unknown',409)
+    return {**receipt,'exit_code':code}
+
+
+def delivery_preflight(project, version, *, defer_releases=True, diu_release_version=''):
     """Vérifie identité, version, forges et capacités sans publier ni écrire."""
     from pathlib import Path
     from .forge_push import FORGES,context
@@ -798,9 +885,9 @@ def delivery_preflight(project, version, *, defer_releases=False):
     original=file_operation(project,{'op':'env-read'})
     raw=base64.b64decode(original['content'],validate=True)
     replace_version(raw,version)
-    if any(flags.values()):
-        diu_program(project)
-        require(defer_releases is True,'session-delivery-release-policy-required',409)
+    if any(flags.values()) and not defer_releases:
+        require(diu_release_version,'session-delivery-release-policy-required',409)
+        diu_release_program(project,diu_release_version)
     forges=[]
     for forge in FORGES:
         prefix='REMOTE_'+forge+'_'
@@ -814,7 +901,7 @@ def delivery_preflight(project, version, *, defer_releases=False):
             validate_remote_tags(version,tags)
             forges.append({'name':forge,'branch':branch,'remote':remote,'signature':signature})
     from .versioning import release_metadata
-    return {'project_id':project_id,'forges':forges,'release_metadata':release_metadata(version),'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','defer_releases':defer_releases}
+    return {'project_id':project_id,'forges':forges,'release_metadata':release_metadata(version),'debian':flags['PROJECT_DEBIAN_PACKAGE'],'docker':flags['PROJECT_DOCKERED'],'version':version,'env_sha256':original['digest'],'source_mode':'working-tree','builder':'cab','defer_releases':defer_releases,'diu_release_version':diu_release_version}
 
 
 def verify_version(project, forge, version, commit, tag_oid, expected_signature, expected_branch):
@@ -876,9 +963,12 @@ def configure_delivery_policy(actor,data):
     from .core import commands as c
     from .core.models import Event,EvidenceProducer
     c.require(actor.role=='admin','session-delivery-admin-required',403)
-    c.require({'project_id','run_id','version','defer_releases','request_id','authorization'}<=set(data)<={'project_id','run_id','version','defer_releases','request_id','authorization','evidence_producer'},'session-delivery-fields-invalid',400)
+    c.require({'project_id','run_id','version','defer_releases','request_id','authorization'}<=set(data)<={'project_id','run_id','version','defer_releases','request_id','authorization','evidence_producer','diu_release_version'},'session-delivery-fields-invalid',400)
     version_tuple(data['version']);request_id=c.identifier(data['request_id'])
-    c.require(data['defer_releases'] is True,'session-delivery-release-policy-unavailable',409)
+    deferred=data['defer_releases']
+    compatible=data.get('diu_release_version','')
+    c.require(type(deferred) is bool and (deferred or bool(compatible)),'session-delivery-release-policy-unavailable',409)
+    if not deferred:version_tuple(compatible)
     c.require(isinstance(data['authorization'],str) and 0<len(data['authorization'])<=4000,'session-delivery-authorization-required',400)
     with transaction.atomic():
         run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
@@ -886,12 +976,12 @@ def configure_delivery_policy(actor,data):
         fingerprint=c.digest(data)
         if previous:
             c.require(previous.data.get('request_digest')==fingerprint,'session-delivery-request-conflict',409)
-            return {'configured':True,'version':data['version'],'defer_releases':True}
+            return {'configured':True,'version':data['version'],'defer_releases':deferred}
         c.working(run);c.require(c.no_pending(run),'session-git-effect-unresolved',409)
         producer_id=data.get('evidence_producer') or ensure_delivery_producer(run.project)
         c.require(EvidenceProducer.objects.filter(pk=producer_id,project=run.project,active=True,actor__active=True,actor__uid=0,actor__role='collector',kinds__contains=['publication']).exists(),'session-delivery-producer-invalid',409)
-        c.event(run,'session-delivery-policy',{'request_id':request_id,'request_digest':fingerprint,'version':data['version'],'defer_releases':True,'evidence_producer':producer_id,'authorization':data['authorization'],'authority':actor.pk})
-    return {'configured':True,'version':data['version'],'defer_releases':True}
+        c.event(run,'session-delivery-policy',{'request_id':request_id,'request_digest':fingerprint,'version':data['version'],'defer_releases':deferred,'diu_release_version':compatible,'evidence_producer':producer_id,'authorization':data['authorization'],'authority':actor.pk})
+    return {'configured':True,'version':data['version'],'defer_releases':deferred}
 
 
 BUILD_STRATEGY = 'working-tree'
@@ -909,8 +999,8 @@ def _delivery_keys(plan):
 
 
 def _delivery_view(delivery):
-    public={'error','commit','branch','tag','version','exit_code','verified','reason','source_mode','executed','kind'}
-    return {'version':delivery.version,'state':delivery.state,'commit':delivery.commit_oid or None,'steps':[{'key':step.key,'state':step.state,'receipt':{key:value for key,value in step.receipt.items() if key in public}} for step in delivery.steps.order_by('pk')]}
+    public={'error','commit','branch','tag','version','exit_code','verified','reason','source_mode','executed','kind','builder','publisher'}
+    return {'version':delivery.version,'state':delivery.state,'scope':delivery.plan.get('scope','change'),'commit':delivery.commit_oid or None,'steps':[{'key':step.key,'state':step.state,'receipt':{key:value for key,value in step.receipt.items() if key in public}} for step in delivery.steps.order_by('pk')]}
 
 
 def _publish_delivery(delivery_id):
@@ -972,10 +1062,10 @@ def _launch_delivery(delivery_id):
         _set_delivery_state(delivery_id,'UNKNOWN')
 
 
-def start_delivery(actor, run, version, connector_id):
+def start_delivery(actor, run, version, connector_id, *, complete=False):
     """Cadre une livraison ; aucune étape n'est rejouée pour une même version."""
     import os
-    from django.db import IntegrityError,connection,transaction
+    from django.db import IntegrityError,transaction
     from .connector_process import identity as process_identity
     from .core.commands import no_pending,revision,run_scope,working
     from .core.models import FinalizationPlan,GitDelivery,GitDeliveryStep,GitFileReservation,GitSessionIndex,Operation,Project
@@ -984,6 +1074,7 @@ def start_delivery(actor, run, version, connector_id):
     version_tuple(version)
     existing=GitDelivery.objects.filter(run=run,version=version).first()
     if existing is not None:
+        require((existing.plan.get('scope')=='project')==complete,'session-delivery-scope-conflict',409)
         return delivery_status(actor,run,version,connector_id)
     selection=delivery_version_selection(actor,run,version)
     working(run)
@@ -994,7 +1085,12 @@ def start_delivery(actor, run, version, connector_id):
     require(index is not None and index.state=='OPEN','session-delivery-index-invalid',409)
     reservations=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True))
     require(reservations,'session-git-reservation-required',409)
-    git_plan=preflight_commit(run.project,index,version,reservations)
+    if complete:
+        from .preexisting_git import git_guard
+        with git_guard():
+            git_plan=preflight_commit(run.project,index,version,reservations,complete=True)
+    else:
+        git_plan=preflight_commit(run.project,index,version,reservations)
     current_revision=revision(run)
     validations=Operation.objects.filter(run=run,state='COMPLETED',source_revision=current_revision).order_by('-updated')[:50]
     require(any(op.receipt.get('exit_code')==0 and (op.request.get('phase') in ('test','verify','verification') or isinstance(op.request.get('host_authorization'),dict)) for op in validations),'session-git-validation-required',409)
@@ -1002,7 +1098,8 @@ def start_delivery(actor, run, version, connector_id):
     project=Project.objects.get(pk=run.project_id)
     from .core.models import Event
     policy=Event.objects.filter(run=run,kind='session-delivery-policy',data__version=version).order_by('-pk').first()
-    plan=delivery_preflight(project,version,defer_releases=bool(policy and policy.data.get('defer_releases') is True))
+    plan=delivery_preflight(project,version,defer_releases=policy is None or policy.data.get('defer_releases') is True,
+                            diu_release_version=policy.data.get('diu_release_version','') if policy else '')
     plan['evidence_producer']=(policy.data.get('evidence_producer') if policy else None) or ensure_delivery_producer(project)
     from .core.models import EvidenceProducer
     require(EvidenceProducer.objects.filter(pk=plan['evidence_producer'],project=project,active=True,actor__active=True,actor__uid=0,actor__role='collector',kinds__contains=['publication']).exists(),'session-delivery-producer-invalid',409)
@@ -1012,6 +1109,7 @@ def start_delivery(actor, run, version, connector_id):
     plan['version_selection']=selection
     plan['source_revision']=current_revision
     plan['git']=git_plan
+    plan['scope']='project' if complete else 'change'
     executor=process_identity(os.getpid())
     require(executor is not None,'session-delivery-worker-unavailable',409)
     try:
@@ -1172,7 +1270,11 @@ def _delivery_worker(delivery_id):
         _set_step(delivery_id,'version-projection','COMPLETED',{'verified':True})
         _set_step(delivery_id,'commit','RUNNING')
         try:
-            receipt=commit_session(run.actor,{'project_id':project.pk,'run_id':run.run_id,'request_id':'delivery-'+str(delivery_id)+'-commit','version':version,'expected_index_digest':plan['git']['index_digest']})
+            commit_request={'project_id':project.pk,'run_id':run.run_id,'request_id':'delivery-'+str(delivery_id)+'-commit','version':version,'expected_index_digest':plan['git']['index_digest']}
+            if plan.get('scope')=='project':
+                receipt=commit_session(run.actor,commit_request,full=plan['git']['full'])
+            else:
+                receipt=commit_session(run.actor,commit_request)
         except Refused as error:
             uncertain=error.code in ('session-delivery-result-unknown','session-git-effect-unresolved')
             _set_step(delivery_id,'commit','UNKNOWN' if uncertain else 'FAILED',{'error':error.code})
@@ -1246,9 +1348,12 @@ def _continue_after_commit(delivery_id,receipt):
         key='build:'+kind;_set_step(delivery_id,key,'RUNNING');started=[]
         def before_build(value):
             _update_step_receipt(delivery_id,key,value);started.append(True)
-        try:built=execute_diu_build(project,kind,version,before_build)
+        native=plan.get('builder')=='cab'
+        build=execute_native_build if native else execute_diu_build
+        try:built=build(project,kind,version,before_build)
         except Refused as error:
-            uncertain=bool(started) and error.code!='session-delivery-diu-not-started'
+            uncertain=(error.code=='session-delivery-artifact-outcome-uncertain' if native else
+                       bool(started) and error.code!='session-delivery-diu-not-started')
             state='UNKNOWN' if uncertain else 'FAILED'
             _set_step(delivery_id,key,state,{'error':error.code})
             _set_delivery_state(delivery_id,'UNKNOWN' if uncertain else 'PARTIAL');return
@@ -1257,9 +1362,21 @@ def _continue_after_commit(delivery_id,receipt):
             _set_delivery_state(delivery_id,'PARTIAL');return
         _set_step(delivery_id,key,'COMPLETED',built)
     if plan['docker'] or plan['debian']:
-        require(plan.get('defer_releases') is True,'session-delivery-release-policy-invalid',409)
         for target in plan['forges']:
-            _set_step(delivery_id,'release:'+target['name'],'SKIPPED',{'reason':'developer-deferred','executed':False,'version':version,'tag':version})
+            key='release:'+target['name']
+            if plan.get('defer_releases') is True:
+                _set_step(delivery_id,key,'SKIPPED',{'reason':'developer-deferred','publisher':'diu','executed':False,'version':version,'tag':version})
+                continue
+            require(plan.get('diu_release_version'),'session-delivery-release-policy-invalid',409)
+            _set_step(delivery_id,key,'RUNNING');started=[]
+            def mark_release(value):
+                _update_step_receipt(delivery_id,key,value);started.append(True)
+            try:published=execute_diu_release(project,target['name'],version,plan['diu_release_version'],mark_release)
+            except Refused as error:
+                state='UNKNOWN' if started else 'FAILED'
+                _set_step(delivery_id,key,state,{'publisher':'diu','error':error.code})
+                _set_delivery_state(delivery_id,'UNKNOWN' if started else 'PARTIAL');return
+            _set_step(delivery_id,key,'COMPLETED',published)
     for target in plan['forges']:
         key='verify:'+target['name'];_set_step(delivery_id,key,'RUNNING')
         try:

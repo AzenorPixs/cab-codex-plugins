@@ -1030,7 +1030,7 @@ def command(request,body:Command):
     if name in ('session.git.stage_adopted','session.git.reserve_adopted'):
         from cab_platform.session_git import administrative_stage
         return administrative_stage(actor,data,reserve=name=='session.git.reserve_adopted')
-    if name in ('session.delivery.start_adopted','session.delivery.status_adopted'):
+    if name in ('session.delivery.start_adopted','session.delivery.full_start_adopted','session.delivery.status_adopted'):
         from cab_platform.session_git import administrative_run
         from cab_platform.session_delivery import start_delivery,delivery_status
         commands.require(set(data)=={'project_id','run_id','version'},'session-delivery-fields-invalid',400)
@@ -1039,7 +1039,7 @@ def command(request,body:Command):
             current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
             return delivery_status(current.actor,current,data['version'],None,administrator=actor)
         current,connector_id=administrative_run(actor,data)
-        return start_delivery(current.actor,current,data['version'],connector_id)
+        return start_delivery(current.actor,current,data['version'],connector_id,complete=name=='session.delivery.full_start_adopted')
     if name in ('run.reframe_prequalification','finalization.host_completion','session.git.cancel_unpublished_stage'):
         principal(request,admin=True)
         from cab_platform.host_completion import reframe_prequalification,declare_host_completion,cancel_unpublished_stage
@@ -1055,7 +1055,7 @@ def command(request,body:Command):
     if name=='session.delivery.policy':
         from cab_platform.session_delivery import configure_delivery_policy
         return configure_delivery_policy(actor,data)
-    if name in ('session.delivery.start','session.delivery.status'):
+    if name in ('session.delivery.start','session.delivery.full_start','session.delivery.status'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_delivery import start_delivery,delivery_status
         commands.require(set(data)=={'version'},'session-delivery-fields-invalid',400)
@@ -1063,7 +1063,9 @@ def command(request,body:Command):
         current=current_worker_run(actor,peer,read_only=name=='session.delivery.status',native_thread=native_thread)
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
-        return (start_delivery if name=='session.delivery.start' else delivery_status)(actor,current,data['version'],connector.pk)
+        if name=='session.delivery.status':
+            return delivery_status(actor,current,data['version'],connector.pk)
+        return start_delivery(actor,current,data['version'],connector.pk,complete=name=='session.delivery.full_start')
     if name=='session.git.context':
         commands.require(not data,'session-git-fields-invalid',400)
         from .connectors import current_worker_run

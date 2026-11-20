@@ -1776,35 +1776,39 @@ CAB MUST lier chaque connexion MCP à son RUN natif vérifié et refuser toute o
 - **THEN** CAB protège l'arbre Git et son commit de base par des références internes non publiées, jusqu'à confirmation de la livraison et retrait contrôlé de l'index.
 
 ### Requirement: Livraison Git et CI/CD par CAB
-Lorsque la CI/CD est autorisée, CAB MUST recevoir la version, mettre à jour `PROJECT_VERSION` sans altérer les autres valeurs, créer un commit limité à l'index de session et un tag égal à cette version, puis envoyer la branche et ce tag aux forges configurées avec protection concurrente. Les opérations Git des sessions MUST passer par CAB.
+Lorsque la CI/CD est autorisée, CAB MUST recevoir la version, mettre à jour `PROJECT_VERSION`, créer le commit et un tag égal à la version, puis envoyer la branche et ce tag aux forges configurées avec protection concurrente. Les opérations Git des sessions MUST passer par CAB.
 
 #### Scenario: Livrer la version demandée
-- **WHEN** une session autorisée demande la livraison d'une version valide
-- **THEN** CAB livre son commit et son tag sans intégrer les fichiers d'autres sessions ni déplacer d'autres tags ou branches.
+- **WHEN** une session autorisée demande CICD sur une version valide
+- **THEN** CAB livre les fichiers préparés dans l’index du change et préserve les autres chemins
 
 #### Scenario: Global CAB confirmé dans le commit
-- **WHEN** le STATISTICS.md global indexé correspond à une écriture CAB confirmée et au fichier courant
-- **THEN** CAB peut inclure cette seule production partagée dans le commit de session, en vérifiant que son entrée d'index est restée identique.
-- **AND** les autres contenus partagés ou non attribués restent préservés.
+- **WHEN** le rapport global indexé correspond à une écriture CAB confirmée
+- **THEN** CAB peut l’inclure après vérification de son entrée d’index
+
+#### Scenario: CICDF sur le projet entier
+- **WHEN** une session autorisée demande explicitement CICDF
+- **THEN** CAB fige et livre les fichiers admissibles modifiés ou indexés du projet, y compris hors du change courant
+- **AND THEN** CAB préserve les index isolés des autres sessions et refuse les conflits ou effets incertains
+- **AND THEN** le reçu conserve le périmètre choisi sur cette version
 
 ### Requirement: Builds et releases DIU orchestrés par CAB
-CAB MUST exécuter au plus une fois chaque build DIU activé par la configuration du projet, puis les releases DIU activées pour les forges admissibles. CAB MUST conserver les reçus de chaque étape et ne pas rejouer un effet confirmé ou incertain.
-
-#### Scenario: Publication conditionnelle
-- **WHEN** un build ou une forge est désactivé, échoue ou retourne un résultat incertain
-- **THEN** CAB indique son état et ne présente pas la publication correspondante comme réussie.
+CAB MUST construire les artefacts activés avec ses constructeurs natifs. CAB MUST déléguer la publication des artefacts à DIU lorsque la politique de livraison l’autorise et qu’une version DIU compatible est vérifiée. CAB MUST conserver les reçus de chaque étape et ne pas rejouer un effet confirmé ou incertain.
 
 #### Scenario: Construction sur le projet courant
-- **WHEN** CAB appelle un build ou une release DIU
-- **THEN** il utilise les commandes DIU existantes sur le répertoire habituel du projet, sans modifier DIU ni fournir un répertoire de sources figées.
-- **AND** il ne présente pas les artefacts comme exclusivement issus du commit si des modifications courantes peuvent y être incluses.
-- **AND** une incompatibilité DIU est signalée sans modifier implicitement le tag demandé.
+- **WHEN** un projet active Debian ou Docker
+- **THEN** CAB construit le format correspondant avec la recette du projet et actualise l’inventaire des artefacts observés
+- **AND THEN** le reçu précise que la construction utilise le dossier de travail courant
+
+#### Scenario: Publication conditionnelle
+- **WHEN** la publication DIU est différée ou n’est pas autorisée avec une version compatible
+- **THEN** CAB conserve l’étape de publication comme non exécutée
+- **AND THEN** aucun tag supplémentaire de compatibilité n’est créé
 
 #### Scenario: Report explicite des releases DIU
-- **WHEN** le développeur autorise le report des releases pour un RUN et une version
-- **THEN** CAB conserve cette décision avant la livraison, exécute les envois Git et les builds activés, et enregistre les releases comme SKIPPED avec motif developer-deferred.
-- **AND** il ne crée aucun tag de compatibilité ni ne présente ces releases comme publiées.
-- **AND** la décision ne s'applique pas aux autres RUN ou versions.
+- **WHEN** le développeur diffère les releases pour ce RUN et cette version
+- **THEN** CAB conserve le report, livre Git, construit les artefacts et inscrit les étapes DIU comme SKIPPED
+- **AND THEN** la décision ne s’applique qu’à ce RUN et cette version
 
 ### Requirement: Autorisation interprojets générique
 CAB MUST vérifier une autorisation explicite liée à la session native, au projet cible et aux chemins concernés avant d'accepter un rattachement interprojets. Cette autorisation MUST être persistée et révocable, sans nom ou chemin de projet particulier codé dans CAB.
@@ -1815,12 +1819,12 @@ CAB MUST vérifier une autorisation explicite liée à la session native, au pro
 - **AND** il refuse une autre cible ou un chemin hors autorisation.
 
 ### Requirement: Entrée CICD distribuée
-CAB MUST distribuer un plugin CICD contenant le skill de déclenchement et de suivi de livraison, ainsi que sa commande. Ils MUST transmettre la version au parcours CAB et consulter le même reçu sans exécuter Git ni relancer un effet incertain.
+CAB MUST distribuer les plugins CICD et CICDF, leurs skills et leurs commandes. CICD MUST transmettre la version avec le périmètre du change. CICDF MUST transmettre la version avec le périmètre complet sur mandat explicite. Les deux parcours MUST consulter le même reçu sans relancer un effet incertain.
 
 #### Scenario: Parcours disponible ou connecteur ancien
-- **WHEN** le développeur demande une livraison par le skill CICD
-- **THEN** le skill utilise les outils MCP de livraison CAB du RUN natif vérifié.
-- **AND** si ces outils sont absents, il signale leur indisponibilité sans exécution de substitution.
+- **WHEN** un connecteur propose le point d’entrée demandé
+- **THEN** le skill utilise cet outil et consulte le reçu
+- **AND THEN** si l’outil manque, le skill indique que le connecteur doit être rechargé
 
 ### Requirement: Indexation immédiate du rapport statistique global
 Après chaque écriture du STATISTICS.md à la racine d'un projet Git, CAB MUST indexer uniquement ce fichier dans l'index Git ordinaire du projet et vérifier le contenu indexé avant de libérer la réservation de l'écrivain statistique. Cette opération partagée appartient à CAB et ne doit pas indexer les fichiers d'une session. Les rapports de change ne sont pas inclus dans cette exception.

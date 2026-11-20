@@ -1,0 +1,9 @@
+{
+  "name": "CICDF",
+  "version": "3.4.0",
+  "description": "Livrer par CAB tous les fichiers admissibles modifiés ou indexés du projet.",
+  "author": {
+    "name": "CAB"
+  },
+  "skills": "./skills/"
+}

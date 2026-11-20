@@ -71,7 +71,7 @@ def initialize_profiles(profiles):
         write_profile(user,agent,{'actor_id':actor.pk,'token':token})
 
 def payload_digest(package_root):
-    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd')]:
+    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf')]:
         manifest=package_root/'plugins'/folder/'.codex-plugin/plugin.json'
         if not manifest.is_file() or not (package_root/'plugins'/folder/'skills'/folder/'SKILL.md').is_file() or not (package_root/'commands'/(label+'.md')).is_file():raise ClientError('integration-payload-missing')
         data=json.loads(manifest.read_text())
@@ -89,9 +89,9 @@ def integration_files(user,agent,package_root):
     home=Path(user.pw_dir);target=home/('.codex/config.toml' if agent in ('codex','codex-cli') else '.config/opencode/opencode.json')
     values={'configuration':hashlib.sha256(read_user_file(target,user.pw_uid)).hexdigest()}
     if agent in ('codex','codex-cli'):
-        for name in ('CAB.md','CCAB.md','CABU.md','CICD.md'):
+        for name in ('CAB.md','CCAB.md','CABU.md','CICD.md','CICDF.md'):
             values[name]=hashlib.sha256(read_user_file(home/'.codex/commands'/name,user.pw_uid)).hexdigest()
-        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd')]:
+        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf')]:
             source=package_root/'plugins'/folder
             version=json.loads((source/'.codex-plugin/plugin.json').read_text())['version']
             cached=home/'.codex/plugins/cache/cab_codex_plugins'/label/version
@@ -199,12 +199,12 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if removed.returncode:raise ClientError('codex-old-cab-marketplace-removal-failed')
         added=subprocess.run([executable,'plugin','marketplace','add',str(package_root),'--json'],env=env,capture_output=True,text=True,timeout=30,**options)
         if added.returncode:raise ClientError('codex-cab-marketplace-registration-failed')
-        for plugin in ['CAB','CCAB','CABU','CICD']:
+        for plugin in ['CAB','CCAB','CABU','CICD','CICDF']:
             installed=subprocess.run([executable,'plugin','add',plugin+'@cab_codex_plugins','--json'],env=env,capture_output=True,text=True,timeout=30,**options)
             if installed.returncode:raise ClientError('codex-cab-plugin-installation-failed')
         commands=home/'.codex/commands';commands.mkdir(parents=True,exist_ok=True)
         if commands.resolve()!=commands:raise ClientError('codex-command-directory-unsafe')
-        for name in ['CAB.md','CCAB.md','CABU.md','CICD.md']:
+        for name in ['CAB.md','CCAB.md','CABU.md','CICD.md','CICDF.md']:
             source=package_root/'commands'/name;destination=commands/name
             if destination.exists():
                 if destination.resolve()!=destination or not destination.is_file():raise ClientError('codex-command-target-unsafe')

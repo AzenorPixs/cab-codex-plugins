@@ -24,7 +24,7 @@ def validate_versions(root):
     lock=json.loads((root/'frontend/package-lock.json').read_text())
     require(lock['version']==version and lock['packages']['']['version']==version)
     require("import {version as buildVersion} from '../package.json'" in (root/'frontend/src/SystemUpdate.tsx').read_text())
-    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd')]:
+    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf')]:
         base=root/'integrations/codex'/folder
         manifest=base/'.codex-plugin/plugin.json';skill=base/'skills'/folder/'SKILL.md';command=root/'integrations/commands'/(label+'.md')
         require(all(path.is_file() and not path.is_symlink() for path in (manifest,skill,command)))
@@ -73,7 +73,7 @@ def main():
         shutil.copytree(source,destination)
         for path in [destination,*destination.rglob('*')]:path.chmod(0o755 if path.is_dir() else 0o644)
     catalog=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
-    for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab','CICD':'cicd'}[plugin['name']]
+    for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab','CICD':'cicd','CICDF':'cicdf'}[plugin['name']]
     (OUT/'marketplace.json').write_text(json.dumps(catalog,indent=2)+'\n')
     print(json.dumps({'prepared':True,'version':version,'archives':{k:v['sha256'] for k,v in manifest['archives'].items()}}))
 
