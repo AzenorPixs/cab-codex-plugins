@@ -18,26 +18,37 @@ PUBLIC_TREES=('usr/lib/cab/python','usr/lib/cab/web','usr/lib/cab/plugins','usr/
 PUBLIC_FILES={'usr/bin/cab':0o755,'usr/lib/cab/runtime-manifest.json':0o644,'usr/lib/cab/python-vendor.tar.xz':0o644,'usr/lib/cab/electric.tar.xz':0o644}
 
 
-def preflight_package(path,version):
+def preflight_package(path,version,*,pass_fds=(),require_payload_hashes=False):
     """Contrôler le payload public avant APT, sans toucher aux données privées."""
     required={'usr/bin/cab','usr/lib/cab/python/cab_platform/__init__.py','usr/lib/cab/python/cab_platform/cli.py','usr/lib/cab/web/index.html','usr/lib/cab/runtime-manifest.json'}
     seen=set();public=0;embedded={}
-    process=subprocess.Popen(['/usr/bin/dpkg-deb','--fsys-tarfile',str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    payload={'python':{},'web':{}}
+    archives={}
+    process=subprocess.Popen(['/usr/bin/dpkg-deb','--fsys-tarfile',str(path)],stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL,pass_fds=pass_fds)
     try:
         with tarfile.open(fileobj=process.stdout,mode='r|') as archive:
             for item in archive:
                 name=item.name.removeprefix('./').rstrip('/')
                 selected=name=='usr/lib/cab' or name in PUBLIC_FILES or any(name==root or name.startswith(root+'/') for root in PUBLIC_TREES)
                 if not selected:continue
-                if '..' in Path(name).parts or name.startswith('/') or not (item.isdir() or item.isfile()):raise ClientError('debian-public-payload-type-invalid')
+                if name in seen or '..' in Path(name).parts or name.startswith('/') or not (item.isdir() or item.isfile()):raise ClientError('debian-public-payload-type-invalid')
                 wanted=0o755 if item.isdir() else PUBLIC_FILES.get(name,0o644)
                 if item.mode!=wanted or item.uid!=0 or item.gid!=0:raise ClientError('debian-public-payload-permissions-invalid')
                 public+=1;seen.add(name)
+                if not item.isfile():continue
+                relative=name.removeprefix('usr/lib/cab/')
+                group,_,entry=relative.partition('/')
                 if name in ('usr/lib/cab/python/cab_platform/__init__.py','usr/lib/cab/runtime-manifest.json'):
                     stream=archive.extractfile(item)
                     raw=stream.read(262145)
                     if len(raw)>262144:raise ClientError('debian-payload-version-invalid')
                     embedded[name]=raw
+                    if group in payload:payload[group][entry]=hashlib.sha256(raw).hexdigest()
+                elif group in payload:
+                    payload[group][entry]=hashlib.file_digest(archive.extractfile(item),'sha256').hexdigest()
+                elif relative in ('python-vendor.tar.xz','electric.tar.xz'):
+                    archives[relative]=hashlib.file_digest(archive.extractfile(item),'sha256').hexdigest()
     except (OSError,ValueError,SyntaxError,tarfile.TarError) as error:
         raise ClientError('debian-public-payload-invalid') from error
     finally:
@@ -50,8 +61,21 @@ def preflight_package(path,version):
         module=ast.parse(embedded['usr/lib/cab/python/cab_platform/__init__.py'].decode('utf-8'))
         versions=[ast.literal_eval(node.value) for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='__version__' for target in node.targets)]
         manifest=json.loads(embedded['usr/lib/cab/runtime-manifest.json'])
-    except (ValueError,SyntaxError,UnicodeError) as error:raise ClientError('debian-payload-version-invalid') from error
-    if versions!=[version] or manifest.get('version')!=version:raise ClientError('debian-payload-version-invalid')
+    except (KeyError,ValueError,SyntaxError,UnicodeError) as error:raise ClientError('debian-payload-version-invalid') from error
+    if versions!=[version] or not isinstance(manifest,dict) or manifest.get('version')!=version:
+        raise ClientError('debian-payload-version-invalid')
+    declarations=manifest.get('payload_sha256')
+    if require_payload_hashes or declarations is not None:
+        verified={group:hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+                  for group,files in payload.items()}
+        declared_archives=manifest.get('archives')
+        if not isinstance(declared_archives,dict) or declarations!=verified:
+            raise ClientError('debian-payload-integrity-invalid')
+        for key in ('python-vendor','electric'):
+            item=declared_archives.get(key)
+            filename=key+'.tar.xz'
+            if not isinstance(item,dict) or item.get('file')!=filename or filename not in archives or item.get('sha256')!=archives[filename]:
+                raise ClientError('debian-payload-integrity-invalid')
     return {'public_paths_verified':public,'embedded_version_verified':version,'private_paths_modified':False}
 
 

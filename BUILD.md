@@ -61,23 +61,23 @@ sans totaux partagés. Couverture incomplète : N/A, pas de rétroactivité. Par
 et limites dans docs/platform-operations.md et docs/sgs-schema.md.
 
 
-Préparer le frontend avec `npm ci` puis `npm run build` dans frontend.
-Préparer les dépendances Python3.13 selon packaging/python-lock.txt et extraire
-l’image publique Electric figée par digest dans output/package/electric-public.
-`python3 packaging/prepare.py` produit les payloads publics vérifiés, le code et
-les plugins sous output/package. Aucun secret de compte ni état local n’entre
-dans ces payloads. Les archives de runtime contiennent des dépendances publiques,
-licences et certificats CA publics ; les sources privées du projet restent exclues.
+Installer les dépendances frontend verrouillées avec `npm ci` dans
+`frontend`. Préparer les dépendances Python3.13 de `packaging/python-lock.txt`
+et extraire l’image Electric figée dans `output/package/electric-public`.
 
-Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
-DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD est déclenchée par le skill CICD et le moteur CAB : version,
-index de session, commit, tag et envois Git appartiennent à CAB. Les commandes
-DIU existantes restent chargées des builds sur le projet courant ; elles ne
-reçoivent pas de répertoire de sources figées. Pour la livraison 3.2.16, le tag
-reste exactement 3.2.16 et les releases DIU sont explicitement différées, car
-leur contrat actuel exige un tag préfixé v. Aucune modification de DIU n'est
-incluse. Un build ne prouve pas une publication ou une installation.
+La fabrication Debian native via CAB utilise `build/debian-package.json`.
+Pour la recette qui installe le manifeste du runtime CAB, le constructeur
+invoque `packaging/prepare.py` dans un dossier temporaire sous l’identité POSIX
+du projet. La préparation compile le frontend, copie les sources Python et
+génère le manifeste pour la version demandée. Elle utilise les dépendances
+préparées de `output/package`. Elle peut aussi être lancée en amont par
+l’interpréteur et le Node déclarés dans `DEVOPS.md`, avec `--node` et
+`--expected-version`. Aucun secret de compte n’entre dans ces contenus.
+
+La construction vérifie le paquet assemblé avant de le placer dans `dist/`.
+La publication vérifie la version et les empreintes des contenus Python, Web
+et des archives depuis le descripteur de fichier utilisé pour le transfert.
+CABU effectue son propre contrôle avant APT.
 
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 

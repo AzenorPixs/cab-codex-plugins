@@ -117,6 +117,12 @@ def release_assets(release,forge):
 
 
 def release_debian(project,client,base,root,forge,public_github,packages,mark):
+    from .artifact_builders import cab_runtime_recipe,recipe,verify_cab_debian
+    try:
+        with opened(Path(project.root),directory=True) as root_fd:
+            cab_runtime=cab_runtime_recipe(recipe(root_fd))
+    except FileNotFoundError:
+        cab_runtime=False
     for package in packages:
         name,tag=package['name'],canonical_version(package['version'])
         require(DEB.fullmatch(name),'artifact-local-changed',409)
@@ -128,6 +134,8 @@ def release_debian(project,client,base,root,forge,public_github,packages,mark):
             with os.fdopen(os.dup(fd),'rb') as stream:
                 require(info.st_size==package['size'] and hashlib.file_digest(stream,'sha256').hexdigest()==package['sha256'],
                         'artifact-local-changed',409)
+                if cab_runtime:
+                    verify_cab_debian(fd,tag)
                 stream.seek(0)
                 release=existing(client,release_path)
                 if release is None:

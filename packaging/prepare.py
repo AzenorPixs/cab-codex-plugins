@@ -1,11 +1,13 @@
 """Préparation CI : sources choisies, assets compilés, runtimes publics figés."""
 import hashlib
 import ast
+import argparse
 import json
 from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import tarfile
 import tomllib
 
@@ -50,31 +52,59 @@ def public_modes(root):
         else:raise RuntimeError('public-payload-type-invalid')
 
 
-def main():
+def payload_digest(root):
+    files={}
+    for path in sorted(root.rglob('*')):
+        if path.is_file():
+            with path.open('rb') as stream:
+                files[path.relative_to(root).as_posix()]=hashlib.file_digest(stream,'sha256').hexdigest()
+    return hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
+def main(*, output=None, dependencies=None, node=None, expected_version=None):
+    output=output or OUT
+    dependencies=dependencies or OUT
     version=validate_versions(ROOT)
-    OUT.mkdir(parents=True,exist_ok=True)
-    target=OUT/'python/cab_platform'
+    if expected_version is not None and version!=expected_version:
+        raise RuntimeError('package-source-version-mismatch')
+    public=dependencies/'electric-public'
+    if not (public/'bin/entrypoint').is_file():raise RuntimeError('pinned-electric-image-extraction-required')
+    vendor=dependencies/'python-vendor'
+    if not (vendor/'django/__init__.py').is_file():raise RuntimeError('locked-python-vendor-required')
+    output.mkdir(parents=True,exist_ok=True)
+    node=node or shutil.which('node')
+    if node is None:raise RuntimeError('frontend-node-unavailable')
+    frontend=ROOT/'frontend'
+    subprocess.run([node,'node_modules/typescript/bin/tsc','--noEmit'],cwd=frontend,check=True)
+    subprocess.run([node,'node_modules/vite/bin/vite.js','build','--outDir',str(output/'web'),
+                    '--emptyOutDir'],cwd=frontend,check=True)
+    target=output/'python/cab_platform'
     if target.parent.exists():shutil.rmtree(target.parent)
     for source in (ROOT/'src/cab_platform').rglob('*.py'):
         if source.is_symlink():raise RuntimeError('source-symlink-refused')
         dest=target/source.relative_to(ROOT/'src/cab_platform');dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,dest);dest.chmod(0o644)
     public_modes(target.parent)
-    if not (OUT/'web/index.html').is_file():raise RuntimeError('frontend-build-required')
-    public_modes(OUT/'web')
-    public=OUT/'electric-public'
-    if not (public/'bin/entrypoint').is_file():raise RuntimeError('pinned-electric-image-extraction-required')
-    vendor=OUT/'python-vendor'
-    if not (vendor/'django/__init__.py').is_file():raise RuntimeError('locked-python-vendor-required')
-    manifest={'version':version,'platform':'Debian 13 amd64, Python 3.13','electric_image':'electricsql/electric@sha256:efb6fa43859d67cb8c73439e0c8bc0f7a3daa467500fb06f2a924bcb2070c139','python_lock_sha256':hashlib.sha256((ROOT/'packaging/python-lock.txt').read_bytes()).hexdigest(),'archives':{'python-vendor':archive(vendor,OUT/'python-vendor.tar.xz'),'electric':archive(public,OUT/'electric.tar.xz')}}
-    (OUT/'runtime-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    if not (output/'web/index.html').is_file():raise RuntimeError('frontend-build-required')
+    public_modes(output/'web')
+    manifest={'version':version,'platform':'Debian 13 amd64, Python 3.13','electric_image':'electricsql/electric@sha256:efb6fa43859d67cb8c73439e0c8bc0f7a3daa467500fb06f2a924bcb2070c139','python_lock_sha256':hashlib.sha256((ROOT/'packaging/python-lock.txt').read_bytes()).hexdigest(),'archives':{'python-vendor':archive(vendor,output/'python-vendor.tar.xz'),'electric':archive(public,output/'electric.tar.xz')}}
+
     for name,source in [('plugins',ROOT/'integrations/codex'),('commands',ROOT/'integrations/commands'),('docs',ROOT/'docs')]:
-        destination=OUT/name
+        destination=output/name
         if destination.exists():shutil.rmtree(destination)
         shutil.copytree(source,destination)
         for path in [destination,*destination.rglob('*')]:path.chmod(0o755 if path.is_dir() else 0o644)
     catalog=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
     for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab','CICD':'cicd','CICDF':'cicdf'}[plugin['name']]
-    (OUT/'marketplace.json').write_text(json.dumps(catalog,indent=2)+'\n')
+    (output/'marketplace.json').write_text(json.dumps(catalog,indent=2)+'\n')
+    manifest['payload_sha256']={name:payload_digest(output/name) for name in ('python','web')}
+    (output/'runtime-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(json.dumps({'prepared':True,'version':version,'archives':{k:v['sha256'] for k,v in manifest['archives'].items()}}))
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description='Préparer le contenu public du paquet CAB.')
+    parser.add_argument('--output',type=Path)
+    parser.add_argument('--dependencies',type=Path)
+    parser.add_argument('--node')
+    parser.add_argument('--expected-version')
+    args=parser.parse_args()
+    main(output=args.output,dependencies=args.dependencies,node=args.node,expected_version=args.expected_version)

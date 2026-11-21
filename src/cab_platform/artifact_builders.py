@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 from tempfile import TemporaryDirectory
 from uuid import uuid4
@@ -119,7 +120,47 @@ def recipe(root_fd):
     return data
 
 
-def write_package_tree(root_fd, tree, data, version):
+def cab_runtime_recipe(data):
+    return any(isinstance(item,dict) and item.get('destination')=='/usr/lib/cab/runtime-manifest.json'
+               for item in (data.get('files') or []))
+
+
+def verify_cab_debian(fd, version):
+    from .client import ClientError
+    from .update import preflight_package
+    path=f'/proc/self/fd/{fd}'
+    control=subprocess.run(['/usr/bin/dpkg-deb','-f',path,'Package','Version'],pass_fds=(fd,),
+                           env=ENV,capture_output=True,text=True,timeout=15)
+    require(control.returncode==0 and control.stdout.splitlines()==['Package: cab',f'Version: {version}'],
+            'debian-package-version-invalid',409)
+    try:
+        return preflight_package(path,version,pass_fds=(fd,),require_payload_hashes=True)
+    except ClientError as error:
+        raise Refused(str(error),409) from error
+
+
+def prepare_cab_runtime(project, root, root_fd, scratch, version, mark):
+    """Préparer en espace privé avec l’identité POSIX du projet."""
+    require(project.owner_uid>0,'artifact-debian-build-owner-invalid',409)
+    account=pwd.getpwuid(project.owner_uid)
+    group=project.owner_gid if project.owner_gid is not None else account.pw_gid
+    with source(root_fd,['packaging','prepare.py']) as fd:
+        regular(fd)
+    node=shutil.which('node',path=ENV['PATH'])
+    require(node is not None,'artifact-debian-node-unavailable',409)
+    scratch.chmod(0o711)
+    generated=scratch/'generated'
+    generated.mkdir(mode=0o700)
+    os.chown(generated,project.owner_uid,group)
+    code=execute([sys.executable,'-B',str(root/'packaging/prepare.py'),'--output',str(generated),
+                  '--dependencies',str(root/'output/package'),'--node',node,'--expected-version',version],mark,
+                 options={'user':project.owner_uid,'group':group,'extra_groups':os.getgrouplist(account.pw_name,group)},
+                 env={**ENV,'HOME':str(generated)})
+    require(code==0,'artifact-debian-payload-preparation-failed',409)
+    return generated
+
+
+def write_package_tree(root_fd, tree, data, version, *, prepared_fd=None):
     control = tree / 'DEBIAN'
     control.mkdir()
     control.chmod(0o755)
@@ -151,7 +192,9 @@ def write_package_tree(root_fd, tree, data, version):
             if not parent.exists():
                 parent.mkdir()
                 parent.chmod(0o755)
-        with source(root_fd, names) as fd:
+        source_root,source_names=(prepared_fd,names[2:]) if prepared_fd is not None and names[:2]==['output','package'] else (root_fd,names)
+        require(source_names,'artifact-source-invalid',409)
+        with source(source_root, source_names) as fd:
             if mode is not None or item.get('conffile') or item.get('empty_json'):
                 regular(fd)
             copy_source(fd, target)
@@ -248,11 +291,20 @@ def build_debian(project, metadata, mark):
             tmp_path = Path(tmp)
             tree = tmp_path / 'tree'
             tree.mkdir(mode=0o700)
-            write_package_tree(root_fd, tree, data, version)
+            cab_runtime=cab_runtime_recipe(data)
+            if cab_runtime:
+                generated=prepare_cab_runtime(project,root,root_fd,tmp_path,version,mark)
+                with opened(generated,directory=True) as prepared_fd:
+                    write_package_tree(root_fd,tree,data,version,prepared_fd=prepared_fd)
+            else:
+                write_package_tree(root_fd,tree,data,version)
             filename = f"{data['package']}_{version}_{data['architecture']}.deb"
             archive = tmp_path / filename
             code = execute(['/usr/bin/dpkg-deb', '--build', '--root-owner-group', str(tree), str(archive)], mark)
             if code == 0:
+                if cab_runtime:
+                    with opened(archive) as candidate:
+                        verify_cab_debian(candidate,version)
                 try:
                     with opened(filename, parent=dist_fd) as existing, opened(archive) as candidate:
                         regular(existing)
