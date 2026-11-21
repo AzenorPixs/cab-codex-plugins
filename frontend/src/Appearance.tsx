@@ -1,30 +1,29 @@
-import {createContext,useContext,useEffect,useLayoutEffect,useRef,useState,type FormEvent,type ReactNode} from 'react'
+import {createContext,useContext,useEffect,useLayoutEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
-import {applyComponentStyle,tablePageSize,type ComponentStyle,type StyleAdjustment,type StyleFields,type TableName} from './InterfaceStyle'
+import {applyComponentStyle,nearestProfile,profileInterval,profiles,styleAtWidth,tablePageSize,
+  type ComponentStyle,type ProfileName,type ProfileStyles,type StyleAdjustment,type StyleFields,type StyleGroup,type TableName} from './InterfaceStyle'
 
-type ProfileName='mobile'|'tablet'|'hd'|'fullhd'|'qhd'|'uhd'
 type Profile={layout:number;font:number}
 type Profiles=Record<ProfileName,Profile>
 type PageProfiles=Record<string,Partial<Record<ProfileName,Partial<Profile>>>>
-type Preference={font_scale:number;theme:'light'|'dark';responsive:Profiles;developer_mode:boolean;page_responsive:PageProfiles;component_style:ComponentStyle}
+type Preference={font_scale:number;theme:'light'|'dark';responsive:Profiles;developer_mode:boolean;page_responsive:PageProfiles;component_style:ComponentStyle;profile_styles:ProfileStyles}
 type SavedPreference=Preference&{persistent:boolean;style_fields?:StyleFields}
-type AppearanceValue={preferences:Preference;page:string;selectPage:(page:string)=>void;adjustPage:(profile:ProfileName,field:keyof Profile,value:number)=>void;pending:boolean;status:string;update:(patch:Partial<Preference>)=>void;styleFields:StyleFields;saveStyle:(change:StyleAdjustment)=>Promise<void>}
-const profiles:{id:ProfileName;label:string;width:number}[]=[{id:'mobile',label:'Mobile',width:390},{id:'tablet',label:'Tablette',width:768},{id:'hd',label:'HD',width:1366},{id:'fullhd',label:'Full HD',width:1920},{id:'qhd',label:'QHD',width:2560},{id:'uhd',label:'4K',width:3840}]
+type AppearanceValue={preferences:Preference;width:number;componentStyle:ComponentStyle;page:string;selectPage:(page:string)=>void;adjustPage:(profile:ProfileName,field:keyof Profile,value:number)=>void;pending:boolean;status:string;update:(patch:Partial<Preference>)=>void;styleFields:StyleFields;saveStyle:(change:StyleAdjustment)=>Promise<void>}
 function defaultProfiles():Profiles{return Object.fromEntries(profiles.map(({id})=>[id,{layout:100,font:100}])) as Profiles}
 function normalize(value:Partial<Preference>):Preference{
   const responsive=defaultProfiles()
   for(const {id} of profiles){const item=value.responsive?.[id];if(item&&Number.isInteger(item.layout)&&item.layout>=50&&item.layout<=150&&Number.isInteger(item.font)&&item.font>=50&&item.font<=150)responsive[id]={layout:item.layout,font:item.font}}
   const page_responsive:PageProfiles={}
   if(value.page_responsive&&typeof value.page_responsive==='object')for(const [page,items] of Object.entries(value.page_responsive)){if(!page.startsWith('/')||!items||typeof items!=='object')continue;const entry:Partial<Record<ProfileName,Partial<Profile>>>={};for(const {id} of profiles){const candidate=items[id];if(!candidate||typeof candidate!=='object')continue;const accepted:Partial<Profile>={};for(const field of ['layout','font'] as const){const n=candidate[field];if(typeof n==='number'&&Number.isInteger(n)&&n>=50&&n<=150)accepted[field]=n}if(Object.keys(accepted).length)entry[id]=accepted}if(Object.keys(entry).length)page_responsive[page]=entry}
-  return {font_scale:typeof value.font_scale==='number'?value.font_scale:100,theme:value.theme==='dark'?'dark':'light',responsive,developer_mode:value.developer_mode===true,page_responsive,component_style:value.component_style??{}}
+  return {font_scale:typeof value.font_scale==='number'?value.font_scale:100,theme:value.theme==='dark'?'dark':'light',responsive,developer_mode:value.developer_mode===true,page_responsive,component_style:value.component_style??{},profile_styles:value.profile_styles??{}}
 }
 function pageProfiles(preferences:Preference,page:string):Profiles{const result=defaultProfiles();for(const {id} of profiles)result[id]={...result[id],...preferences.page_responsive[page]?.[id]};return result}
-function interpolate(width:number,values:Profiles,field:keyof Profile){
-  if(width<=profiles[0].width)return values[profiles[0].id][field]
-  for(let i=1;i<profiles.length;i++){const left=profiles[i-1],right=profiles[i];if(width<=right.width){const a=values[left.id][field],b=values[right.id][field];return a+(b-a)*(width-left.width)/(right.width-left.width)}}
-  return values[profiles[profiles.length-1].id][field]
+function interpolate(width:number,value:(profile:ProfileName)=>number){
+  const {left,right,ratio}=profileInterval(width)
+  const start=value(left.id)
+  return start+(value(right.id)-start)*ratio
 }
 const AppearanceContext=createContext<AppearanceValue|null>(null)
 function useAppearance(){const value=useContext(AppearanceContext);if(!value)throw new Error('Affichage indisponible');return value}
@@ -40,19 +39,48 @@ export function AppearanceProvider({children}:{children:ReactNode}){
     const unsubscribe=shape.subscribe(({rows})=>{const row=rows.find(value=>Number(value.id)===1);if(!row)return;try{const raw=typeof row.preferences==='string'?JSON.parse(row.preferences):row.preferences;if(!raw||typeof raw!=='object')return;latest.current=normalize(raw as Partial<Preference>);electricLoaded.current=true;loaded.current=true;setPreferences(latest.current)}catch{return}})
     return ()=>{unsubscribe();controller.abort()}
   },[query.data?.persistent])
-  useEffect(()=>{
-    const apply=()=>{const width=window.innerWidth;const effective=pageProfiles(preferences,page);const layout=interpolate(width,effective,'layout')*interpolate(width,preferences.responsive,'layout')/100;const font=interpolate(width,effective,'font')*interpolate(width,preferences.responsive,'font')/100;document.documentElement.style.setProperty('--responsive-layout-scale',String(layout/100));document.documentElement.style.setProperty('--font-scale',String(preferences.font_scale*font/10000));document.documentElement.dataset.theme=preferences.theme}
-    apply();window.addEventListener('resize',apply);return ()=>window.removeEventListener('resize',apply)
-  },[preferences,page])
-  useLayoutEffect(()=>applyComponentStyle(document.documentElement,preferences.component_style),[preferences.component_style])
+  const [width,setWidth]=useState(()=>window.innerWidth)
+  useLayoutEffect(()=>{
+    const resize=()=>setWidth(window.innerWidth)
+    window.addEventListener('resize',resize)
+    resize()
+    return ()=>window.removeEventListener('resize',resize)
+  },[])
+  const componentStyle=useMemo(()=>styleAtWidth(preferences.component_style,preferences.profile_styles,width),
+    [preferences.component_style,preferences.profile_styles,width])
+  useLayoutEffect(()=>{
+    const root=document.documentElement
+    const effective=pageProfiles(preferences,page)
+    const layout=interpolate(width,id=>effective[id].layout)*interpolate(width,id=>preferences.responsive[id].layout)
+    const font=interpolate(width,id=>effective[id].font)*interpolate(width,id=>preferences.responsive[id].font)
+    const baseFont=interpolate(width,id=>preferences.profile_styles[id]?.general?.font_scale??preferences.font_scale)
+    root.style.setProperty('--responsive-layout-scale',String(layout/10000))
+    root.style.setProperty('--font-scale',String(baseFont*font/1000000))
+    root.dataset.theme=preferences.theme
+    return applyComponentStyle(root,componentStyle,width)
+  },[preferences,page,width,componentStyle])
   const componentSave=useMutation({
-    mutationFn:(change:StyleAdjustment)=>api<{component_style:ComponentStyle}>('interface/style',change),
+    mutationFn:(change:StyleAdjustment)=>api<Pick<Preference,'responsive'|'profile_styles'>>('interface/style',change),
     scope:{id:'interface-preferences'},
-    onSuccess:({component_style}, {group})=>{
-      const next={...latest.current.component_style}
-      if(component_style[group])next[group]=component_style[group]
-      else delete next[group]
-      latest.current={...latest.current,component_style:next}
+    onSuccess:(saved, {group,profile})=>{
+      if(group==='resolutions'){
+        const responsive={...latest.current.responsive,[profile]:saved.responsive[profile]??{layout:100,font:100}}
+        latest.current={...latest.current,responsive}
+      }else{
+        const profileStyles={...latest.current.profile_styles}
+        const next={...profileStyles[profile]}
+        if(group==='general'){
+          if(saved.profile_styles[profile]?.general)next.general=saved.profile_styles[profile].general
+          else delete next.general
+        }else{
+          const value=saved.profile_styles[profile]?.[group]
+          if(value)next[group]=value
+          else delete next[group]
+        }
+        if(Object.keys(next).length)profileStyles[profile]=next
+        else delete profileStyles[profile]
+        latest.current={...latest.current,profile_styles:profileStyles}
+      }
       setPreferences(latest.current)
     },
   })
@@ -62,32 +90,86 @@ export function AppearanceProvider({children}:{children:ReactNode}){
   function adjustPage(profile:ProfileName,field:keyof Profile,value:number){const pages=latest.current.page_responsive;const next={...pages,[page]:{...pages[page],[profile]:{...pages[page]?.[profile],[field]:value}}};latest.current={...latest.current,page_responsive:next};setPreferences(latest.current);if(query.data?.persistent)savePage.mutate({page,profile,field,value});else setNotice('Préférences temporaires jusqu’à l’initialisation de CAB.')}
   function update(patch:Partial<Preference>){const value={...latest.current,...patch};latest.current=value;setPreferences(value);if(query.data?.persistent)save.mutate(value);else setNotice('Préférences temporaires jusqu’à l’initialisation de CAB.')}
   const status=save.isPending?'Enregistrement des préférences…':notice
-  return <AppearanceContext.Provider value={{preferences,page,selectPage,adjustPage,pending:query.isPending||save.isPending||savePage.isPending,status,update,styleFields:query.data?.style_fields||{},saveStyle}}>{children}</AppearanceContext.Provider>
+  return <AppearanceContext.Provider value={{preferences,width,componentStyle,page,selectPage,adjustPage,pending:query.isPending||save.isPending||savePage.isPending,status,update,styleFields:query.data?.style_fields||{},saveStyle}}>{children}</AppearanceContext.Provider>
 }
-export function useComponentStyle(group:StyleAdjustment['group']){
+export function useCurrentProfile(){return nearestProfile(useAppearance().width).id}
+export function useComponentStyle(group:StyleGroup,profile:ProfileName){
   const {preferences,styleFields,saveStyle}=useAppearance()
-  return {fields:styleFields[group]||[],values:preferences.component_style[group]||{},saveStyle}
+  return {fields:styleFields[group]||[],values:{...preferences.component_style[group],...preferences.profile_styles[profile]?.[group]},
+    hasOverrides:Object.keys(preferences.profile_styles[profile]?.[group]||{}).length>0,saveStyle}
 }
-export function useTablePageSize(table:TableName){return tablePageSize(useAppearance().preferences.component_style,table)}
+export function useTablePageSize(table:TableName){return tablePageSize(useAppearance().componentStyle,table)}
 export function PageAppearance({path}:{path:string}){const {selectPage}=useAppearance();useEffect(()=>selectPage(path),[path,selectPage]);return null}
-export function FontControls(){const {preferences,pending,status,update}=useAppearance();return <div className="interface-font-controls" aria-label="Taille des polices">
-    <div className="font-controls"><button type="button" className="header-control" aria-label="Réduire la taille du texte" title="Réduire les polices" disabled={pending||preferences.font_scale<=80} onClick={()=>update({font_scale:Math.max(80,preferences.font_scale-10)})}>−</button><output aria-label="Taille du texte">{preferences.font_scale}%</output><button type="button" className="header-control" aria-label="Augmenter la taille du texte" title="Agrandir les polices" disabled={pending||preferences.font_scale>=160} onClick={()=>update({font_scale:Math.min(160,preferences.font_scale+10)})}>+</button></div><p role="status">{status}</p></div>}
-export function ResponsiveControls(){
-  const {preferences,pending,status,update}=useAppearance();const [draft,setDraft]=useState<Profiles>(preferences.responsive);const [dirty,setDirty]=useState(false)
-  useEffect(()=>{if(!dirty)setDraft(preferences.responsive)},[preferences.responsive,dirty])
-  function change(id:ProfileName,field:keyof Profile,value:string){setDirty(true);setDraft(current=>({...current,[id]:{...current[id],[field]:value===''?0:Number(value)}}))}
-  function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();if(profiles.some(({id})=>[draft[id].layout,draft[id].font].some(value=>!Number.isInteger(value)||value<50||value>150)))return;update({responsive:draft});setDirty(false)}
-  return <form className="responsive-controls" onSubmit={submit}><h2>Adaptation par résolution</h2><p>Ces pourcentages globaux multiplient les réglages propres à chaque page sans les remplacer. Entre deux résolutions, CAB adapte progressivement les valeurs.</p><div className="responsive-profile-list">{profiles.map(({id,label,width})=><fieldset className="responsive-profile" key={id}><legend>{label} · {width} px</legend><label>Interface (%)<input type="number" min="50" max="150" step="1" required value={draft[id].layout||''} onChange={event=>change(id,'layout',event.target.value)}/></label><label>Police (%)<input type="number" min="50" max="150" step="1" required value={draft[id].font||''} onChange={event=>change(id,'font',event.target.value)}/></label></fieldset>)}</div><button type="submit" disabled={pending||!dirty}>Enregistrer</button><p role="status">{status}</p></form>
+
+export function FontControls({profile}:{profile:ProfileName}){
+  const {preferences,saveStyle}=useAppearance()
+  const [pending,setPending]=useState(false)
+  const [message,setMessage]=useState('')
+  const saved=preferences.profile_styles[profile]?.general?.font_scale
+  const size=saved??preferences.font_scale
+  async function change(value?:number){
+    setPending(true)
+    try{
+      await saveStyle({profile,group:'general',...(value===undefined?{reset:true}:{values:{font_scale:value}})})
+      setMessage('Réglage enregistré.')
+    }catch{setMessage('Impossible d’enregistrer la taille du texte.')}
+    finally{setPending(false)}
+  }
+  return <div className="interface-font-controls" aria-label="Taille des polices">
+    <div className="font-controls">
+      <button type="button" className="header-control" aria-label="Réduire la taille du texte" disabled={pending||size<=80}
+        onClick={()=>void change(Math.max(80,size-10))}>−</button>
+      <output aria-label="Taille du texte">{size}%</output>
+      <button type="button" className="header-control" aria-label="Augmenter la taille du texte" disabled={pending||size>=160}
+        onClick={()=>void change(Math.min(160,size+10))}>+</button>
+    </div>
+    <button type="button" disabled={pending||saved===undefined} onClick={()=>void change()}>Rétablir la taille héritée</button>
+    <p role="status">{message}</p>
+  </div>
+}
+
+export function ResponsiveControls({profile}:{profile:ProfileName}){
+  const {preferences,saveStyle}=useAppearance()
+  const [draft,setDraft]=useState<Partial<Profile>>({})
+  const [pending,setPending]=useState(false)
+  const [message,setMessage]=useState('')
+  const current=preferences.responsive[profile]
+  const value={...current,...draft}
+  async function save(reset=false){
+    setPending(true)
+    try{
+      await saveStyle({profile,group:'resolutions',...(reset?{reset:true}:{values:draft})})
+      setDraft({})
+      setMessage('Réglages enregistrés.')
+    }catch{setMessage('Impossible d’enregistrer les réglages.')}
+    finally{setPending(false)}
+  }
+  function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void save()}
+  return <form className="responsive-controls" onSubmit={submit}>
+    <h2>Adaptation par résolution</h2>
+    <p>Ces pourcentages multiplient les références de chaque page. CAB interpole les valeurs entre deux résolutions.</p>
+    <fieldset className="responsive-profile"><legend>Facteurs globaux</legend>
+      {(['layout','font'] as const).map(field=><label key={field}>{field==='layout'?'Interface (%)':'Police (%)'}
+        <input type="number" min="50" max="150" step="1" required value={value[field]||''} disabled={pending}
+          onChange={event=>setDraft({...draft,[field]:Number(event.target.value)})}/>
+      </label>)}
+    </fieldset>
+    <div className="interface-component-actions">
+      <button type="submit" disabled={pending||!Object.keys(draft).length}>Enregistrer</button>
+      <button type="button" disabled={pending||(current.layout===100&&current.font===100&&!Object.keys(draft).length)}
+        onClick={()=>void save(true)}>Rétablir les valeurs par défaut</button>
+    </div>
+    <p role="status">{message}</p>
+  </form>
 }
 export function DeveloperModeToggle(){
   const {preferences,pending,status,update}=useAppearance()
   return <section className="developer-mode"><h2>Mode développeur</h2><label><input type="checkbox" checked={preferences.developer_mode} disabled={pending} onChange={event=>update({developer_mode:event.target.checked})}/> Activer les réglages responsives dans le bandeau</label><output aria-label="État du mode développeur">{preferences.developer_mode?'1':'0'}</output><p role="status">{status}</p></section>
 }
 export function DeveloperToolbar(){
-  const {preferences,page,pending,status,adjustPage}=useAppearance();const [width,setWidth]=useState(()=>window.innerWidth)
-  useEffect(()=>{const resize=()=>setWidth(window.innerWidth);window.addEventListener('resize',resize);return ()=>window.removeEventListener('resize',resize)},[])
+  const {preferences,page,pending,status,adjustPage,width}=useAppearance()
   if(!preferences.developer_mode)return null
-  const profile=profiles.reduce((best,item)=>Math.abs(item.width-width)<Math.abs(best.width-width)?item:best)
+  const profile=nearestProfile(width)
   const current=pageProfiles(preferences,page)[profile.id]
   function change(field:keyof Profile,delta:number){const value=Math.min(150,Math.max(50,current[field]+delta));adjustPage(profile.id,field,value)}
   return <div className="developer-toolbar" aria-label="Réglages responsives développeur"><span>Page · {profile.label} · {profile.width} px</span>{(['layout','font'] as const).map(field=><div className="developer-toolbar-control" key={field}><span>{field==='layout'?'Interface':'Police'}</span><button type="button" disabled={pending||current[field]<=50} aria-label={`Réduire ${field==='layout'?'interface':'police'} ${profile.label}`} onClick={()=>change(field,-1)}>−</button><output>{current[field]} %</output><button type="button" disabled={pending||current[field]>=150} aria-label={`Augmenter ${field==='layout'?'interface':'police'} ${profile.label}`} onClick={()=>change(field,1)}>+</button></div>)}<span className="sr-only" role="status">{status}</span></div>

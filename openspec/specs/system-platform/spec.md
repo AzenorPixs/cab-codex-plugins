@@ -2491,13 +2491,14 @@ CAB MUST construire et publier les artefacts activés dans les parcours CICD et 
 
 ### Requirement: Présentation par onglets de l’interface
 
-La page Interface MUST afficher Blocs, Colonnes, Général, Menus, Résolutions,
-Tableaux, Titres et Top barre dans cet ordre. Général MUST rester ouvert au
-chargement. La navigation MUST fonctionner au clavier et sur mobile.
+Interface MUST afficher Blocs, Colonnes, Général, Menus, Résolutions,
+Tableaux, Titres et Top barre. Général MUST ouvrir par défaut. Chaque onglet
+MUST proposer Mobile, Tablette, HD, Full HD, QHD et 4K au clavier et sur mobile.
 
 #### Scenario: Accès aux réglages historiques
-- **WHEN** un administrateur ouvre Interface
-- **THEN** Général contient la taille globale des polices et Résolutions l’adaptation par résolution.
+- **WHEN** l’administrateur choisit Full HD
+- **THEN** Général présente sa taille de texte et Résolutions ses facteurs Interface et Police
+- **AND** le choix est conservé lors d’un changement d’onglet principal.
 
 ### Requirement: Réglages de disposition et de navigation
 
@@ -2525,18 +2526,23 @@ pagination constituent les valeurs par défaut modifiables dans cet onglet.
 
 ### Requirement: Persistance synchronisée des styles de composants
 
-Les réglages MUST être validés côté serveur, écrits dans PostgreSQL par un
-administrateur et publiés via Electric. Chaque onglet MUST pouvoir enregistrer
-ses champs modifiés et rétablir ses défauts indépendamment. Le rendu MUST
-conserver les facteurs responsives globaux et les références par page.
+Les réglages MUST être validés côté serveur, conservés par profil dans
+PostgreSQL et diffusés par Electric. La réinitialisation MUST viser le
+seul groupe du profil affiché. Les valeurs historiques MUST rester héritées.
 
 #### Scenario: Enregistrement synchronisé
-- **WHEN** un administrateur enregistre un réglage valide
-- **THEN** CAB l’enregistre en PostgreSQL et actualise les fenêtres ouvertes via Electric.
+- **WHEN** l’administrateur modifie une valeur en Full HD
+- **THEN** les valeurs enregistrées pour les autres profils sont conservées
+- **AND** les fenêtres ouvertes recalculent leur rendu selon leur largeur.
+
+#### Scenario: Écran entre deux profils
+- **WHEN** la largeur se situe entre deux références
+- **THEN** CAB interpole les dimensions définies aux deux bornes et la taille de police de Général
+- **AND** les couleurs, seuils, graisses et compteurs utilisent le profil le plus proche.
 
 #### Scenario: Réinitialisation isolée
-- **WHEN** un administrateur réinitialise un onglet
-- **THEN** CAB rétablit ses valeurs de référence et conserve les autres groupes.
+- **WHEN** l’administrateur réinitialise un onglet pour la 4K
+- **THEN** CAB rétablit ses valeurs héritées en 4K et conserve les autres groupes et profils.
 
 ### Requirement: Régénération du paquet Debian CAB
 

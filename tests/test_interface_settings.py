@@ -48,3 +48,25 @@ class InterfaceStyleTests(unittest.TestCase):
             with self.subTest(group=group, values=values), self.assertRaises(ValueError):
                 style.patch_group(existing, group, values, reset)
         self.assertEqual(existing, {'columns': {'sidebar_width': 270}})
+
+    def test_profile_patches_do_not_replace_existing_defaults_or_other_profiles(self):
+        before = {'font_scale':110,'component_style':{'tables':{'head_font':21}},
+                  'profile_styles':{'uhd':{'tables':{'head_font':23}}}}
+        updated = style.patch_profile(before,'fullhd','tables',{'head_font':17},False)
+        self.assertEqual(updated['profile_styles']['uhd']['tables']['head_font'],23)
+        self.assertEqual(updated['profile_styles']['fullhd']['tables']['head_font'],17)
+        self.assertEqual(updated['component_style'],before['component_style'])
+        self.assertEqual(style.patch_profile(updated,'fullhd','tables',{},True),before)
+
+    def test_resume_responsive_patches_keep_other_resolution_and_field(self):
+        before={'responsive':{'fullhd':{'font':91,'layout':95},'uhd':{'font':110,'layout':100}}}
+        updated=style.patch_profile(before,'fullhd','resolutions',{'layout':88},False)
+        self.assertEqual(updated['responsive']['fullhd'],{'font':91,'layout':88})
+        self.assertEqual(updated['responsive']['uhd'],before['responsive']['uhd'])
+        self.assertNotIn('fullhd',style.patch_profile(updated,'fullhd','resolutions',{},True)['responsive'])
+
+    def test_general_range_and_partial_responsive_defaults(self):
+        with self.assertRaises(ValueError):
+            style.patch_profile({},'fullhd','general',{'font_scale':161},False)
+        self.assertEqual(style.patch_profile({},'fullhd','resolutions',{'font':120},False)['responsive']['fullhd'],
+                         {'font':120,'layout':100})

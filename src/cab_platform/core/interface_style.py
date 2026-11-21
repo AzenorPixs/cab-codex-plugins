@@ -114,6 +114,10 @@ FIELDS = {
 }
 
 _INDEX = {group: {field['key']: field for field in fields} for group, fields in FIELDS.items()}
+_PROFILE_FIELDS = {
+    'general': {'font_scale': number('font_scale', 'Taille du texte', 100, 80, 160, '%')},
+    'resolutions': {key: number(key, key, 100, 50, 150, '%') for key in ('layout', 'font')},
+}
 
 
 def valid_value(field, value):
@@ -134,4 +138,37 @@ def patch_group(previous, group, values, reset):
         result.pop(group, None)
     elif values:
         result[group] = {**result.get(group, {}), **values}
+    return result
+
+
+def patch_profile(preferences, profile, group, values, reset):
+    """Amande une résolution sans écraser les autres groupes ou profils."""
+    fields = _PROFILE_FIELDS.get(group)
+    if fields is not None and ((reset and values) or any(
+        key not in fields or not valid_value(fields[key], value) for key, value in values.items()
+    )):
+        raise ValueError('interface-style-invalid')
+    result = dict(preferences)
+    if group == 'resolutions':
+        responsive = dict(preferences.get('responsive') or {})
+        if reset:
+            responsive.pop(profile, None)
+        elif values:
+            responsive[profile] = {'layout':100,'font':100,**responsive.get(profile, {}),**values}
+        result['responsive'] = responsive
+        return result
+    profiles = dict(preferences.get('profile_styles') or {})
+    profile_values = dict(profiles.get(profile, {}))
+    if group == 'general':
+        if reset:
+            profile_values.pop(group, None)
+        elif values:
+            profile_values[group] = {**profile_values.get(group, {}), **values}
+    else:
+        profile_values = patch_group(profile_values, group, values, reset)
+    if profile_values:
+        profiles[profile] = profile_values
+    else:
+        profiles.pop(profile, None)
+    result['profile_styles'] = profiles
     return result

@@ -21,7 +21,7 @@ from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
-from .interface_style import FIELDS as INTERFACE_STYLE_FIELDS, patch_group
+from .interface_style import FIELDS as INTERFACE_STYLE_FIELDS, patch_group, patch_profile
 from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate,McpConnector,InterfacePreferencesProjection
 
 class LocalBearer(HttpBearer):
@@ -68,7 +68,8 @@ class PageResponsiveAdjustment(Schema):
     field:Literal['layout','font']
     value:int=Field(ge=50,le=150)
 class InterfaceStyleAdjustment(Schema):
-    group:Literal['blocs','columns','menus','tables','titles','top_bar']
+    group:Literal['blocs','columns','general','menus','resolutions','tables','titles','top_bar']
+    profile:Literal['mobile','tablet','hd','fullhd','qhd','uhd']|None=None
     values:dict[str,Any]=Field(default_factory=dict)
     reset:bool=False
 class ServiceConfiguration(Schema):
@@ -161,16 +162,16 @@ def cab_version(request):
 def interface_preferences(request):
     from cab_platform.paths import runtime_config
     initialized=bool(runtime_config().get('initialized'));value={'font_scale':100,'theme':'light'}
-    component_style={}
+    styles={'component_style':{},'profile_styles':{}}
     if initialized:
         record=Configuration.objects.filter(pk='interface').first()
         if record:
             value=InterfacePreferences.model_validate(record.value).model_dump()
-            component_style=record.value.get('component_style') or {}
+            styles={key:record.value.get(key) or {} for key in styles}
     if value.get('responsive') is None:value['responsive']=ResponsiveProfiles().model_dump()
     if value.get('developer_mode') is None:value['developer_mode']=False
     if value.get('page_responsive') is None:value['page_responsive']={}
-    return {**value,'component_style':component_style,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':initialized,'csrf_token':get_token(request)}
+    return {**value,**styles,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':initialized,'csrf_token':get_token(request)}
 
 @api.post('/interface/preferences',auth=None)
 def save_interface_preferences(request,body:InterfacePreferences):
@@ -187,6 +188,7 @@ def save_interface_preferences(request,body:InterfacePreferences):
         if value['developer_mode']!=previous:principal(request,admin=True)
         value['page_responsive']=(record.value.get('page_responsive') if record else None) or {}
         value['component_style']=(record.value.get('component_style') if record else None) or {}
+        value['profile_styles']=(record.value.get('profile_styles') if record else None) or {}
         Configuration.objects.update_or_create(pk='interface',defaults={'value':value})
         InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
     return {**value,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':True}
@@ -199,14 +201,19 @@ def save_interface_style(request,body:InterfaceStyleAdjustment):
         record=Configuration.objects.select_for_update().get(pk='interface')
         value=record.value.copy()
         try:
-            value['component_style']=patch_group(value.get('component_style'),body.group,body.values,body.reset)
+            if body.profile is not None:
+                value=patch_profile(value,body.profile,body.group,body.values,body.reset)
+            else:
+                if body.group in ('general','resolutions'):
+                    raise ValueError('interface-style-invalid')
+                value['component_style']=patch_group(value.get('component_style'),body.group,body.values,body.reset)
         except ValueError as error:
             raise commands.Refused('interface-style-invalid',400) from error
         if value!=record.value:
             record.value=value
             record.save(update_fields=['value','updated'])
             InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
-    return {'component_style':value['component_style']}
+    return {key:value.get(key) or {} for key in ('component_style','profile_styles','responsive')}
 
 @api.post('/interface/responsive/page',auth=None)
 def save_page_responsive(request,body:PageResponsiveAdjustment):

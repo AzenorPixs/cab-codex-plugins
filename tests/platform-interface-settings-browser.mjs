@@ -23,7 +23,7 @@ try{
   for(const name of index.toString().match(/\/assets\/[\w-]+\.(?:css|js)/g)){
     assets.set(name,await readFile(web+name))
   }
-  const preferences={persistent:true,font_scale:100,theme:'light',component_style:{}}
+  const preferences={persistent:true,font_scale:100,theme:'light',component_style:{},profile_styles:{},responsive:{}}
   let revision=1
   const archivedSizes=new Set()
   let completed
@@ -46,21 +46,33 @@ try{
       for(const frame of [admin,mobile]){
         await wait(()=>frame.contentDocument?.querySelector('[role="tab"][aria-selected="true"]'),'Onglets absents');
         const doc=frame.contentDocument;
-        const tabs=[...doc.querySelectorAll('[role="tab"]')];
+        const tabs=[...doc.querySelector('.interface-tabs').querySelectorAll('[role="tab"]')];
         check(JSON.stringify(tabs.map(tab=>tab.textContent))===JSON.stringify(expected),'Ordre alphabétique');
         check(doc.querySelector('[role="tab"][aria-selected="true"]').textContent==='Général','Général par défaut');
         check(doc.querySelector('#interface-panel-general .font-controls'),'Taille des polices');
+        const expectProfile=frame===mobile?'Mobile':'Full HD';
+        const profileTabs=()=>[...doc.querySelectorAll('.interface-resolution-tabs [role="tab"]')];
+        const selectedProfile=()=>profileTabs().find(tab=>tab.getAttribute('aria-selected')==='true');
+        check(selectedProfile().textContent===expectProfile,'Résolution courante sélectionnée');
+        check(profileTabs().map(tab=>tab.textContent).join(',')==='Mobile,Tablette,HD,Full HD,QHD,4K','Six résolutions');
+        const original=selectedProfile();
+        original.focus();
+        original.dispatchEvent(new frame.contentWindow.KeyboardEvent('keydown',{key:'End',bubbles:true}));
+        await wait(()=>selectedProfile().textContent==='4K','Navigation clavier des résolutions');
+        original.click();
+        await wait(()=>selectedProfile().textContent===expectProfile,'Retour à la résolution courante');
         tabs[2].focus();
         tabs[2].dispatchEvent(new frame.contentWindow.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
         await wait(()=>tabs[3].getAttribute('aria-selected')==='true','Navigation au clavier');
         check(doc.activeElement===tabs[3],'Focus de l’onglet');
         tabs[4].click();
         await wait(()=>tabs[4].getAttribute('aria-selected')==='true','Onglet Résolutions');
-        check(doc.querySelectorAll('#interface-panel-resolutions fieldset').length===6,'Six profils existants');
+        check(doc.querySelectorAll('#interface-panel-resolutions fieldset').length===1,'Seul le profil sélectionné est affiché');
         if(frame===mobile)check(tabs.every(tab=>tab.getBoundingClientRect().right<=frame.contentWindow.innerWidth),'Onglets trop larges sur mobile');
         for(const [id,index] of [['blocs',0],['columns',1],['menus',3],['tables',5],['titles',6],['top_bar',7]]){
           tabs[index].click();
           await wait(()=>doc.querySelector('#interface-panel-'+id+':not([hidden]) form'),'Formulaire '+id);
+          check(selectedProfile().textContent===expectProfile,'La résolution choisie reste sélectionnée');
         }
       }
       const doc=admin.contentDocument;
@@ -79,8 +91,14 @@ try{
       await wait(()=>!height.form.querySelector('[type="submit"]').disabled,'Édition de la hauteur');
       height.form.requestSubmit();
       await wait(()=>referee.style.getPropertyValue('--ui-top-bar-height')==='94px','Projection Electric du bandeau dans une autre fenêtre');
+      check(!mobile.contentDocument.documentElement.style.getPropertyValue('--ui-top-bar-height'),'Mobile conserve le défaut');
+      doc.querySelector('#interface-top_bar-resolution-tab-uhd').click();
+      const uhd=await wait(()=>doc.querySelector('#interface-top_bar-resolution-panel-uhd:not([hidden]) input[name="height"]'),'Réglages 4K');
+      check(uhd.value==='76','Le réglage Full HD ne modifie pas le formulaire 4K');
+      doc.querySelector('#interface-top_bar-resolution-tab-fullhd').click();
+      await wait(()=>doc.querySelector('#interface-top_bar-resolution-panel-fullhd:not([hidden]) input[name="height"]'),'Retour Full HD');
       doc.querySelector('#interface-tab-tables').click();
-      const size=field('tables','page_archives');
+      const size=await wait(()=>field('tables','page_archives'),'Pagination Full HD');
       check(size.value==='10','Pagination de référence');
       edit(size,'15');
       await wait(()=>!size.form.querySelector('[type="submit"]').disabled,'Édition de la pagination');
@@ -112,11 +130,17 @@ try{
       if(path==='/api/v1/interface/style'&&request.method==='POST'){
         let body=''
         for await(const part of request)body+=part
-        const {group,values,reset}=JSON.parse(body)
-        if(reset)delete preferences.component_style[group]
-        else preferences.component_style[group]={...preferences.component_style[group],...values}
+        const {group,profile,values,reset}=JSON.parse(body)
+        if(group==='resolutions'){
+          if(reset)delete preferences.responsive[profile]
+          else preferences.responsive[profile]={layout:100,font:100,...preferences.responsive[profile],...values}
+        }else{
+          const settings=preferences.profile_styles[profile]??={}
+          if(reset)delete settings[group]
+          else settings[group]={...settings[group],...values}
+        }
         revision++
-        return json(response,{component_style:preferences.component_style})
+        return json(response,preferences)
       }
       if(path==='/api/v1/sync/interface-preferences'){
         const offset=url.searchParams.get('offset')||'-1'
@@ -157,7 +181,7 @@ try{
   await closed
   assert.equal(result.passed,true,result.error||'Résultat Chromium absent')
   assert.deepEqual(archivedSizes,new Set([10,15]),'Modification de la pagination sans rechargement')
-  console.log('Chromium : huit onglets, clavier, mobile, sauvegarde, réinitialisation et projection Electric sur une deuxième fenêtre.')
+  console.log('Chromium : huit onglets, six résolutions, navigation au clavier et persistance isolée Full HD/4K/mobile, avec projection Electric.')
 }finally{
   server?.closeAllConnections()
   server?.close()
