@@ -40901,14 +40901,14 @@ Change : `manage-project-versioning-and-track-change-stages` · état local : `a
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 16274.833739 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 16267.108785 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de sortie | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de raisonnement | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache lus | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache écrits | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Total natif des tokens | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -40922,7 +40922,7 @@ Change : `manage-project-versioning-and-track-change-stages` · état local : `a
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:921a0f3b6aadecde27aa929021c12ed086651f736cbf6960c5019792af5ba2ca
+Provenance : change-periods:8d1dea427514a477c34c24bf0f240868d35b522eb1564dc612e1a53942731fd3
 
 ## 2. Messages et outils
 
@@ -40984,21 +40984,8 @@ Provenance : change-periods:921a0f3b6aadecde27aa929021c12ed086651f736cbf6960c501
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_cache_read | 72653312 | bounded |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_cache_write | 0 | bounded |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_input | 72852946 | bounded |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_output | 67297 | bounded |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_reasoning | 25334 | bounded |
-| SCM-CAB-VERSION-CYCLE-20261121-01 | 01a1fdc0-8760-7042-b5a5-fb6af208f37a | tokens_total | 72920243 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f4ba86d1f154fe56acff29325b56e324f1869e26cd5baf9bbaf2a5c8eda7e911", "generated_at": "2026-11-21T16:20:19.214737+00:00", "revision": "f4ba86d1f154fe56acff29325b56e324f1869e26cd5baf9bbaf2a5c8eda7e911", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c4f31cf30824955ffb28b2e925b27bae836453e92e80f003196bc2416aadc663", "generated_at": "2026-11-21T16:21:54.891249+00:00", "revision": "c4f31cf30824955ffb28b2e925b27bae836453e92e80f003196bc2416aadc663", "scope": "change"} -->
 
 
 ## Change `manage-session-git-and-cicd` — openspec/changes/archive/2026-11-18-manage-session-git-and-cicd/STATISTICS.md
@@ -74751,4 +74738,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9a120b825cc3fd9709483738512ab676e0b3f929b140a1e628d8350108adf90c", "generated_at": "2026-11-21T16:20:20.664564+00:00", "revision": "9a120b825cc3fd9709483738512ab676e0b3f929b140a1e628d8350108adf90c", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "413644db5a76010652500ad1673621a83b716973ecbcf4f72807750d419709f1", "generated_at": "2026-11-21T16:22:01.352733+00:00", "revision": "413644db5a76010652500ad1673621a83b716973ecbcf4f72807750d419709f1", "scope": "project"} -->
