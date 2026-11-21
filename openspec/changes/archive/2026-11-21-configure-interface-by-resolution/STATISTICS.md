@@ -29,7 +29,7 @@ Change : `configure-interface-by-resolution` · état local : `archived`. Les va
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:724554759b4222e5358560a16a2ad0804866a9d08e20595b0c0045895add06d3
+Provenance : change-periods:caf88188e97965f0484aa22d4fe9aeef17c0b1e4f7a940ee5ceeaa85acf8b9ea
 
 ## 2. Messages et outils
 
@@ -91,13 +91,5 @@ Provenance : change-periods:724554759b4222e5358560a16a2ad0804866a9d08e20595b0c00
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-INTERFACE-RESOLUTIONS-CICD-20261121 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b601d246800b2d66a5bfea0ec08f5ed276ab839760ae11f84d1026255c9416b5", "generated_at": "2026-11-21T09:49:15.674176+00:00", "revision": "b601d246800b2d66a5bfea0ec08f5ed276ab839760ae11f84d1026255c9416b5", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "479931fe2428ee3ac89b239ffb66e60499fd2aeab8c71c6af75f13496fb8b54e", "generated_at": "2026-11-21T09:51:31.633088+00:00", "revision": "479931fe2428ee3ac89b239ffb66e60499fd2aeab8c71c6af75f13496fb8b54e", "scope": "change"} -->
