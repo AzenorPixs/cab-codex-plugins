@@ -771,3 +771,50 @@ Quand un change est archivé alors que son ancien rapport reste en attente,
 CAB peut classer le reste `FAILED_REMAINDER_NO_CHANGE`. Le chemin retiré,
 le blob ancien attesté avant le lot et les rapports achevés sont vérifiés sous
 verrou. L’événement conserve le reçu UNKNOWN d’origine et les preuves.
+
+
+## Effets ponctuels et reprises de session
+
+Les commandes `session.effect.authorize`, `.inspect`, `.request`, `.status` et
+`.open_recovery` sont exposées par `session_effect` dans MCP. Les identités du
+projet et du RUN restent celles de la connexion. L'autorisation ponctuelle
+porte une nature précise et une référence stable ; seul le propriétaire direct,
+l'administrateur ou l'orchestrateur désigné peut la porter. Le codeur piloté
+peut exécuter une autorisation reçue ou demander la reprise d'une étape FAILED.
+
+Les natures sont `commit` (sans nouveau tag), `build:debian`, `build:docker`,
+`publish:FORGEJO`, `publish:GITHUB`, `publish:GITLAB` et `resume` pour la reprise
+après commit. Une demande sans expected_state capture le CAS côté service ;
+inspect permet de fournir explicitement ce snapshot pour un diagnostic.
+Le couple RUN/request_id désigne une seule tentative. L'intention, son dispatch,
+les progrès et le résultat sont immuables. Une intention indécise bloque les
+effets suivants ; une requête connue ne redispatche rien.
+
+La reprise après commit ouvre une édition sur une livraison PARTIAL arrêtée,
+avec commit COMPLETED, échec connu et aucun effet RUNNING/UNKNOWN. Elle conserve
+les reçus/plan originaux, rouvre uniquement son index et garde sa version. Sous
+mandat CICDF explicite, le CAS capture tous les fichiers admissibles du projet.
+Le commit supplémentaire avance la branche et déplace son tag atomiquement,
+puis les envois utilisent les références distantes observées comme leases.
+Les étapes aval nécessaires reçoivent de nouveaux reçus ; les inconnues restent
+protégées. Aucun statut SQL manuel ni appel Git client n'est un parcours de reprise.
+
+`session.version.prepare` (`session_version_prepare`) réserve et aligne les
+versions du Python, pyproject, frontend/verrou, manifestes plugins et commandes
+CAB. En piloté ces fichiers doivent être dans le cadrage de l'orchestrateur.
+L'intention d'écriture est conservée avant mutation. Qualifier les sources après
+préparation ; le prévol et la création du commit refusent un désalignement.
+
+
+### Remédiation avant reprise
+
+Un échec de build suit diagnostic → remédiation → qualification → reprise.
+`session_effect(action="diagnose", args={delivery_id})` expose des causes et
+remédiations structurées, sans sortie brute du processus. Après open_recovery,
+`action="remediate"` prépare les versions publiques nécessaires et retourne
+SOURCE_QUALIFICATION_REQUIRED. `request(kind="resume", mode="recovery")` déclenche
+aussi cette préparation automatiquement si elle manque ; si elle modifie les
+sources, il rend la main pour leur qualification, avant toute nouvelle tentative.
+Un manque de dépendance ou un défaut de source non corrigé reste explicitement
+à traiter. Le moteur n'installe pas de dépendance nouvelle ni ne rejoue UNKNOWN.
+Le suivi natif constate aussi un arrêt du worker, avec reçu conservé.

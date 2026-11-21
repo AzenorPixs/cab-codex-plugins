@@ -109,7 +109,8 @@ def event(run,kind,data):
 def no_pending(run,*,terminal_git=False):
     from .models import GitDelivery,GitSessionEffect,TerminalGitCommit
     if not terminal_git and TerminalGitCommit.objects.filter(run=run).exclude(state='COMPLETED').exists():return False
-    return not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists() and not GitSessionEffect.objects.filter(run=run,state__in=['INTENT','RUNNING','UNKNOWN']).exists() and not GitDelivery.objects.filter(run=run,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists()
+    from cab_platform.requested_effects import active_deliveries,pending
+    return not pending(run) and not Operation.objects.filter(run=run).exclude(state__in=TERMINAL).exists() and not GitSessionEffect.objects.filter(run=run,state__in=['INTENT','RUNNING','UNKNOWN']).exists() and not active_deliveries(run).exists()
 
 def resolve_native(actor,project,session_id,data,run=None):
     from cab_platform.native_sources import inspect,locate,NativeSourceError

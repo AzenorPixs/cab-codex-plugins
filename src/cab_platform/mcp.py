@@ -318,6 +318,29 @@ def autonomy_review(project_id:str,run_id:str,submission_digest:str,decision:str
 def incident_report(project_id:str,incident_id:str,category:str,summary:str,evidence:list[dict])->dict:
     """Déclare un incident avec références etSHA256, sans secret ni prompt."""
     return client().command('incident.report',locals())
+
+@public_tool()
+def session_effect(project_id:str,run_id:str,action:str,args:dict)->dict:
+    """Commit/build/publication demandés ou reprise ; inspect puis request, même reçu, sans rejeu."""
+    if action not in ('authorize','inspect','request','status','open_recovery','diagnose','remediate'):raise ValueError('session-effect-action-invalid')
+    if set(args)&{'project_id','run_id'}:raise ValueError('session-effect-identity-invalid')
+    result=client().command('session.effect.'+action,{'project_id':project_id,'run_id':run_id,**args})
+    if action=='request' and result.get('state')=='INTENT':
+        import time
+        deadline=time.monotonic()+45
+        while time.monotonic()<deadline:
+            time.sleep(.5)
+            result=client().command('session.effect.status',{'project_id':project_id,'run_id':run_id,'request_id':args['request_id']})
+            if result.get('state')!='INTENT':break
+    if action in ('request','status') and isinstance(result.get('delivery'),dict):
+        item=result['delivery']
+        return {'state':result['state'],'request_id':result['request_id'],'delivery_id':result.get('delivery_id'),'delivery_state':item.get('state'),'commit':item.get('commit'),'version':item.get('version'),'failed_steps':[s['key'] for s in item.get('steps',[]) if s['state'] in ('FAILED','UNKNOWN')]}
+    return result
+
+@public_tool()
+def session_version_prepare(project_id:str,run_id:str,request_id:str,version:str)->dict:
+    """Aligne les versions publiques CAB réservées avant qualification et commit."""
+    return client().command('session.version.prepare',locals())
 @public_tool()
 def statistics(project_id:str,run_id:str,after:int=0)->dict:
     """Mesures bornées du RUN ; totaux historiques de session exclus, manques explicites."""

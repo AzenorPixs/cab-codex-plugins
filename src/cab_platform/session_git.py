@@ -149,7 +149,9 @@ def _reserve_files_locked(actor, data, connector_id=None):
         if reopening:
             previous_paths=list(GitFileReservation.objects.filter(git_index=index,active=False).values_list('path',flat=True).distinct())
             require(previous_paths and verify_releasable_index(project,index.index_path,previous_paths)==index.origin.get('release',{}).get('index_sha256'),'session-git-release-unstaged',409)
-        require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
+        from .requested_effects import active_deliveries,pending
+        require(not pending(current),'session-effect-unresolved',409)
+        require(not active_deliveries(current,index).exists(),'session-delivery-active',409)
         prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
         current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
         relocated_paths=[];preexisting_authorizations=[];clean_initial_paths=[];direct_preexisting_paths=[]
@@ -381,7 +383,9 @@ def _stage_files_locked(actor, data, connector_id=None):
             return prior.receipt
         index = GitSessionIndex.objects.select_for_update().filter(change_id=current.change_record_id, session_id=current.coding_session_id).first()
         require(index is not None and index.state in ('PENDING', 'OPEN'), 'session-git-index-unavailable', 409)
-        require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
+        from .requested_effects import active_deliveries,pending
+        require(not pending(current),'session-effect-unresolved',409)
+        require(not active_deliveries(current,index).exists(),'session-delivery-active',409)
         require(not index.effects.filter(state__in=('INTENT', 'RUNNING', 'UNKNOWN')).exists(), 'session-git-effect-unresolved', 409)
         recorded = {entry.path for entry in GitFileReservation.objects.filter(git_index=index, active=True)}
         require(set(paths).issubset(recorded), 'session-git-reservation-required', 409)

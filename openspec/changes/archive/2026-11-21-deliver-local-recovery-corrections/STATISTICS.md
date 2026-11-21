@@ -2,7 +2,7 @@
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `deliver-local-recovery-corrections` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `deliver-local-recovery-corrections` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -59,15 +59,15 @@ Provenance : change-periods:e306ed7e6fd69bdfd1ec5e88839176a277c74943a99a7920b998
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 253 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 253 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | 2 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+| Tâches OpenSpec prouvées et terminées | 4 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -96,13 +96,13 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 941824 | bounded |
+| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 31844736 | bounded |
 | SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 948694 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 3004 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 869 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 951698 | bounded |
+| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 32033875 | bounded |
+| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 130418 | bounded |
+| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 75577 | bounded |
+| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 32164293 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "e466bcc1e7298b7d802392aa25382008031a749ab64df52c53da047634a6c119", "generated_at": "2026-11-21T22:43:47.063966+00:00", "revision": "e466bcc1e7298b7d802392aa25382008031a749ab64df52c53da047634a6c119", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "d68fc45397140635caaa352b239f0c5ff998c0c7969514c23052fe86d46662d7", "generated_at": "2026-11-21T23:45:03.469014+00:00", "revision": "d68fc45397140635caaa352b239f0c5ff998c0c7969514c23052fe86d46662d7", "scope": "change"} -->

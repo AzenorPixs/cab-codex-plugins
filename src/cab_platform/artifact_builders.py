@@ -142,6 +142,11 @@ def verify_cab_debian(fd, version):
 def prepare_cab_runtime(project, root, root_fd, scratch, version, mark):
     """Préparer en espace privé avec l’identité POSIX du projet."""
     require(project.owner_uid>0,'artifact-debian-build-owner-invalid',409)
+    from .package_versions import inspect as version_inspect
+    versions=version_inspect(root,version)
+    if versions['mismatches']:
+        mark({'diagnostic':{'phase':'payload-preparation','code':'package-source-version-not-aligned','paths':versions['mismatches'],'remediation':'prepare-reserved-package-versions'}})
+        raise Refused('artifact-debian-source-version-not-aligned',409)
     account=pwd.getpwuid(project.owner_uid)
     group=project.owner_gid if project.owner_gid is not None else account.pw_gid
     with source(root_fd,['packaging','prepare.py']) as fd:
@@ -155,7 +160,7 @@ def prepare_cab_runtime(project, root, root_fd, scratch, version, mark):
     code=execute([sys.executable,'-B',str(root/'packaging/prepare.py'),'--output',str(generated),
                   '--dependencies',str(root/'output/package'),'--node',node,'--expected-version',version],mark,
                  options={'user':project.owner_uid,'group':group,'extra_groups':os.getgrouplist(account.pw_name,group)},
-                 env={**ENV,'HOME':str(generated)})
+                 env={**ENV,'HOME':str(generated)},diagnostic_phase='payload-preparation')
     require(code==0,'artifact-debian-payload-preparation-failed',409)
     return generated
 
@@ -224,7 +229,20 @@ def write_package_tree(root_fd, tree, data, version, *, prepared_fd=None):
         (control / 'conffiles').chmod(0o644)
 
 
-def execute(argv, mark, *, options=None, env=None):
+def execute(argv, mark, *, options=None, env=None,diagnostic_phase=None):
+    if diagnostic_phase:
+        import tempfile
+        with tempfile.TemporaryFile() as output:
+            process=subprocess.Popen(argv,env=env or ENV,stdin=subprocess.DEVNULL,stdout=output,stderr=output,start_new_session=True,umask=0o022,**(options or {}))
+            from .connector_process import identity
+            mark({'child':identity(process.pid)})
+            code=process.wait(timeout=3600)
+            if code:
+                output.seek(0,2);size=output.tell();output.seek(max(0,size-65536));tail=output.read()
+                known={'package-source-version-mismatch':'prepare-reserved-package-versions','package-payload-version-invalid':'prepare-reserved-package-versions','pinned-electric-image-extraction-required':'restore-pinned-electric-dependency','locked-python-vendor-required':'restore-locked-python-vendor','frontend-build-required':'qualify-frontend-build','source-symlink-refused':'inspect-public-source-links'}
+                reason=next((name for name in known if name.encode() in tail),'payload-source-build-failed')
+                mark({'diagnostic':{'phase':diagnostic_phase,'exit_code':code,'code':reason,'remediation':known.get(reason,'qualify-corrected-sources'),'typescript_codes':sorted(set(s.decode() for s in re.findall(rb'\bTS[0-9]{3,6}\b',tail)))}})
+            return code
     process = subprocess.Popen(argv, env=env or ENV, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                start_new_session=True, umask=0o022, **(options or {}))

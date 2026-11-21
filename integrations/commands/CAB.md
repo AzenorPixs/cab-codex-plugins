@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CAB
-version: 3.9.3
+version: 3.9.4
 ---
 
 Répondre en français. Charger le skill CAB distribué avec le plugin du même nom.
@@ -12,3 +12,9 @@ Avant admission, consulter la référence finalization.md du skill : champs stri
 critères exacts, IDs retournés par CAB et validation pure du contrat. Un refus
 explicite se corrige ; UNKNOWN ne se rejoue pas. La publication native utilise
 un producteur autorisé, pas une commande CI/CD dans l'atelier isolé.
+
+Préparer les versions publiques avec `session_version_prepare` avant les tests
+et le commit. Pour commits, constructions ou publications ponctuels/autorisés
+ou de reprise, utiliser `session_effect` ; CAB porte effets, CAS, reçus et suivi.
+Le LLM n'exécute pas Git. Une livraison partielle garde son identité/version ;
+consulter le parcours open_recovery/resume du skill, sans nouveau start.

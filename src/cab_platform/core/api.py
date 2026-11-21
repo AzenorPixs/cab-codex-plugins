@@ -1122,6 +1122,15 @@ def command(request,body:Command):
     if name in ('session.git.inspect_preexisting','session.git.authorize_preexisting'):
         from cab_platform.preexisting_git import inspect_preexisting,authorize_preexisting
         return (inspect_preexisting if name=='session.git.inspect_preexisting' else authorize_preexisting)(actor,data)
+    if name=='session.version.prepare':
+        from cab_platform.package_versions import prepare
+        return prepare(actor,data)
+    if name.startswith('session.effect.'):
+        from cab_platform import requested_effects as effects
+        actions={'authorize':effects.authorize,'inspect':effects.inspect,'request':effects.request,'status':effects.status,'open_recovery':effects.open_recovery,'diagnose':effects.diagnose,'remediate':effects.remediate}
+        action=name.removeprefix('session.effect.')
+        commands.require(action in actions,'session-effect-action-invalid',400)
+        return actions[action](actor,data)
     if name=='session.git.adopt':
         from cab_platform.session_git import adopt_files
         return adopt_files(actor,data)

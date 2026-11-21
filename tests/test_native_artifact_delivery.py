@@ -46,7 +46,7 @@ class NativeArtifactDeliveryTests(unittest.TestCase):
                 p=SimpleNamespace(pk='project')
                 target={'name':'FORGEJO','remote':'head','signature':'sig','branch':'main'}
                 plan={'scope':scope,'forges':[target],'docker':True,'debian':True,'defer_releases':False}
-                row=SimpleNamespace(project=p,run=None,version='2.0.0',plan=plan)
+                row=SimpleNamespace(project=p,run=None,version='2.0.0',plan=plan,steps=SimpleNamespace(get=lambda **kwargs:SimpleNamespace(state='PENDING')))
                 trace=[]
                 def build(_p,kind,_version,mark):
                     trace.append(('build',kind));mark({})

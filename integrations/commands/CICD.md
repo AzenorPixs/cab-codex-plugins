@@ -1,6 +1,6 @@
 ---
 description: Déclencher et suivre la CI/CD du projet par CAB
-version: 3.9.3
+version: 3.9.4
 ---
 
 Répondre en français. Charger le skill `cicd` distribué avec le plugin `CICD`.
@@ -14,3 +14,9 @@ La livraison passe par `session_delivery_start`, puis `session_delivery_status`
 sur la même version. CAB réalise Git sur le seul change et construit puis publie ses artefacts ; conserver les reçus et
 ne pas rejouer un effet incertain. L’absence de ces outils impose de signaler
 le parcours indisponible, sans exécution Git ou CI/CD DIU de substitution.
+
+Préparer les versions publiques avec `session_version_prepare` avant les tests
+et le commit. Pour commits, constructions ou publications ponctuels/autorisés
+ou de reprise, utiliser `session_effect` ; CAB porte effets, CAS, reçus et suivi.
+Le LLM n'exécute pas Git. Une livraison partielle garde son identité/version ;
+consulter le parcours open_recovery/resume du skill, sans nouveau start.
