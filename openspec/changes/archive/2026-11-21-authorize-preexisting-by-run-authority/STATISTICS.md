@@ -58,8 +58,8 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 48 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 48 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 72 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 72 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,4 +91,4 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "351f43512d03ba06afda824ebafd3ce2fd9c16a30b490b617d989e09f9f64ca0", "generated_at": "2026-11-21T12:32:25.040944+00:00", "revision": "351f43512d03ba06afda824ebafd3ce2fd9c16a30b490b617d989e09f9f64ca0", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "69157b801425156691ddabb3d7e5b2eb26df9e7aac20dfb7314fd777e1596b0c", "generated_at": "2026-11-21T16:54:48.315487+00:00", "revision": "69157b801425156691ddabb3d7e5b2eb26df9e7aac20dfb7314fd777e1596b0c", "scope": "change"} -->

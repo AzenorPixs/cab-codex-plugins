@@ -1659,3 +1659,5 @@ Livraison et activation sont vérifiées séparément, sans preuve déduite du c
 - `manage-project-versioning-and-track-change-stages` — change archivé, code non attribué. Politique de version de 1 à 7, adaptation Git locale, accusé Version, cycle à douze étapes et mesures par change. Qualification ciblée effectuée. La publication, l’activation et la vérification native sont suivies par les reçus CAB. [Proposition](openspec/changes/archive/2026-11-21-manage-project-versioning-and-track-change-stages/proposal.md).
 
 - `recover-cicdf-statistics-index-conflict` — archivé, code non attribué. Reprise du commit CICDF sur le même reçu lorsque seuls les rapports CAB attestés ont modifié l’index partagé. [Proposition](openspec/changes/archive/2026-11-21-recover-cicdf-statistics-index-conflict/proposal.md).
+
+- `recover-retired-statistics-publication` — archivé, code non attribué. Réconciliation d’un rapport retiré sur preuves avec conservation des rapports acquis. [Proposition](openspec/changes/archive/2026-11-21-recover-retired-statistics-publication/proposal.md).

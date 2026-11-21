@@ -94,6 +94,54 @@ class StoppedPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(c.Refused,'statistics-effect-unknown'):s.recover_lock(self.lock)
         self.job.refresh_from_db();self.assertEqual(self.job.state,'UNKNOWN')
 
+    def retired_fixture(self):
+        from datetime import timedelta
+        self.path.parent.mkdir(parents=True,exist_ok=True)
+        self.path.write_text('ancien rapport')
+        sibling='openspec/changes/other/STATISTICS.md'
+        current=self.root/sibling
+        current.parent.mkdir(parents=True)
+        current.write_text('rapport achevé')
+        self.git.git('add','--',self.relative,sibling)
+        self.git.git('commit','-m','fixture reports')
+        previous=hashlib.sha256(self.path.read_bytes()).hexdigest()
+        witness=StatisticsJob.objects.create(project=self.project,pk=uuid.uuid4().hex,request_id='prior-witness',action='sync',state='COMPLETED',owner_pid=0,owner_start='',result={'indexed_documents':{self.relative:{'state':'COMPLETED','sha256':previous}}})
+        StatisticsJob.objects.filter(pk=witness.pk).update(updated=self.job.created-timedelta(seconds=1))
+        archive=self.root/'openspec/changes/archive/2026-01-01-fixture'
+        archive.parent.mkdir()
+        self.path.parent.rename(archive)
+        (archive/'proposal.md').write_text('Archive existante')
+        completed={'state':'COMPLETED','sha256':hashlib.sha256(current.read_bytes()).hexdigest()}
+        self.job.result={**self.job.result,'indexed_documents':{**self.job.result['indexed_documents'],sibling:completed}}
+        self.job.save()
+        self.lock.refresh_from_db()
+        return witness,current
+
+    def test_retired_pending_report_preserves_completed_sibling_and_index(self):
+        self.retired_fixture()
+        original={'state':self.job.state,'expected':self.job.expected,'result':self.job.result}
+        before=(self.root/'.git/index').read_bytes()
+        s.recover_lock(self.lock)
+        self.job.refresh_from_db();self.lock.refresh_from_db()
+        event=Event.objects.get(project=self.project,kind='statistics-stopped-before-remaining-publication')
+        self.assertEqual(event.data['original_receipt'],original)
+        self.assertEqual(self.job.result['recovery']['classification'],'FAILED_REMAINDER_NO_CHANGE')
+        self.assertEqual(self.job.result['indexed_documents'],original['result']['indexed_documents'])
+        self.assertEqual((self.root/'.git/index').read_bytes(),before)
+        self.assertFalse(self.path.exists())
+        self.assertIsNone(self.lock.owner_id)
+
+    def test_retired_report_requires_earlier_receipt_and_unchanged_siblings(self):
+        witness,current=self.retired_fixture()
+        StatisticsJob.objects.filter(pk=witness.pk).update(state='FAILED')
+        with self.assertRaisesRegex(c.Refused,'statistics-effect-unknown'):s.recover_lock(self.lock)
+        StatisticsJob.objects.filter(pk=witness.pk).update(state='COMPLETED')
+        current.write_text('rapport divergent')
+        with self.assertRaisesRegex(c.Refused,'statistics-effect-unknown'):s.recover_lock(self.lock)
+        self.job.refresh_from_db();self.lock.refresh_from_db()
+        self.assertEqual(self.job.state,'UNKNOWN')
+        self.assertEqual(self.lock.owner_id,self.job.pk)
+
 
 class PublicPayloadTests(unittest.TestCase):
     def setUp(self):

@@ -1,8 +1,8 @@
-# Statistiques du change — release-exact-git-reservation
+# Statistiques du change — allow-web-admin-git-with-agent-reservations
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `release-exact-git-reservation` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `allow-web-admin-git-with-agent-reservations` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -58,15 +58,15 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+| Tâches OpenSpec prouvées et terminées | 2 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -91,4 +91,4 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b07798ef5d10ad5600c9cc9f85a2fe63a6f6860cfb08bba48548b3086be7bf52", "generated_at": "2026-11-21T15:02:45.399642+00:00", "revision": "b07798ef5d10ad5600c9cc9f85a2fe63a6f6860cfb08bba48548b3086be7bf52", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "2968c5527417b8140493c958e346da558a57891a51b3160021662d791d37db83", "generated_at": "2026-11-21T16:54:09.049435+00:00", "revision": "2968c5527417b8140493c958e346da558a57891a51b3160021662d791d37db83", "scope": "change"} -->

@@ -5,6 +5,33 @@ from cab_platform.host_completion import revised_policy,require_prequalification
 from cab_platform.core.commands import Refused
 
 class HostCompletionPolicyTests(unittest.TestCase):
+    def test_existing_snapshot_is_preserved_only_when_index_and_refs_match(self):
+        import test_git_commit_metadata as fixtures
+        from cab_platform.host_completion import verify_unpublished_stage
+        fixture=fixtures.MetadataTests('test_dates_et_signatures_protegees')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        tree=fixture.git('write-tree').strip()
+        keep='refs/cab/recovery-test'
+        base='refs/cab/recovery-base'
+        fixture.git('update-ref',keep,tree)
+        fixture.git('update-ref',base,fixture.head)
+        path=str(fixture.root/'.git/index')
+        index=types.SimpleNamespace(index_path=path,base_head=fixture.head,keep_ref=keep,keep_oid=tree)
+        receipt={'phase':'prepared','index_path':path,'base_oid':fixture.head,
+                 'keep_ref':keep,'base_ref':base,'previous_keep_oid':tree}
+        before=__import__('pathlib').Path(path).read_bytes()
+        result=verify_unpublished_stage(fixture.project,index,receipt)
+        self.assertEqual(result['retained_snapshot'],tree)
+        self.assertEqual(__import__('pathlib').Path(path).read_bytes(),before)
+        fixture.git('update-ref',base,fixture.first)
+        with self.assertRaises(Refused):
+            verify_unpublished_stage(fixture.project,index,receipt)
+        fixture.git('update-ref',base,fixture.head)
+        fixture.git('read-tree',fixture.head)
+        with self.assertRaises(Refused):
+            verify_unpublished_stage(fixture.project,index,receipt)
+
     def test_revision_avant_preuve_preserve_commandes_producteurs_et_revue(self):
         old=['25 archives par page','Portée autorisée'];new=['10 archives par page','Portée autorisée']
         policy={'nature':'development','checks':[{'id':'test','argv':['/usr/bin/true'],'criteria':old,'executor':'local'}],'requirements':[{'id':'proof','kind':'verification','producer':'producer','criteria':old}],'review_required':True}

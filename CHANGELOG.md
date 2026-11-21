@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.9.3
+
+- Réconciliation sur preuves du dernier rapport rendu obsolète par un archivage, avec conservation des publications déjà achevées et du reçu UNKNOWN.
+
 ## 3.9.1
 
 - Reprise sur le même reçu CICDF après un conflit d’index partagé dû uniquement à des rapports CAB attestés. Le plan et l’arbre de code restent figés.

@@ -766,3 +766,8 @@ le code de travail, la version et les empreintes d’index avant le commit.
 Une entrée de code modifiée dans l’index partagé ou une preuve manquante
 empêche l’admission. Le reçu original et les étapes version et projection
 sont conservés.
+
+Quand un change est archivé alors que son ancien rapport reste en attente,
+CAB peut classer le reste `FAILED_REMAINDER_NO_CHANGE`. Le chemin retiré,
+le blob ancien attesté avant le lot et les rapports achevés sont vérifiés sous
+verrou. L’événement conserve le reçu UNKNOWN d’origine et les preuves.

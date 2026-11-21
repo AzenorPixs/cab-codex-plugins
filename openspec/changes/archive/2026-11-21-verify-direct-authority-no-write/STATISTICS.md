@@ -1,8 +1,8 @@
-# Statistiques du change — reconcile-native-device-and-reserve-framed-files
+# Statistiques du change — verify-direct-authority-no-write
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `reconcile-native-device-and-reserve-framed-files` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `verify-direct-authority-no-write` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -91,4 +91,4 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ee32f4e74f34809e5caa22d6af7833f407afb5ef256055893e698a3c4eed36d0", "generated_at": "2026-11-21T14:41:02.695056+00:00", "revision": "ee32f4e74f34809e5caa22d6af7833f407afb5ef256055893e698a3c4eed36d0", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6f09607d45d35684dce5a7e857591646724ed5ea024a3ae3efa78b0822700d1b", "generated_at": "2026-11-21T16:39:51.255642+00:00", "revision": "6f09607d45d35684dce5a7e857591646724ed5ea024a3ae3efa78b0822700d1b", "scope": "change"} -->

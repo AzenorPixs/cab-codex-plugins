@@ -123,6 +123,107 @@ def before_publication_evidence(job):
     return {'classification':'FAILED_NO_CHANGE','scope_digest':digest,'before':paths,'writer_stopped':True,'owner_stopped':not owner_alive,'owner_process_stopped':not owner_alive,'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False}
 
 
+def retired_pending_publication_evidence(job):
+    """Prouve que le dernier rapport, devenu obsolète, n'a pas été publié."""
+    from datetime import date
+    import hashlib
+    from cab_platform.git_commit_remove import context, run
+    from cab_platform.session_git import shared_scope_digest
+
+    if job.state!='UNKNOWN' or job.action!='sync' or job.result.get('error')!='statistics-publication-unconfirmed':
+        return None
+    project=job.project
+    root=Path(project.root)
+    changes=root/'openspec/changes'
+    receipts=job.result.get('indexed_documents',{})
+    candidates=[name for name,item in receipts.items() if item.get('state')=='PENDING']
+    if len(candidates)!=1:
+        return None
+    retired=candidates[0]
+    path=commands.safe_path(root,retired,exists=False)
+    change=path.parent.name
+    if path.name!='STATISTICS.md' or path.parent.parent!=changes or change=='archive' or not commands.ID.fullmatch(change):
+        return None
+    archives=[]
+    for candidate in (changes/'archive').glob('????-??-??-'+change):
+        try:date.fromisoformat(candidate.name[:10])
+        except ValueError:continue
+        archives.append(candidate)
+    if len(archives)!=1:
+        return None
+    directory=commands.safe_path(root,str(archives[0].relative_to(root)),exists=False)
+    if not directory.is_dir() or not commands.safe_path(root,str((directory/'proposal.md').relative_to(root)),exists=False).is_file():
+        return None
+    sibling=str(directory.relative_to(root))
+    expectation=job.expected.get(str(path),{})
+    pending=receipts[retired]
+    if 'before' not in expectation or expectation['before'] is not None or not pending.get('sha256') or pending['sha256']!=expectation.get('after'):
+        return None
+    completed={name:item for name,item in receipts.items() if name!=retired}
+    if not completed or any(item.get('state')!='COMPLETED' or not item.get('sha256') for item in completed.values()):
+        return None
+    for absolute,expected in job.expected.items():
+        if absolute==str(path):
+            continue
+        target=Path(absolute)
+        if not target.is_relative_to(root) or completed.get(str(target.relative_to(root)),{}).get('sha256')!=expected.get('after'):
+            return None
+    global_index=job.result.get('global_index')
+    if global_index and global_index.get('state') not in ('COMPLETED','SKIPPED'):
+        return None
+    if path.parent.exists() or path.parent.is_symlink():
+        return None
+    child=job.result.get('child',{})
+    owner_alive=alive(job.owner_pid,job.owner_start)
+    if (owner_alive and (job.owner_pid!=os.getpid() or job.pk in ACTIVE)) or alive(child.get('pid',0),child.get('start','')):
+        return None
+
+    options,env=context(project)
+    def git(*args):
+        return run(project,options,env,*args)
+    head=git('rev-parse','--verify','HEAD')
+    index_lock=git('rev-parse','--path-format=absolute','--git-path','index.lock')
+    if head.returncode!=0 or index_lock.returncode!=0:
+        return None
+    lockpath=Path(index_lock.stdout.decode().strip())
+    if lockpath.exists() or lockpath.is_symlink():
+        return None
+    paths=sorted(receipts)
+    digest=shared_scope_digest(project,options,env,paths)
+    cached=git('show',':'+retired)
+    prior=git('show','HEAD:'+retired)
+    if cached.returncode!=0 or prior.returncode!=0 or cached.stdout!=prior.stdout:
+        return None
+    if git('diff','--cached','--quiet','HEAD','--',retired).returncode!=0:
+        return None
+    previous_sha=hashlib.sha256(cached.stdout).hexdigest()
+    if previous_sha==pending['sha256']:
+        return None
+    witness=StatisticsJob.objects.filter(
+        project=project,
+        state='COMPLETED',updated__lt=job.created,
+        result__indexed_documents__contains={retired:{'sha256':previous_sha,'state':'COMPLETED'}},
+    ).order_by('-updated','pk').first()
+    if witness is None:
+        return None
+    for relative,item in completed.items():
+        target=commands.safe_path(root,relative,exists=False)
+        if file_hash(project,target)!=item['sha256'] or not document_index_matches(project,relative,item['sha256']):
+            return None
+    if (path.parent.exists() or path.parent.is_symlink() or lockpath.exists() or lockpath.is_symlink()
+        or git('rev-parse','--verify','HEAD').stdout!=head.stdout
+        or shared_scope_digest(project,options,env,paths)!=digest):
+        return None
+    return {
+        'classification':'FAILED_REMAINDER_NO_CHANGE','scope_digest':digest,
+        'retired_path':retired,'archive':sibling,'file_before_absent':True,
+        'head':head.stdout.decode().strip(),'index_before_sha256':previous_sha,
+        'prior_index_receipt':witness.request_id,'completed_documents':completed,
+        'writer_stopped':True,'owner_process_stopped':not owner_alive,
+        'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False,
+    }
+
+
 def recover_lock(lock):
     job=lock.owner
     if not job:return
@@ -132,12 +233,13 @@ def recover_lock(lock):
     if alive(child.get('pid',0),child.get('start','')):raise commands.Refused('statistics-effect-unknown')
     commands.require(connection.in_atomic_block,'statistics-recovery-transaction-required')
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s,%s)',[7348501,7348502])
-    before=before_publication_evidence(job)
+    before=before_publication_evidence(job) or retired_pending_publication_evidence(job)
     if before:
         from .models import Event
         original={'state':job.state,'expected':job.expected,'result':job.result}
         original_digest=commands.digest(original)
-        Event.objects.create(project=job.project,kind='statistics-stopped-before-publication',data={'job_id':job.pk,'request_id':job.request_id,'original_receipt':original,'original_receipt_digest':original_digest,'evidence':before})
+        kind='statistics-stopped-before-remaining-publication' if before['classification']=='FAILED_REMAINDER_NO_CHANGE' else 'statistics-stopped-before-publication'
+        Event.objects.create(project=job.project,kind=kind,data={'job_id':job.pk,'request_id':job.request_id,'original_receipt':original,'original_receipt_digest':original_digest,'evidence':before})
         job.state='FAILED';job.result={**job.result,'recovery':{**before,'original_receipt_digest':original_digest}};job.save(update_fields=['state','result','updated'])
         lock.owner=None;lock.save(update_fields=['owner']);return
     for path,expected in job.expected.items():

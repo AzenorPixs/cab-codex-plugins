@@ -68,16 +68,109 @@ def reframe_prequalification(actor,data):
 
 @transaction.atomic
 def declare_host_completion(actor,data):
-    run,plan,key,fingerprint,previous=admission(actor,data,'host-completion-authorized',set())
+    if 'prepare_local_release' in data:
+        return prepare_local_release(actor,data)
+    withdrawal = 'withdraw_delivery' in data
+    run,plan,key,fingerprint,previous=admission(
+        actor,data,'host-completion-authorized',{'withdraw_delivery'} if withdrawal else set(),
+    )
     if previous:return previous
     index=GitSessionIndex.objects.select_for_update().filter(change_id=run.change_record_id,session_id=run.coding_session_id).first()
+    previous_policy = None
+    if withdrawal:
+        c.require(
+            data['withdraw_delivery'] is True and run.mode == 'direct'
+            and plan.policy.get('nature') == 'delivery' and not plan.policy.get('review_required'),
+            'host-completion-withdrawal-invalid', 409,
+        )
+        c.require(
+            not GitDelivery.objects.filter(run=run).exists()
+            and not TerminalGitCommit.objects.filter(run=run).exists()
+            and not run.finalization_evidence.filter(payload__kind__in=['publication', 'installation']).exists(),
+            'host-completion-delivery-protected', 409,
+        )
+        previous_policy = {'policy': plan.policy, 'digest': plan.digest,
+                           'criteria': run.mandate['criteria'], 'framing_digest': run.mandate['framing_digest']}
+        requirements = [rule for rule in plan.policy['requirements'] if rule['kind'] != 'publication']
+        covered = {criterion for rule in plan.policy['checks'] + requirements for criterion in rule['criteria']}
+        criteria = [criterion for criterion in run.mandate['criteria'] if criterion in covered]
+        candidate = {**plan.policy, 'nature': 'development', 'requirements': requirements}
+        try:
+            plan.policy = validate(candidate, criteria, run.mode)
+        except ContractError as error:
+            raise c.Refused(str(error), 400) from error
+        plan.digest = c.digest(plan.policy)
+        run.mandate = {**run.mandate, 'criteria': criteria, 'finalization': plan.policy}
+        run.mandate['framing_digest'] = c.digest({
+            k: v for k, v in run.mandate.items()
+            if k not in ('framing_digest', 'native_source', 'native_frozen_at', 'native_source_home', 'native_source_history')
+        })
+        plan.save(update_fields=['policy', 'digest', 'updated'])
+        run.save(update_fields=['mandate', 'updated'])
     require_host_policy(run,plan,index)
     c.require(not GitFileReservation.objects.filter(git_index=index,active=True).exists() and not GitDelivery.objects.filter(run=run).exists() and not TerminalGitCommit.objects.filter(run=run).exists(),'host-completion-delivery-protected',409)
     marker={'mode':'host-validated-without-delivery','authority':actor.pk,'authorization':data['authorization'],'request_id':key,'delivered':False}
     previous_terminal=run.configuration.get('terminal_git',{})
     run.configuration={**run.configuration,'terminal_git':{'required':False},'host_completion':marker};run.save(update_fields=['configuration','updated'])
     receipt={'configured':True,'delivery_required':False,'proofs_and_archive_required':True,'index_preserved':True}
-    c.event(run,'host-completion-authorized',{'request_id':key,'fingerprint':fingerprint,'previous_terminal_git':previous_terminal,'authority':actor.pk,'authorization':data['authorization'],'receipt':receipt})
+    detail = {}
+    if previous_policy is not None:
+        receipt = {**receipt, 'delivery_withdrawn': True, 'policy_digest': plan.digest,
+                   'framing_digest': run.mandate['framing_digest']}
+        detail = {'previous_delivery_policy': previous_policy}
+    c.event(run,'host-completion-authorized',{'request_id':key,'fingerprint':fingerprint,'previous_terminal_git':previous_terminal,'authority':actor.pk,'authorization':data['authorization'],'receipt':receipt,**detail})
+    return receipt
+
+
+def prepare_local_release(actor,data):
+    """Reprend une clôture locale interrompue avant le moindre effet de clôture Git."""
+    from django.db import connection
+    from .core.models import Lease, StatisticsJob
+
+    fields = {'project_id','run_id','request_id','expected_policy_digest','expected_framing_digest',
+              'authorization','prepare_local_release'}
+    c.require(actor.active and actor.role == 'admin','administrator-required',403)
+    c.require(set(data) == fields and data['prepare_local_release'] is True
+              and isinstance(data['authorization'],str) and 20 <= len(data['authorization']) <= 4000,
+              'host-completion-fields-invalid',400)
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_xact_lock(%s,%s)',[7348501,7348502])
+    run = c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    key = c.identifier(data['request_id'])
+    fingerprint = c.digest(data)
+    previous = Event.objects.filter(run=run,kind='host-completion-prepared',data__request_id=key).first()
+    if previous:
+        c.require(previous.data['fingerprint'] == fingerprint,'host-completion-request-conflict',409)
+        return previous.data['receipt']
+    plan = FinalizationPlan.objects.select_for_update().get(run=run)
+    c.require(plan.digest == data['expected_policy_digest'] == c.digest(plan.policy)
+              and run.mandate.get('framing_digest') == data['expected_framing_digest'],
+              'finalization-revision-stale',409)
+    c.require(run.mode == 'direct' and run.state == 'FINALIZING' and run.suspension == 'PAUSE'
+              and plan.phase == 'FINALIZING' and plan.missing == ['statistics-project-busy']
+              and plan.policy.get('nature') == 'development' and not plan.policy.get('review_required')
+              and not plan.receipt and not run.review and not run.mandate.get('native_frozen_at'),
+              'host-completion-prepare-protected',409)
+    c.require(c.no_pending(run) and not GitDelivery.objects.filter(run=run).exists()
+              and not TerminalGitCommit.objects.filter(run=run).exists()
+              and not Lease.objects.filter(run=run,state='HELD').exists()
+              and not StatisticsJob.objects.filter(project=run.project,
+                  request_id__startswith=f'AUTO-FINALIZE-{run.pk}-').exists()
+              and not any(rule.get('kind') in ('publication','installation') for rule in plan.policy['requirements']),
+              'host-completion-delivery-protected',409)
+    old = {'state':run.state,'suspension':run.suspension,'configuration':run.configuration,
+           'phase':plan.phase,'missing':plan.missing}
+    marker = {'mode':'host-validated-without-delivery','authority':actor.pk,
+              'authorization':data['authorization'],'request_id':key,'delivered':False}
+    run.configuration = {**run.configuration,'terminal_git':{'required':False},'host_completion':marker}
+    run.state = 'FINALIZATION_PENDING'
+    run.save(update_fields=['configuration','state','updated'])
+    plan.phase = 'WAITING'
+    plan.missing = ['session-git-reservations-active']
+    plan.save(update_fields=['phase','missing','updated'])
+    receipt = {'prepared':True,'state':run.state,'suspension':run.suspension,'delivered':False}
+    c.event(run,'host-completion-prepared',{'request_id':key,'fingerprint':fingerprint,
+            'previous':old,'authorization':data['authorization'],'authority':actor.pk,'receipt':receipt})
     return receipt
 
 
@@ -85,9 +178,24 @@ def verify_unpublished_stage(project,index,receipt):
     from pathlib import Path
     from .git_commit_remove import context,run as git_run
     from .session_delivery import _index_digest
-    c.require(receipt.get('phase')=='prepared' and not receipt.get('previous_keep_oid') and not index.keep_ref and not index.keep_oid,'stage-cancel-snapshot-present',409)
+    c.require(receipt.get('phase')=='prepared','stage-cancel-snapshot-present',409)
     c.require(receipt.get('index_path')==index.index_path and receipt.get('base_oid')==index.base_head and not Path(index.index_path+'.lock').exists(),'stage-cancel-index-changed',409)
     digest=_index_digest(index.index_path,project.owner_uid);options,env=context(project)
+    previous=receipt.get('previous_keep_oid')
+    if previous:
+        c.require(index.keep_oid==previous and index.keep_ref==receipt.get('keep_ref'),
+                  'stage-cancel-snapshot-changed',409)
+        for field,expected in (('keep_ref',previous),('base_ref',index.base_head)):
+            result=git_run(project,options,env,'rev-parse','--verify','--quiet',receipt[field])
+            c.require(result.returncode==0 and result.stdout.decode().strip()==expected,
+                      'stage-cancel-reference-changed',409)
+        own={**env,'GIT_INDEX_FILE':index.index_path}
+        same=git_run(project,options,own,'diff','--cached','--quiet','--no-ext-diff',previous,'--')
+        c.require(same.returncode==0,'stage-cancel-index-changed',409)
+        c.require(_index_digest(index.index_path,project.owner_uid)==digest,'stage-cancel-index-changed',409)
+        return {'index_sha256':digest,'base_oid':index.base_head,'retained_snapshot':previous,
+                'index_preserved':True,'no_new_snapshot':True}
+    c.require(not index.keep_ref and not index.keep_oid,'stage-cancel-snapshot-present',409)
     for field in ('keep_ref','base_ref'):
         result=git_run(project,options,env,'rev-parse','--verify','--quiet',receipt[field])
         c.require(result.returncode==1,'stage-cancel-reference-present',409)
@@ -125,11 +233,14 @@ def cancel_unpublished_stage(actor,data):
             options,env=context(run.project)
             c.require(index.index_path==_index_path(run.project,index,options,env),'stage-cancel-index-changed',409)
             proof=verify_unpublished_stage(run.project,index,effect.receipt)
-            backup=index.index_path+'.aborted-'+str(effect.pk)
-            c.require(not os.path.lexists(backup),'stage-cancel-backup-exists',409)
-            os.rename(index.index_path,backup)
+            backup=None
+            if not proof.get('retained_snapshot'):
+                backup=index.index_path+'.aborted-'+str(effect.pk)
+                c.require(not os.path.lexists(backup),'stage-cancel-backup-exists',409)
+                os.rename(index.index_path,backup)
             effect.state='CANCELLED';effect.save(update_fields=['state','updated'])
-            index.state='PENDING';index.save(update_fields=['state','updated'])
+            index.state='OPEN' if proof.get('retained_snapshot') else 'PENDING'
+            index.save(update_fields=['state','updated'])
             receipt={'cancelled':True,'effect_id':effect.pk,'original_receipt_preserved':True,'index_backup':backup,**proof}
             c.event(run,'git-stage-aborted-on-proof',{'request_id':key,'fingerprint':fingerprint,'authority':actor.pk,'authorization':data['authorization'],'original_receipt_digest':data['expected_receipt_digest'],'receipt':receipt})
             return receipt
