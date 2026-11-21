@@ -2,16 +2,17 @@
 
 ## Purpose
 
-TBD - created by archiving change recover-retired-statistics-publication. Update Purpose after archive.
+Réconcilier sans rejeu une publication statistique interrompue sur l'ancien chemin d'un change archivé, en conservant les reçus et les preuves d'absence d'effet.
 
 ## Requirements
 
 ### Requirement: Reste sans effet d’un lot statistique après archivage
 
-CAB MUST réconcilier un rapport encore en attente si son ancien chemin était
-absent, son change possède une archive unique et l’entrée indexée est
-inchangée par rapport à HEAD et attestée avant le lot. CAB MUST vérifier
-les rapports déjà achevés, conserver UNKNOWN et ne rejouer aucune écriture.
+CAB MUST réconcilier un rapport en attente sur un ancien chemin absent d'un change archivé uniquement sur preuves stables. CAB MUST vérifier les rapports achevés, conserver le reçu UNKNOWN original et ne rejouer aucune écriture.
+
+#### Scenario: Rapport retiré absent de HEAD et de l'index
+- **WHEN** les producteurs sont arrêtés, l'ancien chemin initialement absent reste absent, Git confirme sous verrous l'absence d'entrée dans HEAD et l'index, et les rapports achevés correspondent à leurs reçus
+- **THEN** CAB enregistre FAILED_REMAINDER_NO_CHANGE, préserve les reçus et libère le verrou sans modifier les autres RUN.
 
 #### Scenario: Rapport en attente sur l’ancien chemin d’un change archivé
 - **WHEN** le producteur est arrêté et CAB retrouve toutes les preuves sous ses verrous

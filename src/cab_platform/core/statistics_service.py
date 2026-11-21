@@ -192,20 +192,27 @@ def retired_pending_publication_evidence(job):
     digest=shared_scope_digest(project,options,env,paths)
     cached=git('show',':'+retired)
     prior=git('show','HEAD:'+retired)
-    if cached.returncode!=0 or prior.returncode!=0 or cached.stdout!=prior.stdout:
-        return None
-    if git('diff','--cached','--quiet','HEAD','--',retired).returncode!=0:
-        return None
-    previous_sha=hashlib.sha256(cached.stdout).hexdigest()
-    if previous_sha==pending['sha256']:
-        return None
-    witness=StatisticsJob.objects.filter(
-        project=project,
-        state='COMPLETED',updated__lt=job.created,
-        result__indexed_documents__contains={retired:{'sha256':previous_sha,'state':'COMPLETED'}},
-    ).order_by('-updated','pk').first()
-    if witness is None:
-        return None
+    previous_sha=None
+    witness=None
+    if cached.returncode==0 and prior.returncode==0:
+        if cached.stdout!=prior.stdout or git('diff','--cached','--quiet','HEAD','--',retired).returncode!=0:
+            return None
+        previous_sha=hashlib.sha256(cached.stdout).hexdigest()
+        if previous_sha==pending['sha256']:
+            return None
+        witness=StatisticsJob.objects.filter(
+            project=project,
+            state='COMPLETED',updated__lt=job.created,
+            result__indexed_documents__contains={retired:{'sha256':previous_sha,'state':'COMPLETED'}},
+        ).order_by('-updated','pk').first()
+        if witness is None:
+            return None
+    else:
+        # Un échec de git show seul ne prouve pas l'absence d'une entrée.
+        entries=git('ls-files','--stage','-z','--',retired)
+        tree=git('ls-tree','-z','HEAD','--',retired)
+        if entries.returncode!=0 or tree.returncode!=0 or entries.stdout or tree.stdout:
+            return None
     for relative,item in completed.items():
         target=commands.safe_path(root,relative,exists=False)
         if file_hash(project,target)!=item['sha256'] or not document_index_matches(project,relative,item['sha256']):
@@ -218,7 +225,8 @@ def retired_pending_publication_evidence(job):
         'classification':'FAILED_REMAINDER_NO_CHANGE','scope_digest':digest,
         'retired_path':retired,'archive':sibling,'file_before_absent':True,
         'head':head.stdout.decode().strip(),'index_before_sha256':previous_sha,
-        'prior_index_receipt':witness.request_id,'completed_documents':completed,
+        'index_before_absent':previous_sha is None,
+        'prior_index_receipt':witness.request_id if witness else None,'completed_documents':completed,
         'writer_stopped':True,'owner_process_stopped':not owner_alive,
         'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False,
     }
