@@ -101,6 +101,67 @@ class RecoveryTests(unittest.TestCase):
   data=self.inspect();self.assertEqual(set(data['metadata_overlays']),{self.path});self.assertFalse(data['mutation_dispatched'])
   self.assertEqual(before,(self.git.git('rev-parse','HEAD'),Path(self.index.index_path).read_bytes(),(self.root/self.path).read_bytes()))
   self.failed.refresh_from_db();self.assertEqual((self.failed.state,self.failed.receipt),('FAILED',{}))
+ def full_statistics_conflict(self):
+  from cab_platform.session_git import shared_scope_digest
+  path='STATISTICS.md'
+  report=self.root/path
+  report.write_text('rapport figé\n')
+  paths=[path,self.path]
+  old_digest=shared_scope_digest(self.project,self.options,self.env,paths)
+  with tempfile.TemporaryDirectory() as folder:
+   candidate={**self.env,'GIT_INDEX_FILE':str(Path(folder)/'candidate')}
+   self.assertEqual(d._git(self.project,self.options,candidate,'read-tree',self.head).returncode,0)
+   self.assertEqual(d._git(self.project,self.options,candidate,'add','--',*paths).returncode,0)
+   tree=d._git(self.project,self.options,candidate,'write-tree').stdout.decode().strip()
+  self.row.plan.update(scope='project')
+  self.row.plan['git'].update(paths=paths,full={'head':self.head,'tree':tree,'paths':paths,'adoption':{'complete':True,'paths':paths,'shared_digest':old_digest}})
+  self.row.save(update_fields=['plan'])
+  m.GitDeliveryStep.objects.filter(delivery=self.row,key='commit').update(receipt={'error':'session-delivery-shared-index-conflict'})
+  report.write_text('rapport CAB actualisé\n')
+  self.git.git('add','--',path)
+  return report
+
+ def attest_fixture_report(self, report):
+  sha=hashlib.sha256(report.read_bytes()).hexdigest()
+  return m.StatisticsJob.objects.create(pk=uuid.uuid4().hex,project=self.project,request_id='fixture-statistics',action='sync',state='COMPLETED',owner_pid=os.getpid(),owner_start='',result={'indexed_documents':{'STATISTICS.md':{'state':'COMPLETED','sha256':sha}}})
+
+ def test_full_recovery_keeps_original_plan_and_dispatches_frozen_scope(self):
+  report=self.full_statistics_conflict()
+  witness=self.attest_fixture_report(report)
+  original=copy.deepcopy(self.row.plan)
+  observed=self.inspect()
+  self.assertEqual(observed['full']['tree'],original['git']['full']['tree'])
+  self.assertNotEqual(observed['full']['adoption']['shared_digest'],original['git']['full']['adoption']['shared_digest'])
+  self.assertEqual([item['job_id'] for item in observed['statistics_witnesses']],[witness.pk])
+  request=self.request()
+  with patch.object(r,'launch'): receipt=r.dispatch(self.admin,request)
+  attempt=receipt['admission']['attempt_request_id']
+  event=m.Event.objects.get(run=self.run,kind='precommit-recovery-admitted')
+  with patch('django.db.close_old_connections'),patch.object(d,'commit_session',return_value={'commit':'a'*40,'tag_oid':'b'*40}) as commit,patch.object(d,'_continue_after_commit') as continuation:
+   r._worker(self.row.pk,event.pk,attempt)
+   self.assertEqual(commit.call_args.kwargs['full'],observed['full'])
+   continuation.assert_called_once()
+  self.row.refresh_from_db();self.failed.refresh_from_db()
+  self.assertEqual(self.row.plan,original)
+  self.assertEqual((self.failed.state,self.failed.receipt),('FAILED',{}))
+  self.assertFalse(receipt['admission']['version_replayed'])
+  self.assertFalse(receipt['admission']['version_projection_replayed'])
+
+ def test_full_recovery_refuses_unattested_statistics_or_indexed_code(self):
+  report=self.full_statistics_conflict()
+  with self.assertRaisesRegex(c.Refused,'statistics-proof-required'):self.inspect()
+  self.attest_fixture_report(report)
+  self.git.git('add','--',self.manual_path)
+  with self.assertRaisesRegex(c.Refused,'shared-index-code-divergent'):self.inspect()
+  self.assertFalse(m.Event.objects.filter(run=self.run,kind='precommit-recovery-admitted').exists())
+
+ def test_full_recovery_refuses_working_code_drift_against_frozen_tree(self):
+  report=self.full_statistics_conflict()
+  self.attest_fixture_report(report)
+  (self.root/self.path).write_text('future file\n')
+  with self.assertRaisesRegex(c.Refused,'precommit-source-changed'):self.inspect()
+  self.assertFalse(m.Event.objects.filter(run=self.run,kind='precommit-recovery-admitted').exists())
+
  def test_real_rebase_metadata_preserves_source_index_and_other_head_files(self):
   with tempfile.TemporaryDirectory() as folder:
    own={**self.env,'GIT_INDEX_FILE':str(Path(folder)/'index')};self.assertEqual(d._git(self.project,self.options,own,'read-tree',self.head).returncode,0)

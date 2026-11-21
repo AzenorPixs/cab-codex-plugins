@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.9.1
+
+- Reprise sur le même reçu CICDF après un conflit d’index partagé dû uniquement à des rapports CAB attestés. Le plan et l’arbre de code restent figés.
+
 ## 3.9.0
 
 - Politique de version de 1 à 7 composantes, avec aperçu et adaptation des tags

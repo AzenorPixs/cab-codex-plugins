@@ -76,7 +76,9 @@ la session. Le worker revérifie le CAS sous le verrou Git avant tout effet.
 
 La résolution automatique traite uniquement les scalaires de version déclarés
 si les autres octets et données, ainsi que le mode, sont identiques à HEAD.
-Les autres conflits restent refusés. Une résolution manuelle nécessite les
+Pour un CICDF, une dérive de l’index partagé limitée aux rapports CAB attestés
+suit le même reçu avec le plan de code figé. Toute divergence de code ou
+preuve statistique manquante reste bloquante. Une résolution manuelle nécessite les
 chemins réservés et leurs OID/modes HEAD et staged, le SHA256 de chaque diff,
 ainsi que `resolution_approval` avec `paths_digest`, `owner_reference` et
 `reviewer_reference`. Le propriétaire et le responsable doivent avoir relu ces

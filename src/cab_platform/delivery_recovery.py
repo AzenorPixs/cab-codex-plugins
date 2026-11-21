@@ -116,6 +116,69 @@ def rebase_index(project,options,env,source_env,own_env,base,head,names,version,
 
 def admin(actor):c.require(actor.active and actor.pk=='system-admin' and actor.uid==0 and actor.role=='admin','precommit-local-administrator-required',403)
 
+def attest_statistics_only_full_recovery(current, options, env, head):
+    """Conserve l'arbre CICDF et atteste les seules entrées partagées variables."""
+    import copy
+    import hashlib
+    from .core.models import StatisticsJob
+    from .git_commit_remove import OID
+    from .session_git import shared_scope_digest
+
+    git_plan = current.plan['git']
+    frozen = git_plan.get('full')
+    c.require(current.plan.get('scope') == 'project' and isinstance(frozen, dict)
+              and frozen.get('head') == head and OID.fullmatch(frozen.get('tree', ''))
+              and frozen.get('paths') == git_plan['paths'],
+              'precommit-closed-full-plan-required')
+    adoption = frozen.get('adoption') or {}
+    c.require(adoption.get('complete') is True and adoption.get('paths') == frozen['paths'],
+              'precommit-closed-full-plan-required')
+    project = current.project
+    cat = delivery._git(project, options, env, 'cat-file', '-t', frozen['tree'])
+    c.require(cat.returncode == 0 and cat.stdout.strip() == b'tree',
+              'precommit-frozen-tree-unavailable')
+    staged = delivery._changed_paths(project, options, env, head)
+    c.require(staged and all(p in adoption['paths'] and delivery.managed_statistics_path(p) for p in staged),
+              'precommit-shared-index-code-divergent')
+    witnesses = []
+    for path in sorted(staged):
+        blob = delivery._git(project, options, env, 'show', ':' + path)
+        c.require(blob.returncode == 0, 'precommit-statistics-proof-required')
+        sha = hashlib.sha256(blob.stdout).hexdigest()
+        job = StatisticsJob.objects.filter(
+            project=project, state='COMPLETED',
+            result__indexed_documents__contains={path: {'state': 'COMPLETED', 'sha256': sha}},
+        ).order_by('pk').first()
+        c.require(job is not None, 'precommit-statistics-proof-required')
+        witnesses.append({'path':path,'sha256':sha,'job_id':job.pk,'request_id':job.request_id})
+
+    filemode_result=delivery._git(project,options,env,'config','--bool','--get','core.filemode')
+    c.require(filemode_result.returncode==1 or filemode_result.returncode==0 and filemode_result.stdout.strip() in (b'true',b'false'),'precommit-full-filemode-unavailable')
+    use_filemode = filemode_result.stdout.strip() != b'false'
+    root = Path(project.root)
+    for path in frozen['paths']:
+        if delivery.managed_statistics_path(path):
+            continue
+        target = c.safe_path(root,path,exists=False)
+        tree = delivery._git(project,options,env,'ls-tree',frozen['tree'],'--',path)
+        c.require(tree.returncode == 0,'precommit-frozen-tree-unavailable')
+        fields = tree.stdout.split(b'\t',1)[0].split()
+        if not fields:
+            c.require(not target.exists(),'precommit-full-working-tree-changed')
+            continue
+        c.require(len(fields)==3 and fields[0] in (b'100644', b'100755')
+                  and fields[1]==b'blob' and target.is_file(),
+                  'precommit-full-working-tree-changed')
+        file = delivery._git(project,options,env,'hash-object','--no-filters','--',path)
+        c.require(file.returncode==0 and file.stdout.strip()==fields[2]
+                  and (not use_filemode or bool(target.stat().st_mode & 0o100)==(fields[0]==b'100755')),
+                  'precommit-full-working-tree-changed')
+    current_digest=shared_scope_digest(project,options,env,adoption['paths'])
+    candidate=copy.deepcopy(frozen)
+    candidate['adoption']['shared_digest']=current_digest
+    return {'full':candidate,'statistics_witnesses':witnesses,'observed_filemode':use_filemode}
+
+
 def snapshot(current,admission=None,resolutions=None):
     """CAS en lecture seule ; le PID d'un service vivant n'est pas un état de thread."""
     from .git_commit_remove import context
@@ -128,7 +191,12 @@ def snapshot(current,admission=None,resolutions=None):
     if admission:
         expected={'recovery_event':admission.pk,'attempt_request_id':admission.data['receipt']['attempt_request_id'],'original_failed_effect_id':admission.data['receipt']['original_effect_id']}
         c.require(by['commit'].state=='RUNNING' and by['commit'].receipt==expected,'precommit-step-protected')
-    else:c.require(by['commit'].state=='FAILED' and by['commit'].receipt=={'error':'session-delivery-rebase-conflict'},'precommit-step-protected')
+        failed_commit=next(item['receipt'] for item in admission.data['original_failed_state']['steps'] if item['key']=='commit')
+    else:
+        c.require(by['commit'].state=='FAILED','precommit-step-protected')
+        failed_commit=by['commit'].receipt
+    statistics_only=failed_commit=={'error':'session-delivery-shared-index-conflict'} and current.plan.get('scope')=='project'
+    c.require(statistics_only or failed_commit=={'error':'session-delivery-rebase-conflict'},'precommit-step-protected')
     c.require(all(s.state=='PENDING' and not s.receipt for s in steps if s.key not in ('version','version-projection','commit')),'precommit-downstream-dispatched')
     failed=GitSessionEffect.objects.get(run=run,request_id='delivery-'+str(current.pk)+'-commit')
     c.require(failed.git_index_id==index.pk and failed.state=='FAILED' and not failed.receipt,'precommit-original-effect-protected')
@@ -147,7 +215,8 @@ def snapshot(current,admission=None,resolutions=None):
     names=delivery._changed_paths(current.project,options,{**env,'GIT_INDEX_FILE':index.index_path},index.base_head)
     c.require(names and set(names).issubset({r['path'] for r in reservations}),'precommit-reservations-changed')
     from .session_git import git_snapshot,shared_scope_digest
-    c.require(not (delivery.unstaged_code_paths(git_snapshot(current.project,index.index_path))&{r['path'] for r in reservations}),'precommit-source-changed')
+    if not statistics_only:
+        c.require(not (delivery.unstaged_code_paths(git_snapshot(current.project,index.index_path))&{r['path'] for r in reservations}),'precommit-source-changed')
     c.require(delivery._git(current.project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version).returncode==1,'precommit-tag-present')
     from .project_metadata import read_metadata
     c.require(read_metadata(current.project.root).get('values',{}).get('PROJECT_VERSION')==version,'precommit-version-changed')
@@ -157,10 +226,17 @@ def snapshot(current,admission=None,resolutions=None):
     c.require((current.project.public_metadata or {}).get('values',{}).get('PROJECT_VERSION')==version,'precommit-projection-changed')
     source_env={**env,'GIT_INDEX_FILE':index.index_path}
     if admission:resolutions=admission.data['original_failed_state']['resolutions']
-    resolved=validate_resolutions(current.project,options,source_env,head,names,resolutions or {})
-    chosen=overlays(current.project,options,source_env,head,names,version)
-    c.require(not set(resolved)&set(chosen),'precommit-resolution-ambiguous')
-    return {'delivery_id':current.pk,'project_id':current.project_id,'project_root':current.project.root,'owner_uid':current.project.owner_uid,'owner_gid':current.project.owner_gid,'run_id':run.run_id,'session_id':run.session_id,'actor_id':run.actor_id,'generation':run.generation,'run_state':run.state,'version':version,'policy_digest':run.finalization_plan.digest,'framing_digest':run.mandate['framing_digest'],'source_revision':current.plan['source_revision'],'plan_digest':c.digest(current.plan),'native_source':native,'validations':[{'id':op.pk,'receipt_digest':op.receipt_digest} for op in validations],'head':head,'branch':branch,'base_head':index.base_head,'index_id':index.pk,'index_path':index.index_path,'index_digest':digest,'reservations':reservations,'shared_digest':shared_scope_digest(current.project,options,env,names),'version_file_sha256':env_sha,'steps':[next(item for item in admission.data['original_failed_state']['steps'] if item['key']=='commit') if admission and s.key=='commit' else {'id':s.pk,'key':s.key,'state':s.state,'receipt':s.receipt} for s in steps],'original_effect':{'id':failed.pk,'state':failed.state,'receipt':failed.receipt,'request_id':failed.request_id,'request_digest':failed.request_digest},'metadata_overlays':chosen,'resolutions':resolved,'mutation_dispatched':False}
+    full_recovery={}
+    if statistics_only:
+        c.require(not resolutions,'precommit-full-manual-overlay-forbidden')
+        resolved={}
+        chosen={}
+        full_recovery=attest_statistics_only_full_recovery(current,options,env,head)
+    else:
+        resolved=validate_resolutions(current.project,options,source_env,head,names,resolutions or {})
+        chosen=overlays(current.project,options,source_env,head,names,version)
+        c.require(not set(resolved)&set(chosen),'precommit-resolution-ambiguous')
+    return {'delivery_id':current.pk,'project_id':current.project_id,'project_root':current.project.root,'owner_uid':current.project.owner_uid,'owner_gid':current.project.owner_gid,'run_id':run.run_id,'session_id':run.session_id,'actor_id':run.actor_id,'generation':run.generation,'run_state':run.state,'version':version,'policy_digest':run.finalization_plan.digest,'framing_digest':run.mandate['framing_digest'],'source_revision':current.plan['source_revision'],'plan_digest':c.digest(current.plan),'native_source':native,'validations':[{'id':op.pk,'receipt_digest':op.receipt_digest} for op in validations],'head':head,'branch':branch,'base_head':index.base_head,'index_id':index.pk,'index_path':index.index_path,'index_digest':digest,'reservations':reservations,'shared_digest':shared_scope_digest(current.project,options,env,names),'version_file_sha256':env_sha,'steps':[next(item for item in admission.data['original_failed_state']['steps'] if item['key']=='commit') if admission and s.key=='commit' else {'id':s.pk,'key':s.key,'state':s.state,'receipt':s.receipt} for s in steps],'original_effect':{'id':failed.pk,'state':failed.state,'receipt':failed.receipt,'request_id':failed.request_id,'request_digest':failed.request_digest},'metadata_overlays':chosen,'resolutions':resolved,'mutation_dispatched':False,**full_recovery}
 
 def _worker(delivery_id,event_id,request_id):
     from django.db import close_old_connections
@@ -174,7 +250,8 @@ def _worker(delivery_id,event_id,request_id):
             observed=snapshot(current,admission)
             c.require(c.digest(observed)==admission.data['receipt']['expected_state_digest'],'precommit-cas-changed')
             token=_MANUAL.set(observed['resolutions'])
-            receipt=delivery.commit_session(current.run.actor,{'project_id':current.project_id,'run_id':current.run.run_id,'request_id':request_id,'version':current.version,'expected_index_digest':current.plan['git']['index_digest']})
+            scope = {'full':observed['full']} if 'full' in observed else {}
+            receipt=delivery.commit_session(current.run.actor,{'project_id':current.project_id,'run_id':current.run.run_id,'request_id':request_id,'version':current.version,'expected_index_digest':current.plan['git']['index_digest']},**scope)
         except c.Refused as error:
             uncertain=error.code in ('session-delivery-result-unknown','session-git-effect-unresolved')
             delivery._set_step(delivery_id,'commit','UNKNOWN' if uncertain else 'FAILED',{'error':error.code,'recovery_event':event_id,'attempt_request_id':request_id})
@@ -235,7 +312,8 @@ def dispatch(actor,data):
             event=Event.objects.filter(run=current.run,kind='precommit-recovery-admitted',data__request_id=data['request_id']).get()
             current.state='RUNNING';current.executor=identity(__import__('os').getpid());current.save(update_fields=['state','executor','updated'])
             step=GitDeliveryStep.objects.select_for_update().get(delivery=current,key='commit')
-            c.require(step.state=='FAILED' and step.receipt=={'error':'session-delivery-rebase-conflict'},'precommit-step-protected')
+            original_commit=next(item['receipt'] for item in observed['steps'] if item['key']=='commit')
+            c.require(step.state=='FAILED' and step.receipt==original_commit,'precommit-step-protected')
             step.state='RUNNING';step.receipt={'recovery_event':event.pk,'attempt_request_id':request_id,'original_failed_effect_id':observed['original_effect']['id']};step.save(update_fields=['state','receipt','updated'])
             admitted=(current.pk,event.pk,request_id)
         launch(*admitted)

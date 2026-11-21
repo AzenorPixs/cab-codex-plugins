@@ -756,3 +756,13 @@ le snapshot de l’étape FAILED. La nouvelle tentative de commit est corrélée
 et la continuation reprend les seules étapes aval jamais émises. Le PID encore
 vivant d’un service n’est pas une preuve d’activité d’un worker logiquement terminé.
 Les opérations Git restent exclusivement exécutées par CAB.
+
+
+Pour un CICDF dont le commit a échoué avant les références avec
+`session-delivery-shared-index-conflict`, `inspect_precommit` accepte aussi
+les écarts de rapports attestés dans l’index partagé. Le candidat conserve
+l’arbre Git du lot initial. La reprise vérifie les témoins de statistiques,
+le code de travail, la version et les empreintes d’index avant le commit.
+Une entrée de code modifiée dans l’index partagé ou une preuve manquante
+empêche l’admission. Le reçu original et les étapes version et projection
+sont conservés.
