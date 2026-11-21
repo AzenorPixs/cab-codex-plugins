@@ -76,6 +76,27 @@ def adopt_native_observation(actor,row):
         previous.state='SUPERSEDED';previous.error='native-worker-observation-adopted';previous.save(update_fields=['state','error','seen']);project_connector(previous)
 
 
+def same_direct_scope(anchor,run):
+    source=anchor.mandate.get('native_source')
+    return (anchor.mode==run.mode=='direct' and anchor.actor_id==run.actor_id
+            and anchor.session_id==run.session_id and bool(source) and source==run.mandate.get('native_source'))
+
+
+def remember_direct_run(run):
+    if run.mode=='direct' and run.configuration.get('direct_parallel') is not True:
+        run.configuration={**run.configuration,'direct_parallel':True}
+        run.save(update_fields=['configuration'])
+
+
+def register_parallel(anchor,run):
+    from .run_replacement import TERMINAL
+    if not same_direct_scope(anchor,run) or anchor.state in TERMINAL or anchor.suspension=='STOP':
+        return False
+    c.require(anchor.project_id!=run.project_id or anchor.change!=run.change,'direct-run-already-active',409)
+    remember_direct_run(run)
+    return True
+
+
 @transaction.atomic
 def bind_worker_run(actor,data,peer,*,native_thread=None):
     from .models import McpRunBinding,McpThreadBinding
@@ -92,16 +113,20 @@ def bind_worker_run(actor,data,peer,*,native_thread=None):
                   'session-native-thread-divergent',403)
         previous=McpThreadBinding.objects.select_for_update().select_related('run').filter(connector=connector,thread=native_thread).first()
         if previous and previous.run_id!=run.pk:
+            if register_parallel(previous.run,run):return True
             c.require(c.no_pending(previous.run),'session-connector-busy',409)
         McpThreadBinding.objects.update_or_create(connector=connector,thread=native_thread,defaults={'run':run})
+        remember_direct_run(run)
         return True
     c.require(not McpThreadBinding.objects.filter(connector=connector).exists(),'session-native-thread-required',403)
     previous=McpRunBinding.objects.select_for_update().select_related('run').filter(connector=connector).first()
     if previous is not None and previous.run_id!=run.pk:
+        if register_parallel(previous.run,run):return True
         c.require(c.no_pending(previous.run),'session-connector-busy',409)
         if previous.run.session_id!=run.session_id:
             c.require(previous.run.state=='CLOSED','session-connector-shared',409)
     McpRunBinding.objects.update_or_create(connector=connector,defaults={'run':run})
+    remember_direct_run(run)
     return True
 
 
@@ -110,14 +135,17 @@ def lock_worker_binding(actor,connector_id,run):
     from .models import McpRunBinding,McpThreadBinding
     connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).exclude(state='SUPERSEDED').first()
     c.require(connector is not None and alive(connector.process) and alive(connector.worker),'session-connector-unbound',409)
-    binding=McpRunBinding.objects.select_for_update().filter(connector=connector,run=run).first()
+    binding=McpThreadBinding.objects.select_related('run').filter(connector=connector,thread=run.session_id).first()
     if binding is None:
-        binding=McpThreadBinding.objects.select_for_update().filter(connector=connector,run=run,thread=run.session_id).first()
-    c.require(binding is not None,'session-connector-run-divergent',403)
+        binding=McpRunBinding.objects.select_related('run').filter(connector=connector).first()
+    c.require(binding is not None and (binding.run_id==run.pk or
+              run.configuration.get('direct_parallel') is True and same_direct_scope(binding.run,run)),
+              'session-connector-run-divergent',403)
 
 
-def current_worker_run(actor,peer,*,read_only=False,native_thread=None):
-    from .models import McpRunBinding,McpThreadBinding
+def current_worker_run(actor,peer,*,read_only=False,native_thread=None,project_id='',run_id=''):
+    from .models import McpRunBinding,McpThreadBinding,Run
+    from .run_replacement import TERMINAL
     connector=worker_connector(actor,peer)
     c.require(connector is not None,'session-connector-unbound',409)
     if native_thread is None:
@@ -127,7 +155,20 @@ def current_worker_run(actor,peer,*,read_only=False,native_thread=None):
         c.require(bool(native_thread) and actor.agent in ('codex','codex-cli'),'session-native-thread-required',403)
         binding=McpThreadBinding.objects.select_related('run__project','run__actor').filter(connector=connector,thread=native_thread,run__session_id=native_thread).first()
     c.require(binding is not None and binding.run.actor_id==actor.pk,'session-connector-unbound',409)
-    run=binding.run;c.scope(actor,run.project)
+    anchor=binding.run
+    c.require(isinstance(project_id,str) and isinstance(run_id,str) and bool(project_id)==bool(run_id),
+              'session-run-target-required',400)
+    run=anchor
+    if project_id and (project_id,run_id)!=(anchor.project_id,anchor.run_id):
+        run=c.run_scope(actor,run_id,project_id)
+        c.require(run.configuration.get('direct_parallel') is True and same_direct_scope(anchor,run),
+                  'session-connector-run-divergent',403)
+    elif not project_id and anchor.mode=='direct':
+        candidates=Run.objects.filter(actor=actor,session_id=anchor.session_id,mode='direct',
+                                      mandate__native_source=anchor.mandate.get('native_source')).exclude(state__in=TERMINAL).exclude(suspension__in=['STOP','PAUSE'])
+        c.require(not candidates.filter(configuration__direct_parallel=True).exclude(pk=anchor.pk).exists(),
+                  'session-run-target-required',409)
+    c.scope(actor,run.project)
     if read_only:return run
     c.working(run)
     source=c.resolve_native(actor,run.project,run.session_id,{'codex_home':run.mandate.get('native_source_home','')},run=run)

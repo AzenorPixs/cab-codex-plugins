@@ -227,3 +227,20 @@ parcours administratif borné décrit dans le skill CICD. Conserver la même
 livraison, version, RUN/SID et les reçus ; aucune relance start ni substitution
 d’identité. L’inspection et le CAS ne sont pas une permission de choisir un
 code divergent : seules les résolutions exactes explicitement revues sont admises.
+
+## Plusieurs RUN directs dans un même Codex
+
+Conserver le couple projet/RUN retourné par CAB pour chaque change et utiliser
+le même SID natif vérifié. Rattacher chaque RUN avec `native_bind`. CAB maintient
+sa liaison principale et accepte les autres RUN directs du même journal.
+Dès qu’une cible implicite peut être ambiguë, transmettre `project_id` et
+`run_id` à chaque opération Git ou de livraison, y compris les lectures de
+reçus. Les réservations et les preuves restent propres au RUN ciblé.
+La télémétrie native du SID conserve une période active à la fois.
+
+Pour remplacer un cadrage jamais exécuté, indiquer `replaces_run_id` dans
+`run_begin`. CAB vérifie et archive l’annulation dans la même transaction.
+Ne pas utiliser STOP pour remplacer un RUN direct. Si le travail a commencé,
+poursuivre le même RUN ou employer son parcours de clôture bloquée.
+`run_cancel_replaced` régularise un ancien cadrage sur le reçu d’un
+successeur livré et clôturé, sans réutiliser ses preuves pour le premier.

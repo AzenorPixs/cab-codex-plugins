@@ -317,7 +317,8 @@ def web_login(request,body:Login):
 def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':run.change_record.tasks_done if run.change_record else None,'tasks_total':run.change_record.tasks_total if run.change_record else None,'updated':run.updated.isoformat()}
+    change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
 
 def operation_data(op):
     resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
@@ -939,7 +940,7 @@ def finalization_status(request,project_id:str,run_id:str):
 def handoff(request,project_id:str,run_id:str,after:int=0):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     commands.require(actor.role=='admin' or actor.pk==r.mandate.get('orchestrator_id') or r.mode=='direct' and r.actor_id==actor.pk,'handoff-authority-required',403)
-    rows=list(Event.objects.filter(run=r,id__gt=max(0,after),kind__in=['exception-requested','review-requested','run-closed']).order_by('id').values('id','kind','data')[:100])
+    rows=list(Event.objects.filter(run=r,id__gt=max(0,after),kind__in=['exception-requested','review-requested','run-closed','run-cancelled-before-start']).order_by('id').values('id','kind','data')[:100])
     return {'run_id':r.run_id,'state':r.state,'events':rows,'next_after':rows[-1]['id'] if rows else after,'submission':r.review.get('submission') if r.state=='REVIEW_PENDING' else None}
 
 @api.get('/events')
@@ -1049,6 +1050,9 @@ def command(request,body:Command):
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
     if name=='run.begin':return run_data(commands.begin_run(actor,data))
+    if name=='run.cancel_replaced':
+        from .run_replacement import reconcile
+        return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
     if name=='run.reconcile_archive':return commands.reconcile_archive(actor,data)
     if name=='run.adopt':
@@ -1115,25 +1119,27 @@ def command(request,body:Command):
     if name in ('session.delivery.start','session.delivery.full_start','session.delivery.status'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_delivery import start_delivery,delivery_status
-        commands.require(set(data)=={'version'},'session-delivery-fields-invalid',400)
+        commands.require('version' in data and set(data)<={'version','project_id','run_id'},'session-delivery-fields-invalid',400)
         peer=getattr(request,'cab_peer',None)
-        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status',native_thread=native_thread)
+        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status',native_thread=native_thread,
+                                   project_id=data.get('project_id',''),run_id=data.get('run_id',''))
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
         if name=='session.delivery.status':
             return delivery_status(actor,current,data['version'],connector.pk)
         return start_delivery(actor,current,data['version'],connector.pk,complete=name=='session.delivery.full_start')
     if name=='session.git.context':
-        commands.require(not data,'session-git-fields-invalid',400)
+        commands.require(set(data)<={'project_id','run_id'},'session-git-fields-invalid',400)
         from .connectors import current_worker_run
-        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True,native_thread=native_thread)
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True,native_thread=native_thread,**data)
         from cab_platform.session_delivery import version_policy
         return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id,'version_policy':version_policy(current)}
     if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
         peer=getattr(request,'cab_peer',None)
-        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'),native_thread=native_thread)
+        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'),native_thread=native_thread,
+                                   project_id=data.get('project_id',''),run_id=data.get('run_id',''))
         connector=worker_connector(actor,peer)
         commands.require(connector is not None,'session-connector-unbound',409)
         commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)

@@ -109,6 +109,9 @@ try{
       }
       const doc=admin.contentDocument;
       const audit=await wait(()=>archive.contentDocument?.querySelector('.monitor-table'),'Tableau d’archives');
+      const cancelled=await wait(()=>audit.querySelector('tbody a[href$="/runs/replacement"]'),'Lien vers le RUN remplaçant');
+      check(cancelled.closest('td').textContent.includes('Cancelled before start'),'État d’annulation concis en anglais');
+      check(!cancelled.closest('td').textContent.includes('CANCELLED_BEFORE_START'),'Code technique masqué');
       const referee=archive.contentDocument.documentElement;
       check(archive.contentWindow.getComputedStyle(audit.querySelector('th')).backgroundColor==='rgb(33, 94, 84)','Couleur de référence');
       function field(panel,key){return doc.querySelector('#interface-panel-'+panel+' input[name="'+key+'"]')}
@@ -189,7 +192,9 @@ try{
       if(path==='/api/v1/session-archives'){
         const pageSize=Number(url.searchParams.get('page_size'))
         archivedSizes.add(pageSize)
-        return json(response,{sessions:[],page:1,total_pages:Math.ceil(30/pageSize),total:30,has_next:true})
+        return json(response,{sessions:[{project_id:'fixture-cab',run_id:'old',session_id:'fixture',change:'shared-change',
+          state:'CANCELLED_BEFORE_START',replacement:{run_id:'replacement'},archived_at:'2026-11-21T08:00:00Z'}],
+          page:1,total_pages:Math.ceil(30/pageSize),total:30,has_next:true})
       }
       if(path.startsWith('/api/v1/sync/'))return response.writeHead(403,{'Content-Type':'application/json'}).end('{}')
       if(path.startsWith('/api/v1/'))return json(response,{})

@@ -89,18 +89,28 @@ def project_register(root:str)->dict:
     """Rattache un projet canonique autorisé au compte effectif."""
     return client().command('project.register',{'root':root})
 @public_tool()
-def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None)->dict:
+def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None,replaces_run_id:str='')->dict:
     """Cadre un RUN. Piloté : autorité orchestrateur requise, choix résolus avant codage."""
-    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization})
+    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization,**({'replaces_run_id':replaces_run_id} if replaces_run_id else {})})
 @public_tool()
-def session_delivery_start(version:str)->dict:
-    """CICD livre les fichiers préparés dans l’index du change courant."""
-    return client().command('session.delivery.start',{'version':version})
+def run_cancel_replaced(project_id:str,run_id:str,replacement_run_id:str,request_id:str)->dict:
+    """Annule sur preuves un RUN direct jamais exécuté, relié au RUN livré."""
+    return client().command('run.cancel_replaced',locals())
+
+
+def run_target(project_id,run_id):
+    return {key:value for key,value in (('project_id',project_id),('run_id',run_id)) if value}
+
 
 @public_tool()
-def session_delivery_full_start(version:str)->dict:
+def session_delivery_start(version:str,project_id:str='',run_id:str='')->dict:
+    """CICD livre les fichiers préparés dans l’index du change courant."""
+    return client().command('session.delivery.start',{'version':version,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_delivery_full_start(version:str,project_id:str='',run_id:str='')->dict:
     """CICDF livre tous les fichiers admissibles modifiés ou indexés du projet, sur mandat explicite."""
-    return client().command('session.delivery.full_start',{'version':version})
+    return client().command('session.delivery.full_start',{'version':version,**run_target(project_id,run_id)})
 
 @public_tool()
 def session_delivery_select_version(project_id:str,run_id:str,version:str)->dict:
@@ -108,39 +118,39 @@ def session_delivery_select_version(project_id:str,run_id:str,version:str)->dict
     return client().command('session.delivery.select_version',{'project_id':project_id,'run_id':run_id,'version':version})
 
 @public_tool()
-def session_delivery_status(version:str)->dict:
+def session_delivery_status(version:str,project_id:str='',run_id:str='')->dict:
     """Lit le reçu de cette version sans relancer ses effets."""
-    return client().command('session.delivery.status',{'version':version})
+    return client().command('session.delivery.status',{'version':version,**run_target(project_id,run_id)})
 
 @public_tool()
-def session_git_context()->dict:
+def session_git_context(project_id:str='',run_id:str='')->dict:
     """Identifie le RUN attaché à cette connexion MCP."""
-    return client().command('session.git.context',{})
+    return client().command('session.git.context',run_target(project_id,run_id))
 
 @public_tool()
-def session_git_release(request_id:str)->dict:
+def session_git_release(request_id:str,project_id:str='',run_id:str='')->dict:
     """Libère les fichiers validés et indexés en fin de travail sans livraison ; conserve l'index, aucun commit ni push."""
-    return client().command('session.git.release',{'request_id':request_id})
+    return client().command('session.git.release',{'request_id':request_id,**run_target(project_id,run_id)})
 
 @public_tool()
-def session_git_reserve(request_id:str,paths:list[str])->dict:
+def session_git_reserve(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
     """Réserve avant modification les fichiers du RUN lié à cette connexion."""
-    return client().command('session.git.reserve',{'request_id':request_id,'paths':paths})
+    return client().command('session.git.reserve',{'request_id':request_id,'paths':paths,**run_target(project_id,run_id)})
 
 @public_tool()
-def session_git_stage(request_id:str,paths:list[str])->dict:
+def session_git_stage(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
     """Indexe les fichiers réservés d'une étape validée dans l'index de session."""
-    return client().command('session.git.stage',{'request_id':request_id,'paths':paths})
+    return client().command('session.git.stage',{'request_id':request_id,'paths':paths,**run_target(project_id,run_id)})
 
 @public_tool()
-def session_git_status(request_id:str)->dict:
+def session_git_status(request_id:str,project_id:str='',run_id:str='')->dict:
     """Lit le reçu de la même indexation sans la rejouer."""
-    return client().command('session.git.status',{'request_id':request_id})
+    return client().command('session.git.status',{'request_id':request_id,**run_target(project_id,run_id)})
 
 @public_tool()
-def session_git_inspect(include_paths:bool=False)->dict:
+def session_git_inspect(include_paths:bool=False,project_id:str='',run_id:str='')->dict:
     """Lit l’état compact Git et les réservations du RUN lié à cette connexion."""
-    return client().command('session.git.inspect',{'include_paths':include_paths})
+    return client().command('session.git.inspect',{'include_paths':include_paths,**run_target(project_id,run_id)})
 
 @public_tool()
 def finalization_status(project_id:str,run_id:str)->dict:
@@ -205,7 +215,7 @@ async def wait_for_handoff(project_id:str,run_id:str,after:int=0,timeout_ms:int=
     while asyncio.get_running_loop().time()<deadline:
         try:
             result=await asyncio.to_thread(c.get,'handoff',project_id=project_id,run_id=run_id,after=after)
-            if result['events'] or result['state'] in ('REVIEW_PENDING','CLOSED','BLOCKED'):return result
+            if result['events'] or result['state'] in ('REVIEW_PENDING','CLOSED','BLOCKED','CANCELLED_BEFORE_START'):return result
         except ClientError as error:
             if str(error)!='cab-unavailable':raise
         await asyncio.sleep(1)

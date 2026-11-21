@@ -90,7 +90,7 @@ def revision(run,relocations=None):
 def projection(run):
     from .monitor import ensure_records
     ensure_records(run)
-    change=run.change_record
+    change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
     from .models import SessionArchive
     values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
     existing=SessionProjection.objects.filter(binding=run).first()
@@ -126,6 +126,7 @@ def locate_native(actor,data):
 def bind_native(actor,data):
     from .native_access import root_for
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    require(r.state!='CANCELLED_BEFORE_START','run-not-active',409)
     require(type(data.get('resume',False)) is bool,'native-source-resume-invalid',400)
     require(isinstance(data.get('codex_home',''),str),'native-source-path-invalid',400)
     if not data.get('codex_home') and r.mandate.get('native_source_home'):data={**data,'codex_home':r.mandate['native_source_home']}
@@ -188,10 +189,26 @@ def begin_run(actor,data):
         require(actor.role in ('admin','orchestrator'),'framing-authority-required',403)
         require(data.get('orchestrator_id')==actor.pk,'orchestrator-required',400)
         actor=Actor.objects.get(pk=data['coder_id']);scope(actor,project)
+    if mode=='direct':Actor.objects.select_for_update().get(pk=actor.pk)
     prior=Run.objects.filter(project=project,run_id=run_id).first()
     if prior:
         require(prior.actor_id==actor.pk and prior.session_id==sid and prior.mandate.get('framing_digest')==digest(data),'run-identity-conflict');return prior
-    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=identifier(data['change']),mandate={**data,'framing_digest':digest(data)})
+    change=identifier(data['change'])
+    replaced=None
+    replacing=data.get('replaces_run_id')
+    if mode=='direct':
+        from .run_replacement import TERMINAL, require_unstarted
+        active=Run.objects.select_for_update().filter(project=project,actor=actor,mode='direct',session_id=sid,change=change).exclude(state__in=TERMINAL)
+        if replacing:
+            replaced=active.filter(run_id=identifier(replacing)).first()
+            require(replaced is not None,'run-replacement-divergent',409)
+            require_unstarted(replaced)
+            require(revision(replaced)==replaced.source_revision,'run-replacement-source-changed',409)
+            active=active.exclude(pk=replaced.pk)
+        require(not active.exists(),'direct-run-already-active',409)
+    else:
+        require(not replacing,'run-replacement-direct-only',400)
+    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode})
@@ -200,6 +217,9 @@ def begin_run(actor,data):
     from cab_platform.session_git import capture_initial
     capture_initial(r)
     r.configuration={**r.configuration,'terminal_git':{'required':True}};r.save(update_fields=['configuration'])
+    if replaced is not None:
+        from .run_replacement import cancelled
+        cancelled(replaced,r,actor,'REPLACE-'+r.run_id)
     return r
 
 @transaction.atomic
@@ -435,6 +455,9 @@ def suspend(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
     require(actor.role in ('admin','orchestrator') or r.mode=='direct' and r.actor_id==actor.pk,'suspension-authority-required',403)
     action=data['action'];require(action in ('PAUSE','RESUME','STOP'),'suspension-action-invalid',400)
+    from .run_replacement import TERMINAL
+    require(r.state not in TERMINAL,'run-not-active',409)
+    require(action!='STOP' or r.mode!='direct','direct-run-stop-requires-terminal-path',409)
     if action=='RESUME':require(no_pending(r),'effects-unresolved')
     r.suspension='' if action=='RESUME' else action;r.save();event(r,'suspension',{'action':action});return {'state':r.state,'suspension':r.suspension}
 

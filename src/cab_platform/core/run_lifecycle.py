@@ -94,6 +94,10 @@ def terminal_proof(run):
 def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
     from .models import FinalizationPlan
+    from .run_replacement import CANCELLED
+    if run.state==CANCELLED:
+        result.update(action='cancelled',replacement=run.configuration.get('replacement'))
+        return {**result,'evaluation_digest':c.digest(result)}
     if run.state == 'CLOSURE_INVALID':
         result['reasons']=[closed_change_issue(run) or 'archive-missing-or-ambiguous']
         result['evaluation_digest']=c.digest(result)
@@ -232,7 +236,7 @@ def sweep():
             if run.state in ('CLOSED','CLOSURE_INVALID'):
                 try:run=reconcile_closed_change(run)
                 except (c.Refused,OSError,ValueError):continue
-            if run.state not in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING') and FinalizationPlan.objects.filter(run=run).exists():
+            if run.state not in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING','CANCELLED_BEFORE_START') and FinalizationPlan.objects.filter(run=run).exists():
                 from .run_finalization import process
                 try:process(run.pk)
                 except (c.Refused,OSError,ValueError):continue

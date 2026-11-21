@@ -65,6 +65,8 @@ def dossier(run,plan,*,allow_terminal_git=False):
 def view(run,plan=None):
     plan=plan or FinalizationPlan.objects.get(run=run)
     from .run_lifecycle import closed_change_issue
+    if run.state=='CANCELLED_BEFORE_START':
+        return {'phase':run.state,'missing':[],'next_actions':[],'policy_digest':plan.digest,'replacement':run.configuration.get('replacement')}
     if run.state in ('CLOSED','CLOSURE_INVALID') and plan.receipt:
         try:
             issue=closed_change_issue(run)
@@ -102,19 +104,19 @@ def prepare_review(run,plan,result):
 
 def process(run_id):
     run=Run.objects.select_related('actor','project').get(pk=run_id);plan=FinalizationPlan.objects.get(run=run)
-    if run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING') or plan.receipt:return
+    if run.suspension in ('STOP','PAUSE') or run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING','CANCELLED_BEFORE_START') or plan.receipt:return
     if not plan.policy:
         path=Path(run.project.root)/'openspec/changes/archive'
         if any(path.glob('????-??-??-'+run.change)) and run.state=='WORKING':
             with transaction.atomic():
                 run=Run.objects.select_for_update().get(pk=run_id)
-                if run.state=='WORKING':run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':['finalization-contract-required']})
+                if run.state=='WORKING' and not run.suspension:run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':['finalization-contract-required']})
         return
     evidence.capture_update(plan)
     with transaction.atomic():
         run=Run.objects.select_for_update().select_related('actor','project').get(pk=run_id)
         plan=FinalizationPlan.objects.select_for_update().get(run=run)
-        if run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING') or plan.receipt:return
+        if run.suspension in ('PAUSE','STOP') or run.state in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING','CANCELLED_BEFORE_START') or plan.receipt:return
         result=dossier(run,plan,allow_terminal_git=run.state=='FINALIZING')
         if result['missing']:
             changed=plan.missing!=result['missing'] or plan.phase!='WAITING'
