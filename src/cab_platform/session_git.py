@@ -152,7 +152,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
         require(not GitDelivery.objects.filter(git_index=index,state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']).exists(),'session-delivery-active',409)
         prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
         current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
-        relocated_paths=[];preexisting_authorizations=[];clean_initial_paths=[]
+        relocated_paths=[];preexisting_authorizations=[];clean_initial_paths=[];direct_preexisting_paths=[]
         for path in sorted(paths):
             key = hashlib.sha256(path.encode('utf-8')).hexdigest()
             existing = GitFileReservation.objects.select_for_update().filter(project=project, path_digest=key, active=True).first()
@@ -165,7 +165,12 @@ def _reserve_files_locked(actor, data, connector_id=None):
                 relocated=reconciled_archive_owned(current,index,path)
                 clean=path in prior_dirty and path not in current_dirty and clean_at_head(current,path,snapshot)
                 granted=matching_authorization(current,index,path,snapshot) if not clean and not relocated else None
-                require(clean or granted or relocated or any(item.path==path and released_index_matches(project,item.git_index,path) for item in candidates),'session-git-file-preexisting',409)
+                direct=(
+                    current.mode=='direct' and path in current_dirty
+                    and not clean and not granted and not relocated
+                )
+                require(direct or clean or granted or relocated or any(item.path==path and released_index_matches(project,item.git_index,path) for item in candidates),'session-git-file-preexisting',409)
+                if direct:direct_preexisting_paths.append(path)
                 if relocated:relocated_paths.append(path)
                 if granted:preexisting_authorizations.append(granted)
                 if clean:clean_initial_paths.append(path)
@@ -173,7 +178,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
         if reopening:
             index.state='OPEN';index.save(update_fields=['state','updated']);event(current,'git-index-reopened',{'request_id':request_id,'previous_release':index.origin.get('release',{})})
         receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change, 'session_id': current.session_id}
-        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths,'preexisting_authorizations':preexisting_authorizations,'clean_initial_paths':clean_initial_paths})
+        event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths,'preexisting_authorizations':preexisting_authorizations,'clean_initial_paths':clean_initial_paths,'direct_preexisting_paths':direct_preexisting_paths})
         return receipt
 
 
@@ -288,7 +293,7 @@ def adopt_files(actor,data):
 
 
 def _index_path(project, index, options, env):
-    """Répertoire privé dans le répertoire Git réellement résolu par Git."""
+    """Répertoire réservé au propriétaire ou au groupe du projet."""
     from pathlib import Path
     result = run(project, options, env, 'rev-parse', '--absolute-git-dir')
     require(result.returncode == 0, 'session-git-index-unavailable', 409)
@@ -297,7 +302,8 @@ def _index_path(project, index, options, env):
         require(gitdir.is_absolute() and gitdir.resolve() == gitdir, 'session-git-index-unavailable', 409)
         rootfd = os.open(gitdir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            require(os.fstat(rootfd).st_uid == project.owner_uid, 'session-git-index-unavailable', 409)
+            git_info = os.fstat(rootfd)
+            require(git_info.st_uid == project.owner_uid, 'session-git-index-unavailable', 409)
             try:
                 os.mkdir('cab-session-index', 0o700, dir_fd=rootfd)
                 made = True
@@ -308,7 +314,16 @@ def _index_path(project, index, options, env):
                 if made and os.geteuid() == 0:
                     os.fchown(indexfd, project.owner_uid, project.owner_gid if project.owner_gid is not None else -1)
                 info = os.fstat(indexfd)
-                require(info.st_uid == project.owner_uid and stat.S_IMODE(info.st_mode) & 0o077 == 0, 'session-git-index-unavailable', 409)
+                mode = stat.S_IMODE(info.st_mode)
+                project_group = project.owner_gid
+                if project_group is None:
+                    project_group = Path(project.root).stat().st_gid
+                group_allowed = info.st_gid == git_info.st_gid == project_group
+                require(
+                    info.st_uid == project.owner_uid and mode & 0o007 == 0
+                    and (mode & 0o070 == 0 or group_allowed),
+                    'session-git-index-unavailable', 409,
+                )
             finally:
                 os.close(indexfd)
         finally:

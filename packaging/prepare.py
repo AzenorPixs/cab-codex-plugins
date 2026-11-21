@@ -17,7 +17,7 @@ OUT=ROOT/'output/package'
 def validate_versions(root):
     module=ast.parse((root/'src/cab_platform/__init__.py').read_text())
     versions=[ast.literal_eval(node.value) for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='__version__' for target in node.targets)]
-    if len(versions)!=1 or not isinstance(versions[0],str) or not re.fullmatch(r'\d+\.\d+\.\d+',versions[0]):raise RuntimeError('package-source-version-invalid')
+    if len(versions)!=1 or not isinstance(versions[0],str) or not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',versions[0]):raise RuntimeError('package-source-version-invalid')
     version=versions[0]
     def require(condition):
         if not condition:raise RuntimeError('package-payload-version-invalid')
@@ -26,7 +26,7 @@ def validate_versions(root):
     lock=json.loads((root/'frontend/package-lock.json').read_text())
     require(lock['version']==version and lock['packages']['']['version']==version)
     require("import {version as buildVersion} from '../package.json'" in (root/'frontend/src/SystemUpdate.tsx').read_text())
-    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf')]:
+    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf'),('CABD','cabd')]:
         base=root/'integrations/codex'/folder
         manifest=base/'.codex-plugin/plugin.json';skill=base/'skills'/folder/'SKILL.md';command=root/'integrations/commands'/(label+'.md')
         require(all(path.is_file() and not path.is_symlink() for path in (manifest,skill,command)))
@@ -94,7 +94,7 @@ def main(*, output=None, dependencies=None, node=None, expected_version=None):
         shutil.copytree(source,destination)
         for path in [destination,*destination.rglob('*')]:path.chmod(0o755 if path.is_dir() else 0o644)
     catalog=json.loads((ROOT/'.agents/plugins/marketplace.json').read_text())
-    for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab','CICD':'cicd','CICDF':'cicdf'}[plugin['name']]
+    for plugin in catalog['plugins']:plugin['source']['path']='./plugins/'+{'CAB':'cab','CABU':'cabu','CCAB':'ccab','CICD':'cicd','CICDF':'cicdf','CABD':'cabd'}[plugin['name']]
     (output/'marketplace.json').write_text(json.dumps(catalog,indent=2)+'\n')
     manifest['payload_sha256']={name:payload_digest(output/name) for name in ('python','web')}
     (output/'runtime-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

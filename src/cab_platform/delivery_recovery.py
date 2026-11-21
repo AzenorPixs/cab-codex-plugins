@@ -13,7 +13,7 @@ from .core.models import Actor,Event,GitDelivery,GitDeliveryStep,GitSessionEffec
 from . import session_delivery as delivery
 from .connector_process import identity
 
-VERSION=r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2,3}'
+VERSION=r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}'
 ACTIONS={'inspect_precommit','resume_precommit','status_precommit'}
 _MANUAL=ContextVar('cab_precommit_manual_resolutions',default=None)
 

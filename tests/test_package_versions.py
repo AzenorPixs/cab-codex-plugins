@@ -21,19 +21,19 @@ class PackageVersionsTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
         self.version=prepare.validate_versions(ROOT)
         paths=['src/cab_platform/__init__.py','pyproject.toml','frontend/package.json','frontend/package-lock.json','frontend/src/SystemUpdate.tsx']
-        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf')]:paths.extend([f'integrations/codex/{folder}/.codex-plugin/plugin.json',f'integrations/codex/{folder}/skills/{folder}/SKILL.md',f'integrations/commands/{label}.md'])
+        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf'),('CABD','cabd')]:paths.extend([f'integrations/codex/{folder}/.codex-plugin/plugin.json',f'integrations/codex/{folder}/skills/{folder}/SKILL.md',f'integrations/commands/{label}.md'])
         for relative in paths:
             target=self.root/relative;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/relative,target)
     def tearDown(self):self.tmp.cleanup()
     def test_current_sources_are_aligned(self):self.assertEqual(prepare.validate_versions(self.root),self.version)
     def test_each_outdated_plugin_is_refused(self):
-        for folder in ('cab','ccab','cabu','cicd','cicdf'):
+        for folder in ('cab','ccab','cabu','cicd','cicdf','cabd'):
             with self.subTest(folder=folder):
                 path=self.root/f'integrations/codex/{folder}/.codex-plugin/plugin.json';original=path.read_text();data=json.loads(original);data['version']='3.1.4';path.write_text(json.dumps(data))
                 with self.assertRaisesRegex(RuntimeError,'package-payload-version-invalid'):prepare.validate_versions(self.root)
                 path.write_text(original)
     def test_each_outdated_command_is_refused(self):
-        for label in ('CAB','CCAB','CABU','CICD','CICDF'):
+        for label in ('CAB','CCAB','CABU','CICD','CICDF','CABD'):
             with self.subTest(command=label):
                 path=self.root/f'integrations/commands/{label}.md';original=path.read_text();path.write_text(original.replace(f'version: {self.version}','version: 3.1.4'))
                 with self.assertRaisesRegex(RuntimeError,'package-payload-version-invalid'):prepare.validate_versions(self.root)

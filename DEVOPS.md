@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-20T13:26:26Z
+Début du relevé (UTC) : 2026-11-21T13:10:38Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -132,13 +132,13 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
   * @opencode-ai/plugin : déclarée 1.19.3 ; verrouillée (npm) 1.19.3 ; observée 1.19.3
     * Installation : /home/devops/datas/cab/.opencode/node\_modules/@opencode-ai/plugin# OpenSpec
 
-  * 2.1.0
+  * 2.1.1
   * /home/devops/.local/npm/bin/openspec
 
 
 # OpenSSL
 
-  * 3.5.7
+  * 3.5.9
   * /usr/bin/openssl
 
 
@@ -208,7 +208,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
   * Cython : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv
-    * Déclaration : Cython ==3.4.0
+    * Déclaration : Cython ==3.5.0
     * Source : pyproject.toml — [build-system].requires
   * Nuitka : installation non vérifiable
     * Environnement vérifié : /home/devops/datas/cab/.cab-tests/DCAB/venv

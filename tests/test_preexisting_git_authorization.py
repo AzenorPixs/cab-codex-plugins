@@ -78,17 +78,20 @@ class PreexistingAuthorizationTests(unittest.TestCase):
         key = hashlib.sha256('\0'.join(sorted(selected)).encode()).hexdigest()[:12]
         return session.reserve_files(self.owner, {**self.kw, 'request_id': 'fixture-reserve-' + key, 'paths': selected})
 
-    def test_preexisting_refused_without_authorization(self):
-        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
-            self.reserve()
-        self.assertFalse(GitFileReservation.objects.filter(project=self.project).exists())
+    def test_direct_preexisting_in_frame_needs_no_separate_authorization(self):
+        self.assertEqual(self.reserve()['reserved_count'], 1)
+        event = Event.objects.get(run=self.run,kind='git-files-reserved')
+        self.assertEqual(event.data['direct_preexisting_paths'],['DEVOPS.md'])
+        self.assertFalse(Event.objects.filter(run=self.run,kind='git-preexisting-authorized').exists())
 
     def test_admission_preserves_baseline_file_and_index_then_allows_reservation(self):
         payload = self.payload()
         head = self.git('rev-parse', 'HEAD')
         status = self.git('status', '--porcelain')
         raw = (self.root / 'DEVOPS.md').read_bytes()
-        receipt = admission.authorize_preexisting(self.admin, payload)
+        inspected = admission.inspect_preexisting(self.owner, {**self.kw, 'paths': ['DEVOPS.md']})
+        self.assertEqual(inspected['expected_state'], payload['expected_state'])
+        receipt = admission.authorize_preexisting(self.owner, payload)
         self.assertTrue(receipt['baseline_preserved'])
         self.assertFalse(receipt['index_changed'])
         self.assertFalse(GitSessionIndex.objects.filter(change=self.run.change_record).exists())
@@ -108,11 +111,30 @@ class PreexistingAuthorizationTests(unittest.TestCase):
             admission.authorize_preexisting(self.admin, {**payload, 'authorization': 'A different authorization must not replace the first receipt.'})
         self.assertEqual(Event.objects.filter(run=self.run, kind='git-preexisting-authorized').count(), 1)
 
-    def test_owner_cannot_inspect_or_grant_administrative_authority(self):
-        with self.assertRaisesRegex(c.Refused, 'administrator-required'):
-            admission.inspect_preexisting(self.owner, {**self.kw, 'paths': ['DEVOPS.md']})
-        with self.assertRaisesRegex(c.Refused, 'administrator-required'):
-            admission.authorize_preexisting(self.owner, self.payload())
+    def test_other_actor_cannot_admit_files_for_the_direct_run(self):
+        other = Actor.objects.create(pk='foreign-' + uuid.uuid4().hex, uid=os.getuid(), agent='fixture')
+        other.projects.add(self.project)
+        with self.assertRaisesRegex(c.Refused, 'file-authority-required'):
+            admission.inspect_preexisting(other, {**self.kw, 'paths': ['DEVOPS.md']})
+        with self.assertRaisesRegex(c.Refused, 'file-authority-required'):
+            admission.authorize_preexisting(other, self.payload())
+
+    def test_only_designated_orchestrator_can_admit_for_a_piloted_run(self):
+        orchestrator = Actor.objects.create(pk='parent-' + uuid.uuid4().hex, uid=os.getuid(), agent='fixture', role='orchestrator')
+        orchestrator.projects.add(self.project)
+        self.run.mode = 'piloted'
+        self.run.mandate = {**self.run.mandate, 'orchestrator_id': orchestrator.pk}
+        self.run.save(update_fields=['mode', 'mandate'])
+        request = {**self.kw, 'paths': ['DEVOPS.md']}
+        observed = admission.inspect_preexisting(orchestrator, request)['expected_state']
+        payload = self.payload(expected_state=observed)
+        for caller in (self.owner, self.admin):
+            with self.subTest(caller=caller.pk), self.assertRaisesRegex(c.Refused, 'file-authority-required'):
+                admission.authorize_preexisting(caller, payload)
+        receipt = admission.authorize_preexisting(orchestrator, payload)
+        self.assertEqual(self.reserve()['reserved_count'], 1)
+        event = Event.objects.get(run=self.run, kind='git-files-reserved')
+        self.assertEqual(event.data['preexisting_authorizations'][0]['grant_id'], receipt['grant_id'])
 
     def test_cas_rejects_changed_file_without_mutating_baseline(self):
         payload = self.payload()
@@ -137,16 +159,17 @@ class PreexistingAuthorizationTests(unittest.TestCase):
     def test_grant_becomes_stale_if_file_changes_before_reservation(self):
         admission.authorize_preexisting(self.admin, self.payload())
         (self.root / 'DEVOPS.md').write_text('foreign change after grant\n')
-        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
-            self.reserve()
-        self.assertFalse(GitFileReservation.objects.filter(project=self.project).exists())
+        self.assertEqual(self.reserve()['reserved_count'],1)
+        event = Event.objects.get(run=self.run,kind='git-files-reserved')
+        self.assertEqual(event.data['preexisting_authorizations'],[])
 
     def test_file_mode_change_also_invalidates_grant(self):
         admission.authorize_preexisting(self.admin, self.payload())
         target = self.root / 'DEVOPS.md'
         target.chmod(target.stat().st_mode ^ 0o100)
-        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
-            self.reserve()
+        self.assertEqual(self.reserve()['reserved_count'],1)
+        event = Event.objects.get(run=self.run,kind='git-files-reserved')
+        self.assertEqual(event.data['preexisting_authorizations'],[])
 
     def test_outside_scope_secrets_symlinks_and_directories_rejected(self):
         (self.root / 'outside.md').write_text('outside\n')
@@ -261,14 +284,16 @@ class PreexistingAuthorizationTests(unittest.TestCase):
         self.assertEqual(GitChange.objects.get(change=self.run.change_record).baseline, self.baseline)
         self.assertEqual(Event.objects.get(run=self.run, kind='git-files-reserved').data['clean_initial_paths'], ['DEVOPS.md'])
 
-    def test_tracked_executable_bit_difference_is_refused(self):
+    def test_tracked_executable_bit_difference_is_not_reported_as_clean(self):
         self.git('add', 'DEVOPS.md')
         self.git('commit', '-qm', 'prior work delivered')
         self.git('config', 'core.filemode', 'true')
         (self.root / 'DEVOPS.md').chmod(0o770)
         self.assertFalse(admission.clean_at_head(self.run, 'DEVOPS.md', session.git_snapshot(self.project)))
-        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
-            self.reserve()
+        self.assertEqual(self.reserve()['reserved_count'],1)
+        event = Event.objects.get(run=self.run,kind='git-files-reserved')
+        self.assertEqual(event.data['clean_initial_paths'],[])
+        self.assertEqual(event.data['direct_preexisting_paths'],['DEVOPS.md'])
 
     def test_ignored_mode_cannot_hide_different_bytes(self):
         self.git('add', 'DEVOPS.md')
@@ -284,8 +309,9 @@ class PreexistingAuthorizationTests(unittest.TestCase):
     def test_grant_cannot_leak_to_another_run(self):
         admission.authorize_preexisting(self.admin, self.payload())
         other = c.begin_run(self.owner, {**self.run.mandate, 'run_id': 'OTHER', 'session_id': 'OTHER-SID', 'change': 'other'})
-        with self.assertRaisesRegex(c.Refused, 'file-preexisting'):
-            session.reserve_files(self.owner, {**self.kw, 'run_id': other.run_id, 'request_id': 'other-reserve', 'paths': ['DEVOPS.md']})
+        self.assertEqual(session.reserve_files(self.owner, {**self.kw, 'run_id': other.run_id, 'request_id': 'other-reserve', 'paths': ['DEVOPS.md']})['reserved_count'],1)
+        event = Event.objects.get(run=other,kind='git-files-reserved')
+        self.assertEqual(event.data['preexisting_authorizations'],[])
 
 
 if __name__ == '__main__':

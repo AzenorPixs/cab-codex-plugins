@@ -71,11 +71,14 @@ livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
 
-Un préexistant explicitement autorisé peut être inspecté puis admis par
-l’administrateur via `session.git.inspect_preexisting` et
-`session.git.authorize_preexisting`, sans réécriture de baseline. Reprendre
-ensuite la réservation native ; un grant périmé ou une protection ne se force
-pas. Un ancien dirty réellement propre à HEAD est reconnu automatiquement.
+Dans un RUN direct, le propriétaire peut inspecter puis admettre les
+préexistants du mandat avec `session.git.inspect_preexisting` et
+`session.git.authorize_preexisting` sous son identité CAB habituelle.
+Dans un RUN piloté, l'orchestrateur désigné décide de cette admission et le
+codeur réserve ensuite les fichiers sur son canal natif. Le mandat de
+l'orchestrateur fixe le périmètre des écritures. CAB préserve la baseline
+et les réservations des autres sessions. Un ancien dirty réellement propre
+à HEAD est reconnu automatiquement.
 
 Pour un travail demandé sans CI/CD ni livraison, après les derniers contrôles,
 le report source et leur indexation, appeler `session_git_release` avant de

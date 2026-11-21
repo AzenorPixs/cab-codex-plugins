@@ -241,7 +241,7 @@ def debian_version(project, root, metadata, data):
         tags = run(project, options, env, 'tag', '--points-at', 'HEAD')
         require(tags.returncode == 0, 'artifact-version-invalid', 409)
         names = tags.stdout.decode().splitlines()
-        if any(re.fullmatch(r'v?(0|[1-9]\d*)(\.(0|[1-9]\d*)){2,3}', name) for name in names):
+        if any(re.fullmatch(r'v?(0|[1-9]\d*)(\.(0|[1-9]\d*)){0,6}', name) for name in names):
             names = [name for name in names if not re.fullmatch(r'v?\d{4}(\.\d{2}){4}', name)]
         versions = {name.removeprefix('v') for name in names}
         require(len(versions) <= 1, 'artifact-version-invalid', 409)

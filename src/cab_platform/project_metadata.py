@@ -1,4 +1,5 @@
 """Instantané public de project.env : liste fermée, aucune évaluation shell."""
+import base64
 import os
 from pathlib import Path
 import re
@@ -7,8 +8,9 @@ from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY')
-KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
+SCALAR_KEY = re.compile(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=')
 
 def public_value(key,value):
     if not value or len(value)>500 or any(ord(c)<32 for c in value) or any(c in value for c in '$`\\'):return False
@@ -29,7 +31,43 @@ def public_value(key,value):
         from .versioning import canonical_version,VersionError
         try:canonical_version(value);return True
         except VersionError:return False
+    if key=='PROJECT_VERSION_POLICY':
+        return value in tuple('1234567')
     return bool(re.fullmatch(r'[\w./@+-]+',value))
+
+
+def version_configuration(raw: bytes) -> dict[str, str]:
+    from .versioning import VersionError, historical_version, inferred_policy, parse_policy
+    values = {}
+    for line in raw.decode('utf-8').splitlines():
+        key = SCALAR_KEY.match(line)
+        if not key or key[1] not in ('PROJECT_VERSION', 'PROJECT_VERSION_POLICY'):
+            continue
+        name = key[1]
+        match = ASSIGNMENT.fullmatch(line) if len(line) <= 4096 else None
+        if not match or name in values:
+            raise VersionError('version-configuration-invalid')
+        values[name] = next(part for part in match.groups()[1:] if part is not None).strip()
+    version = values.get('PROJECT_VERSION')
+    if version:
+        version = historical_version(version)
+    components = inferred_policy(version)
+    if 'PROJECT_VERSION_POLICY' in values:
+        policy = parse_policy(values['PROJECT_VERSION_POLICY'])
+        if version and policy != components:
+            raise VersionError('version-policy-mismatch')
+    return values
+
+
+def initialize_version_policy(raw: bytes) -> bytes:
+    from .versioning import historical_version, inferred_policy
+    values = version_configuration(raw)
+    if 'PROJECT_VERSION_POLICY' in values:
+        return raw
+    version = values.get('PROJECT_VERSION')
+    policy = inferred_policy(historical_version(version) if version else None)
+    newline = b'' if not raw or raw.endswith(b'\n') else b'\n'
+    return raw + newline + f'PROJECT_VERSION_POLICY={policy}\n'.encode('ascii')
 
 def read_metadata(root):
     root=Path(root)
@@ -68,6 +106,27 @@ def synchronize(project_id,include_forges=True,include_git=True):
     with transaction.atomic():
         project=Project.objects.select_for_update().get(pk=project_id)
         snapshot=read_metadata(project.root)
+        if snapshot['state'] in ('ready','partial') and 'PROJECT_VERSION_POLICY' not in snapshot['values']:
+            from .core.commands import Refused
+            from .forge_settings import file_operation
+            from .versioning import VersionError
+            try:
+                source=file_operation(project,{'op':'env-read'})
+                raw=base64.b64decode(source['content'],validate=True)
+                changed=initialize_version_policy(raw)
+                if changed!=raw:
+                    file_operation(project,{'op':'env-write','digest':source['digest'],'content':base64.b64encode(changed).decode('ascii')})
+                    snapshot=read_metadata(project.root)
+            except VersionError as error:
+                snapshot['version_policy_error']=str(error)
+            except (Refused,ValueError,OSError):
+                snapshot['version_policy_error']='version-policy-file-unavailable'
+        elif 'PROJECT_VERSION_POLICY' in snapshot['values']:
+            from .versioning import VersionError, parse_policy, policy_parts
+            values=snapshot['values']
+            if values.get('PROJECT_VERSION'):
+                try:policy_parts(values['PROJECT_VERSION'],parse_policy(values['PROJECT_VERSION_POLICY']))
+                except VersionError as error:snapshot['version_policy_error']=str(error)
         snapshot['project_root']=project.root
         previous=project.public_metadata or {}
         tokens_changed=False

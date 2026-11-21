@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 3.9.0
+
+- Politique de version de 1 à 7 composantes, avec aperçu et adaptation des tags
+  Git locaux dans Overview.
+- Cycle à douze étapes avec accusé de lecture du skill Version et conservation
+  des itérations et durées sous le change.
+
 ## 3.2.26
 - Reprise administrative sous CAS du seul commit échoué avant références, dans la même livraison et sans rejouer version/projection.
 - Résolution automatique des seuls scalaires de version ; résolutions de code limitées aux blobs et diffs explicitement revus.

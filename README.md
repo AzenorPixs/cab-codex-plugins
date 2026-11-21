@@ -4,6 +4,9 @@
 CAB prend officiellement en charge PostgreSQL17 et18 (Debian Trixie/Forky).
 La référence est conservée sous /etc/cab ; voir [le parcours PostgreSQL](docs/postgresql.md).
 
+Les règles de politique de version, l’adaptation des tags locaux et le suivi
+du temps par change sont décrits dans les [opérations CAB](docs/platform-operations.md).
+
 ## CAB 3.2.8
 
 Le contrôle MCP utilise d'abord l'API native de l'instance réellement raccordée,

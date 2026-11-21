@@ -31,7 +31,7 @@ def release_obsolete_slot(actor, version, request_id, scope):
     """Libérer le créneau d'une version remplacée, en conservant son reçu."""
     from .frontend_recovery import observation
     from .cabu_recovery_policy import same_instance
-    from .session_delivery import version_tuple
+    from .session_delivery import delivery_version_order
     active = SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
     if active is None:
         return
@@ -41,7 +41,7 @@ def release_obsolete_slot(actor, version, request_id, scope):
         recovery.get('replacement'), scope.get('frontend'))
     admissible = (version and old and active.actor_id == actor.pk
                   and active.state == 'RELOAD_REQUIRED' and active.result.get('verified') is True
-                  and version_tuple(old) < version_tuple(version) and (not recovery or settled_relaunch)
+                  and delivery_version_order(old) < delivery_version_order(version) and (not recovery or settled_relaunch)
                   and verified_local_installation(version) is not None)
     c.require(admissible, 'update-already-active')
     active.result = {**active.result, 'superseded_by': request_id}

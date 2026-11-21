@@ -194,14 +194,36 @@ de mise à jour automatique ou une preuve de compatibilité d’un fork.
 
 ## Cycle et tâches des changes
 
-Le propriétaire déclare l’étape1–11 et sa phase via `cab call run.progress`
-(project_id,run_id,stage,phase) ou run_progress. Les positions peuvent reculer.
+Le propriétaire déclare l’étape et sa phase via `cab call run.progress`
+ou `run_progress`. Le cycle courant compte douze étapes et insère la lecture
+de Version après Spécification. Les anciens RUN gardent leur cycle de onze
+étapes. Les positions peuvent reculer.
 Le tableau temps réel porte étape et tâches réalisées ; le RUN ouvre
 /projects/<project_id>/runs/<run_id>. Les inconnues restent explicites.
 Les tâches proviennent du tasks.md unique actif ou archivé ; change_tasks
 mémorise les libellés, cases, ordre, lignes et empreinte, y compris les anciennes
 lignes retirées sous état inactif. Une source indisponible conserve le dernier
 instantané et le signale. Les cases ne valident ni le RUN ni le gate terminal.
+
+CAB ouvre et ferme les passages d’étape observés avec son horloge serveur.
+Le change conserve ses passages lors d’une reprise sous un autre RUN.
+Overview donne les dates, le détail des passages et la somme des durées
+mesurées. Les durées de passages simultanés s’additionnent.
+
+## Politique de version d’un projet
+
+`PROJECT_VERSION_POLICY` fixe de une à sept composantes. CAB complète la
+variable absente à partir de la version courante ou choisit 3 en l’absence
+de version. Le fichier `project.env` fait autorité. Le champ d’Overview ouvre
+un aperçu de la version et des renommages de tags avant la confirmation.
+Une migration change les références du dépôt local et conserve leurs objets,
+y compris les tags annotés. Un aperçu périmé ou une collision bloque
+l’application. Une interruption se traite sur le même identifiant d’aperçu.
+
+Une version de politique supérieure est toujours ordonnée après une version
+de politique inférieure. Par exemple, `0.3.8.0` vient après `4.0.0`. Une
+réduction locale laisse les tags distants en place. Une livraison ultérieure
+reste bloquée si un tag distant est classé au-dessus du numéro proposé.
 
 La migration normalise les tables projects, runs, sessions, changes et
 change_tasks sans modifier SID, générations, mandats ou reçus. Le service est

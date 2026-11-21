@@ -97,9 +97,21 @@ class MetadataTests(unittest.TestCase):
         from cab_platform import project_git
         self.project.public_metadata={'values':{'GIT_USER_NAME':'Identité projet','GIT_USER_EMAIL':'projet@example.invalid','PROJECT_VERSION':'0.0.1'}}
         projects=MagicMock();projects.objects.get.return_value=self.project
-        reservations=MagicMock();reservations.objects.filter.return_value.exists.return_value=False
+        reservations=MagicMock();reservations.objects.filter.return_value.exists.return_value=True
         with patch.object(project_git,'Project',projects),patch.object(project_git,'commit_progress'),patch.object(project_git,'_refresh_status'),patch('cab_platform.core.models.GitFileReservation',reservations),patch('django.db.connection',types.SimpleNamespace(cursor=MagicMock())):
             return project_git.commit_local('fixture',**fields)
+
+    def test_indexation_web_des_fichiers_suivis_reserves(self):
+        from cab_platform import git_stage_modified as stage
+        projects = MagicMock()
+        projects.objects.get.return_value = self.project
+        reservations = MagicMock()
+        reservations.objects.filter.return_value.exists.return_value = True
+        _, digest = stage.preview(self.project)
+        with patch.object(stage, 'Project', projects), patch.object(stage, 'connection', types.SimpleNamespace(cursor=MagicMock())), patch.object(stage, '_refresh_status'), patch('cab_platform.core.models.GitFileReservation', reservations):
+            self.assertEqual(stage.stage('fixture', digest), {'staged': 1})
+        self.assertEqual(self.git('show', ':file.txt'), 'travail non indexé\n')
+        self.assertEqual(self.git('ls-files', '--', 'libre.txt'), '')
 
     def test_futur_commit_applique_auteur_date_et_description_du_tag_distincte(self):
         output=[]

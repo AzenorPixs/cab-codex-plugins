@@ -118,6 +118,16 @@ def session_delivery_select_version(project_id:str,run_id:str,version:str)->dict
     return client().command('session.delivery.select_version',{'project_id':project_id,'run_id':run_id,'version':version})
 
 @public_tool()
+def version_skill_acknowledge(project_id:str,run_id:str,revision:str,confirmed:bool)->dict:
+    """Confirme à CAB la lecture et la compréhension du skill Version."""
+    return client().command('version.skill_acknowledge',locals())
+
+@public_tool()
+def version_propose(project_id:str,run_id:str,position:int,reason:str,explicit_version:str='')->dict:
+    """Le codeur propose une composante, ou la version explicite du développeur."""
+    return client().command('version.propose',locals())
+
+@public_tool()
 def session_delivery_status(version:str,project_id:str='',run_id:str='')->dict:
     """Lit le reçu de cette version sans relancer ses effets."""
     return client().command('session.delivery.status',{'version':version,**run_target(project_id,run_id)})
@@ -177,8 +187,8 @@ def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)
 @public_tool()
-def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK')->dict:
-    """Déclare la position 1–11 ; phase : 0 à 32 caractères A-Z, 0-9, _ ou - ; ne valide aucune étape."""
+def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK',description:str|None=None)->dict:
+    """Déclare la position du cycle. CAB calcule les durées et conserve la description facultative."""
     try:return client().command('run.progress',locals())
     except ClientError as error:raise ToolError(str(error)) from error
 @public_tool()
@@ -286,6 +296,11 @@ def external_attach(project_id:str,run_id:str,profile:dict)->dict:
 def session_coordinate(project_id:str,run_id:str,action:str,args:dict)->dict:
     """Abonnements, avis, boîte et acquittements par le codeur, sans relais courant du parent."""
     return client().command('coordinate',locals())
+@public_tool()
+def run_authorize_paths(project_id:str,run_id:str,request_id:str,paths:list[str],authorization:str)->dict:
+    """En direct, enregistre l’autorisation du développeur pour des fichiers exacts du RUN rattaché."""
+    return client().command('exception.authorize_direct_paths',locals())
+
 @public_tool()
 def autonomy_exception(project_id:str,run_id:str,request_id:str,category:str,summary:str)->dict:
     """Soumet seulement hors change, hors cadrage, outil absent ou consultation web."""

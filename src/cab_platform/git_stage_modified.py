@@ -51,10 +51,6 @@ def stage(project_id, digest):
     try:
         paths, current = preview(project)
         require(paths and current == digest, 'git-stage-preview-changed', 409)
-        from .core.models import GitFileReservation
-        try:names=[path.decode('utf-8','strict') for path,_ in paths]
-        except UnicodeError:raise Refused('git-stage-preview-unavailable',409) from None
-        require(not GitFileReservation.objects.filter(project=project,active=True,path__in=names).exists(),'project-git-reservations-active',409)
         try:
             result = subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false', 'add', '--update', '--pathspec-from-file=-', '--pathspec-file-nul'], input=b'\0'.join(path for path, _ in paths) + b'\0', cwd='/', env={**env, 'GIT_LITERAL_PATHSPECS': '1'}, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120, **options)
         except (OSError, subprocess.TimeoutExpired):

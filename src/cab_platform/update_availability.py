@@ -1,24 +1,26 @@
 """Cache public de la release officielle ; réseau sur un worker séparé."""
 from datetime import timedelta
 import json
-import re
 import secrets
 from urllib.request import Request,urlopen
 from django.db import transaction
 from django.utils import timezone
 from . import __version__
 from .core.models import UpdateAvailability
+from .versioning import VersionError, numeric_parts
 
 def version_tuple(value):
-    if not isinstance(value,str) or not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',value) or len(value)>100:return None
-    return tuple(int(part) for part in value.split('.'))
+    try:return numeric_parts(value)
+    except VersionError:return None
 
 def view():
     from .paths import runtime_config
     if not runtime_config().get('initialized'):return {'current_version':__version__,'latest_version':None,'update_available':False,'checked_at':None,'next_check_at':None,'error':None}
     cached=UpdateAvailability.objects.filter(pk=1).first()
     latest=cached.latest_version if cached else ''
-    return {'current_version':__version__,'latest_version':latest or None,'update_available':bool(version_tuple(latest) and version_tuple(latest)>version_tuple(__version__)),'checked_at':cached.checked_at.isoformat() if cached and cached.checked_at else None,'next_check_at':cached.next_check_at.isoformat() if cached and cached.next_check_at else None,'error':cached.error or None if cached else None}
+    available,current=version_tuple(latest),version_tuple(__version__)
+    is_newer=bool(available and current and (len(available),available)>(len(current),current))
+    return {'current_version':__version__,'latest_version':latest or None,'update_available':is_newer,'checked_at':cached.checked_at.isoformat() if cached and cached.checked_at else None,'next_check_at':cached.next_check_at.isoformat() if cached and cached.next_check_at else None,'error':cached.error or None if cached else None}
 
 def request_check(force=False):
     cached,_=UpdateAvailability.objects.get_or_create(pk=1)

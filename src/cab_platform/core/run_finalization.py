@@ -99,7 +99,7 @@ def prepare_review(run,plan,result):
     submission['digest']=c.digest(submission)
     previous=run.review.get('submission',{})
     if previous.get('digest')==submission['digest']:return
-    run.review={'submission':submission};run.state='REVIEW_PENDING';run.stage=8;run.save(update_fields=['review','state','stage','updated'])
+    run.review={'submission':submission};run.state='REVIEW_PENDING';run.stage=run.cycle_steps-3;run.save(update_fields=['review','state','stage','updated'])
     c.event(run,'review-requested',{'submission_digest':submission['digest'],'assembled_by':'cab-policy'})
 
 def process(run_id):
@@ -128,7 +128,7 @@ def process(run_id):
                 run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':plan.missing})
             return
         if run.state!='FINALIZING':
-            run.state='FINALIZING';run.stage=10;run.save(update_fields=['state','stage','updated'])
+            run.state='FINALIZING';run.stage=run.cycle_steps-1;run.save(update_fields=['state','stage','updated'])
             plan.phase='FINALIZING';plan.missing=[];plan.save()
             c.event(run,'finalization-started',{'policy_digest':plan.digest,'proofs':result['proofs']})
     # État durable FINALIZING : aucune nouvelle exécution n'est admise.
@@ -177,6 +177,6 @@ def process(run_id):
             receipt['host_completion']=run.configuration['host_completion']
             receipt['delivered']=False
         plan.receipt=receipt;plan.phase='CLOSED';plan.missing=[];plan.save()
-        run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=11;run.phase='CLOSED';run.save(update_fields=['review','state','stage','phase','updated'])
+        run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=run.cycle_steps;run.phase='CLOSED';run.save(update_fields=['review','state','stage','phase','updated'])
         c.event(run,'run-closed',receipt)
         return receipt

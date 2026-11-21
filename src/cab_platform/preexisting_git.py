@@ -129,17 +129,26 @@ def observe(current, paths):
     return {'scope': {'project_id': current.project_id, 'run_id': current.run_id, 'session_id': current.session_id, 'generation': current.generation, 'actor_id': current.actor_id, 'change': current.change}, 'framing_digest': current.mandate['framing_digest'], 'source_revision': revision, 'baseline_digest': c.digest(baseline.baseline), 'head': snapshot['head'], 'index_id': index.pk if index else None, 'files': files}
 
 
+def require_file_authority(actor, current):
+    if current.mode == 'direct':
+        allowed = actor.pk == current.actor_id or actor.role == 'admin'
+    else:
+        allowed = (current.mode == 'piloted'
+                   and actor.role in ('orchestrator', 'admin')
+                   and actor.pk == current.mandate.get('orchestrator_id'))
+    c.require(actor.active and allowed, 'session-git-file-authority-required', 403)
+
+
 def inspect_preexisting(actor, data: dict) -> dict:
-    c.require(actor.active and actor.role == 'admin', 'session-git-administrator-required', 403)
     c.require(set(data) == {'project_id', 'run_id', 'paths'}, 'session-git-fields-invalid', 400)
     paths = validate_paths(data['paths'])
     with git_guard(), transaction.atomic():
         current = c.run_scope(actor, data['run_id'], data['project_id'], lock=True, owner=False)
+        require_file_authority(actor, current)
         return {'expected_state': observe(current, paths), 'effects_issued': False}
 
 
 def authorize_preexisting(actor, data: dict) -> dict:
-    c.require(actor.active and actor.role == 'admin', 'session-git-administrator-required', 403)
     c.require(set(data) == {'project_id', 'run_id', 'request_id', 'paths', 'expected_state', 'authorization'}, 'session-git-fields-invalid', 400)
     paths = validate_paths(data['paths'])
     key = c.identifier(data['request_id'])
@@ -147,6 +156,7 @@ def authorize_preexisting(actor, data: dict) -> dict:
     request_digest = c.digest({**data, 'paths': paths})
     with git_guard(), transaction.atomic():
         current = c.run_scope(actor, data['run_id'], data['project_id'], lock=True, owner=False)
+        require_file_authority(actor, current)
         previous = Event.objects.filter(run=current, kind='git-preexisting-authorized', data__request_id=key).first()
         if previous:
             c.require(previous.data['request_digest'] == request_digest, 'session-git-request-conflict', 409)
@@ -162,6 +172,8 @@ def authorize_preexisting(actor, data: dict) -> dict:
 def matching_authorization(current, index, path, snapshot):
     record = Event.objects.filter(run=current, kind='git-preexisting-authorized', data__paths__contains=[path]).order_by('-pk').first()
     if record is None:
+        return None
+    if current.mode == 'piloted' and record.data.get('authority') != current.mandate.get('orchestrator_id'):
         return None
     protected_boundary(current)
     observed = record.data['observation']

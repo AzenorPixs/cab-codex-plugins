@@ -16,7 +16,7 @@ PROJECT_VERSION et les conventions du projet, puis adapter l'incrément au
 périmètre validé. Ne pas demander systématiquement un numéro au développeur.
 Une version explicitement imposée par le développeur prime sur ce choix.
 
-En session pilotée, cette responsabilité appartient à l'orchestrateur : il
+Dans le cycle historique, en session pilotée, cette responsabilité appartient à l'orchestrateur : il
 déclare son choix par `session_delivery_select_version(project_id,run_id,version)`
 avant la livraison et le transmet au codeur. Le codeur utilise exactement cette
 version ; CAB refuse une version choisie unilatéralement par le codeur piloté.
@@ -50,6 +50,11 @@ Le moteur CAB déplace automatiquement le tag de version sans v sur le dernier
 commit de clôture des statistiques et de BLOCKERS.md éventuel. La branche et
 le tag sont envoyés atomiquement et vérifiés. Ce comportement est dans le code
 CAB ; le LLM ne déplace pas le tag et ne réalise aucun commit ou push parallèle.
+
+Pour un RUN à douze étapes, appliquer le skill **Version** après la
+spécification. Le codeur choisit puis appelle `version_propose` après
+l’accusé du lecteur habilité. En piloté, l’orchestrateur déclare le
+numéro choisi par le codeur. Les RUN historiques gardent leur parcours.
 
 ## Reprise administrative avant commit
 

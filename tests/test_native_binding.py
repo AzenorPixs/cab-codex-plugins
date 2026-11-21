@@ -53,4 +53,41 @@ class NativeBindingTests(unittest.TestCase):
         third=self.root/'third.jsonl';third.write_bytes(self.source.read_bytes());self.run.mandate['native_frozen_at']='2026-11-13T00:00:00Z';self.run.save()
         with patch('cab_platform.native_sources.indexed_path',return_value=str(third)),self.assertRaisesRegex(commands.Refused,'resume-state-invalid'):commands.bind_native(self.actor,{**self.query,'source_file':str(third),'resume':True})
 
+    def test_admin_reconciles_only_device_change_during_finalization(self):
+        commands.bind_native(self.actor,{**self.query,'source_file':str(self.source)})
+        self.run.refresh_from_db()
+        actual=self.run.mandate['native_source']
+        previous={**actual,'device':actual['device']+1}
+        self.run.mandate={**self.run.mandate,'native_source':previous}
+        self.run.state='FINALIZATION_PENDING'
+        self.run.save(update_fields=['state','mandate'])
+        admin=Actor.objects.create(pk=uuid.uuid4().hex,uid=0,agent='fixture',
+                                   role='admin',token_hash=uuid.uuid4().hex)
+        identity=(self.run.pk,self.run.session_id,self.run.generation,self.run.state)
+        request={**self.query,'expected_device':previous['device']}
+        with patch('cab_platform.native_sources.indexed_path',return_value='/elsewhere'):
+            with self.assertRaisesRegex(commands.Refused,'index-authority-required'):
+                commands.reconcile_native_device(admin,request)
+        with patch('cab_platform.native_sources.indexed_path',return_value=str(self.source)):
+            receipt=commands.reconcile_native_device(admin,request)
+            self.assertEqual(receipt['device'],actual['device'])
+        self.run.refresh_from_db()
+        self.assertEqual((self.run.pk,self.run.session_id,self.run.generation,self.run.state),identity)
+        self.assertEqual(self.run.mandate['native_source'],actual)
+        event=Event.objects.get(run=self.run,kind='native-source-device-reconciled')
+        self.assertEqual(event.data['previous'],previous)
+
+    def test_device_reconciliation_refuses_a_different_inode(self):
+        commands.bind_native(self.actor,{**self.query,'source_file':str(self.source)})
+        self.run.refresh_from_db()
+        source=self.run.mandate['native_source']
+        with patch.object(commands,'resolve_native',return_value={**source,'device':source['device']+1,'inode':source['inode']+1}):
+            with self.assertRaisesRegex(commands.Refused,'resume-state-invalid'):
+                self.run.state='FINALIZATION_PENDING'
+                self.run.save(update_fields=['state'])
+                commands.bind_native(self.actor,{**self.query,'resume':True})
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.mandate['native_source'],source)
+        self.assertFalse(Event.objects.filter(run=self.run,kind='native-source-device-reconciled').exists())
+
 if __name__=='__main__':unittest.main()

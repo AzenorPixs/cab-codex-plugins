@@ -425,6 +425,7 @@ class Run(models.Model):
     coding_session=models.ForeignKey(CodingSession,null=True,on_delete=models.PROTECT,related_name='runs')
     change_record=models.ForeignKey(Change,null=True,on_delete=models.PROTECT,related_name='runs')
     configuration=models.JSONField(default=dict)
+    cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
     stage=models.PositiveSmallIntegerField(null=True,blank=True)
     phase=models.CharField(max_length=32,blank=True)
     state=models.CharField(max_length=32,default='WORKING')
@@ -437,7 +438,56 @@ class Run(models.Model):
     updated=models.DateTimeField(auto_now=True)
     class Meta:
         db_table='runs'
-        constraints=[models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity'),models.CheckConstraint(condition=models.Q(stage__isnull=True)|models.Q(stage__gte=1,stage__lte=11),name='cab_run_stage_valid')]
+        constraints=[
+            models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity'),
+            models.CheckConstraint(condition=models.Q(cycle_steps__in=(11,12)),name='cab_run_cycle_steps_valid'),
+            models.CheckConstraint(condition=models.Q(stage__isnull=True)|models.Q(stage__gte=1,stage__lte=models.F('cycle_steps')),name='cab_run_stage_valid'),
+        ]
+
+
+class ChangeStage(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='stages')
+    key=models.CharField(max_length=32)
+
+    class Meta:
+        db_table='change_stages'
+        constraints=[
+            models.UniqueConstraint(fields=['change','key'],name='cab_change_stage_identity'),
+        ]
+
+
+class VersionPolicyMigration(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='version_policy_migrations')
+    preview_id=models.CharField(max_length=64)
+    state=models.CharField(max_length=16,default='PENDING')
+    plan=models.JSONField(default=dict)
+    created_at=models.DateTimeField(auto_now_add=True)
+    updated_at=models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table='version_policy_migrations'
+        constraints=[
+            models.UniqueConstraint(fields=['project','preview_id'],name='cab_version_policy_preview_identity'),
+            models.UniqueConstraint(fields=['project'],condition=models.Q(state='PENDING'),name='cab_one_version_policy_migration'),
+        ]
+
+
+class ChangeStageIteration(models.Model):
+    stage=models.ForeignKey(ChangeStage,on_delete=models.PROTECT,related_name='iterations')
+    run=models.ForeignKey(Run,null=True,on_delete=models.SET_NULL,related_name='stage_iterations')
+    started_at=models.DateTimeField()
+    ended_at=models.DateTimeField(null=True)
+    end_reason=models.CharField(max_length=32,blank=True)
+    description=models.TextField(blank=True)
+    description_source=models.CharField(max_length=12,blank=True)
+
+    class Meta:
+        db_table='change_stage_iterations'
+        ordering=['started_at','pk']
+        constraints=[
+            models.UniqueConstraint(fields=['run'],condition=models.Q(ended_at__isnull=True),name='cab_one_open_stage_per_run'),
+            models.CheckConstraint(condition=models.Q(ended_at__isnull=True)|models.Q(ended_at__gte=models.F('started_at')),name='cab_change_stage_iteration_dates'),
+        ]
 
 class Operation(models.Model):
     run=models.ForeignKey(Run,on_delete=models.PROTECT)
@@ -507,6 +557,7 @@ class SessionProjection(models.Model):
     archived=models.BooleanField(default=False)
     change=models.CharField(max_length=200)
     generation=models.PositiveBigIntegerField()
+    cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
     stage=models.PositiveSmallIntegerField(null=True)
     phase=models.CharField(max_length=32,blank=True)
     tasks_done=models.PositiveIntegerField(null=True)

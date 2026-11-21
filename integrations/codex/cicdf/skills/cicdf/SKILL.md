@@ -9,4 +9,9 @@ Utiliser ce parcours sur demande explicite de CICDF ou de livraison de tous les 
 
 Appliquer les règles du skill `cicd` pour le choix de version, le rattachement au RUN, le suivi et la clôture. Appeler `session_delivery_full_start(version)`. Lire ensuite `session_delivery_status(version)` sur le même reçu. Le champ `scope` doit valoir `project`. Une réponse perdue se vérifie sur le reçu existant. Le codeur ne reproduit aucun commit, build ou envoi.
 
+Pour un RUN à douze étapes, appliquer le skill **Version** après la
+spécification. Le codeur choisit puis appelle `version_propose` après
+l’accusé du lecteur habilité. En piloté, l’orchestrateur déclare le
+numéro choisi par le codeur. Les RUN historiques gardent leur parcours.
+
 CAB construit et publie les artefacts Debian et Docker activés par ses fonctions natives. Indiquer les étapes réellement vérifiées et les publications différées.

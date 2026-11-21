@@ -183,7 +183,7 @@ def heartbeat(actor,data,peer):
     process=identity(peer['pid']);c.require(process and cab_process(peer['pid'],'mcp')==actor.agent,'connector-process-invalid',403)
     key=data.get('connector_id');c.require(isinstance(key,str) and re.fullmatch('[a-f0-9]{32}',key),'connector-id-invalid',400)
     worker=identity(data.get('worker_pid',0));c.require(worker and worker['parent_pid']==process['pid'] and worker['uid']==actor.uid and cab_process(worker['pid'],'mcp-worker')==actor.agent,'connector-worker-invalid',403)
-    version=data.get('loaded_version');c.require(isinstance(version,str) and re.fullmatch(r'\d+\.\d+\.\d+',version),'connector-version-invalid',400)
+    version=data.get('loaded_version');c.require(isinstance(version,str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',version),'connector-version-invalid',400)
     c.require(type(data.get('pending')) is int and 0<=data['pending']<=10000,'connector-pending-invalid',400)
     state=data.get('state');c.require(state in ('READY','BUSY','RELOADING','CATALOG_PENDING','FAILED'),'connector-state-invalid',400)
     Actor.objects.select_for_update().get(pk=actor.pk)
@@ -197,7 +197,7 @@ def heartbeat(actor,data,peer):
     row.worker=worker;row.loaded_version=version;row.pending=data['pending'];row.state=state
     uncertain=data.get('uncertain',state=='FAILED');c.require(type(uncertain) is bool,'connector-uncertainty-invalid',400);row.uncertain=uncertain
     relay=data.get('relay_version','')
-    c.require(relay=='' or isinstance(relay,str) and re.fullmatch(r'\d+\.\d+\.\d+',relay),'connector-relay-version-invalid',400)
+    c.require(relay=='' or isinstance(relay,str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',relay),'connector-relay-version-invalid',400)
     row.relay_version=relay
     if data.get('catalog_version')==version:row.catalog_version=version
     row.error=str(data.get('error',''))[:100];row.save()

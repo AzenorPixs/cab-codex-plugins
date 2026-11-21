@@ -6,7 +6,7 @@ import tomllib
 from .client import ClientError
 
 KEY='CAB_MCP_PACKAGE_VERSION'
-VERSION=re.compile(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2,3}\Z')
+VERSION=re.compile(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}\Z')
 CAB=r'mcp_servers\s*\.\s*(?:cab|"cab"|\'cab\')'
 
 def codex_epoch(original: bytes,version: str) -> bytes:

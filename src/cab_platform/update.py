@@ -124,7 +124,7 @@ def update(package=None,version=None,progress=None):
         package_name=subprocess.check_output(['/usr/bin/dpkg-deb','-f',str(path),'Package'],text=True).strip()
         if package_name!='cab':raise ClientError('debian-package-identity-invalid')
         target=subprocess.check_output(['/usr/bin/dpkg-deb','-f',str(path),'Version'],text=True).strip()
-        if not re.fullmatch(r'\d+\.\d+\.\d+',target) or version and target!=version:raise ClientError('debian-package-version-invalid')
+        if not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',target) or version and target!=version:raise ClientError('debian-package-version-invalid')
         if subprocess.run(['/usr/bin/dpkg','--compare-versions',target,'lt',previous],capture_output=True).returncode==0:raise ClientError('update-downgrade-refused')
         sha=hashlib.sha256(path.read_bytes()).hexdigest()
         payload=preflight_package(path,target)

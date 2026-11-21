@@ -92,14 +92,19 @@ def projection(run):
     ensure_records(run)
     change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
     from .models import SessionArchive
-    values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
+    values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'cycle_steps':run.cycle_steps,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
     existing=SessionProjection.objects.filter(binding=run).first()
     if existing and all(getattr(existing,key)==value for key,value in values.items()):return
     SessionProjection.objects.update_or_create(binding=run,defaults=values)
 
 def event(run,kind,data):
-    Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)
-    if run:projection(run)
+    record=Event.objects.create(project=run.project if run else None,run=run,kind=kind,data=data)
+    if run:
+        projection(run)
+        if run.cycle_steps == 12:
+            from cab_platform.change_stage_metrics import STOP_STATES,TRANSITIONS,observe
+            if kind in TRANSITIONS or run.suspension or run.state in STOP_STATES:
+                observe(run,record.created)
 
 def no_pending(run,*,terminal_git=False):
     from .models import GitDelivery,GitSessionEffect,TerminalGitCommit
@@ -122,6 +127,60 @@ def locate_native(actor,data):
     source=resolve_native(actor,project,identifier(data['session_id']),{**data,'source_file':''})
     return {'project_id':project.pk,'session_id':data['session_id'],**source}
 
+def native_device_only(previous, current):
+    fields = {'source_file', 'device', 'inode', 'uid'}
+    return (
+        isinstance(previous, dict) and isinstance(current, dict)
+        and set(previous) == set(current) == fields
+        and type(previous['device']) is type(current['device']) is int
+        and previous['device'] != current['device']
+        and all(previous[key] == current[key] for key in fields - {'device'})
+    )
+
+
+def record_native_device(run, source, authority):
+    """Réconcilie le montage courant, sans remplacer le journal ni ses preuves."""
+    from cab_platform.native_sources import NativeSourceError, indexed_path
+    from .run_lifecycle import guard
+
+    previous = run.mandate.get('native_source')
+    require(native_device_only(previous, source), 'native-source-device-only-required')
+    working(run)
+    require(not run.mandate.get('native_frozen_at') and not run.review
+            and not run.mandate.get('legacy_snapshot_id'), 'native-source-resume-state-invalid')
+    guard(run, allow_measurement=True)
+    try:
+        indexed = indexed_path(run.actor.uid, run.session_id, run.mandate.get('native_source_home', ''))
+    except NativeSourceError as error:
+        raise Refused(str(error), 400) from None
+    require(indexed == source['source_file'], 'native-source-index-authority-required')
+    current = resolve_native(run.actor, run.project, run.session_id,
+                             {'source_file': previous['source_file']}, run=run)
+    require(current == source, 'native-source-device-changed')
+    history = run.mandate.get('native_source_history', [])
+    require(isinstance(history, list) and len(history) < 128, 'native-source-history-limit')
+    entry = {'previous': previous, 'current': source, 'at': timezone.now().isoformat(),
+             'authority': 'exact-native-index-device', 'actor': authority.pk}
+    run.mandate = {**run.mandate, 'native_source': source, 'native_source_history': [*history, entry]}
+    run.save(update_fields=['mandate', 'updated'])
+    event(run, 'native-source-device-reconciled', entry)
+
+
+@transaction.atomic
+def reconcile_native_device(actor, data):
+    require(actor.active and actor.role == 'admin', 'administrator-required', 403)
+    require(set(data) == {'project_id', 'run_id', 'expected_device'}
+            and type(data['expected_device']) is int, 'native-source-device-fields-invalid', 400)
+    run = run_scope(actor, data['run_id'], data['project_id'], lock=True, owner=False)
+    previous = run.mandate.get('native_source')
+    require(previous and previous.get('device') == data['expected_device'], 'native-source-device-changed')
+    source = resolve_native(run.actor, run.project, run.session_id,
+                            {'source_file': previous['source_file']}, run=run)
+    record_native_device(run, source, actor)
+    return {'reconciled': True, 'run_id': run.run_id, 'session_id': run.session_id,
+            'generation': run.generation, 'device': source['device']}
+
+
 @transaction.atomic
 def bind_native(actor,data):
     from .native_access import root_for
@@ -132,6 +191,9 @@ def bind_native(actor,data):
     if not data.get('codex_home') and r.mandate.get('native_source_home'):data={**data,'codex_home':r.mandate['native_source_home']}
     source=resolve_native(actor,r.project,r.session_id,data,run=r)
     previous=r.mandate.get('native_source')
+    if data.get('resume') and native_device_only(previous,source):
+        record_native_device(r, source, actor)
+        previous=source
     if previous is not None and previous!=source:
         require(data.get('resume') is True,'native-source-replacement-refused')
         require(r.state=='WORKING' and not r.mandate.get('native_frozen_at'),'native-source-resume-state-invalid')
@@ -179,6 +241,9 @@ def begin_run(actor,data):
     project=Project.objects.get(pk=data['project_id']);scope(actor,project)
     with connection.cursor() as cursor:cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[project.pk])
     require(project.creation_state=='READY','project-creation-needs-reconciliation')
+    from .models import VersionPolicyMigration
+    require(not VersionPolicyMigration.objects.filter(project=project,state='PENDING').exists(),
+            'version-policy-migration-pending',409)
     run_id=identifier(data['run_id']);sid=identifier(data['session_id']);mode=data['mode']
     require(mode in ('direct','piloted'),'run-mode-invalid',400)
     require(data.get('decisions_resolved') is True,'decisions-not-resolved',400)
@@ -208,7 +273,7 @@ def begin_run(actor,data):
         require(not active.exists(),'direct-run-already-active',409)
     else:
         require(not replacing,'run-replacement-direct-only',400)
-    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,mandate={**data,'framing_digest':digest(data)})
+    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode})
@@ -228,11 +293,17 @@ def progress(actor,data):
     require(r.state in ('WORKING','FINALIZATION_PENDING','REVIEW_PENDING','ACCEPTED') and not r.suspension,'run-not-active')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
     stage=data.get('stage');phase=data.get('phase',r.phase)
-    require(type(stage) is int and 1<=stage<=11,'run-stage-invalid',400)
+    require(type(stage) is int and 1<=stage<=r.cycle_steps,'run-stage-invalid',400)
     require(isinstance(phase,str) and bool(re.fullmatch(r'[A-Z0-9_-]{0,32}',phase)),'run-phase-invalid',400)
+    if r.cycle_steps == 12 and stage > 6:
+        from cab_platform.version_skill import require_acknowledged
+        require_acknowledged(r)
     if r.stage!=stage or r.phase!=phase:
         r.stage=stage;r.phase=phase;r.save(update_fields=['stage','phase','updated']);event(r,'run-progress',{'stage':stage,'phase':phase})
-    return {'run_id':r.run_id,'stage':r.stage,'phase':r.phase,'generation':r.generation}
+    if data.get('description') is not None:
+        from cab_platform.change_stage_metrics import describe
+        describe(r,data['description'])
+    return {'run_id':r.run_id,'stage':r.stage,'phase':r.phase,'generation':r.generation,'cycle_steps':r.cycle_steps}
 
 @transaction.atomic
 def reconcile_archive(actor,data):
@@ -270,7 +341,8 @@ def reconcile_archive(actor,data):
     updated['framing_digest']=digest({key:value for key,value in updated.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
     record={'archive_path':archive,'previous_framing_digest':expected,'framing_digest':updated['framing_digest'],'source_revision':current,'paths':replacements,'at':timezone.now().isoformat()}
     updated['archive_reconciliations']=[record]
-    r.mandate=updated;r.source_revision=current;r.stage=9;r.save()
+    from cab_platform.change_stage_metrics import number_for
+    r.mandate=updated;r.source_revision=current;r.stage=number_for(r,'archival');r.save()
     event(r,'mandate-archive-reconciled',{'actor':actor.pk,**record})
     return {'state':'RECONCILED','run_id':r.run_id,'session_id':r.session_id,'generation':r.generation,**record}
 
@@ -368,7 +440,8 @@ def submit(actor,data):
     require(set(t['criterion'] for t in tests)==set(r.mandate['criteria']),'criteria-not-covered')
     submission={'id':identifier(data['submission_id']),'source_revision':current,'tests':tests,'limits':data.get('limits',[]),'summary':str(data.get('summary',''))[:4000]}
     submission['digest']=digest(submission)
-    r.review={'submission':submission};r.source_revision=current;r.state='REVIEW_PENDING';r.stage=8;r.save();event(r,'review-requested',{'submission_digest':submission['digest']});return submission
+    from cab_platform.change_stage_metrics import number_for
+    r.review={'submission':submission};r.source_revision=current;r.state='REVIEW_PENDING';r.stage=number_for(r,'review');r.save();event(r,'review-requested',{'submission_digest':submission['digest']});return submission
 
 @transaction.atomic
 def review(actor,data):
@@ -423,13 +496,20 @@ def exception(actor,data):
     return {'state':'EXCEPTION_PENDING'}
 
 @transaction.atomic
-def exception_decision(actor,data):
+def exception_decision(actor,data,*,direct_connection=False):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
-    require(actor.role in ('admin','orchestrator') and (actor.role=='admin' or actor.pk==r.mandate.get('orchestrator_id')),'exception-authority-required',403)
+    direct_owner=direct_connection and r.mode=='direct' and actor.pk==r.actor_id
+    require(actor.role=='admin' or actor.role=='orchestrator' and actor.pk==r.mandate.get('orchestrator_id') or direct_owner,'exception-authority-required',403)
     require(data['decision'] in ('approved','rejected'),'decision-invalid',400)
     requested=Event.objects.filter(run=r,kind='exception-requested',data__id=data['request_id']).first()
     require(requested is not None,'exception-not-found',404)
     scope=data.get('scope',{});require(isinstance(scope,dict),'exception-scope-invalid',400)
+    if direct_owner and actor.role!='admin':
+        require(requested.data['category']=='outside-framing' and data['decision']=='approved'
+                and set(scope)=={'paths','authorization'},'exception-authority-required',403)
+        authorization=scope['authorization']
+        require(isinstance(authorization,str) and 20<=len(authorization.strip())<=2000,
+                'exception-developer-authorization-required',400)
     prior=Event.objects.filter(run=r,kind='exception-decided',data__id=data['request_id']).first()
     if prior:
         require(prior.data['decision']==data['decision'] and prior.data['scope']==scope,'exception-decision-conflict')
@@ -440,14 +520,16 @@ def exception_decision(actor,data):
         working(r);require(no_pending(r) and not r.review and not r.mandate.get('native_frozen_at') and not r.mandate.get('legacy_snapshot_id'),'exception-paths-protected')
         paths=scope['paths'];require(isinstance(paths,list) and paths and len(paths)<=128,'exception-paths-invalid',400)
         for path in paths:
-            safe_path(Path(r.project.root),path,exists=False)
+            target=safe_path(Path(r.project.root),path,exists=False)
+            if direct_owner and actor.role!='admin':
+                require(str(Path(path))==path and not target.is_dir(),'exception-direct-file-required',400)
             if path not in old_paths and path not in added:added.append(path)
         require(len(old_paths)+len(added)<=128,'mandate-paths-required',400)
         r.mandate={**r.mandate,'paths':old_paths+added}
         r.mandate['framing_digest']=digest({key:value for key,value in r.mandate.items() if key not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
         r.save(update_fields=['mandate','updated'])
     receipt={'decision':data['decision'],'added_paths':added,'framing_digest':r.mandate.get('framing_digest')}
-    event(r,'exception-decided',{'id':data['request_id'],'decision':data['decision'],'scope':scope,'old_paths':old_paths,'previous_framing_digest':old_digest,'receipt':receipt})
+    event(r,'exception-decided',{'id':data['request_id'],'decision':data['decision'],'scope':scope,'actor':actor.pk,'old_paths':old_paths,'previous_framing_digest':old_digest,'receipt':receipt})
     return receipt
 
 @transaction.atomic

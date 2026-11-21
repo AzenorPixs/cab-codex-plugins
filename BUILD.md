@@ -861,20 +861,16 @@ profil et la mise en service des composants sont des opérations distinctes.
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.3.2` pour le broker,
-le contrôleur, le superviseur, le moniteur, le moteur SGS et les plugins CAB/CABU ; chaque plugin ajoute uniquement un
-cachebuster Codex à cette version.
+CAB utilise une version de projet explicite et cohérente entre ses artefacts.
+Les tags de livraison sont égaux à la version, sans préfixe `v`. Les versions
+historiques préfixées restent lisibles. La construction vérifie l’alignement
+des métadonnées des sources, des clients et des plugins distribués.
 
-Les releases Git devraient être identifiées par des tags de forme :
-
-```text
-vMAJOR.MINOR.PATCH
-```
-
-Le `CHANGELOG.md` accompagne les releases et décrit les changements significatifs.
-
-Les numéros de version du broker et du plugin doivent être synchronisés ou leur relation explicitement documentée.
+La politique de projet indique le nombre de composantes. Une politique de
+numéro supérieur est ordonnée après toute politique de numéro inférieur.
+À politique égale, CAB compare les composantes de gauche à droite.
+Consulter le change OpenSpec pour l’adaptation des tags locaux et les contrôles
+de la livraison. Le `CHANGELOG.md` décrit les changements significatifs.
 
 ## 8. Publication du plugin
 

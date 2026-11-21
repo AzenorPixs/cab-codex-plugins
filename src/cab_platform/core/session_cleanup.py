@@ -76,7 +76,7 @@ def retire_technical(actor,data):
     authorization=data.get('authorization');c.require(isinstance(authorization,str) and 10<=len(authorization)<=4000,'technical-retirement-authorization-required',400)
     binding=binding_proof(run)
     receipt={'kind':'legacy-technical-retirement','classification':'technical-session-retired','receipt_id':'LEGACY-TECHNICAL-RETIRE-'+str(run.pk),'request_id':key,'input_digest':fingerprint,'identity':identity(run),'observed_at':timezone.now().isoformat(),'snapshot_sha256':run.mandate['import_sha256'],'binding':binding,'authority':actor.pk,'developer_authorized':True,'authorization':authorization,'reason':reason,'previous_state':run.state,'historical_end_unknown':True,'normal_acceptance':False,'work_replayed':False}
-    run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=11;run.save(update_fields=['review','state','stage','updated'])
+    run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=run.cycle_steps;run.save(update_fields=['review','state','stage','updated'])
     c.event(run,'legacy-technical-session-retired',receipt)
     return retirement_proof(run)
 
@@ -87,7 +87,7 @@ def retire(run,authority):
     if run.state=='CLOSED':return retirement_proof(run)
     facts=retirement_facts(run)
     receipt={'kind':'legacy-service-retirement','receipt_id':'LEGACY-SERVICE-RETIRE-'+str(run.pk),'identity':identity(run),'observed_at':timezone.now().isoformat(),'snapshot_sha256':run.mandate['import_sha256'],'facts':facts,'authority':authority,'previous_state':run.state,'historical_end_unknown':True,'normal_acceptance':False,'work_replayed':False}
-    run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=11;run.save(update_fields=['review','state','stage','updated'])
+    run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=run.cycle_steps;run.save(update_fields=['review','state','stage','updated'])
     c.event(run,'legacy-service-retired',receipt);c.projection(run)
     return retirement_proof(run)
 

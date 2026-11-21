@@ -80,7 +80,7 @@ def validate(policy: dict,criteria: list[str],mode: str) -> dict:
     require(covered==set(criteria),'finalization-criteria-not-covered')
     review=policy.get('review_required',mode=='piloted');require(type(review) is bool and (mode!='piloted' or review),'finalization-reserved-review-required')
     if any(r['producer']=='cab-update' for r in clean_requirements):
-        require(identifier(policy.get('update_request_id')) and isinstance(policy.get('target_version'),str) and re.fullmatch(r'\d+\.\d+\.\d+',policy['target_version']),'finalization-update-binding-required')
+        require(identifier(policy.get('update_request_id')) and isinstance(policy.get('target_version'),str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',policy['target_version']),'finalization-update-binding-required')
     if nature=='service':require(any(r['kind']=='service_end' for r in clean_requirements),'finalization-service-proof-required')
     if nature=='activation':require({'installation','availability'}<={r['kind'] for r in clean_requirements},'finalization-activation-proofs-required')
     if nature=='delivery':require(any(r['kind']=='publication' for r in clean_requirements),'finalization-publication-proof-required')

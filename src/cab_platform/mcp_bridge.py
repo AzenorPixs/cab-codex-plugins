@@ -66,7 +66,7 @@ class Bridge:
             return False
         version=message.get('version')
         if (not self.startup_nonce or message['cab_worker_startup']!=self.startup_nonce
-                or not isinstance(version,str) or not re.fullmatch(r'\d+\.\d+\.\d+',version)):
+                or not isinstance(version,str) or not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',version)):
             raise ValueError('mcp-worker-startup-invalid')
         self.startup_nonce=None
         self.version=version

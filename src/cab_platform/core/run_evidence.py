@@ -162,9 +162,11 @@ def retarget_release(actor,data):
     plan=FinalizationPlan.objects.select_for_update().get(run=run)
     c.require(not plan.receipt and plan.digest==data['expected_policy_digest'] and plan.digest==c.digest(plan.policy),'finalization-revision-stale')
     old=plan.policy.get('target_version','');new=data['target_version']
-    c.require(isinstance(new,str) and bool(re.fullmatch(r'\d+\.\d+\.\d+',new)) and bool(re.fullmatch(r'\d+\.\d+\.\d+',old)),'finalization-patch-required',400)
-    before=tuple(map(int,old.split('.')));after=tuple(map(int,new.split('.')))
-    c.require(after[:2]==before[:2] and after[2]==before[2]+1,'finalization-patch-required',400)
+    from cab_platform.versioning import VersionError, numeric_parts
+    try:before,after=numeric_parts(old),numeric_parts(new)
+    except VersionError:raise c.Refused('finalization-patch-required',400) from None
+    c.require(len(after)==len(before) and after[:-1]==before[:-1] and after[-1]==before[-1]+1,
+              'finalization-patch-required',400)
     failed=SystemUpdate.objects.select_for_update().filter(pk=plan.policy.get('update_request_id'),state='FAILED',target_version=old).first()
     c.require(failed is not None and (failed.actor_id==run.actor_id or actor.role=='admin'),'finalization-failed-update-required')
     c.require(not run.finalization_evidence.filter(source='cab-update',payload__result='passed').exists(),'finalization-release-already-proven')

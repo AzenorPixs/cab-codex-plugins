@@ -121,7 +121,7 @@ def evaluate(run):
             result['tasks_applicable']=False
             try:
                 proof=terminal_proof(run)
-                result.update(action='normalize' if run.state!='CLOSED' or run.stage!=11 else 'closed',terminal=proof,archive_allowed=run.state=='CLOSED')
+                result.update(action='normalize' if run.state!='CLOSED' or run.stage!=run.cycle_steps else 'closed',terminal=proof,archive_allowed=run.state=='CLOSED')
             except c.Refused as error:
                 result.update(action='service',reasons=['service-terminal-proof-required',error.code])
                 if error.code=='legacy-terminal-proof-missing':
@@ -132,7 +132,7 @@ def evaluate(run):
             result['evaluation_digest']=c.digest(result);return result
         if run.state=='CLOSED':
             proof=terminal_proof(run)
-            result.update(action='normalize' if run.stage!=11 else 'closed',terminal=proof)
+            result.update(action='normalize' if run.stage!=run.cycle_steps else 'closed',terminal=proof)
             if proof['kind']=='legacy-technical-retirement':
                 result['archive_allowed']=True;result['evaluation_digest']=c.digest(result);return result
             if plan and plan.receipt and plan.policy['nature']!='development':
@@ -182,7 +182,7 @@ def recheck(actor,data,*,automatic=False):
             current=evaluate(run)
             c.require(current['action']=='normalize','closure-evaluation-changed')
             require_closed_change(run)
-            run.state='CLOSED';run.stage=11;run.save(update_fields=['state','stage','updated'])
+            run.state='CLOSED';run.stage=run.cycle_steps;run.save(update_fields=['state','stage','updated'])
             c.event(run,'run-terminal-reconciled',{'proof':current['terminal'],'protection_retained':run.suspension,'automatic':automatic})
         return evaluate(run)
     return evaluation

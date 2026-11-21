@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from django.db import transaction,IntegrityError
 from django.db.models import Q
 from .core.commands import Refused,require
-from .core.models import Project,Run,Operation,Lease,StatisticsJob
+from .core.models import Project,Run,Operation,Lease,StatisticsJob,VersionPolicyMigration
 from .core.commands import TERMINAL
 from .paths import config
 from .forge_settings import file_operation
@@ -25,6 +25,15 @@ def edit(project_id,fields,digest,project_path=None):
     try:
         with transaction.atomic():
             project=Project.objects.select_for_update().get(pk=project_id)
+            require(not VersionPolicyMigration.objects.filter(project=project,state='PENDING').exists(),
+                    'version-policy-migration-pending',409)
+            if fields.get('PROJECT_VERSION'):
+                from .project_metadata import read_metadata
+                from .versioning import VersionError, parse_policy, policy_parts
+                policy=read_metadata(project.root)['values'].get('PROJECT_VERSION_POLICY')
+                if policy is not None:
+                    try:policy_parts(fields['PROJECT_VERSION'],parse_policy(policy))
+                    except VersionError as error:raise Refused(str(error),409) from error
             identifier=fields.get('PROJECT_ID',project.identifier)
             if identifier:
                 require(not Project.objects.exclude(pk=project.pk).filter(Q(identifier=identifier)|Q(pk=identifier)).exists(),'project-configuration-id-conflict',409)

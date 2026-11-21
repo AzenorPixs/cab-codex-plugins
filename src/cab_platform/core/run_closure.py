@@ -96,5 +96,5 @@ def close_normal(actor,data,*,automatic=False):
             receipt['blockers']={'path':str((report.parent/'BLOCKERS.md').relative_to(r.project.root)),
                                  'sha256':hashlib.sha256(raw).hexdigest()}
         previous=r.review.get('closure');commands.require(previous is None or previous==receipt,'closure-receipt-conflict')
-        r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.stage=11 if branch=='TERMINÉ' else r.stage;r.suspension='';r.save();commands.event(r,'run-closed',receipt)
+        r.review['closure']=receipt;r.state='CLOSED' if branch=='TERMINÉ' else 'BLOCKED';r.stage=r.cycle_steps if branch=='TERMINÉ' else r.stage;r.suspension='';r.save();commands.event(r,'run-closed',receipt)
         return receipt

@@ -4,18 +4,23 @@ import hashlib
 import re
 from .core.commands import Refused, require
 from .forge_settings import file_operation
+from .versioning import NUMERIC_VERSION, VersionError, inferred_policy, numeric_parts, parse_policy, timestamp_tag, version_order_key
 
-VERSION = re.compile(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2,3}\Z')
-ASSIGNMENT = re.compile(r'''^([ \t]*PROJECT_VERSION[ \t]*=[ \t]*)(?:("[vV]?[0-9]+(?:\.[0-9]+){2,3}")|('[vV]?[0-9]+(?:\.[0-9]+){2,3}')|([vV]?[0-9]+(?:\.[0-9]+){2,3}))([ \t]*(?:[ \t]\#[^\r\n]*)?)(\r?\n)?$''')
+ASSIGNMENT = re.compile(r'''^([ \t]*PROJECT_VERSION[ \t]*=[ \t]*)(?:("[vV]?[0-9]+(?:\.[0-9]+){0,6}")|('[vV]?[0-9]+(?:\.[0-9]+){0,6}')|([vV]?[0-9]+(?:\.[0-9]+){0,6}))([ \t]*(?:[ \t]\#[^\r\n]*)?)(\r?\n)?$''')
 KEY = re.compile(r'^[ \t]*(?:export[ \t]+)?PROJECT_VERSION[ \t]*=')
 
 
 def version_tuple(value):
-    from .versioning import canonical_version,VersionError
+    from .versioning import canonical_version
     try:canonical_version(value)
     except VersionError as error:raise Refused(str(error),400) from None
-    require(isinstance(value, str) and len(value) <= 64 and VERSION.fullmatch(value) is not None, 'session-delivery-version-invalid', 400)
-    return tuple(int(part) for part in value.split('.'))
+    try:return numeric_parts(value)
+    except VersionError:raise Refused('session-delivery-version-invalid',400) from None
+
+
+def delivery_version_order(value):
+    version_tuple(value)
+    return version_order_key(value)
 
 
 
@@ -30,8 +35,14 @@ def version_policy(run):
     from .project_metadata import read_metadata
     values=read_metadata(run.project.root).get('values',{})
     current=values.get('PROJECT_VERSION','')
-    parts=version_tuple(current)
-    return {'current_version':current,'numeric_components':len(parts),'selected_by':'orchestrator' if run.mode=='piloted' else 'coding-agent','authority':run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id,'developer_version_overrides':True,'ask_developer_when_missing':False,'prefix':''}
+    configured=values.get('PROJECT_VERSION_POLICY')
+    try:
+        components=parse_policy(configured) if configured is not None else inferred_policy(current)
+    except VersionError as error:
+        raise Refused(str(error),409) from None
+    if current:
+        require(len(version_tuple(current))==components,'version-policy-mismatch',409)
+    return {'current_version':current,'numeric_components':components,'configured':configured is not None,'selected_by':'orchestrator' if run.mode=='piloted' else 'coding-agent','authority':run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id,'developer_version_overrides':True,'ask_developer_when_missing':False,'prefix':''}
 
 
 def select_delivery_version(actor,data):
@@ -44,12 +55,24 @@ def select_delivery_version(actor,data):
         run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
         authority=version_authority(actor,run)
         previous=Event.objects.filter(run=run,kind='delivery-version-selected').order_by('-pk').first()
-        if previous and previous.data['version']==data['version']:return previous.data
+        if run.cycle_steps==11 and previous and previous.data['version']==data['version']:return previous.data
         c.working(run)
         require(c.no_pending(run) and not GitDelivery.objects.filter(run=run).exists(),'session-delivery-version-selection-protected',409)
         policy=version_policy(run)
-        require(version_tuple(data['version'])>version_tuple(policy['current_version']),'session-delivery-version-not-new',409)
+        proposal=None
+        if run.cycle_steps == 12:
+            from .version_skill import require_acknowledged
+            require_acknowledged(run)
+            proposal=Event.objects.filter(run=run,kind='version-proposed',data__version=data['version'],
+                data__coder=run.actor_id,data__current_version=policy['current_version'],
+                data__policy=policy['numeric_components'],data__generation=run.generation).order_by('-pk').first()
+            require(proposal is not None,'version-coder-proposal-required',409)
+        require(not policy['configured'] or len(version_tuple(data['version']))==policy['numeric_components'],'version-policy-mismatch',409)
+        require(not policy['current_version'] or delivery_version_order(data['version'])>delivery_version_order(policy['current_version']),'session-delivery-version-not-new',409)
         receipt={'version':data['version'],'previous_version':policy['current_version'],'authority':authority,'selected_by':policy['selected_by'],'mode':run.mode}
+        if proposal:
+            receipt.update({'proposal':proposal.pk,'coder':run.actor_id,'policy':policy['numeric_components']})
+        if previous and previous.data==receipt:return previous.data
         c.event(run,'delivery-version-selected',receipt)
         return receipt
 
@@ -79,7 +102,7 @@ def replace_version(raw, version):
         old = original.strip('\"\'')
         from .versioning import historical_version
         old=historical_version(old)
-        require(version_tuple(version) > version_tuple(old), 'session-delivery-version-not-new', 409)
+        require(delivery_version_order(version) > delivery_version_order(old), 'session-delivery-version-not-new', 409)
         quote = original[0] if original[0] in ('\"', "'") else ''
         lines[position] = match.group(1) + quote + version + quote + match.group(5) + (match.group(6) or '')
     else:
@@ -693,27 +716,17 @@ def commit_session(actor, data, *, full=None):
             with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
 
 
-def timestamp_tag(value):
-    from datetime import datetime
-    for pattern,format in ((r'[0-9]{4}(?:\.[0-9]{2}){4}','%Y.%m.%d.%H.%M'),(r'[0-9]{4}(?:-[0-9]{2}){5}','%Y-%m-%d-%H-%M-%S')):
-        if re.fullmatch(pattern,value):
-            try:datetime.strptime(value,format)
-            except ValueError:return False
-            return True
-    return False
-
-
 def validate_remote_tags(version, tags):
     """Applique la priorité DIU sans supprimer ni modifier les autres tags."""
-    requested=version_tuple(version)
+    requested=delivery_version_order(version)
     for ref in tags:
         require(ref.startswith('refs/tags/'),'session-delivery-remote-tags-invalid',409)
         name=ref[len('refs/tags/'):]
-        value=name[1:] if name.startswith('v') else name
+        value=name[1:] if name.startswith(('v','V')) and len(name)>1 and name[1].isdigit() else name
         if timestamp_tag(value):
             continue
-        require(VERSION.fullmatch(value) is not None,'session-delivery-remote-tag-incomparable',409)
-        remote=version_tuple(value)
+        require(NUMERIC_VERSION.fullmatch(value) is not None,'session-delivery-remote-tag-incomparable',409)
+        remote=delivery_version_order(value)
         require(remote<requested,'session-delivery-remote-tag-not-older',409)
 
 
@@ -1026,6 +1039,13 @@ def start_delivery(actor, run, version, connector_id, *, complete=False):
         require((existing.plan.get('scope')=='project')==complete,'session-delivery-scope-conflict',409)
         return delivery_status(actor,run,version,connector_id)
     selection=delivery_version_selection(actor,run,version)
+    if run.cycle_steps == 12:
+        from .version_skill import require_acknowledged
+        require_acknowledged(run)
+        active_policy=version_policy(run)
+        require(selection.get('previous_version')==active_policy['current_version']
+                and selection.get('policy')==active_policy['numeric_components'],
+                'session-delivery-version-selection-stale',409)
     working(run)
     require(no_pending(run),'session-git-effect-unresolved',409)
     contract=FinalizationPlan.objects.filter(run=run).first()

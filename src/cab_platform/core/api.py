@@ -89,6 +89,11 @@ class ProjectConfigurationEdit(Schema):
     revision:str
     project_path:str|None=None
 
+class VersionPolicyEdit(Schema):
+    policy:int
+    side:str
+    preview_id:str|None=None
+
 class ForgeEdit(Schema):
     fields:dict[str,str]
     token:str|None=None
@@ -318,7 +323,7 @@ def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
     change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
 
 def operation_data(op):
     resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
@@ -715,14 +720,18 @@ def project_configuration_read(request,project_id:str):
     principal(request,admin=True)
     from cab_platform.forge_settings import file_operation
     from cab_platform.project_configuration_edit import FIELDS
-    from cab_platform.project_metadata import synchronize
+    from cab_platform.project_metadata import initialize_version_policy, synchronize
     from cab_platform.paths import secret
+    import base64
     import hmac
     project=Project.objects.get(pk=project_id);before=file_operation(project,{'op':'env-read'});snapshot=synchronize(project.pk);env=file_operation(project,{'op':'env-read'})
-    commands.require(before['digest']==env['digest'],'project-configuration-changed',409)
+    if before['digest']!=env['digest']:
+        try:expected=initialize_version_policy(base64.b64decode(before['content'],validate=True))
+        except ValueError:raise commands.Refused('project-configuration-changed',409) from None
+        commands.require(hashlib.sha256(expected).hexdigest()==env['digest'],'project-configuration-changed',409)
     commands.require(Project.objects.filter(pk=project.pk,root=project.root).exists(),'project-configuration-changed',409)
     revision=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
-    response=JsonResponse({'fields':{key:snapshot.get('values',{}).get(key,'') for key in FIELDS},'project_path':project.root,'revision':revision})
+    response=JsonResponse({'fields':{key:snapshot.get('values',{}).get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')},'project_path':project.root,'revision':revision})
     response['Cache-Control']='no-store';return response
 
 @api.post('/projects/{project_id}/configuration')
@@ -736,6 +745,31 @@ def project_configuration_save(request,project_id:str,body:ProjectConfigurationE
     expected=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
     commands.require(hmac.compare_digest(expected,body.revision),'project-configuration-changed',409)
     return edit(project.pk,body.fields,env['digest'],body.project_path)
+
+@api.post('/projects/{project_id}/version-policy')
+def project_version_policy(request,project_id:str,body:VersionPolicyEdit):
+    principal(request,admin=True)
+    from cab_platform.version_policy_migration import apply, preview
+    if body.preview_id is None:
+        return preview(project_id,body.policy,body.side)
+    return apply(project_id,body.policy,body.side,body.preview_id)
+
+@api.get('/projects/{project_id}/change-stage-metrics')
+def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,offset:int=0):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from .models import Change
+    changes=Change.objects.filter(project=project)
+    if change_id is not None:
+        from cab_platform.change_stage_metrics import summarize
+        change=changes.filter(pk=change_id).first()
+        commands.require(change is not None,'change-not-found',404)
+        return {'identifier':change.identifier,**summarize(change)}
+    commands.require(0<=offset<=100000,'change-metrics-offset-invalid',400)
+    items=list(changes.order_by('identifier','pk').values('id','identifier')[offset:offset+51])
+    return {'changes':items[:50],'has_more':len(items)>50}
 
 @api.post('/projects/{project_id}/forges/authenticate')
 def forge_authenticate(request,project_id:str):
@@ -1054,6 +1088,9 @@ def command(request,body:Command):
         from .run_replacement import reconcile
         return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
+    if name in ('version.skill_acknowledge','version.propose'):
+        from cab_platform.version_skill import acknowledge, propose
+        return (acknowledge if name=='version.skill_acknowledge' else propose)(actor,data)
     if name=='run.reconcile_archive':return commands.reconcile_archive(actor,data)
     if name=='run.adopt':
         with transaction.atomic():
@@ -1133,7 +1170,10 @@ def command(request,body:Command):
         from .connectors import current_worker_run
         current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True,native_thread=native_thread,**data)
         from cab_platform.session_delivery import version_policy
-        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,'session_id':current.session_id,'version_policy':version_policy(current)}
+        from cab_platform.version_skill import status as version_skill_status
+        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,
+                'session_id':current.session_id,'cycle_steps':current.cycle_steps,
+                'version_policy':version_policy(current),'version_skill':version_skill_status(current)}
     if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
@@ -1149,6 +1189,7 @@ def command(request,body:Command):
             return (reserve_files if name=='session.git.reserve' else stage_files)(actor,scoped,connector.pk)
         return (effect_status if name=='session.git.status' else inspect_session)(actor,scoped)
     if name=='native.locate':return commands.locate_native(actor,data)
+    if name=='native.reconcile_device':return commands.reconcile_native_device(actor,data)
     if name=='native.bind':
         from .connectors import bind_worker_run
         with transaction.atomic():
@@ -1240,6 +1281,18 @@ def command(request,body:Command):
         return revoke(actor,data)
     if name=='exception.request':return commands.exception(actor,data)
     if name=='exception.decide':return commands.exception_decision(actor,data)
+    if name=='exception.authorize_direct_paths':
+        from .connectors import current_worker_run
+        commands.require(set(data)=={'project_id','run_id','request_id','paths','authorization'},
+                         'exception-scope-invalid',400)
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),native_thread=native_thread,
+                                   project_id=data['project_id'],run_id=data['run_id'])
+        commands.require(current.mode=='direct' and current.actor_id==actor.pk,
+                         'exception-authority-required',403)
+        return commands.exception_decision(actor,{
+            'project_id':current.project_id,'run_id':current.run_id,'request_id':data['request_id'],
+            'decision':'approved','scope':{'paths':data['paths'],'authorization':data['authorization']},
+        },direct_connection=True)
     if name=='metric.record':
         commands.require(actor.role in ('collector','admin'),'collector-required',403)
         r=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)

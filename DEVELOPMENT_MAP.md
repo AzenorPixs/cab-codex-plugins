@@ -1655,3 +1655,5 @@ Livraison et activation sont vérifiées séparément, sans preuve déduite du c
 ## Surveillance Git récursive — change archivé
 
 `monitor-project-git-recursively` : code non attribué ; surveillance inotify, file d’analyse globale et délais en base. Archivage et validations ciblées réalisés ; livraison CI/CD distincte. Voir `openspec/changes/archive/2026-11-16-monitor-project-git-recursively`.
+
+- `manage-project-versioning-and-track-change-stages` — change archivé, code non attribué. Politique de version de 1 à 7, adaptation Git locale, accusé Version, cycle à douze étapes et mesures par change. Qualification ciblée effectuée. La publication, l’activation et la vérification native sont suivies par les reçus CAB. [Proposition](openspec/changes/archive/2026-11-21-manage-project-versioning-and-track-change-stages/proposal.md).
