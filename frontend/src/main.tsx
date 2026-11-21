@@ -4,7 +4,7 @@ import {QueryClient,QueryClientProvider,useQuery,useQueryClient} from '@tanstack
 import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate,Navigate} from '@tanstack/react-router'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
-import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle} from './Appearance'
+import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle,useTablePageSize} from './Appearance'
 import {GitMonitorSettings} from './GitMonitorSettings'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
 import {BinaryCounters} from './BinaryCounters'
@@ -21,6 +21,7 @@ import {McpConnectionsProvider,McpVersions} from './McpConnections'
 import {CabVersionProvider,useCabVersion} from './CabVersion'
 import {Notifications} from './Notifications'
 import './style.css'
+import './MonitorTable.css'
 
 type Health={state:string;initialized:boolean;version:string;csrf_token:string}
 type Session={project_id:string;run_id:string;session_id:string;mode:string;state:string;suspension:string;archived:boolean;change:string;generation:number|string;updated:string;stage:number|null;tasks_done:number|null;tasks_total:number|null}
@@ -63,6 +64,7 @@ function SessionRows({project,rows,showProject}:{project:Project;rows:Session[];
   return <>{rows.map(row=><tr key={`${project.id}:${row.run_id}`}>{showProject&&<td data-label="Projets"><Link className="text-button" to="/projects/$projectId" params={{projectId:project.identifier||project.id}}>{project.identifier||project.id}</Link></td>}<td data-label="RUN / Session"><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.identifier||project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td data-label="Change">{row.change}</td><td data-label="Profil">{row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe'}</td><td data-label="État"><span className="badge">{runStateLabel(row.state)}</span>{row.suspension&&<small className="protection-label">{row.suspension}</small>}</td><td data-label="Étape">{stageLabel(row.stage)}</td><td data-label="Tâches réalisées">{row.mode==='service'?'Sans objet':row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td data-label="Actualisation">{new Date(row.updated).toLocaleString('fr-FR')}</td><td data-label="Actions"><SessionActions projectId={project.id} runId={row.run_id} evaluation={evaluations.data?.evaluations.find(item=>item.run_id===row.run_id)}/></td></tr>)}</>
 }
 function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]}){
+  const pageSize=useTablePageSize('sessions')
   const [rows,setRows]=useState<Session[]>([]),[status,setStatus]=useState(''),[page,setPage]=useState(1)
   useEffect(()=>{
     const controller=new AbortController();setRows([]);setStatus('')
@@ -73,12 +75,12 @@ function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]
   },[project?.id])
   const available=project?[project]:projects
   const all=available.flatMap(value=>rows.filter(row=>!row.archived&&row.project_id===value.id).map(row=>({project:value,row})))
-  const pages=Math.max(1,Math.ceil(all.length/10)),current=Math.min(page,pages)
-  const visible=all.slice((current-1)*10,current*10)
+  const pages=Math.max(1,Math.ceil(all.length/pageSize)),current=Math.min(page,pages)
+  const visible=all.slice((current-1)*pageSize,current*pageSize)
   const groups=available.map(value=>({project:value,rows:visible.filter(item=>item.project.id===value.id).map(item=>item.row)})).filter(value=>value.rows.length)
   useEffect(()=>setPage(1),[project?.id])
   useEffect(()=>{if(page>pages)setPage(pages)},[page,pages])
-  return <><div className="section-heading"><div><p className="eyebrow">SESSIONS DE CODAGE EN COURS</p></div>{status&&<p role="status" className="live">{status}</p>}</div><div className="table-wrap"><table><thead><tr>{!project&&<th>Projets</th>}<th>RUN / Session</th><th>Change</th><th>Profil</th><th>État</th><th>Étape</th><th>Tâches réalisées</th><th>Actualisation</th><th>Actions</th></tr></thead><tbody>{groups.map(group=><SessionRows key={group.project.id} project={group.project} rows={group.rows} showProject={!project}/>)}</tbody></table>{!groups.length&&<p className="empty">{project?'Aucune session pour ce projet.':'Aucune session pour les projets accessibles.'}</p>}</div><nav className="git-overview-controls" aria-label="Pagination des sessions"><button type="button" disabled={current<=1} onClick={()=>setPage(1)}>Premier</button><button type="button" disabled={current<=1} onClick={()=>setPage(current-1)}>Précédent</button><span>Page {current} / {pages} · {all.length} session{all.length>1?'s':''}</span><button type="button" disabled={current>=pages} onClick={()=>setPage(current+1)}>Suivant</button><button type="button" disabled={current>=pages} onClick={()=>setPage(pages)}>Dernier</button></nav></>
+  return <><div className="section-heading"><div><p className="eyebrow">SESSIONS DE CODAGE EN COURS</p></div>{status&&<p role="status" className="live">{status}</p>}</div><div className="table-wrap"><table className="monitor-table"><thead><tr>{!project&&<th scope="col"><span>Projets</span></th>}<th scope="col"><span>RUN / Session</span></th><th scope="col"><span>Change</span></th><th scope="col"><span>Profil</span></th><th scope="col"><span>État</span></th><th scope="col"><span>Étape</span></th><th scope="col"><span>Tâches réalisées</span></th><th scope="col"><span>Actualisation</span></th><th scope="col"><span>Actions</span></th></tr></thead><tbody>{groups.map(group=><SessionRows key={group.project.id} project={group.project} rows={group.rows} showProject={!project}/>)}</tbody></table>{!groups.length&&<p className="empty">{project?'Aucune session pour ce projet.':'Aucune session pour les projets accessibles.'}</p>}</div><nav className="git-overview-controls" aria-label="Pagination des sessions"><button type="button" disabled={current<=1} onClick={()=>setPage(1)}>Premier</button><button type="button" disabled={current<=1} onClick={()=>setPage(current-1)}>Précédent</button><span>Page {current} / {pages} · {all.length} session{all.length>1?'s':''}</span><button type="button" disabled={current>=pages} onClick={()=>setPage(current+1)}>Suivant</button><button type="button" disabled={current>=pages} onClick={()=>setPage(pages)}>Dernier</button></nav></>
 }
 function AllProjectSessions({projects,archives=false}:{projects:Project[];archives?:boolean}){
   return <div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{archives?'Archives':'Sessions'}</h1></div></div></section>{archives?<SessionArchives projects={projects}/>:<SessionList projects={projects}/>}</section></div>

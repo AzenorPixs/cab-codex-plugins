@@ -6,13 +6,13 @@ import {Shape,ShapeStream} from '@electric-sql/client'
 import {Link,useRouterState} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
-import {FontControls,ResponsiveControls} from './Appearance'
+import {InterfaceSettings} from './InterfaceSettings'
 
 type Section='agents'|'database'|'interface'|'projects'|'web-server'
 const pages=[['database','Base de données'],['binaries','Binaires'],['git','Git'],['interface','Interface'],['update','Mise à jour'],['projects','Projets'],['web-server','Serveur Web']] as const
 export function AdministrationShell({children}:{children:ReactNode}){
   const path=useRouterState({select:state=>state.location.pathname})
-  return <div className="administration-layout"><aside className="administration-sidebar"><h2>Administration</h2><nav aria-label="Administration">{pages.map(([id,label])=><Link key={id} to={`/administration/${id}`} activeOptions={{exact:true}} className={path===`/administration/${id}`?'selected':''}>{label}</Link>)}</nav></aside><div className="administration-content">{children}</div></div>
+  return <div className="administration-layout administration-shell"><aside className="administration-sidebar"><h2>Administration</h2><nav aria-label="Administration">{pages.map(([id,label])=><Link key={id} to={`/administration/${id}`} activeOptions={{exact:true}} className={path===`/administration/${id}`?'selected':''}>{label}</Link>)}</nav></aside><div className="administration-content">{children}</div></div>
 }
 type Configuration={path:string;revision:string;configuration:Record<string,unknown>;restart_required:boolean;pending_fields:string[];secret_placeholder:string;logging_levels:string[]}
 type Agent={runtime:{running:boolean;mcp_running:boolean;mcp_connected:boolean;mcp_state:string};release:{version?:string;url?:string;provider_label?:string;status?:string;checked_at?:number;next_check?:number};connector_path:string;connector_agent:string;agent:string;label:string;path:string;resolved_path:string;state:string;version:string|null;mcp_configurations:{path:string;account:string;state:string;servers:{name:string;state:string;runtime:string}[]}[]}
@@ -34,10 +34,10 @@ export function ConfigurationAccess({login,section,selectedAgent}:{login:ReactNo
   if(query.error)return login
   const initial=query.data
   if(section==='agents')return <Agents selectedAgent={selectedAgent}/>
-  return <section className="administration"><p className="eyebrow">ADMINISTRATION</p><h1>{pages.find(([id])=>id===section)?.[1]}</h1>
+  return <section className="administration"><h1>{pages.find(([id])=>id===section)?.[1]}</h1>
     {notice&&<p role="status">{notice}</p>}
     {initial.restart_required&&<p role="status" className="pending-configuration">Redémarrage nécessaire pour appliquer : {initial.pending_fields.join(', ')}. La configuration active est conservée jusque-là.</p>}
-    {section==='interface'?<><h2>Taille des polices</h2><p>Ces réglages s’appliquent à toute l’interface et sont enregistrés en base de données. Le bouton clair/sombre reste dans le bandeau.</p><FontControls/><ResponsiveControls/></>:<SettingsForm key={section+initial.revision} initial={initial} fields={fields[section]} onSaved={()=>setNotice('Configuration enregistrée.')}/>}
+    {section==='interface'?<InterfaceSettings/>:<SettingsForm key={section+initial.revision} initial={initial} fields={fields[section]} onSaved={()=>setNotice('Configuration enregistrée.')}/>}
   </section>
 }
 function SettingsForm({initial,fields:items,onSaved}:{initial:Configuration;fields:Field[];onSaved:()=>void}){

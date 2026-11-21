@@ -1,3 +1,4 @@
+import {useTablePageSize} from './Appearance'
 import {useEffect,useRef,useState} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
@@ -59,16 +60,17 @@ function IncidentPurge({incident,close}:{incident:Incident;close:()=>void}){
   </dialog>
 }
 export function ProjectIncidents({project}:{project:Project}){
+  const pageSize=useTablePageSize('incidents')
   const [page,setPage]=useState(1);const [selected,setSelected]=useState<Incident|null>(null)
   const [purgeTarget,setPurgeTarget]=useState<Incident|null>(null)
-  const query=useQuery({queryKey:['project-incidents',project.id,page],queryFn:async()=>registry(await api<unknown>(`projects/${encodeURIComponent(project.id)}/incidents?`+new URLSearchParams({page:String(page),page_size:'25'}))),refetchInterval:15000})
+  const query=useQuery({queryKey:['project-incidents',project.id,page,pageSize],queryFn:async()=>registry(await api<unknown>(`projects/${encodeURIComponent(project.id)}/incidents?`+new URLSearchParams({page:String(page),page_size:String(pageSize)}))),refetchInterval:15000})
   useEffect(()=>{setPage(1);setSelected(null);setPurgeTarget(null)},[project.id])
   useEffect(()=>{if(query.data&&query.data.page!==page)setPage(query.data.page)},[query.data,page])
   const shown=selected?(query.data?.incidents.find(row=>row.incident_id===selected.incident_id)||selected):null
   const pages=query.data?Math.max(1,Math.ceil(query.data.total/query.data.page_size)):1
   return <section className="ccab-incidents"><p className="eyebrow">REGISTRE CCAB</p>{query.isPending&&<p role="status">Chargement des déclarations…</p>}{query.error&&<p role="alert">Registre CCAB indisponible.</p>}
-    <div className="table-wrap"><table aria-label="Déclarations d’incident CCAB">
-      <thead><tr><th>Identifiant / RUN</th><th>Catégorie</th><th>Résumé</th><th>État</th><th>Déclaré le</th><th>Responsable</th><th>Preuves</th><th>Supprimer</th></tr></thead>
+    <div className="table-wrap"><table className="monitor-table" aria-label="Déclarations d’incident CCAB">
+      <thead><tr><th scope="col"><span>Identifiant / RUN</span></th><th scope="col"><span>Catégorie</span></th><th scope="col"><span>Résumé</span></th><th scope="col"><span>État</span></th><th scope="col"><span>Déclaré le</span></th><th scope="col"><span>Responsable</span></th><th scope="col"><span>Preuves</span></th><th scope="col"><span>Supprimer</span></th></tr></thead>
       <tbody>
         {query.data?.incidents.map(row=><tr key={row.incident_id}>
           <td data-label="Identifiant / RUN">

@@ -1,3 +1,4 @@
+import {useTablePageSize} from './Appearance'
 import {useEffect,useState,type ReactNode} from 'react'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {Link} from '@tanstack/react-router'
@@ -18,7 +19,6 @@ type Binary={
 
 type SortColumn='pid'|'username'|'executable'|'role'|'first_seen'|'last_seen'|'stopped'
 type Sort={column:SortColumn;descending:boolean}
-const pageSize=10
 const collator=new Intl.Collator('fr-FR',{numeric:true,sensitivity:'base'})
 const columns=[
   ['pid','PID'],['username','Compte'],['executable','Exécutable'],['role','Rôle'],
@@ -55,6 +55,7 @@ function compare(a:Binary,b:Binary,{column,descending}:Sort){
 }
 
 function BinaryTable({rows,active}:{rows:Binary[];active:boolean}){
+  const pageSize=useTablePageSize('binaries')
   const [sort,setSort]=useState<Sort>({column:active?'pid':'stopped',descending:!active})
   const [page,setPage]=useState(1)
   const ordered=rows.filter(row=>row.active===active).sort((a,b)=>compare(a,b,sort))
@@ -68,7 +69,7 @@ function BinaryTable({rows,active}:{rows:Binary[];active:boolean}){
     setPage(1)
   }
   return <>
-    <div className="table-wrap"><table aria-label={active?'Binaires actifs':'Binaires inactifs'}>
+    <div className="table-wrap"><table className="monitor-table" aria-label={active?'Binaires actifs':'Binaires inactifs'}>
       <thead><tr>{displayed.map(([column,label])=><th key={column} scope="col"
         aria-sort={sort.column===column?(sort.descending?'descending':'ascending'):undefined}>
         <button type="button" className="binary-sort" onClick={()=>selectSort(column)}>

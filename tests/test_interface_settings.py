@@ -1,0 +1,50 @@
+"""Validation des valeurs et fusion isolée des préférences de présentation."""
+import importlib.util
+from pathlib import Path
+import unittest
+
+
+MODULE = Path(__file__).resolve().parents[1] / 'src/cab_platform/core/interface_style.py'
+SPEC = importlib.util.spec_from_file_location('interface_style', MODULE)
+style = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(style)
+
+
+class InterfaceStyleTests(unittest.TestCase):
+    def test_references_for_all_six_groups_are_valid(self):
+        self.assertEqual(set(style.FIELDS), {'blocs', 'columns', 'menus', 'tables', 'titles', 'top_bar'})
+        for group, fields in style.FIELDS.items():
+            with self.subTest(group=group):
+                values = {field['key']: field['default'] for field in fields}
+                self.assertEqual(len(values), len(fields))
+                self.assertEqual(style.patch_group({}, group, values, False), {group: values})
+
+    def test_patch_merges_other_tabs_and_current_values(self):
+        before = {'tables': {'head_font': 22, 'row_height': 51}, 'titles': {'admin_gap': 8}}
+        after = style.patch_group(before, 'tables', {'head_font': 24}, False)
+        self.assertEqual(after, {'tables': {'head_font': 24, 'row_height': 51}, 'titles': {'admin_gap': 8}})
+        self.assertEqual(before['tables']['head_font'], 22)
+
+    def test_reset_is_independent_and_idempotent(self):
+        before = {'tables': {'head_font': 22}, 'top_bar': {'height': 90}}
+        after = style.patch_group(before, 'tables', {}, True)
+        self.assertEqual(after, {'top_bar': {'height': 90}})
+        self.assertEqual(style.patch_group(after, 'tables', {}, True), after)
+        self.assertEqual(style.patch_group(None, 'tables', {}, False), {})
+
+    def test_invalid_values_are_rejected_before_mutation(self):
+        cases = (
+            ('titles', {'unknown': 12}, False),
+            ('tables', {'page_archives': 101}, False),
+            ('tables', {'page_archives': 10.0}, False),
+            ('tables', {'page_archives': True}, False),
+            ('tables', {'header_light': 'url(https://example.org)'}, False),
+            ('menus', {'side_hover': '#abc'}, False),
+            ('top_bar', {'scroll': 'fixed'}, False),
+            ('blocs', {'columns': 3}, True),
+        )
+        existing = {'columns': {'sidebar_width': 270}}
+        for group, values, reset in cases:
+            with self.subTest(group=group, values=values), self.assertRaises(ValueError):
+                style.patch_group(existing, group, values, reset)
+        self.assertEqual(existing, {'columns': {'sidebar_width': 270}})

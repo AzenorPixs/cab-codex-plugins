@@ -62,56 +62,30 @@
 
 .binary-tabs {
   display: flex;
-  gap: .5rem;
+  flex-wrap: wrap;
+  gap: var(--ui-menus-tabs-gap, .5rem);
   margin-block: 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .binary-tabs a {
-  padding: .6rem .9rem;
-  border-bottom: 2px solid transparent;
+  padding: var(--ui-menus-tabs-padding, .6rem) var(--ui-menus-tabs-padding, .9rem);
+  border-bottom: var(--ui-menus-tabs-marker, 2px) solid transparent;
 }
 
 .binary-tabs a[aria-current="page"] {
-  color: var(--accent-text);
+  color: var(--ui-menus-tabs-active, var(--accent-text));
   border-color: currentColor;
-  font-weight: 700;
+  font-weight: var(--ui-menus-tabs-weight, 700);
 }
 
 .binary-list td.binary-executable {
   overflow-wrap: anywhere;
 }
 
-.binary-list tbody tr:nth-child(even) {
-  background: var(--surface-alt);
-}
-
-.binary-list thead th {
-  background: #215e54;
-  color: #fff;
-}
-
-@media (width > 1300px) {
-  .binary-list tbody td {
-    padding-block: 14px;
-  }
-}
-
-@media (max-width: 1300px) {
-  .binary-list tbody td:first-child {
-    padding-block-start: 4px;
-  }
-
-  .binary-list tbody td:last-child {
-    padding-block-end: 4px;
-  }
-}
-
 .binary-sort {
-  display: inline-flex;
   align-items: baseline;
   gap: .35em;
-  padding: .15rem 0;
   border: 0;
   background: transparent;
   color: inherit;

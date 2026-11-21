@@ -21,6 +21,7 @@ from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
+from .interface_style import FIELDS as INTERFACE_STYLE_FIELDS, patch_group
 from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate,McpConnector,InterfacePreferencesProjection
 
 class LocalBearer(HttpBearer):
@@ -66,6 +67,10 @@ class PageResponsiveAdjustment(Schema):
     profile:Literal['mobile','tablet','hd','fullhd','qhd','uhd']
     field:Literal['layout','font']
     value:int=Field(ge=50,le=150)
+class InterfaceStyleAdjustment(Schema):
+    group:Literal['blocs','columns','menus','tables','titles','top_bar']
+    values:dict[str,Any]=Field(default_factory=dict)
+    reset:bool=False
 class ServiceConfiguration(Schema):
     revision:str
     configuration:dict[str,Any]
@@ -156,13 +161,16 @@ def cab_version(request):
 def interface_preferences(request):
     from cab_platform.paths import runtime_config
     initialized=bool(runtime_config().get('initialized'));value={'font_scale':100,'theme':'light'}
+    component_style={}
     if initialized:
         record=Configuration.objects.filter(pk='interface').first()
-        if record:value=InterfacePreferences.model_validate(record.value).model_dump()
+        if record:
+            value=InterfacePreferences.model_validate(record.value).model_dump()
+            component_style=record.value.get('component_style') or {}
     if value.get('responsive') is None:value['responsive']=ResponsiveProfiles().model_dump()
     if value.get('developer_mode') is None:value['developer_mode']=False
     if value.get('page_responsive') is None:value['page_responsive']={}
-    return {**value,'persistent':initialized,'csrf_token':get_token(request)}
+    return {**value,'component_style':component_style,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':initialized,'csrf_token':get_token(request)}
 
 @api.post('/interface/preferences',auth=None)
 def save_interface_preferences(request,body:InterfacePreferences):
@@ -178,9 +186,27 @@ def save_interface_preferences(request,body:InterfacePreferences):
         if value['developer_mode'] is None:value['developer_mode']=previous
         if value['developer_mode']!=previous:principal(request,admin=True)
         value['page_responsive']=(record.value.get('page_responsive') if record else None) or {}
+        value['component_style']=(record.value.get('component_style') if record else None) or {}
         Configuration.objects.update_or_create(pk='interface',defaults={'value':value})
         InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
-    return {**value,'persistent':True}
+    return {**value,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':True}
+
+@api.post('/interface/style')
+def save_interface_style(request,body:InterfaceStyleAdjustment):
+    csrf_check(request)
+    principal(request,admin=True)
+    with transaction.atomic():
+        record=Configuration.objects.select_for_update().get(pk='interface')
+        value=record.value.copy()
+        try:
+            value['component_style']=patch_group(value.get('component_style'),body.group,body.values,body.reset)
+        except ValueError as error:
+            raise commands.Refused('interface-style-invalid',400) from error
+        if value!=record.value:
+            record.value=value
+            record.save(update_fields=['value','updated'])
+            InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
+    return {'component_style':value['component_style']}
 
 @api.post('/interface/responsive/page',auth=None)
 def save_page_responsive(request,body:PageResponsiveAdjustment):
@@ -853,9 +879,9 @@ def closure_evaluations(request,project_id:str):
     return {'evaluations':[evaluate(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
 
 @api.get('/session-archives')
-def session_archives(request,project_id:str='',page:int=1):
+def session_archives(request,project_id:str='',page:int=1,page_size:int=10):
     from cab_platform.archive_listing import archive_page
-    rows,pagination=archive_page(principal(request),project_id,page)
+    rows,pagination=archive_page(principal(request),project_id,page,page_size)
     return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in rows],**pagination}
 
 @api.get('/run')
