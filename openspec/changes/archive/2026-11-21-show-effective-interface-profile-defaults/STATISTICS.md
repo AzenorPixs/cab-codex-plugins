@@ -8,14 +8,14 @@ Change : `show-effective-interface-profile-defaults` · état local : `archived`
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 359.341454 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 359.341454 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de sortie | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de raisonnement | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache lus | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache écrits | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Total natif des tokens | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `show-effective-interface-profile-defaults` · état local : `archived`
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:3ea82c87bdcbe9dcfa52efa8ad72552dda61d996f185fc21fb8a1432ec3f7d1e
+Provenance : change-periods:168e9ec90afe8925c20e09e36733118ae112c069bb0bfec19d9227b786fe80de
 
 ## 2. Messages et outils
 
@@ -91,13 +91,5 @@ Provenance : change-periods:3ea82c87bdcbe9dcfa52efa8ad72552dda61d996f185fc21fb8a
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-INTERFACE-PROFILE-DEFAULTS-20261121 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "fe841ddbf047c5113db802f7454abb9ff37930f7ec9ead39213209a791c91f95", "generated_at": "2026-11-21T10:03:30.054674+00:00", "revision": "fe841ddbf047c5113db802f7454abb9ff37930f7ec9ead39213209a791c91f95", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "db0d983b13abda53b5fbc5b44824038d3a8627afdb68f3677812027da4f65dfc", "generated_at": "2026-11-21T10:05:47.377499+00:00", "revision": "db0d983b13abda53b5fbc5b44824038d3a8627afdb68f3677812027da4f65dfc", "scope": "change"} -->
