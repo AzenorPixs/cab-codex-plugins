@@ -8,14 +8,14 @@ Change : `manage-concurrent-direct-runs` · état local : `archived`. Les valeur
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 574.782694 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 574.782694 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de sortie | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de raisonnement | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache lus | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache écrits | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Total natif des tokens | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `manage-concurrent-direct-runs` · état local : `archived`. Les valeur
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:c8058048bc0b629f4925d7a2878290e6d82fdd6ee1d46fd3bf6dd59df0318e7a
+Provenance : change-periods:ebe4995a916a24f2156840cdbd72f682eb2b6d849ba158e8c97c95ac9f8f6342
 
 ## 2. Messages et outils
 
@@ -59,9 +59,9 @@ Provenance : change-periods:c8058048bc0b629f4925d7a2878290e6d82fdd6ee1d46fd3bf6d
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 7 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 7 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -91,13 +91,5 @@ Provenance : change-periods:c8058048bc0b629f4925d7a2878290e6d82fdd6ee1d46fd3bf6d
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-DIRECT-RUN-ISOLATION-20261121 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ffa0f8ecd5370e34112bbb4de1f55c768454b3d69c9153101b65468286873b32", "generated_at": "2026-11-21T10:50:31.706539+00:00", "revision": "ffa0f8ecd5370e34112bbb4de1f55c768454b3d69c9153101b65468286873b32", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9dc3463f226915871b541849047e1c50c2ed1c200f48708eba8c36dd346f2b04", "generated_at": "2026-11-21T10:53:20.800218+00:00", "revision": "9dc3463f226915871b541849047e1c50c2ed1c200f48708eba8c36dd346f2b04", "scope": "change"} -->
