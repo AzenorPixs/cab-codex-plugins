@@ -70,3 +70,21 @@ class InterfaceStyleTests(unittest.TestCase):
             style.patch_profile({},'fullhd','general',{'font_scale':161},False)
         self.assertEqual(style.patch_profile({},'fullhd','resolutions',{'font':120},False)['responsive']['fullhd'],
                          {'font':120,'layout':100})
+
+    def test_every_field_has_reference_for_each_profile(self):
+        for group,fields in style.FIELDS.items():
+            for field in fields:
+                with self.subTest(group=group,key=field['key']):
+                    self.assertEqual(tuple(field['references']),style.PROFILES)
+                    for reference in field['references'].values():
+                        if reference is not None:
+                            self.assertTrue(style.valid_value(field,reference))
+
+    def test_profile_defaults_follow_layout_and_compact_table_modes(self):
+        def references(group,key):
+            return next(field['references'] for field in style.FIELDS[group] if field['key']==key)
+        self.assertEqual(list(references('top_bar','inline_padding').values()),[18,18,28,28,28,28])
+        self.assertEqual(list(references('columns','sidebar_width').values()),[None,210,260,260,260,260])
+        self.assertEqual(list(references('tables','cell_padding').values()),[10,10,14,14,14,14])
+        self.assertEqual(list(references('tables','head_font').values()),[20]*6)
+        self.assertTrue(all(value is None for value in references('tables','row_height').values()))

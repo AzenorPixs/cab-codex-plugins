@@ -113,6 +113,69 @@ FIELDS = {
     ],
 }
 
+PROFILES = ('mobile', 'tablet', 'hd', 'fullhd', 'qhd', 'uhd')
+_ALL_AUTO = dict.fromkeys(PROFILES)
+_COMPACT_TABLES = {'mobile': 10, 'tablet': 10}
+
+# Références de lecture du CSS. Une absence de valeur fixe laisse le navigateur
+# appliquer les dimensions du contenu, le thème ou les variantes de la page.
+_REFERENCES = {
+    'blocs': {
+        'columns': {'mobile':None,'tablet':None,'hd':None},
+        'width': {'mobile':None,'fullhd':None,'qhd':None,'uhd':None},
+        'stack_width': _ALL_AUTO,
+    },
+    'columns': {
+        'sidebar_width': {'mobile':None,'tablet':210},
+        'content_inline': {'mobile':18,'tablet':24},
+        'content_block': {'mobile':24,'tablet':26},
+    },
+    'menus': {
+        'side_font': {'mobile':15},
+        'side_padding': {'mobile':10},
+        'side_gap': {'mobile':4},
+        'side_height': _ALL_AUTO,
+        'tabs_height': _ALL_AUTO,
+        'tabs_padding': _ALL_AUTO,
+        'tabs_icon': _ALL_AUTO,
+        'tabs_gap': {'mobile':18,'tablet':18},
+        'tabs_hover': _ALL_AUTO,
+    },
+    'tables': {
+        'head_height': _ALL_AUTO,
+        'head_padding': {'mobile':13},
+        'row_height': _ALL_AUTO,
+        'cell_padding': _COMPACT_TABLES,
+        'inline_padding': dict.fromkeys(_COMPACT_TABLES,14),
+        'hover_light': _ALL_AUTO,
+        'hover_dark': _ALL_AUTO,
+    },
+    'titles': {
+        'page_gap': {'mobile':10,'tablet':12},
+        'below': _ALL_AUTO,
+        'font': {'mobile':30},
+    },
+    'top_bar': {
+        'inline_padding': {'mobile':18,'tablet':18},
+        'brand_gap': {'mobile':16,'tablet':20},
+        'link_gap': {'mobile':14,'tablet':18},
+        'tool_gap': {'mobile':16},
+        'font': {'mobile':15},
+        'scroll': {profile:'relative' if profile=='mobile' else 'sticky' for profile in PROFILES},
+    },
+}
+
+for _group, _fields in FIELDS.items():
+    for _field in _fields:
+        _reference = _REFERENCES.get(_group, {}).get(_field['key'], {})
+        _field['references'] = {profile:_reference.get(profile,_field['default']) for profile in PROFILES}
+        if (_group, _field['key']) == ('titles','font'):
+            _field['reference_hint'] = 'Titres des pages Projets'
+        elif (_group, _field['key']) == ('menus','tabs_gap'):
+            _field['reference_hint'] = 'Onglets des pages Projets'
+        elif _group == 'menus' and _field['key'] in ('side_font','side_gap','side_padding'):
+            _field['reference_hint'] = 'Menu latéral Administration'
+
 _INDEX = {group: {field['key']: field for field in fields} for group, fields in FIELDS.items()}
 _PROFILE_FIELDS = {
     'general': {'font_scale': number('font_scale', 'Taille du texte', 100, 80, 160, '%')},

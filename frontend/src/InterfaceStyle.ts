@@ -3,10 +3,11 @@ export type SettingsGroup=StyleGroup|'general'|'resolutions'
 export type ProfileName='mobile'|'tablet'|'hd'|'fullhd'|'qhd'|'uhd'
 export type StyleValue=number|string
 export type ComponentStyle=Partial<Record<StyleGroup,Record<string,StyleValue>>>
-export type StyleField=
+export type StyleField=(
   | {key:string;label:string;kind:'number';default:number;min:number;max:number;unit:string}
   | {key:string;label:string;kind:'color';default:string}
   | {key:string;label:string;kind:'choice';default:string;options:{value:string;label:string}[]}
+)&{references?:Record<ProfileName,StyleValue|null>;reference_hint?:string}
 export type StyleFields=Partial<Record<StyleGroup,StyleField[]>>
 export type ProfileStyles=Partial<Record<ProfileName,ComponentStyle&{general?:{font_scale:number}}>>
 export type StyleAdjustment={group:SettingsGroup;profile:ProfileName;values?:Record<string,StyleValue>;reset?:boolean}

@@ -40,20 +40,36 @@ function ComponentStyleControls({group,profile}:{group:StyleGroup;profile:Profil
     }finally{setSaving(false)}
   }
   function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void save()}
-  function edit(key:string,value:string){setDraft(previous=>({...previous,[key]:value}));setStatus('')}
+  function edit(key:string,value:string,baseline:string){
+    setDraft(previous=>{
+      const next={...previous}
+      if(value===baseline)delete next[key]
+      else next[key]=value
+      return next
+    })
+    setStatus('')
+  }
   if(!fields.length)return <p role="status">Réglages indisponibles.</p>
   return <form className="interface-component-settings" onSubmit={submit}>
     <div className="interface-component-fields">
       {fields.map(field=>{
-        const value=draft[field.key]??String(values[field.key]??field.default)
+        const reference=field.references?field.references[profile]:field.default
+        const current=values[field.key]??reference
+        const baseline=String(current??'')
+        const value=draft[field.key]??baseline
+        const automatic=current===null&&draft[field.key]===undefined
         return <label key={field.key}>{field.label}{field.kind==='number'&&field.unit?` (${field.unit})`:''}
           {field.kind==='choice'
-            ?<select name={field.key} value={value} disabled={saving} onChange={event=>edit(field.key,event.target.value)}>
+            ?<select name={field.key} value={value} disabled={saving} onChange={event=>edit(field.key,event.target.value,baseline)}>
               {field.options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            :<input name={field.key} type={field.kind} value={value} disabled={saving}
-              {...(field.kind==='number'?{required:true,min:field.min,max:field.max,step:1}:{})}
-              onChange={event=>edit(field.key,event.target.value)}/>}
+            :<input name={field.key} type={field.kind} value={field.kind==='color'&&!value?field.default:value} disabled={saving}
+              {...(field.kind==='number'?{required:draft[field.key]!==undefined,min:field.min,max:field.max,step:1,
+                placeholder:automatic?'Automatique':undefined}:{})}
+              onChange={event=>edit(field.key,event.target.value,baseline)}/>}
+          {automatic&&field.kind==='color'&&<small>Automatique</small>}
+          {values[field.key]===undefined&&draft[field.key]===undefined&&field.reference_hint&&
+            <small>{field.reference_hint}</small>}
         </label>
       })}
     </div>

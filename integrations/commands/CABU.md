@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CABU
-version: 3.7.0
+version: 3.7.1
 ---
 
 Répondre en français. Charger le skill CABU distribué avec le plugin du même nom.

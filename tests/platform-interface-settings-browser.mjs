@@ -73,7 +73,39 @@ try{
           tabs[index].click();
           await wait(()=>doc.querySelector('#interface-panel-'+id+':not([hidden]) form'),'Formulaire '+id);
           check(selectedProfile().textContent===expectProfile,'La résolution choisie reste sélectionnée');
+          const input=name=>doc.querySelector('#interface-panel-'+id+' [name="'+name+'"]');
+          const computed=selector=>frame.contentWindow.getComputedStyle(doc.querySelector(selector));
+          if(id==='columns'){
+            check(input('content_inline').value+'px'===computed('.administration-content').paddingLeft,
+              'Marges de contenu identiques à la référence CSS');
+            if(frame===mobile)check(input('sidebar_width').placeholder==='Automatique','Colonne mobile empilée');
+          }
+          if(id==='menus'){
+            check(input('side_font').value+'px'===computed('.administration-sidebar nav a').fontSize,
+              'Police du menu identique à la référence CSS');
+          }
+          if(id==='tables'){
+            check(input('cell_padding').value===(frame===mobile?'10':'14'),'Marge compacte du tableau');
+            check(input('row_height').placeholder==='Automatique','Hauteur du tableau calculée par le contenu');
+          }
+          if(id==='top_bar'){
+            check(input('inline_padding').value+'px'===computed('header').paddingLeft,
+              'Marge du bandeau identique à la référence CSS');
+            check(input('scroll').value===computed('header').position,'Position du bandeau en place');
+            check(!doc.documentElement.style.getPropertyValue('--ui-top-bar-inline-padding'),
+              'Aucune substitution CSS pour obtenir la valeur affichée');
+          }
         }
+      }
+      const responsiveDoc=mobile.contentDocument;
+      for(const [profile,width] of [['tablet',768],['hd',1366],['fullhd',1920],['qhd',2560],['uhd',3840],['mobile',390]]){
+        mobile.width=String(width);
+        responsiveDoc.querySelector('#interface-top_bar-resolution-tab-'+profile).click();
+        const panel=await wait(()=>mobile.contentWindow.innerWidth===width&&
+          responsiveDoc.querySelector('#interface-top_bar-resolution-panel-'+profile+':not([hidden]) input[name="brand_gap"]'),
+          'Profil '+profile+' à la largeur '+width);
+        const header=mobile.contentWindow.getComputedStyle(responsiveDoc.querySelector('.brand-group'));
+        check(header.columnGap===panel.value+'px','Espacement de la marque pour '+profile);
       }
       const doc=admin.contentDocument;
       const audit=await wait(()=>archive.contentDocument?.querySelector('.monitor-table'),'Tableau d’archives');
