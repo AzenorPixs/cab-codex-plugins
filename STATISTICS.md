@@ -20362,14 +20362,14 @@ Change : `configure-interface-component-appearance` · état local : `archived`.
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 977.316325 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 977.316325 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de sortie | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de raisonnement | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache lus | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Tokens de cache écrits | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Total natif des tokens | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -20383,7 +20383,7 @@ Change : `configure-interface-component-appearance` · état local : `archived`.
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:4cd9dedda61061449ea262a614712a3ca5576d74e9c48c621c48e27e37931eba
+Provenance : change-periods:20594775b5afefef000db392695492ae229e2e73410bf67beb1544d42e01af86
 
 ## 2. Messages et outils
 
@@ -20445,16 +20445,8 @@ Provenance : change-periods:4cd9dedda61061449ea262a614712a3ca5576d74e9c48c621c48
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-INTERFACE-SETTINGS-20261121 | 01a1d9da-c14c-7900-bc5b-dbdce1ef963a | N/A | N/A | native-record-too-large |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "1419f70c18e5909a4d3c7749a95f08bbeb855b39131758565b9793895d843af9", "generated_at": "2026-11-21T09:14:45.906978+00:00", "revision": "1419f70c18e5909a4d3c7749a95f08bbeb855b39131758565b9793895d843af9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "653afb2daccbd6be950771858cc98224aa562b6211cf072dc224d44430dc4e40", "generated_at": "2026-11-21T09:16:17.778580+00:00", "revision": "653afb2daccbd6be950771858cc98224aa562b6211cf072dc224d44430dc4e40", "scope": "change"} -->
 
 
 ## Change `configure-responsive-profiles` — openspec/changes/archive/2026-11-16-configure-responsive-profiles/STATISTICS.md
@@ -73850,4 +73842,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "41f141b18889e66fd12c89bda13885ecf824b2a0f4b5a5d97c17d7ae7a09f391", "generated_at": "2026-11-21T09:14:47.953955+00:00", "revision": "41f141b18889e66fd12c89bda13885ecf824b2a0f4b5a5d97c17d7ae7a09f391", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "db8ed61fa0816b98e4e6f20c31230edc2983da6d37efc987db56c3ce3d7ef0e1", "generated_at": "2026-11-21T09:16:20.019139+00:00", "revision": "db8ed61fa0816b98e4e6f20c31230edc2983da6d37efc987db56c3ce3d7ef0e1", "scope": "project"} -->
