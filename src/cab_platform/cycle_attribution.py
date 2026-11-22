@@ -1,6 +1,8 @@
 """Ventilation des intervalles observés sur le temps écoulé."""
 
-FIELDS=('cab_seconds','agent_seconds','wait_observed_seconds')
+FIELDS=('cab_seconds','agent_seconds','waiting_seconds')
+WAIT_DETAILS=('wait_observed_seconds','wait_assigned_seconds')
+PROJECTION_SCHEMA=2
 
 
 def merged(intervals, start, end):
@@ -44,7 +46,7 @@ def display_parts(parts):
 
 
 def partition(start,end,cab=(),agent=(),covered=(),*,display=False):
-    blank={key:None for key in (*FIELDS,'unattributed_seconds')}
+    blank={key:None for key in (*FIELDS,*WAIT_DETAILS)}
     if start is None or end is None or end < start:
         return {**blank,'attribution_complete':False}
     cab=list(cab);agent=list(agent)
@@ -52,13 +54,21 @@ def partition(start,end,cab=(),agent=(),covered=(),*,display=False):
     cab_time=elapsed(cab,start,end)
     total_work=elapsed([*cab,*agent],start,end)
     agent_time=total_work-cab_time
-    observed=elapsed([*covered,*cab,*agent],start,end)
-    parts=(cab_time,agent_time,observed-total_work,duration-observed)
-    complete=observed==duration
-    values=(display_parts(parts) if complete else [(part+50000)//100000/10 for part in parts]) if display else [value/1000000 for value in parts]
-    if not complete:
-        values=[value if part else None for value,part in zip(values,parts)]
-    return {**dict(zip((*FIELDS,'unattributed_seconds'),values)),'attribution_complete':complete}
+    coverage=[*covered,*cab,*agent]
+    observed=elapsed(coverage,start,end)
+    parts=(cab_time,agent_time,duration-total_work)
+    values=display_parts(parts) if display else [value/1000000 for value in parts]
+    assigned=duration-observed
+    gaps=list(missing_intervals(coverage,start,end)) if assigned else []
+    return {
+        **dict(zip(FIELDS,values)),
+        'wait_observed_seconds':(observed-total_work)/1000000,
+        'wait_assigned_seconds':assigned/1000000,
+        'waiting_policy':'no-attested-work' if assigned else None,
+        'waiting_assigned_intervals':[[left.isoformat(),right.isoformat()] for left,right in gaps[:128]],
+        'waiting_assigned_interval_count':len(gaps),
+        'attribution_complete':True,
+    }
 
 
 def native_complete(traces,start,end):

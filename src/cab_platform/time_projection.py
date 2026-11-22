@@ -4,10 +4,11 @@ from threading import Lock, Thread
 from time import monotonic
 
 from django.db import close_old_connections, transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from .core.models import ChangeStage, ChangeStageIteration, Run, RunCycleIteration
+from .cycle_attribution import PROJECTION_SCHEMA
 
 _guard=Lock()
 _next=0.0
@@ -51,7 +52,8 @@ def sweep():
     global _cursor
     active=list(Run.objects.filter(state__in=('WORKING','FINALIZATION_PENDING','REVIEW_PENDING','ACCEPTED','FINALIZING'))
                 .order_by('-updated').values_list('pk',flat=True)[:4])
-    newest=list(RunCycleIteration.objects.filter(ended_at__isnull=False,time_projection={})
+    outdated=Q(time_projection={}) | (Q(time_projection__basis__schema__isnull=False) & ~Q(time_projection__basis__schema=PROJECTION_SCHEMA))
+    newest=list(RunCycleIteration.objects.filter(ended_at__isnull=False).filter(outdated)
                 .order_by('-ended_at').values_list('run_id',flat=True)[:4])
     # Le balayage inclut les archives afin de capter un journal natif terminé tard.
     archived=Run.objects.filter(pk__gt=_cursor).filter(

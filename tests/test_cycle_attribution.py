@@ -27,13 +27,24 @@ class AttributionTests(unittest.TestCase):
         result=clock.partition(start,end,
             [(self.at(3),self.at(7)),(self.at(4),self.at(9))],
             [(self.at(1),self.at(5)),(self.at(6),self.at(10))],[(start,end)])
-        self.assertEqual(result,dict(cab_seconds=6,agent_seconds=3,wait_observed_seconds=3,unattributed_seconds=0,attribution_complete=True))
+        self.assertEqual([result[key] for key in clock.FIELDS],[6,3,3])
+        self.assertEqual(result['wait_observed_seconds'],3)
+        self.assertEqual(result['wait_assigned_seconds'],0)
 
-    def test_missing_coverage_is_not_waiting(self):
+    def test_missing_coverage_is_attributed_to_wait_without_calling_it_observed(self):
         result=clock.partition(self.at(0),self.at(10),[(self.at(0),self.at(2))])
-        self.assertFalse(result['attribution_complete'])
+        self.assertTrue(result['attribution_complete'])
         self.assertEqual(result['cab_seconds'],2)
-        self.assertIsNone(result['wait_observed_seconds'])
+        self.assertEqual(result['wait_observed_seconds'],0)
+        self.assertEqual(result['waiting_seconds'],8)
+        self.assertEqual(result['wait_assigned_seconds'],8)
+        self.assertEqual(result['waiting_policy'],'no-attested-work')
+        self.assertEqual(result['waiting_assigned_intervals'],[[self.at(2).isoformat(),self.at(10).isoformat()]])
+
+    def test_missing_dates_do_not_create_elapsed_time(self):
+        result=clock.partition(self.at(0),None)
+        self.assertFalse(result['attribution_complete'])
+        self.assertTrue(all(result[key] is None for key in clock.FIELDS))
 
     def test_display_rounding_keeps_total(self):
         start,end=self.at(0),self.at(768.6)
