@@ -20498,6 +20498,105 @@ Les mentions historiques de change ouvert ou d'absence d'archivage décrivent l'
 État : change archivé avec succès ; rapport distinct publié dans son archive. Tests de sources partagés réussis ; intégration sur services réels non exécutée. Références préalablement synchronisées, aucune nouvelle fonctionnalité ni changement de version à l'archivage. Git non inspecté, aucun commit ou push. Aucun secret lu, ajouté ou publié. Le contrôle final du lot vérifie présence, six sections, UTF-8/LF, totaux et empreintes des références.
 
 
+## Change `complete-time-attribution-with-wait-policy` — openspec/changes/archive/2026-11-22-complete-time-attribution-with-wait-policy/STATISTICS.md
+
+
+# Statistiques du change — complete-time-attribution-with-wait-policy
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `complete-time-attribution-with-wait-policy` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+
+
+Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 106 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 106 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 4 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "3d236412db4a35d3cf034d05ef024a57bbc39eb1d2dfb099b0f3becae6b8e11b", "generated_at": "2026-11-22T11:19:26.235407+00:00", "revision": "3d236412db4a35d3cf034d05ef024a57bbc39eb1d2dfb099b0f3becae6b8e11b", "scope": "change"} -->
+
+
 ## Change `configure-controller-command-length-limit` — openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/STATISTICS.md
 
 
@@ -76129,4 +76228,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "539846e438321db62155aee3008c66f9ae6e33e10a2048ca121c99f698db5b20", "generated_at": "2026-11-22T11:02:39.008830+00:00", "revision": "539846e438321db62155aee3008c66f9ae6e33e10a2048ca121c99f698db5b20", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "589723e0dbd2971247597e256278f2f7436daad8e553c7e4b34227a52731bf36", "generated_at": "2026-11-22T11:19:30.066059+00:00", "revision": "589723e0dbd2971247597e256278f2f7436daad8e553c7e4b34227a52731bf36", "scope": "project"} -->
