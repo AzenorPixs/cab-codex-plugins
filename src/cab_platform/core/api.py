@@ -957,7 +957,7 @@ def session_archives(request,project_id:str='',page:int=1,page_size:int=10):
 def run_status(request,project_id:str,run_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     from .monitor import details
-    return {**run_data(r),'monitor':details(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
+    return {**run_data(r),'cycle_summary':r.cycle_summary,'monitor':details(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
 
 @api.get('/operation')
 def operation_status(request,project_id:str,run_id:str,request_id:str):

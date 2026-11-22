@@ -3,7 +3,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useId,useRef,useState} from 'react'
 import {TabBar} from './InterfaceSettings'
 import {useRunElectric} from './useRunElectric'
-import {StageOverview,CompleteCycles,stageDuration,type StageMetrics} from './StageOverview'
+import {StageOverview,CompleteCycles,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
 import {api} from './api'
 import {reasonText,runStateLabel,runProtection} from './SessionLifecycle'
 
@@ -18,7 +18,7 @@ const tabs = [
   {id:'cycle',label:'Étapes du cycle'},
   {id:'change',label:'Change'},
 ] as const
-type RunData={replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
+type RunData={cycle_summary?:CycleSummary;replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
 export function RunView({projectId,runId,routeId}:{projectId:string;runId:string;routeId?:string}){
   const live=useRunElectric(projectId,runId)
   const [selectedStage,setSelectedStage]=useState(0)
@@ -41,7 +41,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   }
   const visibleEvidence=finalization.data?.evidence.filter(item=>item.source!=='cab-update')||[]
   const run=query.data;const monitor=run.monitor;const change=monitor.change_record
-  const summary=metrics.data?.cycle_summary
+  const summary=run.cycle_summary
   const date=(value:string|null|undefined)=>value?new Date(value).toLocaleString('fr-FR'):'Non observée'
   const duration=(value:number|null|undefined,complete?:boolean)=>value==null?'Non observée':stageDuration(value)+(complete===false?' (partielle)':'')
   const labels=monitor.stages?.length?monitor.stages:monitor.cycle_steps===12?versionStages:cycleStages
@@ -55,19 +55,19 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   const panels=[
     <>
       {runProtection(run.suspension)&&<p className="protection-label">{runProtection(run.suspension)}</p>}
-    <dl className="run-metadata run-information">
-      <dt>Mandat courant</dt><dd>{monitor.current_mandate?`Mandat autonome ${monitor.current_mandate.id}`:'Aucun mandat observé'}</dd>
-      <dt>Étape</dt><dd>{stageLabel(monitor.stage,monitor.cycle_steps,monitor.stages)}</dd>
-      <dt>Nombre d’itérations du cycle</dt><dd>{summary?.iteration_count??'Non observé'}</dd>
-      <dt>Début du dernier cycle</dt><dd>{date(summary?.last_started_at)}</dd>
-      <dt>Fin du dernier cycle</dt><dd>{date(summary?.last_ended_at)}</dd>
-      <dt>Durée totale des cycles</dt><dd>{duration(summary?.duration_seconds,summary?.duration_complete)}</dd>
-      <dt>Durée totale des cycles « CAB »</dt><dd>{duration(summary?.cab_seconds,summary?.cab_seconds_complete)}</dd>
-      <dt>Durée totale des cycles « Agent(s) »</dt><dd>{duration(summary?.agent_seconds,summary?.agent_seconds_complete)}</dd>
-      <dt>Durée totale des cycles « Attente »</dt><dd>{duration(summary?.waiting_seconds,summary?.waiting_seconds_complete)}</dd>
-      <dt>Demandes indécises</dt><dd>{monitor.pending_requests??'—'}</dd>
-      <dt>Cause / attente</dt><dd>{monitor.waiting_cause||'Non observée'}</dd>
-      <dt>RUN bloquants</dt><dd>{monitor.blocking_runs.length?monitor.blocking_runs.join(', '):'Non observés'}</dd>
+    <dl className="run-information">
+      <div><dt>Mandat courant</dt><dd>{monitor.current_mandate?`Mandat autonome ${monitor.current_mandate.id}`:'Aucun mandat observé'}</dd></div>
+      <div><dt>Étape</dt><dd>{stageLabel(monitor.stage,monitor.cycle_steps,monitor.stages)}</dd></div>
+      <div><dt>Nombre d’itérations du cycle</dt><dd>{summary?.iteration_count??'Non observé'}</dd></div>
+      <div><dt>Début du dernier cycle</dt><dd>{date(summary?.last_started_at)}</dd></div>
+      <div><dt>Fin du dernier cycle</dt><dd>{date(summary?.last_ended_at)}</dd></div>
+      <div><dt>Durée totale des cycles</dt><dd>{duration(summary?.duration_seconds,summary?.duration_complete)}</dd></div>
+      <div><dt>Durée totale des cycles « CAB »</dt><dd>{duration(summary?.cab_seconds,summary?.cab_seconds_complete)}</dd></div>
+      <div><dt>Durée totale des cycles « Agent(s) »</dt><dd>{duration(summary?.agent_seconds,summary?.agent_seconds_complete)}</dd></div>
+      <div><dt>Durée totale des cycles « Attente »</dt><dd>{duration(summary?.waiting_seconds,summary?.waiting_seconds_complete)}</dd></div>
+      <div><dt>Demandes indécises</dt><dd>{monitor.pending_requests??'—'}</dd></div>
+      <div><dt>Cause / attente</dt><dd>{monitor.waiting_cause||'Non observée'}</dd></div>
+      <div><dt>RUN bloquants</dt><dd>{monitor.blocking_runs.length?monitor.blocking_runs.join(', '):'Non observés'}</dd></div>
     </dl>
     {monitor.last_reminder?.message&&<aside className="change-progress" aria-label="Dernier rappel CAB">
       <p>{monitor.last_reminder.message}</p>

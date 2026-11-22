@@ -33,8 +33,13 @@ const iterations=[1,2,3,4].map(id=>({id,number:id,duration_seconds:[15.8,641.2,3
 const metrics={cycle_summary:{iteration_count:2,measured_count:2,duration_complete:true,last_started_at:time,last_ended_at:time,last_duration_seconds:200,duration_seconds:300,cab_seconds:40,agent_seconds:200,waiting_seconds:60},complete_cycle_duration_seconds:64,stages:Array.from({length:12},(_,i)=>({observed:true,iteration_count:2,iterations,children:[{iterations:iterations.map(({id,...item})=>({...item,id:id+10,parent_id:id,description:'Action visible '+id}))}]}))};
 const fixtures={health:{initialized:true,state:'READY',version:'3.9.14',csrf_token:'fixture'},projects:{projects:[project]},run,finalization:{phase:'CLOSED',missing:[],evidence:[{id:1,source:'cab-operation',payload:{rule_id:'preuve visible',kind:'verification',result:'passed'}}]},'projects/fixture/change-stage-metrics':metrics};
 let revision=1;
+let metricsUnavailable=true;
 const server=httpServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');const path=url.pathname;
+ if(path==='/restore-metrics'){
+  metricsUnavailable=false;revision++;
+  res.end('ok');return;
+ }
  if(path==='/mutate'){
   metrics.cycle_summary={...metrics.cycle_summary,iteration_count:3,duration_seconds:400,last_duration_seconds:100};revision++;
   res.end('ok');return;
@@ -49,6 +54,14 @@ const server=httpServer(async(req,res)=>{
  }
  if(path.startsWith('/api/v1/')){
   const key=path.slice(8);
+  if(key==='projects/fixture/change-stage-metrics'&&metricsUnavailable){
+   res.writeHead(503,{'content-type':'application/json'});
+   res.end(JSON.stringify({error:'fixture-detail-unavailable'}));return;
+  }
+  if(key==='run'){
+   res.writeHead(200,{'content-type':'application/json'});
+   res.end(JSON.stringify({...run,cycle_summary:metrics.cycle_summary}));return;
+  }
   res.writeHead(key.startsWith('sync/')?404:200,{'content-type':'application/json'});
   res.end(JSON.stringify(fixtures[key]??{}));
  }else{
@@ -61,6 +74,7 @@ await new Promise(done=>server.listen(0,'127.0.0.1',done));
 const url='http://127.0.0.1:'+server.address().port+'/projects/fixture/runs/RUN';
 try{
  for(const factory of [chromium,firefox]){
+  metricsUnavailable=true;
   metrics.cycle_summary={...metrics.cycle_summary,iteration_count:2,duration_seconds:300,last_duration_seconds:200};revision++;
   const browser=await factory();
   try{
@@ -83,6 +97,10 @@ try{
       card.previousElementSibling.getAttribute('role')==='tablist' && !info.querySelector('.badge') && !info.innerText.includes('PHASE FIXTURE');
    })()`),'titre et informations');
    assert(await ev(`(()=>{const labels=Array.from(document.querySelectorAll('.run-information dt')).map(x=>x.textContent);return labels[0]==='Mandat courant' && labels[1]==='Étape' && labels.length===12 && document.querySelector('.run-information').innerText.includes('5\\u202fmin 0\\u202fs')})()`),'informations et cumul des deux cycles');
+   assert(await ev(`Array.from(document.querySelectorAll('.forge-card-content .run-information > div')).length===12 &&
+     Array.from(document.querySelectorAll('.run-information > div')).every(row=>row.children.length===2 &&
+       row.lastElementChild.getBoundingClientRect().left>row.firstElementChild.getBoundingClientRect().left &&
+       Math.abs(row.lastElementChild.getBoundingClientRect().top-row.firstElementChild.getBoundingClientRect().top)<1)`),'une ligne libellé/valeur par information');
    const click=label=>ev(`Array.from(document.querySelectorAll('[role=tab]')).find(x=>x.textContent===${JSON.stringify(label)}).click() || true`);
    await click('Finalisation');
    assert(await ev('document.body.innerText.includes("preuve visible") && !document.querySelector(".run-session-card details")'));
@@ -93,6 +111,7 @@ try{
    assert(await ev(`parseFloat(getComputedStyle(document.querySelector('.run-cycle-heading p')).borderInlineStartWidth)>0`),'barre verticale');
    await fetch(new URL('/mutate',url));
    await wait(()=>ev(`document.body.innerText.includes('6\\u202fmin 40\\u202fs') && document.body.innerText.includes('1\\u202fmin 40\\u202fs')`),'actualisation Electric sans navigation');
+   await fetch(new URL('/restore-metrics',url));
    for(let stage=1;stage<=12;stage++){
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 4")'),'actions de l’étape');

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.10.1
+
+- Informations de session alignées sur les blocs forge et compteurs persistés servis directement par le détail du RUN.
+
 ## 3.10.0
 
 - Synthèse persistée de toutes les itérations de session, diffusée par Electric : cumuls CAB, Agent(s), Attente et durée distincte du dernier cycle.
