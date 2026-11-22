@@ -67,6 +67,8 @@ def dossier(run,plan,*,allow_terminal_git=False):
         submission=run.review.get('submission',{});decision=run.review.get('decision',{})
         authority=run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id
         if decision.get('decision')!='accept' or decision.get('actor')!=authority or submission.get('source_revision') not in revisions or submission.get('policy_digest')!=plan.digest or submission.get('proofs')!=selected:missing.append('reserved-review-required')
+    from cab_platform.stage_protocol import close_missing
+    missing.extend(close_missing(run))
     return {'missing':sorted(set(missing)),'proofs':selected,'boundary':boundary,'archive_path':archive,'source_revision':current,'artifact_groups':groups}
 
 def view(run,plan=None):
@@ -105,9 +107,12 @@ def prepare_review(run,plan,result):
     submission={'id':'CAB-FINALIZATION-'+str(run.pk),'policy_digest':plan.digest,'source_revision':result['source_revision'],'proofs':result['proofs'],'tests':tests,'limits':[],'summary':'Dossier assemblé automatiquement par CAB à partir des preuves authentifiées.'}
     submission['digest']=c.digest(submission)
     previous=run.review.get('submission',{})
-    if previous.get('digest')==submission['digest']:return
+    if previous.get('digest')==submission['digest'] and run.state=='REVIEW_PENDING':return
     from cab_platform.change_stage_metrics import number_for
-    run.review={'submission':submission};run.state='REVIEW_PENDING';run.stage=number_for(run,'review');run.save(update_fields=['review','state','stage','updated'])
+    from cab_platform.stage_protocol import enabled
+    run.review={'submission':submission};run.state='REVIEW_PENDING'
+    if not enabled(run):run.stage=number_for(run,'review')
+    run.save(update_fields=['review','state','stage','updated'])
     c.event(run,'review-requested',{'submission_digest':submission['digest'],'assembled_by':'cab-policy'})
 
 def process(run_id):
@@ -121,7 +126,8 @@ def process(run_id):
                 if run.state=='WORKING' and not run.suspension:run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':['finalization-contract-required']})
         return
     evidence.capture_update(plan)
-    if run.configuration.get('cycle_profile')=='publication-12-v1':
+    from cab_platform.stage_protocol import enabled as staged_protocol
+    if run.configuration.get('cycle_profile')=='publication-12-v1' and not staged_protocol(run):
         from cab_platform.publication_boundary import frozen,prepare
         if not frozen(run) and not any(rule['kind']=='publication' for rule in plan.policy['requirements']):
             pending=dossier(run,plan)['missing']
@@ -137,7 +143,7 @@ def process(run_id):
             changed=plan.missing!=result['missing'] or plan.phase!='WAITING'
             plan.phase='WAITING';plan.missing=result['missing']
             if changed:plan.save()
-            if set(result['missing'])-{'statistics:not-validated'}=={'reserved-review-required'}:
+            if set(result['missing'])-{'statistics:not-validated','stage:12:agent-validation-required'}=={'reserved-review-required'}:
                 prepare_review(run,plan,result);return
             if result['boundary'] and run.state!='FINALIZATION_PENDING':
                 run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':plan.missing})

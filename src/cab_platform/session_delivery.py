@@ -1082,7 +1082,7 @@ def _launch_delivery(delivery_id):
         _set_delivery_state(delivery_id,'UNKNOWN')
 
 
-def start_delivery(actor, run, version, connector_id, *, complete=False):
+def start_delivery(actor, run, version, connector_id, *, complete=False, stage_authorized=False):
     """Cadre une livraison ; aucune étape n'est rejouée pour une même version."""
     import os
     from django.db import IntegrityError,transaction
@@ -1092,6 +1092,8 @@ def start_delivery(actor, run, version, connector_id, *, complete=False):
     from .project_metadata import synchronize
 
     version_tuple(version)
+    from .stage_protocol import enabled
+    require(not enabled(run) or stage_authorized,'stage-use-publication-begin')
     existing=GitDelivery.objects.filter(run=run,version=version).first()
     if existing is not None:
         require((existing.plan.get('scope')=='project')==complete,'session-delivery-scope-conflict',409)

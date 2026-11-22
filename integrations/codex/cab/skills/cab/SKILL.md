@@ -154,7 +154,24 @@ Après archivage d’un RUN direct, utiliser `run_reconcile_archive` (ou
 courant. Aucun effet non terminal ni bail détenu ; identités, gel et reçus
 restent inchangés. Ne pas recréer la source ni utiliser run.adopt.
 
-Déclarer la position par `run_progress` (ou `cab call run.progress`), selon le
+Pour un RUN régi par le protocole des étapes, le codeur direct ou
+l’orchestrateur piloté annonce en texte « Début de l’étape N — nom » dans
+la session, puis appelle `run_stage_begin`. Pour l’initialisation, annoncer
+avant `run_begin` et enregistrer l’étape dès que le RUN existe. Reprendre le même identifiant si
+la réponse est perdue. Pour une réitération, annoncer le retour et utiliser
+un nouvel identifiant. Pour recommencer le passage courant après un échec
+connu, préciser `restart=true`. CAB ouvre le passage et lance les tâches prévues.
+Consulter `run_stage_status` pendant l’attente et transmettre les retours
+utiles au développeur. Si un retour échoue, revenir à l’étape à reprendre.
+
+Quand toutes les tâches CAB du passage sont réussies, l’agent confirme sa
+part avec `run_stage_validate`, en donnant la tentative et les faits vérifiés.
+Avancer après `validated=true`. Pour la Publication, transmettre à l’entrée
+la version choisie et le périmètre autorisé (`project` sur mandat CICDF).
+En Clôture, attendre toutes les preuves, puis valider cette dernière étape.
+CAB établit le reçu final à partir des preuves et de cette validation.
+
+Pour les RUN historiques, déclarer la position par `run_progress` (ou `cab call run.progress`), selon le
 cycle indiqué dans le détail du RUN. Pour un nouveau cycle, l’Archivage est à
 l’étape 9. CAB fige les mesures, exécute Statistiques et Publication en
 parallèle et place la session en Clôture. Lire les reçus de la même demande

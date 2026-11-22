@@ -192,6 +192,18 @@ def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK',descriptio
     try:return client().command('run.progress',locals())
     except ClientError as error:raise ToolError(str(error)) from error
 @public_tool()
+def run_stage_begin(project_id:str,run_id:str,request_id:str,stage:int,text:str,version:str|None=None,scope:str|None=None,restart:bool=False)->dict:
+    """Annonce un début ou un retour d’étape et lance les tâches CAB prévues."""
+    return client().command('run.stage.begin',{key:value for key,value in locals().items() if value is not None})
+@public_tool()
+def run_stage_validate(project_id:str,run_id:str,request_id:str,attempt:int,text:str)->dict:
+    """Valide la part agent si les retours CAB de ce passage sont tous réussis."""
+    return client().command('run.stage.validate',locals())
+@public_tool()
+def run_stage_status(project_id:str,run_id:str)->dict:
+    """Lit la tentative active et les retours CAB sans relancer leurs effets."""
+    return client().command('run.stage.status',locals())
+@public_tool()
 def run_stage_substep(project_id:str,run_id:str,request_id:str,key:str,state:str,description:str)->dict:
     """Enregistre une sous-étape réelle du RUN avec un identifiant par tentative."""
     return client().command('run.stage_substep',locals())

@@ -18,6 +18,8 @@ def close_normal(actor,data,*,automatic=False):
     from .measurements import end_if_open
     from .run_lifecycle import active_change,archive_state,guard
     candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
+    from cab_platform.stage_protocol import enabled
+    commands.require(data.get('branch')!='TERMINÉ' or not enabled(candidate),'stage-use-closure-validation')
     if automatic:
         from .run_lifecycle import normal_valid
         normal_valid(candidate)

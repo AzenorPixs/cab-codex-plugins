@@ -1111,7 +1111,7 @@ def command(request,body:Command):
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
     if name=='run.begin':
-        run=commands.begin_run(actor,data)
+        run=commands.begin_run(actor,data,stage_protocol=True)
         if native_thread and run.mode=='piloted' and run.mandate.get('orchestrator_id')==actor.pk:
             from uuid import UUID
             try:thread=str(UUID(native_thread))
@@ -1124,6 +1124,9 @@ def command(request,body:Command):
         from .run_replacement import reconcile
         return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
+    if name in ('run.stage.begin','run.stage.validate','run.stage.status'):
+        from cab_platform import stage_protocol
+        return {'run.stage.begin':stage_protocol.begin,'run.stage.validate':stage_protocol.validate,'run.stage.status':stage_protocol.status}[name](actor,data)
     if name=='run.stage_substep':
         from cab_platform.stage_substeps import command as record_substep
         return record_substep(actor,data)

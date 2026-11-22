@@ -84,10 +84,16 @@ def finish_cycle(cycle,at,keys):
 def observe(run: Run, at=None) -> None:
     if run.cycle_steps!=12 or not run.change_record_id:return
     run=Run.objects.select_for_update().get(pk=run.pk)
+    from .stage_protocol import enabled
+    governed=enabled(run)
+    if governed and not run.configuration['stage_protocol'].get('current'):
+        return
     at=at if at is not None else timezone.now()
     current=ChangeStageIteration.objects.select_related('stage').filter(run=run,parent__isnull=True,asynchronous=False,ended_at__isnull=True).first()
     stopped=bool(run.suspension or run.state in STOP_STATES)
     key=keys_for(run)[run.stage-1] if not stopped and run.stage else None
+    if governed and key in ('statistics','publication'):
+        key=None  # Le passage est ouvert par le travail CAB correspondant.
     if current and current.stage.key==key:return
     if current:finish_iteration(current,at,(run.suspension or run.state) if stopped else 'transition')
     cycle=RunCycleIteration.objects.filter(run=run,ended_at__isnull=True).first()

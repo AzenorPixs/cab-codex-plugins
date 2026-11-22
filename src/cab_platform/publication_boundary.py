@@ -38,6 +38,13 @@ def _prepare_locked(run,partial,commit_reports,before_freeze,publication):
     if previous.get('state')=='FROZEN':
         c.require(previous['source_revision']==revision,'publication-frozen-source-changed')
         c.require(previous['commit_reports']==commit_reports,'publication-commit-policy-conflict')
+        from .stage_protocol import enabled
+        if enabled(current) and publication is True and not previous.get('preparation'):
+            previous={**previous,'preparation':before_freeze() if before_freeze else {}}
+            current.configuration={**current.configuration,KEY:previous}
+            current.save(update_fields=['configuration','updated'])
+            from .stage_substeps import phase
+            phase(current,'publication',previous['publication_ref'],'RUNNING')
         run.configuration=current.configuration
         return previous
     if not partial:
@@ -57,14 +64,17 @@ def _prepare_locked(run,partial,commit_reports,before_freeze,publication):
     current.configuration={**current.configuration,KEY:marker};current.save(update_fields=['configuration','updated'])
     from .stage_substeps import phase
     phase(current,'statistics','statistics-'+job.pk,'RUNNING')
-    phase(current,'publication',marker['publication_ref'],'RUNNING' if publication else 'SKIPPED')
+    if publication is not None:
+        phase(current,'publication',marker['publication_ref'],'RUNNING' if publication else 'SKIPPED')
     c.event(current,'statistics-inputs-frozen',{'boundary':marker,'periods':list(MeasurementPeriod.objects.filter(run=current).values_list('pk',flat=True))})
-    position(current,'closure','closure-started')
+    from .stage_protocol import enabled
+    if not enabled(current):
+        position(current,'closure','closure-started')
     run.configuration=current.configuration;run.stage=current.stage;run.phase=current.phase
     return marker
 
 
-def reopen_for_remediation(run,*,version=False):
+def reopen_for_remediation(run,*,version=False,target=None):
     if not frozen(run):return
     from .core import measurements
     previous=run.configuration[KEY]
@@ -74,8 +84,11 @@ def reopen_for_remediation(run,*,version=False):
         current.configuration={**current.configuration,KEY:{'state':'OPEN','generation':previous['generation']}}
         current.save(update_fields=['configuration','updated'])
         c.event(current,'publication-returned-to-work',{'previous_boundary':previous,'reason':'source-remediation'})
-    position(current,'version-skill' if version else 'implementation','run-progress')
-    measurements.transition(current.actor,{'project_id':current.project_id,'run_id':current.run_id,'request_id':'REMEDIATION-WORK-'+str(previous['generation']),'from_coding_start':False},'begin')
+    from .stage_protocol import enabled
+    if target is None and not enabled(current):
+        position(current,'version-skill' if version else 'implementation','run-progress')
+    if target!='statistics':
+        measurements.transition(current.actor,{'project_id':current.project_id,'run_id':current.run_id,'request_id':'REMEDIATION-WORK-'+str(previous['generation']),'from_coding_start':False},'begin')
     run.configuration=current.configuration;run.stage=current.stage;run.phase=current.phase
 
 

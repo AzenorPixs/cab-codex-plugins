@@ -40,6 +40,9 @@ def acknowledge(actor, data) -> dict:
               'version-skill-confirmation-required', 400)
     if status(run)['acknowledged']:
         return status(run)
+    from .stage_protocol import enabled,KEY
+    c.require(not enabled(run) or run.configuration[KEY].get('current',{}).get('stage')==number_for(run,'version-skill'),
+              'stage-versioning-not-started')
     c.working(run)
     c.require(run.change_record_id is not None and (run.stage or 0) >= number_for(run, 'specification'),
               'version-skill-specification-required', 409)

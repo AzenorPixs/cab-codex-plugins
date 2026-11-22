@@ -244,7 +244,7 @@ def register_project(actor,root):
     actor.projects.add(project);return project
 
 @transaction.atomic
-def begin_run(actor,data):
+def begin_run(actor,data,*,stage_protocol=False):
     project=Project.objects.get(pk=data['project_id']);scope(actor,project)
     with connection.cursor() as cursor:cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[project.pk])
     require(project.creation_state=='READY','project-creation-needs-reconciliation')
@@ -280,7 +280,11 @@ def begin_run(actor,data):
         require(not active.exists(),'direct-run-already-active',409)
     else:
         require(not replacing,'run-replacement-direct-only',400)
-    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration={'cycle_profile':'publication-12-v1'},mandate={**data,'framing_digest':digest(data)})
+    configuration={'cycle_profile':'publication-12-v1'}
+    if stage_protocol:
+        from cab_platform.stage_protocol import KEY,VERSION
+        configuration[KEY]={'version':VERSION,'active':{}}
+    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration=configuration,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode})
@@ -297,6 +301,8 @@ def begin_run(actor,data):
 @transaction.atomic
 def progress(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
+    from cab_platform.stage_protocol import enabled
+    require(not enabled(r),'stage-use-begin-and-validate')
     require(r.state in ('WORKING','FINALIZATION_PENDING','REVIEW_PENDING','ACCEPTED') and not r.suspension,'run-not-active')
     require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
     stage=data.get('stage');phase=data.get('phase',r.phase)
@@ -318,8 +324,12 @@ def reconcile_archive(actor,data):
     """Relocalisation du seul change archivé ; jamais un amendement libre."""
     from datetime import date
     from types import SimpleNamespace
-    r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
-    require(r.mode=='direct' and r.state in ('WORKING','FINALIZATION_PENDING'),'archive-reconciliation-state-invalid')
+    r=run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    from cab_platform.stage_protocol import enabled,authority,KEY
+    permitted=(enabled(r) and authority(actor,r)) or (r.mode=='direct' and actor.pk==r.actor_id)
+    require(permitted,'archive-reconciliation-authority-required',403)
+    require(not enabled(r) or r.configuration[KEY].get('current',{}).get('stage')==9,'stage-archival-not-started')
+    require(r.state in ('WORKING','FINALIZATION_PENDING'),'archive-reconciliation-state-invalid')
     expected=data.get('expected_framing_digest');archive=data.get('archive_path')
     require(isinstance(expected,str) and re.fullmatch('[a-f0-9]{64}',expected),'framing-digest-invalid',400)
     require(isinstance(archive,str) and re.fullmatch(r'openspec/changes/archive/\d{4}-\d{2}-\d{2}-'+re.escape(r.change),archive),'archive-path-invalid',400)
@@ -435,6 +445,8 @@ def complete(operation_id,nonce,receipt):
 @transaction.atomic
 def submit(actor,data):
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True);working(r);require(no_pending(r),'effects-unresolved')
+    from cab_platform.stage_protocol import enabled,KEY
+    require(not enabled(r) or r.configuration[KEY].get('current',{}).get('stage')==8,'stage-review-not-started')
     from .models import FinalizationPlan
     require(not FinalizationPlan.objects.filter(run=r).exclude(policy={}).exists(),'finalization-submission-owned-by-cab')
     current=revision(r);tests=data.get('tests',[]);require(tests,'tests-required',400)

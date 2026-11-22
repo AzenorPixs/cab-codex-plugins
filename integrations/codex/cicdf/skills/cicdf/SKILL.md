@@ -9,6 +9,12 @@ Utiliser ce parcours sur demande explicite de CICDF ou de livraison de tous les 
 
 Appliquer les règles du skill `cicd` pour le choix de version, le rattachement au RUN, le suivi et la clôture. Appeler `session_delivery_full_start(version)`. Lire ensuite `session_delivery_status(version)` sur le même reçu. Le champ `scope` doit valoir `project`. Une réponse perdue se vérifie sur le reçu existant. Le codeur ne reproduit aucun commit, build ou envoi.
 
+Sur un RUN régi par le protocole des étapes, annoncer la Publication et
+appeler `run_stage_begin` à l’étape 11 avec la version et `scope="project"`.
+Lire le même lancement via `run_stage_status`. Une fois les retours CAB
+réussis, valider la part de l’agent et poursuivre en Clôture. Pour un RUN
+historique, utiliser le démarrage CICDF de session documenté plus haut.
+
 Pour un RUN à douze étapes, appliquer le skill **Version** après la
 spécification. Le codeur choisit puis appelle `version_propose` après
 l’accusé du lecteur habilité. En piloté, l’orchestrateur déclare le
