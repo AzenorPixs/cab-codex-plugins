@@ -165,7 +165,7 @@ Consulter `run_stage_status` pendant l’attente et transmettre les retours
 utiles au développeur. Si un retour échoue, revenir à l’étape à reprendre.
 
 Déclarer à `run_begin` les mandats effectivement autorisés sous forme de
-liste, par exemple `["SCM","CICDF","CABU"]`. Si aucun mandat n’est nommé,
+liste, par exemple `["SCM","CICDF"]`. Si aucun mandat n’est nommé,
 CAB expose son cadrage sous le nom `CAB`. Avant de terminer l’Initialisation,
 vérifier cette liste, l’annoncer dans la session, puis la confirmer avec
 `run_stage_action(action="mandats", mandates=[…])` et la tentative courante.
@@ -175,6 +175,10 @@ Pour une autre validation réellement effectuée, lire au besoin les actions
 possibles avec `run_stage_action_catalogue` puis consigner l’action avec
 `run_stage_action`. CAB journalise de lui-même les opérations et reçus connus.
 L’Overview ne présente que les actions effectivement observées.
+
+Les mandats d’étape concernent le change. CABU est une mise à jour de l’hôte :
+lancer cab update séparément après la clôture et l’archivage lorsque le
+développeur l’a autorisée, puis annoncer le résultat du reçu système.
 
 Après avoir produit un bilan de blocage, le déclarer dans le passage courant
 avec `run_stage_action(action="blocage", blocker_path=…)` et sa tentative.

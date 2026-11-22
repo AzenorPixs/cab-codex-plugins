@@ -1,8 +1,8 @@
 """Ventilation des intervalles observés sur le temps écoulé."""
 
 FIELDS=('cab_seconds','agent_seconds','waiting_seconds')
-WAIT_DETAILS=('wait_observed_seconds','wait_assigned_seconds')
-PROJECTION_SCHEMA=2
+WAIT_DETAILS=('wait_observed_seconds','agent_assigned_seconds')
+PROJECTION_SCHEMA=3
 
 
 def merged(intervals, start, end):
@@ -56,17 +56,17 @@ def partition(start,end,cab=(),agent=(),covered=(),*,display=False):
     agent_time=total_work-cab_time
     coverage=[*covered,*cab,*agent]
     observed=elapsed(coverage,start,end)
-    parts=(cab_time,agent_time,duration-total_work)
-    values=display_parts(parts) if display else [value/1000000 for value in parts]
     assigned=duration-observed
+    parts=(cab_time,agent_time+assigned,observed-total_work)
+    values=display_parts(parts) if display else [value/1000000 for value in parts]
     gaps=list(missing_intervals(coverage,start,end)) if assigned else []
     return {
         **dict(zip(FIELDS,values)),
         'wait_observed_seconds':(observed-total_work)/1000000,
-        'wait_assigned_seconds':assigned/1000000,
-        'waiting_policy':'no-attested-work' if assigned else None,
-        'waiting_assigned_intervals':[[left.isoformat(),right.isoformat()] for left,right in gaps[:128]],
-        'waiting_assigned_interval_count':len(gaps),
+        'agent_assigned_seconds':assigned/1000000,
+        'agent_attribution_policy':'no-attested-work' if assigned else None,
+        'agent_assigned_intervals':[[left.isoformat(),right.isoformat()] for left,right in gaps[:128]],
+        'agent_assigned_interval_count':len(gaps),
         'attribution_complete':True,
     }
 

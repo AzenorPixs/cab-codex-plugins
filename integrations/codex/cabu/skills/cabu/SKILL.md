@@ -21,23 +21,19 @@ d'un ancien programme déjà en mémoire ne peut pas être fabriquée par CAB.
 Les connecteurs supervisés rechargent leur moteur sans rejouer les appels ;
 le relais maintient l'attente CABU pendant son propre remplacement.
 
-Sur demande explicite ou dans la livraison CICD CAB autorisée, appeler l’outil
-MCP `cab_update` avec un request_id stable et la version cible demandée, ou
-version vide pour la release officielle courante. Aucun sudo client et aucun
-RUN ne sont nécessaires. Tout client CAB actif authentifié est admis, sans
-liste de comptes ; le service root porte uniquement cette opération bornée.
+Sur demande autorisée, le LLM lance la commande système
+`cab update --version VERSION --request-id IDENTIFIANT`. Sans version
+imposée, laisser CAB résoudre la version officielle courante. Le CLI soumet
+la demande au service. L’installation est portée par cab-update.service.
 
-CAB orchestre seul les étapes via cab-update.service, distinct de cab.service.
-L’outil attend mécaniquement le même reçu pendant le redémarrage. Une réponse
-perdue, un délai client ou ADMISSION_UNCONFIRMED impose `cab_update_status`
-avec le même request_id ; ne jamais créer une nouvelle demande pour contourner
-un état inconnu. `state=OK` et `version` prouvent paquet configuré, santé READY
-et finalisation vérifiée. FAILED/UNKNOWN ne sont pas des réussites.
+CABU est extérieur aux douze étapes. Pour une livraison de CAB, le RUN
+atteint la clôture et l’archivage sur ses preuves de publication, puis le LLM
+lance CABU et annonce le résultat dans le chat.
 
-Si le client MCP chargé ne fournit pas ces outils, signaler le client ancien
-et son besoin de rechargement natif, sans modifier les configurations à la main.
-Le parcours administratif `sudo cab update` reste disponible pour l’amorçage
-initial de cette capacité ou une intervention explicitement demandée.
+Garder le même identifiant pour `cab update-status --request-id IDENTIFIANT`.
+Le reçu OK confirme la version installée, la santé et le connecteur. En cas
+de délai ou d’admission non confirmée, lire le même reçu. Une activation
+échouée ou indéterminée doit être annoncée avec son diagnostic.
 
 Le paquet arrête cab.service à frontière sûre, installe les runtimes publics
 hors réseau, applique les migrations d’une base déjà initialisée, redémarre et

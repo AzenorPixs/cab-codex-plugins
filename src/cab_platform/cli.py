@@ -56,7 +56,12 @@ def main(argv=None):
     mcp=sub.add_parser('mcp');mcp.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
     worker=sub.add_parser('mcp-worker');worker.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
     sub.add_parser('bootstrap-token')
-    update_parser=sub.add_parser('update');update_parser.add_argument('--package')
+    update_parser=sub.add_parser('update')
+    update_parser.add_argument('--version',default='')
+    update_parser.add_argument('--request-id')
+    update_parser.add_argument('--timeout-ms',type=int,default=1800000)
+    update_status=sub.add_parser('update-status')
+    update_status.add_argument('--request-id',required=True)
     enroll=sub.add_parser('enroll');enroll.add_argument('--user',required=True);enroll.add_argument('--agent',required=True);enroll.add_argument('--role',choices=['coder','orchestrator','collector'],default='coder')
     call=sub.add_parser('call');call.add_argument('name');call.add_argument('--admin',action='store_true')
     native=sub.add_parser('native-source');native.add_argument('--project-id',required=True);native.add_argument('--session-id',default=os.environ.get('CODEX_THREAD_ID',''));native.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',''))
@@ -91,9 +96,16 @@ def main(argv=None):
             if os.getuid()!=0:raise ClientError('root-administration-required')
             from .paths import secret
             print(secret('bootstrap-token'));return 0
-        elif args.action=='update':
-            from .update import update
-            result=update(args.package)
+        elif args.action in ('update','update-status'):
+            from uuid import uuid4
+            from .host_update_cli import request as request_update, status as update_status
+            client=Client()
+            if args.action=='update':
+                result=request_update(client,args.request_id or 'CABU-'+uuid4().hex,args.version,args.timeout_ms)
+            else:
+                result=update_status(client,args.request_id)
+            print(json.dumps(result,ensure_ascii=False,default=str))
+            return 0 if result['state']=='OK' else 1 if result['state']=='FAILED' else 2
         elif args.action=='finalize':
             from .finalization import finalize
             result=finalize()

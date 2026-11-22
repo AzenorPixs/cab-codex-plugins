@@ -29,17 +29,18 @@ class AttributionTests(unittest.TestCase):
             [(self.at(1),self.at(5)),(self.at(6),self.at(10))],[(start,end)])
         self.assertEqual([result[key] for key in clock.FIELDS],[6,3,3])
         self.assertEqual(result['wait_observed_seconds'],3)
-        self.assertEqual(result['wait_assigned_seconds'],0)
+        self.assertEqual(result['agent_assigned_seconds'],0)
 
-    def test_missing_coverage_is_attributed_to_wait_without_calling_it_observed(self):
+    def test_missing_coverage_is_attributed_to_agent_without_changing_observed_wait(self):
         result=clock.partition(self.at(0),self.at(10),[(self.at(0),self.at(2))])
         self.assertTrue(result['attribution_complete'])
         self.assertEqual(result['cab_seconds'],2)
         self.assertEqual(result['wait_observed_seconds'],0)
-        self.assertEqual(result['waiting_seconds'],8)
-        self.assertEqual(result['wait_assigned_seconds'],8)
-        self.assertEqual(result['waiting_policy'],'no-attested-work')
-        self.assertEqual(result['waiting_assigned_intervals'],[[self.at(2).isoformat(),self.at(10).isoformat()]])
+        self.assertEqual(result['waiting_seconds'],0)
+        self.assertEqual(result['agent_seconds'],8)
+        self.assertEqual(result['agent_assigned_seconds'],8)
+        self.assertEqual(result['agent_attribution_policy'],'no-attested-work')
+        self.assertEqual(result['agent_assigned_intervals'],[[self.at(2).isoformat(),self.at(10).isoformat()]])
 
     def test_missing_dates_do_not_create_elapsed_time(self):
         result=clock.partition(self.at(0),None)

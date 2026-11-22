@@ -42,11 +42,11 @@ La vue session et son Overview MUST utiliser les données PG diffusées par Elec
 - **THEN** aucun détail temporel fictif n'est affiché.
 
 ### Requirement: Identité de l'artefact publié et installé
-Une preuve de publication liée à CABU MUST porter l'empreinte du paquet effectivement publié et installé, et conserver séparément les preuves Git. Une correction de preuve MUST vérifier les assets distants et préserver les anciennes preuves.
+Une livraison Debian demandant une preuve de paquet MUST porter l’empreinte du paquet effectivement publié. CAB MUST conserver séparément les preuves Git. Une correction de preuve MUST vérifier les assets distants et préserver les anciennes preuves.
 
 #### Scenario: Tag Git et paquet Debian
 - **WHEN** leurs empreintes diffèrent
-- **THEN** CAB ne les assimile pas ; la preuve du paquet est établie sur les octets vérifiés de l'asset.
+- **THEN** CAB ne les assimile pas ; la preuve du paquet est établie sur les octets vérifiés de l’asset.
 
 ### Requirement: Commit local propre à la phase Statistiques
 Si le parcours du change prévoit un commit, la phase Statistiques MUST committer localement les seuls rapports qu’elle a modifiés. CAB MUST vérifier leurs empreintes et conserver les autres modifications et indexations. Ce commit MUST rester distinct du commit de publication et ne MUST déclencher ni tag ni envoi distant.
@@ -126,10 +126,10 @@ CAB MUST réutiliser les passages enfants PostgreSQL pour tracer les actions ré
 - **THEN** aucun passage d’action n’est créé et l’Overview ne l’affiche pas.
 
 ### Requirement: Validation de la liste des mandats à l’Initialisation
-Pour un nouveau RUN, l’agent responsable MUST enregistrer sa validation de la liste exacte des mandats déclarés avant de terminer l’Initialisation. CAB MUST conserver la liste horodatée avec le passage. Cette validation ne MUST modifier aucune autorité ni permission.
+Pour un nouveau RUN, l’agent responsable MUST enregistrer sa validation de la liste exacte des mandats déclarés avant de terminer l’Initialisation. CAB MUST conserver la liste horodatée avec le passage. Cette validation ne MUST modifier aucune autorité ni permission. La mise à jour système de l’hôte MUST rester extérieure à cette liste.
 
 #### Scenario: Confirmation du périmètre de session
-- **WHEN** les mandats déclarés sont SCM, CICDF et CABU
+- **WHEN** les mandats déclarés pour le change sont SCM et CICDF
 - **THEN** CAB attend leur confirmation exacte. L’Overview montre la liste quand l’agent l’a validée.
 
 ### Requirement: Deux actions observées pour les rapports statistiques
@@ -140,7 +140,7 @@ CAB MUST tracer séparément le calcul et la validation des statistiques du chan
 - **THEN** seul le passage du traitement réalisé apparaît.
 
 ### Requirement: Ventilation des durées sans double comptage
-L’Overview MUST répartir le temps borné entre CAB, Agent(s) et Attente. CAB MUST recevoir les chevauchements. Le temps restant sans preuve suffisante de travail MUST être attribué à l’attente par convention et distingué de l’attente observée. Les trois colonnes MUST totaliser la durée affichée, après arrondi.
+L’Overview MUST répartir le temps borné entre CAB, Agent(s) et Attente. CAB MUST recevoir les chevauchements. Le reste sans preuve suffisante de travail MUST être attribué à l’Agent. Les trois colonnes MUST totaliser la durée affichée, après arrondi. L’Overview MUST afficher les valeurs de durée seules.
 
 #### Scenario: Travail simultané
 - **WHEN** CAB et un ou plusieurs agents travaillent au même instant
@@ -148,7 +148,7 @@ L’Overview MUST répartir le temps borné entre CAB, Agent(s) et Attente. CAB 
 
 #### Scenario: Preuve de travail indisponible
 - **WHEN** un intervalle borné ne peut pas être attribué d’après les preuves réelles
-- **THEN** il est classé en Attente par convention. L’Overview préserve le détail du montant attribué.
+- **THEN** il est classé dans Agent(s). La provenance reste enregistrée en base et aucun libellé supplémentaire n’est affiché.
 
 #### Scenario: Arrondi des colonnes
 - **WHEN** une ventilation est affichée au dixième de seconde
@@ -162,11 +162,11 @@ CAB MUST enregistrer une action pour l’écriture constatée de BLOCKERS.md ou 
 - **THEN** aucune action de bilan n’apparaît dans l’Overview.
 
 ### Requirement: Projection PostgreSQL des durées de passage et de cycle
-CAB MUST conserver les totaux répartis, la part d’attente attribuée par convention et la référence du calcul par passage et par cycle. Une nouvelle preuve MUST permettre de réviser ces totaux, même pour un RUN archivé. Electric MUST actualiser les vues suite aux mises à jour.
+CAB MUST conserver les totaux répartis, la part du temps attribuée à l’Agent faute de trace et la référence du calcul par passage et par cycle. Une nouvelle preuve MUST permettre de réviser ces totaux, même pour un RUN archivé. Electric MUST actualiser les vues suite aux mises à jour.
 
 #### Scenario: Ventilation partielle du RUN 218
 - **WHEN** une tentative Statistiques bornée reste sans preuve précise de travail
-- **THEN** CAB additionne l’attente observée et l’attente par convention et conserve leur distinction.
+- **THEN** CAB conserve l’attente observée et attribue le reste à l’Agent.
 
 #### Scenario: Travail observé pendant un passage en cours
 - **WHEN** un retour mesuré est disponible avant la fin du passage
@@ -177,7 +177,7 @@ CAB MUST conserver les totaux répartis, la part d’attente attribuée par conv
 - **THEN** CAB persiste ses trois durées et sa date de fin ensemble. L’événement Electric n’affiche aucun passage terminé avec des totaux en attente du recalcul périodique.
 
 #### Scenario: Preuve tardive
-- **WHEN** une preuve fournit les bornes d’un travail précédemment attribué à l’attente par convention
+- **WHEN** une preuve fournit les bornes d’un travail précédemment attribué à l’Agent faute de trace
 - **THEN** CAB réattribue sa durée au responsable et actualise la projection sans modifier le reçu initial.
 
 ### Requirement: Horodatages des actions et passages terminés
@@ -186,3 +186,14 @@ Un nouveau passage ou une nouvelle action MUST recevoir sa date de début à son
 #### Scenario: Verrou refusé avant rendu Statistiques
 - **WHEN** l’admission au rendu échoue avant tout calcul
 - **THEN** CAB termine les actions de préparation et d’admission effectivement réalisées avec leurs dates. Aucun calcul du change ou global n’est créé pour cette tentative.
+
+### Requirement: Mise à jour de l’hôte indépendante du change
+Pour les nouveaux RUN, la clôture MUST dépendre des preuves du change et de sa publication. CABU ne MUST pas être un mandat ou une preuve du cycle. Le LLM MUST déclencher la mise à jour séparément avec cab update, qui MUST utiliser cab-update.service. Le LLM MUST annoncer le résultat du reçu système dans la session.
+
+#### Scenario: Livraison CAB avant mise à jour locale
+- **WHEN** toutes les validations et preuves de publication sont présentes mais CABU n’a pas démarré
+- **THEN** le RUN peut clôturer et être archivé. La mise à jour ne modifie pas son reçu.
+
+#### Scenario: Historique d’activation
+- **WHEN** une ancienne étape contient une action émise par la mise à jour de l’hôte
+- **THEN** l’Overview des étapes masque l’action CABU et conserve les preuves historiques.

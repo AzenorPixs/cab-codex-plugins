@@ -10,8 +10,14 @@ def validate_policy(run,policy):
     try:return validate(policy,run.mandate['criteria'],run.mode)
     except ContractError as error:raise c.Refused(str(error),400) from error
 
+def require_change_policy(run,value):
+    from cab_platform.finalization_contract import require_change_policy as check
+    try:check(value,run.mode)
+    except ContractError as error:raise c.Refused(str(error),400) from error
+
 def initialize(run,policy=None):
     value=validate_policy(run,policy) if policy is not None else {}
+    require_change_policy(run,value)
     return FinalizationPlan.objects.create(run=run,policy=value,digest=c.digest(value) if value else '',missing=[] if value else ['finalization-contract-required'])
 
 @transaction.atomic
@@ -41,6 +47,7 @@ def configure(actor,data):
     value=validate_policy(run,data['policy'])
     plan=FinalizationPlan.objects.filter(run=run).first()
     if plan and plan.policy==value:return {'policy':plan.policy,'digest':plan.digest}
+    require_change_policy(run,value)
     c.working(run)
     from .run_lifecycle import guard
     guard(run,allow_measurement=True)

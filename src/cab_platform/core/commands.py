@@ -271,6 +271,8 @@ def begin_run(actor,data,*,stage_protocol=False):
     prior=Run.objects.filter(project=project,run_id=run_id).first()
     if prior:
         require(prior.actor_id==actor.pk and prior.session_id==sid and prior.mandate.get('framing_digest')==digest(data),'run-identity-conflict');return prior
+    require(not any(mandate.casefold()=='cabu' for mandate in data.get('mandates',[])),
+            'host-update-outside-change-cycle',400)
     change=identifier(data['change'])
     replaced=None
     replacing=data.get('replaces_run_id')

@@ -353,11 +353,32 @@ def _observed_end(record, rows, traces, operations):
     return max(ends,default=None)
 
 
+HOST_UPDATE_ACTIONS=frozenset(('closure.action-installation','closure.action-availability'))
+
+
+def visible_receipt(receipt):
+    mandates=receipt.get('mandates')
+    if isinstance(mandates,list):
+        receipt={**receipt,'mandates':[name for name in mandates if isinstance(name,str) and name.casefold()!='cabu']}
+    if isinstance(receipt.get('note'),str):
+        receipt={**receipt,'note':visible_description(receipt['note'])}
+    return receipt or None
+
+
+def visible_description(description):
+    """Les notes historiques restent brutes en base, séparées du détail d’étape."""
+    import re
+    sentences=re.split(r'(?<=[.!?])\s+|\n+',description or '')
+    return ' '.join(sentence for sentence in sentences
+                    if sentence and not re.search(r'\bcabu\b|\bcab\s+update(?:-status)?\b|par convention',
+                                                 sentence,re.IGNORECASE)) or None
+
+
 def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
     """Détails observés et travail attesté, distinct du temps mural."""
     rows=ChangeStageIteration.objects.filter(stage__change=change).select_related('stage','run').order_by('started_at','pk')
     if run is not None:rows=rows.filter(run=run)
-    records = list(rows)
+    records = list(rows.exclude(stage__key__in=HOST_UPDATE_ACTIONS))
     runs = list(Run.objects.filter(change_record=change).select_related('actor', 'project', 'finalization_plan')) if run is None else [
         Run.objects.select_related('actor', 'project', 'finalization_plan').get(pk=run.pk)
     ]
@@ -402,7 +423,7 @@ def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
                 native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
-                description=record.description or None, source=record.description_source or None, receipt=record.receipt or None))
+                description=visible_description(record.description), source=record.description_source or None, receipt=visible_receipt(record.receipt)))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None
             right = ending['created'] if ending else None
@@ -414,7 +435,7 @@ def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
     for record in rows_by_run[None]:
         grouped[record.stage.key].append(_passage(None, record.pk, record.started_at, record.ended_at,
             number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
-            description=record.description or None, receipt=record.receipt or None))
+            description=visible_description(record.description), receipt=visible_receipt(record.receipt)))
     definitions=keys_for(run) if run is not None else tuple(dict.fromkeys([*STAGE_KEYS[:-1],'publication','closure']))
     stages=[]
     for key in definitions:

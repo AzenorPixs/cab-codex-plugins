@@ -78,7 +78,7 @@ def cab_contract()->dict:
 def finalization_validate(policy:dict,criteria:list[str],mode:str='direct')->dict:
     """Prévol pur : schéma strict, critères exacts et modes ; aucun RUN ni effet."""
     from .finalization_contract import validate,describe,ContractError
-    try:return {'valid':True,'policy':validate(policy,criteria,mode),'contract':describe(),'effects_issued':False}
+    try:return {'valid':True,'policy':validate(policy,criteria,mode,legacy=False),'contract':describe(),'effects_issued':False}
     except ContractError as error:return {'valid':False,'error':str(error),'contract':describe(),'effects_issued':False}
 @public_tool()
 def native_control(project_id:str,run_id:str,session_id:str,generation:int,request_id:str,action:str,text:str='')->dict:

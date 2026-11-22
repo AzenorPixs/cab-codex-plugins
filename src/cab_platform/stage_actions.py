@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from .change_stage_metrics import PUBLICATION_KEYS, finish_iteration, refresh_total
 from .core import commands as c
-from .core.models import ChangeStage, ChangeStageIteration, Event, Operation, Run, RunEvidence
+from .core.models import ChangeStage, ChangeStageIteration, Event, Operation, Run
 from .logging import redact
 
 AGENT_ACTIONS = {
@@ -149,7 +149,7 @@ def _operation(run,event):
 
 
 TRACKED = set(CAB_EVENTS)|set(AGENT_EVENTS)|{
-    'operation-dispatched','operation-terminal','stage-agent-validated','stage-agent-started','finalization-evidence-recorded'
+    'operation-dispatched','operation-terminal','stage-agent-validated','stage-agent-started'
 }
 
 
@@ -175,12 +175,6 @@ def observe_event(event):
         if result.get('attempt')==current.get('attempt') and current.get('stage'):
             name=PUBLICATION_KEYS[current['stage']-1]
             _simple(run,event,('validation-agent','Étape validée par l’agent',name),'agent',latest=True)
-    elif event.kind=='finalization-evidence-recorded':
-        if event.data.get('source')=='cab-update':
-            proof=RunEvidence.objects.filter(pk=event.data.get('evidence_id'),run=run).first()
-            if proof and proof.payload.get('kind') in ('installation','availability'):
-                kind=proof.payload['kind']
-                _simple(run,event,(kind,'Installation vérifiée' if kind=='installation' else 'Disponibilité vérifiée','closure'),'cab')
     else:
         definition=CAB_EVENTS.get(event.kind) or AGENT_EVENTS[event.kind]
         parent=None

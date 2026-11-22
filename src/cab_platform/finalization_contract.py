@@ -55,7 +55,14 @@ def next_actions(missing: list[str],policy: dict) -> list[dict]:
         actions.append(action)
     return actions
 
-def validate(policy: dict,criteria: list[str],mode: str) -> dict:
+def require_change_policy(policy,mode):
+    """Les preuves d’une mise à jour d’hôte ne cadrent pas un nouveau change."""
+    if mode in ('direct','piloted'):
+        require(not policy.get('update_request_id') and not any(rule.get('producer')=='cab-update'
+                for rule in policy.get('requirements',[])),'host-update-outside-change-cycle')
+
+
+def validate(policy: dict,criteria: list[str],mode: str, *, legacy=True) -> dict:
     require(isinstance(policy,dict) and not set(policy)-{'nature','checks','requirements','review_required','update_request_id','target_version'},'finalization-fields-invalid')
     nature=policy.get('nature','development');require(nature in NATURES,'finalization-nature-invalid')
     checks=policy.get('checks',[]);requirements=policy.get('requirements',[])
@@ -78,6 +85,7 @@ def validate(policy: dict,criteria: list[str],mode: str) -> dict:
                 require(item['producer']!='cab-update' or item['kind'] in ('installation','availability'),'finalization-builtin-kind-invalid')
                 clean_requirements.append(dict(item))
     require(covered==set(criteria),'finalization-criteria-not-covered')
+    if not legacy:require_change_policy(policy,mode)
     review=policy.get('review_required',mode=='piloted');require(type(review) is bool and (mode!='piloted' or review),'finalization-reserved-review-required')
     if any(r['producer']=='cab-update' for r in clean_requirements):
         require(identifier(policy.get('update_request_id')) and isinstance(policy.get('target_version'),str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',policy['target_version']),'finalization-update-binding-required')

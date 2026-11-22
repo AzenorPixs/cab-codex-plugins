@@ -938,6 +938,12 @@ def ensure_delivery_producer(project):
     return producer.pk
 
 
+def package_proof_required(plan, requirements):
+    return bool(plan.get('debian') and any(rule.get('producer')=='cab-update' or
+                rule.get('kind')=='publication' and rule.get('artifact_group')=='package' and
+                rule.get('producer')==plan.get('evidence_producer') for rule in requirements))
+
+
 def attest_delivery(delivery_id):
     """Atteste le tag réellement envoyé ; les releases différées restent exclues."""
     from .core.models import EvidenceProducer,FinalizationPlan,GitDelivery
@@ -958,7 +964,7 @@ def attest_delivery(delivery_id):
     artifact=hashlib.sha256(blob.stdout).hexdigest()
     package_step=delivery.steps.filter(key='verify:package',state='COMPLETED').first()
     if package_step:artifact=package_step.receipt['package_sha256']
-    elif any(rule.get('producer')=='cab-update' for rule in plan.policy['requirements']) and delivery.plan.get('debian'):
+    elif package_proof_required(delivery.plan,plan.policy['requirements']):
         from .publication_identity import verified_package
         package,_=verified_package(delivery,before_retire=True);artifact=package['sha256']
     for rule in rules:
@@ -1132,7 +1138,7 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     policy=Event.objects.filter(run=run,kind='session-delivery-policy',data__version=version).order_by('-pk').first()
     plan=delivery_preflight(project,version,defer_releases=bool(policy and policy.data.get('defer_releases') is True))
     plan['evidence_producer']=(policy.data.get('evidence_producer') if policy else None) or ensure_delivery_producer(project)
-    plan['package_identity']=bool(plan.get('debian') and any(rule.get('producer')=='cab-update' for rule in contract.policy['requirements']))
+    plan['package_identity']=package_proof_required(plan,contract.policy['requirements'])
     from .core.models import EvidenceProducer
     require(EvidenceProducer.objects.filter(pk=plan['evidence_producer'],project=project,active=True,actor__active=True,actor__uid=0,actor__role='collector',kinds__contains=['publication']).exists(),'session-delivery-producer-invalid',409)
     require(any(rule.get('kind')=='publication' and rule.get('producer')==plan['evidence_producer'] for rule in contract.policy.get('requirements',[])),'session-delivery-producer-rule-missing',409)
