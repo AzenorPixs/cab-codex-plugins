@@ -35,8 +35,17 @@ def enabled(metadata, kind):
 def debian_inventory(project):
     root = project_root(project)
     latest = {}
+    from .build_workspace import artifact_directory
+    directories=[root/'dist',artifact_directory(project)]
+    for directory in directories:
+        latest.update(_debian_directory(directory))
+    return latest
+
+
+def _debian_directory(directory):
+    latest={}
     try:
-        with opened(root / 'dist', directory=True) as folder:
+        with opened(directory, directory=True) as folder:
             for name in os.listdir(folder):
                 if not re.fullmatch(r'[a-zA-Z0-9_+.:~\-]{1,250}\.deb', name):
                     continue
@@ -59,7 +68,7 @@ def debian_inventory(project):
                     continue
                 when = datetime.fromtimestamp(info.st_mtime, tz=utc.utc)
                 key = f'{package}:{arch}'
-                row = {'package': package, 'version': version, 'architecture': arch, 'filename': name, 'size': info.st_size}
+                row = {'package': package, 'version': version, 'architecture': arch, 'filename': name, 'size': info.st_size,'storage':str(directory)}
                 if key not in latest or (when, name) > (latest[key][0], latest[key][1]['filename']):
                     latest[key] = when, row
     except OSError:

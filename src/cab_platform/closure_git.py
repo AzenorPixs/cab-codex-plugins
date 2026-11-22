@@ -16,6 +16,28 @@ from .statistics_documents import read_source
 ACTIVE_STATES=('INTENT','RUNNING','UNKNOWN','FAILED')
 
 
+@transaction.atomic
+def parallel_receipt(run,branch):
+    """Assembler les reçus des phases achevées, sans écriture dans le projet."""
+    from .phase_statistics import result_for
+    from .core.models import GitDelivery
+    current=Run.objects.select_for_update().get(pk=run.pk)
+    c.require(branch=='TERMINÉ','parallel-closure-branch-invalid')
+    statistics=result_for(current)
+    c.require(statistics.get('state')=='COMPLETED' and statistics.get('verified'),'statistics-not-validated')
+    previous=TerminalGitCommit.objects.filter(run=current).first()
+    if previous:
+        c.require(previous.state=='COMPLETED' and previous.receipt.get('statistics_receipt_digest')==statistics['receipt_digest'],'parallel-closure-receipt-conflict')
+        return previous.receipt
+    delivery=GitDelivery.objects.filter(run=current).order_by('-pk').first()
+    c.require(delivery is None or delivery.state=='COMPLETED','publication-not-validated')
+    result=statistics['result'];local=result.get('local_commit',{})
+    receipt={'kind':'parallel-closure-receipt','branch':branch,'delivered':delivery is not None,'commit':delivery.commit_oid if delivery else None,'delivery_id':delivery.pk if delivery else None,'documents':{p:{'sha256':sha} for p,sha in result['reports'].items()},'statistics_commit':local,'statistics_job':statistics['id'],'statistics_receipt_digest':statistics['receipt_digest'],'project_written':False,'at':timezone.now().isoformat()}
+    TerminalGitCommit.objects.create(run=current,project=current.project,origin={'run_id':current.run_id,'statistics_job':statistics['id']},branch=branch,state='COMPLETED',commit_oid=local.get('commit') or '',receipt=receipt)
+    c.event(current,'parallel-closure-validated',receipt)
+    return receipt
+
+
 def enabled(run):
     return run.configuration.get('terminal_git',{}).get('required') is True
 
@@ -106,6 +128,8 @@ def send(project,target,commit,tag_oid):
 
 
 def complete(run,branch,source_path):
+    if run.configuration.get('cycle_profile')=='publication-12-v1':
+        return parallel_receipt(run,branch) if branch=='TERMINÉ' else None
     if not enabled(run):return None
     c.require(not connection.in_atomic_block,'closure-git-transaction-invalid',409)
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])

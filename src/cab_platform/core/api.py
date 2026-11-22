@@ -755,13 +755,20 @@ def project_version_policy(request,project_id:str,body:VersionPolicyEdit):
     return apply(project_id,body.policy,body.side,body.preview_id)
 
 @api.get('/projects/{project_id}/change-stage-metrics')
-def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,offset:int=0):
+def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,run_id:str|None=None,offset:int=0):
     actor=principal(request)
     project=Project.objects.filter(pk=project_id).first()
     commands.require(project is not None,'project-not-authorized',403)
     if actor.role!='admin':commands.scope(actor,project)
     from .models import Change
     changes=Change.objects.filter(project=project)
+    if run_id is not None:
+        from .models import Run
+        from cab_platform.change_stage_metrics import summarize
+        run=Run.objects.filter(project=project,run_id=run_id).select_related('change_record').first()
+        commands.require(run is not None,'run-not-found',404)
+        if run.change_record is None:return {'run_id':run_id,'stages':[],'cycles':[],'duration_seconds':None,'complete_cycle_duration_seconds':None}
+        return {'identifier':run.change,'run_id':run_id,**summarize(run.change_record,run)}
     if change_id is not None:
         from cab_platform.change_stage_metrics import summarize
         change=changes.filter(pk=change_id).first()
@@ -1088,6 +1095,9 @@ def command(request,body:Command):
         from .run_replacement import reconcile
         return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
+    if name=='run.stage_substep':
+        from cab_platform.stage_substeps import command as record_substep
+        return record_substep(actor,data)
     if name in ('version.skill_acknowledge','version.propose'):
         from cab_platform.version_skill import acknowledge, propose
         return (acknowledge if name=='version.skill_acknowledge' else propose)(actor,data)

@@ -289,7 +289,12 @@ def package_contents(fd):
     return tuple(archive_contents(section) for section in ('--ctrl-tarfile', '--fsys-tarfile'))
 
 
-def build_debian(project, metadata, mark):
+def build_debian(project,metadata,mark):
+    from .build_workspace import source
+    with source(project) as prepared:return _build_debian(prepared,metadata,mark)
+
+
+def _build_debian(project, metadata, mark):
     root = project_root(project)
     with opened(root, directory=True) as root_fd:
         data = recipe(root_fd)
@@ -298,14 +303,8 @@ def build_debian(project, metadata, mark):
         version_status = subprocess.run(['/usr/bin/dpkg', '--validate-version', version], env=ENV,
                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         require(version_status.returncode == 0, 'artifact-version-invalid', 409)
-        if not (root / 'dist').exists():
-            try:
-                os.mkdir('dist', 0o755, dir_fd=root_fd)
-                with opened('dist', parent=root_fd, directory=True) as dist_fd:
-                    os.fchown(dist_fd, project.owner_uid, project.owner_gid if project.owner_gid is not None else -1)
-            except FileExistsError:
-                pass
-        with opened('dist', parent=root_fd, directory=True) as dist_fd, TemporaryDirectory() as tmp:
+        from .build_workspace import artifact_directory
+        with opened(artifact_directory(project),directory=True) as dist_fd, TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             tree = tmp_path / 'tree'
             tree.mkdir(mode=0o700)
@@ -383,6 +382,14 @@ def docker_image_details(reference, options, env):
 
 
 def build_docker(project, metadata, mark):
+    from .build_workspace import REFERENCE, source as isolated_source
+    if REFERENCE.get() is None:
+        return _build_docker(project, metadata, mark)
+    with isolated_source(project) as snapshot:
+        return _build_docker(snapshot, metadata, mark)
+
+
+def _build_docker(project, metadata, mark):
     root = project_root(project)
     image = metadata.get('PROJECT_ID') or project.identifier or ''
     require(DOCKER_NAME.fullmatch(image), 'artifact-docker-name-invalid', 409)

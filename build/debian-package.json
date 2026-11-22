@@ -21,3 +21,4 @@
     {"source":"output/package/marketplace.json","destination":"/usr/lib/cab/.agents/plugins/marketplace.json","mode":"0644"}
   ]
 }
+  

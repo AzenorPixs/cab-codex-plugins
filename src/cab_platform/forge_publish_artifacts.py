@@ -47,11 +47,12 @@ def local_plan(project, values, *, version=None):
         for _when,item in debian_inventory(project).values():
             if version and item['version']!=version:
                 continue
-            with opened(root,directory=True) as folder, opened(item['filename'],parent=folder) as fd:
+            storage=Path(item.get('storage',str(root)))
+            with opened(storage,directory=True) as folder, opened(item['filename'],parent=folder) as fd:
                 info=regular(fd)
                 with os.fdopen(os.dup(fd),'rb') as stream:
                     checksum=hashlib.file_digest(stream,'sha256').hexdigest()
-                files.append({'name':item['filename'],'version':item['version'],'size':info.st_size,'sha256':checksum})
+                files.append({'name':item['filename'],'version':item['version'],'size':info.st_size,'sha256':checksum,'storage':str(storage)})
         if files:
             result['debian']=files
     if enabled(values,'docker'):
@@ -129,7 +130,7 @@ def release_debian(project,client,base,root,forge,public_github,packages,mark):
         release_path=root+'/releases'+('/' if forge=='GITLAB' else '/tags/')+quote(tag,safe='')
         git_tag=root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')
         require(existing(client,git_tag) is not None,'artifact-forge-tag-missing',409)
-        with opened(Path(project.root)/'dist',directory=True) as folder,opened(name,parent=folder) as fd:
+        with opened(Path(package.get('storage',str(Path(project.root)/'dist'))),directory=True) as folder,opened(name,parent=folder) as fd:
             info=regular(fd)
             with os.fdopen(os.dup(fd),'rb') as stream:
                 require(info.st_size==package['size'] and hashlib.file_digest(stream,'sha256').hexdigest()==package['sha256'],

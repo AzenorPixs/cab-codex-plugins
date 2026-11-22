@@ -103,7 +103,9 @@ def contribution(run,proofs):
 
 def generate(job,run,proofs) -> dict:
     from .core import statistics_service as service
-    c.require(run.project_id==job.project_id and run.state=='FINALIZING' and eligible(run),'statistics-canonical-ineligible')
+    from .core.statistics_service import SNAPSHOT
+    snapshot=SNAPSHOT.get() or {}
+    c.require(run.project_id==job.project_id and (run.state=='FINALIZING' or snapshot.get('run_pk')==run.pk) and eligible(run),'statistics-canonical-ineligible')
     relative=directory(run)+'/STATISTICS.md';path=Path(run.project.root)/relative
     previous=Run.objects.get(pk=run.pk).configuration.get(KEY,{})
     c.require(not GitFileReservation.objects.filter(project=run.project,path=relative,active=True).exclude(git_index__session_id=run.coding_session_id).exists(),'statistics-target-reserved')

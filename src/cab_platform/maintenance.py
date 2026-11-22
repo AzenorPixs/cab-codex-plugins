@@ -23,7 +23,7 @@ def installed():
         if result.returncode:raise RuntimeError('package-schema-migration-failed')
         # La publication appartient à Electric, pas au rôle de migration.
         # Seul l'installateur système administre sa liste de colonnes publiques.
-        from .bootstrap import _psql
+        from .bootstrap import STAGE_ELECTRIC_SQL,_psql
         _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection, agents, agent_users, cab_version_projection, interface_preferences_projection, cab_notifications, cab_binary_counts, cab_observed_binaries, project_forge_artifacts TO cab_electric;
         ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL;
         ALTER TABLE agents REPLICA IDENTITY FULL;
@@ -65,7 +65,7 @@ def installed():
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries;
             END IF;
-        END $$;""",cfg['database'])
+        END $$;"""+STAGE_ELECTRIC_SQL,cfg['database'])
     cfg['version']=__version__;atomic_json(CONFIG,cfg)
     return {'state':'CONFIGURED' if cfg.get('initialized') else 'BOOTSTRAP_ONLY'}
 

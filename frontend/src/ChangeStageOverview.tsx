@@ -1,25 +1,27 @@
-import {useState} from 'react'
-import {useQuery} from '@tanstack/react-query'
+import {useEffect,useState} from 'react'
+import {useQuery,useQueryClient} from '@tanstack/react-query'
+import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
+import {CompleteCycles,StageOverview,stageDuration,type StageMetrics} from './StageOverview'
 
-type Iteration={id:number;run_id:string|null;started_at:string;ended_at:string|null;duration_seconds:number|null;description:string|null}
-type Stage={key:string;iteration_count:number;duration_seconds:number|null;iterations:Iteration[]}
-type Metrics={identifier:string;duration_seconds:number|null;stages:Stage[]}
 type ChangePage={changes:{id:string;identifier:string}[];has_more:boolean}
-const labels:Record<string,string>={
-  initialization:'Initialisation',preflight:'Prévol',analysis:'Analyse',framing:'Cadrage',
-  specification:'Spécification','version-skill':'Lecture du skill Version',implementation:'Implémentation',
-  verification:'Vérifications',review:'Revue',archival:'Archivage',statistics:'Statistiques',closure:'Clôture',
-}
-const formatDuration=(seconds:number|null)=>seconds===null?'Non mesurée':
-  new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1,style:'unit',unit:'second'}).format(seconds)
 
 export function ChangeStageOverview({projectId}:{projectId:string}){
   const [offset,setOffset]=useState(0)
   const [selected,setSelected]=useState('')
+  const client=useQueryClient()
   const path=`projects/${projectId}/change-stage-metrics`
   const list=useQuery({queryKey:[path,offset],queryFn:()=>api<ChangePage>(path+'?offset='+offset)})
-  const detail=useQuery({queryKey:[path,selected],queryFn:()=>api<Metrics>(path+'?'+new URLSearchParams({change_id:selected})),enabled:Boolean(selected),refetchInterval:5000})
+  const detail=useQuery({queryKey:[path,selected],queryFn:()=>api<StageMetrics>(path+'?'+new URLSearchParams({change_id:selected})),enabled:Boolean(selected)})
+  useEffect(()=>{
+    if(!selected)return
+    const controller=new AbortController()
+    const stream=new ShapeStream({url:new URL('/api/v1/sync/run-data/stages',location.origin).href,params:{project_id:projectId,change_id:selected},signal:controller.signal,onError:()=>undefined})
+    const unsubscribe=new Shape(stream).subscribe(()=>{
+      if(!controller.signal.aborted)void client.invalidateQueries({queryKey:[path,selected]})
+    })
+    return ()=>{controller.abort();unsubscribe()}
+  },[client,path,projectId,selected])
   const page=(delta:number)=>{setSelected('');setOffset(previous=>previous+delta)}
   return <section className="change-progress">
     <h2>Durée des changes</h2>
@@ -38,14 +40,11 @@ export function ChangeStageOverview({projectId}:{projectId:string}){
     {selected&&detail.isPending&&<p role="status">Chargement des durées…</p>}
     {selected&&detail.error&&<p role="alert">Les durées ne sont pas disponibles.</p>}
     {selected&&detail.data&&<>
-      <p>Durée cumulée : {formatDuration(detail.data.duration_seconds)}</p>
-      {detail.data.stages.filter(stage=>stage.iteration_count>0).map(stage=><details key={stage.key}>
-        <summary>{labels[stage.key]||stage.key} · {stage.iteration_count} · {formatDuration(stage.duration_seconds)}</summary>
-        <ol>{stage.iterations.map(iteration=><li key={iteration.id}>
-          {new Date(iteration.started_at).toLocaleString()} → {iteration.ended_at?new Date(iteration.ended_at).toLocaleString():'En cours'}
-          {' · '}{formatDuration(iteration.duration_seconds)}{iteration.run_id?' · '+iteration.run_id:''}
-          {iteration.description&&<p>{iteration.description}</p>}
-        </li>)}</ol>
+      {detail.data.complete_cycle_duration_seconds!=null&&<p>Durée totale des cycles complets · {stageDuration(detail.data.complete_cycle_duration_seconds)}</p>}
+      <CompleteCycles cycles={detail.data.cycles||[]}/>
+      {detail.data.stages.filter(stage=>stage.observed).map(stage=><details key={stage.key}>
+        <summary>{stage.label||stage.key}{stage.duration_seconds!=null?' · '+stageDuration(stage.duration_seconds):''}</summary>
+        <StageOverview stage={stage} title={stage.label||stage.key}/>
       </details>)}
     </>}
   </section>

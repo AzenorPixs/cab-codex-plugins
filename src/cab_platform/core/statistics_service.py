@@ -21,6 +21,9 @@ from .monitor import identity,observe_tasks
 from .models import Project,Change,ChangeSource,StatisticsDocument,StatisticsRevision,StatisticsMetric,ProjectStatistics,StatisticsJob,StatisticsLock,Run,Operation,Maintenance
 
 ACTIVE=set()
+from contextvars import ContextVar
+SNAPSHOT=ContextVar('cab_statistics_snapshot',default=None)
+STAGE_DOCUMENTS=ContextVar('cab_statistics_stage_documents',default=True)
 
 def process_identity(pid):
     try:return Path('/proc/sys/kernel/random/boot_id').read_text().strip()+':'+Path('/proc',str(pid),'stat').read_text().split(') ',1)[1].split()[19]
@@ -58,12 +61,12 @@ def stage_document(job,path,expected):
         check_target(project,relative)
     else:commands.require(relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name in ('STATISTICS.md','BLOCKERS.md'),'statistics-target-invalid')
     available=probe(project);commands.require(available is not None,'statistics-git-unavailable')
-    receipt={'path':relative,'sha256':expected,'state':'SKIPPED' if available==0 else 'RUNNING'}
+    receipt={'path':relative,'sha256':expected,'state':'SKIPPED' if available==0 or not STAGE_DOCUMENTS.get() else 'RUNNING'}
     indexed={**job.result.get('indexed_documents',{}),relative:receipt}
     job.result={**job.result,'indexed_documents':indexed}
     if relative=='STATISTICS.md':job.result['global_index']=receipt
     job.save(update_fields=['result','updated'])
-    if available==0:return
+    if available==0 or not STAGE_DOCUMENTS.get():return
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     try:
         commands.require(file_hash(project,path)==expected,'statistics-global-index-divergent')
@@ -297,6 +300,10 @@ def write(job,path,content):
 
 
 def _write_locked(job,path,content):
+    snapshot=SNAPSHOT.get()
+    if snapshot and snapshot.get('run_pk'):
+        current=Run.objects.get(pk=snapshot['run_pk']).configuration.get('publication_boundary',{})
+        commands.require(current.get('state')=='FROZEN' and current.get('generation')==snapshot['generation'],'statistics-snapshot-superseded')
     project=job.project;root=Path(project.root);path=Path(path);expected=file_hash(project,path);desired=documents.sha(content.encode())
     if expected==desired:
         stage_document(job,path,desired);return desired
@@ -378,6 +385,13 @@ def discover(project):
     return sources
 
 def evidence_for_change(change):
+    snapshot=SNAPSHOT.get()
+    if snapshot and snapshot['change_id']==change.pk:return __import__('copy').deepcopy(snapshot['contribution'])
+    from cab_platform.publication_boundary import KEY
+    runs=list(Run.objects.filter(change_record=change).order_by('-pk'))
+    active=[r for r in runs if r.state not in ('CLOSED','BLOCKED','CANCELLED_BEFORE_START') and r.configuration.get(KEY,{}).get('state')!='FROZEN']
+    sealed=[r.configuration[KEY] for r in runs if r.configuration.get(KEY,{}).get('state')=='FROZEN' and 'contribution' in r.configuration[KEY]]
+    if sealed and not active:return __import__('copy').deepcopy(sealed[0]['contribution'])
     actor=Run.objects.filter(change_record=change).select_related('actor').order_by('-pk').first()
     if actor:
         data=measurements.change_statistics(actor.actor,{'project_id':change.project_id,'change':change.identifier});contribution=data['sgs_evidence']['contribution']
@@ -391,6 +405,10 @@ def evidence_for_change(change):
         accepted += [row.payload['request_id'] for row in RunEvidence.objects.filter(run=run,source='cab-operation',payload__result='passed') if row.payload.get('request_id')]
     test_count=0;observed=False
     for operation in Operation.objects.filter(run__change_record=change,request_id__in=set(accepted),state='COMPLETED'):
+        boundary=operation.run.configuration.get(KEY,{})
+        if boundary.get('cutoff') and boundary.get('state')=='FROZEN':
+            from django.utils.dateparse import parse_datetime
+            if operation.created>parse_datetime(boundary['cutoff']):continue
         if operation.receipt.get('exit_code')!=0:continue
         counts=re.findall(r'(?m)^Ran (\d+) tests? in ',operation.receipt.get('output',''))
         if counts:test_count+=sum(map(int,counts));observed=True
@@ -406,7 +424,7 @@ def generate_change(job,change):
     observations=[]
     from .models import MeasurementPeriod
     from cab_platform.measurement_sources import snapshot,difference
-    for period in MeasurementPeriod.objects.filter(change=change,ended__isnull=True).select_related('run__actor','run__project','session')[:50]:
+    for period in ([] if SNAPSHOT.get() else MeasurementPeriod.objects.filter(change=change,ended__isnull=True).select_related('run__actor','run__project','session')[:50]):
         values,coverage=difference(period.start_snapshot,snapshot(period.run))
         observations.extend([[period.run.run_id,period.session.native_id,key,value,coverage['state']] for key,value in sorted(values.items())])
         if not values:observations.append([period.run.run_id,period.session.native_id,'N/A','N/A',coverage.get('reason','non observé')])
@@ -469,6 +487,9 @@ def stage_blockers(job):
 def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
+    active_cycles=Run.objects.filter(project=project,configuration__cycle_profile='publication-12-v1',state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'])
+    if automatic and active_cycles.filter(configuration__publication_boundary__state='FROZEN').exists():
+        return {'state':'DEFERRED','reason':'publication-cycle-reports-owned-by-statistics-phase'}
     open_before=set(Change.objects.filter(project=project,source_state='open').values_list('pk',flat=True))
     # Une protection d’écriture incertaine ne bloque pas la projection du maître local.
     discover(project)
@@ -492,6 +513,7 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False,*,cano
         if automatic:
             targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
             targets.update(Change.objects.filter(pk__in=open_before,source_state='archived').values_list('identifier',flat=True))
+            targets.difference_update(active_cycles.values_list('change',flat=True))
         for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():
             report=generate_change(job,change)
             if report is not None and report.status=='ready':

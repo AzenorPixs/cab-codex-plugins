@@ -192,6 +192,10 @@ def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK',descriptio
     try:return client().command('run.progress',locals())
     except ClientError as error:raise ToolError(str(error)) from error
 @public_tool()
+def run_stage_substep(project_id:str,run_id:str,request_id:str,key:str,state:str,description:str)->dict:
+    """Enregistre une sous-étape réelle du RUN avec un identifiant par tentative."""
+    return client().command('run.stage_substep',locals())
+@public_tool()
 def run_reevaluate(project_id:str,run_id:str)->dict:
     """Réévalue et clôture seulement sur preuves ; aucun rejeu ni levée de protection."""
     return client().command('run.reevaluate',locals())

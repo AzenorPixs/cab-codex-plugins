@@ -27,8 +27,9 @@ Une délégation administrative explicite peut conserver un producteur déjà
 autorisé pour le RUN et sa version. Les releases différées restent distinctes.
 Tous les critères doivent être couverts. Les autres essais autorisés restent
 autonomes. Cadrer des chemins sources précis sans les dépendances régénérables.
-Le service capture les reçus, assemble le dossier et finalise périodes/stats
-et CLOSED11 sans submit, statistics_end ou run.close du LLM en fin de session.
+Le service capture les reçus, assemble le dossier et clôture le RUN sans
+submit, statistics_end ni run.close du LLM en fin de session. Le détail du RUN
+fait foi pour les étapes des cycles historiques et du cycle Publication.
 Un change OpenSpec actif interdit une clôture réussie. Archiver après résolution complète des tâches. Si une dépendance empêche de terminer, appeler `run_block` avec les dépendances concrètes. CAB produit `BLOCKERS.md` et enregistre `BLOCKED`. Les pauses explicites gardent leur parcours. En piloté le parent décide la revue.
 Un outil natif hors CAB exige un producteur attestant explicitement autorisé ;
 un journal de tokens ou une déclaration de l'agent ne prouve pas son exécution.
@@ -153,8 +154,14 @@ Après archivage d’un RUN direct, utiliser `run_reconcile_archive` (ou
 courant. Aucun effet non terminal ni bail détenu ; identités, gel et reçus
 restent inchangés. Ne pas recréer la source ni utiliser run.adopt.
 
-Déclarer la position du cycle par `run_progress` (ou `cab call run.progress`),
-étape1–11 et phase. Une position peut reculer et ne valide aucune étape ni gate.
+Déclarer la position par `run_progress` (ou `cab call run.progress`), selon le
+cycle indiqué dans le détail du RUN. Pour un nouveau cycle, l’Archivage est à
+l’étape 9. CAB fige les mesures, exécute Statistiques et Publication en
+parallèle et place la session en Clôture. Lire les reçus de la même demande
+pendant cette attente. La phase Statistiques committe localement les seuls
+rapports qu’elle modifie si le parcours du change prévoit un commit.
+Une position peut reculer et ne valide aucune étape. `run_stage_substep`
+déclare un début et une fin avec le même identifiant pour chaque tentative.
 Les tâches du change sont observées depuis tasks.md et mémorisées en base ;
 leurs cases ne remplacent ni les tests ni la revue finale.
 

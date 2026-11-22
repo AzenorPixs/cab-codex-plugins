@@ -38590,14 +38590,14 @@ GitHub a été utilisé via le connecteur pour vérifier le dépôt distant ; la
 | Publication et activation runtime | Non observées à l’archivage | Distinctes de la qualification source ; bilan SCM/CABU ultérieur |
 
 
-## Change `freeze-statistics-before-publication` — openspec/changes/freeze-statistics-before-publication/STATISTICS.md
+## Change `freeze-statistics-before-publication` — openspec/changes/archive/2026-11-22-freeze-statistics-before-publication/STATISTICS.md
 
 
 # Statistiques du change — freeze-statistics-before-publication
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `freeze-statistics-before-publication` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `freeze-statistics-before-publication` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
@@ -38654,15 +38654,15 @@ Provenance : change-periods:44ed47b789e9fe35fb994c4afb394f31bbbd15aa4f976d45c326
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 6 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 215 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 215 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | 0 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+| Tâches OpenSpec prouvées et terminées | 7 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -38691,16 +38691,16 @@ Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
 
 | RUN | SID | Compteur | Incrément observé | Couverture |
 | --- | --- | --- | --- | --- |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 2945792 | bounded |
+| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 45758080 | bounded |
 | SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 2958801 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 7729 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 2261 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 2966530 | bounded |
+| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 46226177 | bounded |
+| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 226482 | bounded |
+| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 157005 | bounded |
+| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 46452659 | bounded |
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "74257e0e172a8767cb15519522fc9a06d1e659711ad5b22667ca9e2d0a7f174d", "generated_at": "2026-11-22T00:14:07.386411+00:00", "revision": "74257e0e172a8767cb15519522fc9a06d1e659711ad5b22667ca9e2d0a7f174d", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b916786dbfdb58286de156efab188cdbdc44c0cf47c913059da9f27f0c3c14be", "generated_at": "2026-11-22T08:34:31.067898+00:00", "revision": "b916786dbfdb58286de156efab188cdbdc44c0cf47c913059da9f27f0c3c14be", "scope": "change"} -->
 
 
 ## Change `guard-multiresource-native-once` — openspec/changes/archive/2026-11-07-guard-multiresource-native-once/STATISTICS.md
@@ -75647,4 +75647,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7315d7a957230b2e4c43024f03bcaf629371d5774429e1ffbcde72b3dad2f891", "generated_at": "2026-11-22T00:14:09.191246+00:00", "revision": "7315d7a957230b2e4c43024f03bcaf629371d5774429e1ffbcde72b3dad2f891", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "5df6d97fabc9ca69833ad0901cb03a901840bf2ebaf9f55fcbebb597bd479fca", "generated_at": "2026-11-22T08:34:32.514157+00:00", "revision": "5df6d97fabc9ca69833ad0901cb03a901840bf2ebaf9f55fcbebb597bd479fca", "scope": "project"} -->

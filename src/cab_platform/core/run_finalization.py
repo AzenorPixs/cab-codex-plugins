@@ -32,6 +32,8 @@ def dossier(run,plan,*,allow_terminal_git=False):
         boundary=False
     if run.configuration.get('host_completion') and GitFileReservation.objects.filter(git_index__change_id=run.change_record_id,git_index__session_id=run.coding_session_id,active=True).exists():missing.append('session-git-reservations-active')
     current=c.revision(run);revisions={current}
+    frozen_boundary=run.configuration.get('publication_boundary',{})
+    if frozen_boundary.get('state')=='FROZEN':revisions.add(frozen_boundary['source_revision'])
     if archive:revisions.add(c.revision(run,{'openspec/changes/'+run.change:archive}))
     groups={}
     for rule in plan.policy['checks']+plan.policy['requirements']:
@@ -56,6 +58,11 @@ def dossier(run,plan,*,allow_terminal_git=False):
             if group in groups and groups[group]!=value:missing.append('artifact:'+group+':divergent')
             groups[group]=value
         selected.append({'id':row.pk,'digest':row.digest,'rule_id':rule['id']})
+    if run.configuration.get('cycle_profile')=='publication-12-v1':
+        from cab_platform.phase_statistics import result_for
+        status=result_for(run)
+        if status.get('state')!='COMPLETED' or not status.get('verified'):missing.append('statistics:not-validated')
+        elif status['source_revision'] not in revisions:missing.append('statistics:source-stale')
     if plan.policy['review_required']:
         submission=run.review.get('submission',{});decision=run.review.get('decision',{})
         authority=run.mandate.get('orchestrator_id') if run.mode=='piloted' else run.actor_id
@@ -113,6 +120,13 @@ def process(run_id):
                 if run.state=='WORKING' and not run.suspension:run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':['finalization-contract-required']})
         return
     evidence.capture_update(plan)
+    if run.configuration.get('cycle_profile')=='publication-12-v1':
+        from cab_platform.publication_boundary import frozen,prepare
+        if not frozen(run) and not any(rule['kind']=='publication' for rule in plan.policy['requirements']):
+            pending=dossier(run,plan)['missing']
+            if pending==['statistics:not-validated']:
+                prepare(run,publication=False)
+                return
     with transaction.atomic():
         run=Run.objects.select_for_update().select_related('actor','project').get(pk=run_id)
         plan=FinalizationPlan.objects.select_for_update().get(run=run)
@@ -122,13 +136,13 @@ def process(run_id):
             changed=plan.missing!=result['missing'] or plan.phase!='WAITING'
             plan.phase='WAITING';plan.missing=result['missing']
             if changed:plan.save()
-            if result['missing']==['reserved-review-required']:
+            if set(result['missing'])-{'statistics:not-validated'}=={'reserved-review-required'}:
                 prepare_review(run,plan,result);return
             if result['boundary'] and run.state!='FINALIZATION_PENDING':
                 run.state='FINALIZATION_PENDING';run.save(update_fields=['state','updated']);c.event(run,'finalization-waiting',{'missing':plan.missing})
             return
         if run.state!='FINALIZING':
-            run.state='FINALIZING';run.stage=run.cycle_steps-1;run.save(update_fields=['state','stage','updated'])
+            run.state='FINALIZING';run.stage=run.cycle_steps if run.configuration.get('cycle_profile')=='publication-12-v1' else run.cycle_steps-1;run.save(update_fields=['state','stage','updated'])
             plan.phase='FINALIZING';plan.missing=[];plan.save()
             c.event(run,'finalization-started',{'policy_digest':plan.digest,'proofs':result['proofs']})
     # État durable FINALIZING : aucune nouvelle exécution n'est admise.
@@ -149,15 +163,23 @@ def process(run_id):
             c.require(eligible(run),'closure-canonical-source-required')
             canonical=run
         descriptor=directory(run) if canonical else None
-        job='AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest({'proofs':result['proofs'],'canonical':descriptor})[:16] if canonical else 'AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest(result['proofs'])[:16]
-        kwargs={'canonical_run':run,'canonical_proofs':result['proofs']} if canonical else {}
-        publication=statistics_service.sync(run.project,job,generate=run.change if source else None,**kwargs)
-        if canonical:c.require(publication['state']=='COMPLETED','closure-statistics-job-unconfirmed')
-        if source or canonical:
-            report=(source.path if source else descriptor)+'/STATISTICS.md'
-            from cab_platform.statistics_documents import read_source,sha
-            raw,_=read_source(Path(run.project.root),Path(run.project.root)/report);report_sha=sha(raw)
-            if canonical:c.require(publication['result'].get('canonical_report',{}).get('sha256')==report_sha,'closure-report-changed')
+        if run.configuration.get('cycle_profile')=='publication-12-v1':
+            from cab_platform.phase_statistics import result_for
+            statistics=result_for(run)
+            c.require(statistics.get('state')=='COMPLETED' and statistics.get('verified'),'statistics-not-validated')
+            report=(source.path if source else descriptor)+'/STATISTICS.md' if source or descriptor else None
+            report_sha=statistics['result']['reports'].get(report) if report else None
+            if report:c.require(report_sha is not None,'closure-report-required')
+        else:
+            job='AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest({'proofs':result['proofs'],'canonical':descriptor})[:16] if canonical else 'AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest(result['proofs'])[:16]
+            kwargs={'canonical_run':run,'canonical_proofs':result['proofs']} if canonical else {}
+            publication=statistics_service.sync(run.project,job,generate=run.change if source else None,**kwargs)
+            if canonical:c.require(publication['state']=='COMPLETED','closure-statistics-job-unconfirmed')
+            if source or canonical:
+                report=(source.path if source else descriptor)+'/STATISTICS.md'
+                from cab_platform.statistics_documents import read_source,sha
+                raw,_=read_source(Path(run.project.root),Path(run.project.root)/report);report_sha=sha(raw)
+                if canonical:c.require(publication['result'].get('canonical_report',{}).get('sha256')==report_sha,'closure-report-changed')
     except c.Refused as error:
         FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);raise
     except (OSError,ValueError):
@@ -173,6 +195,7 @@ def process(run_id):
         current=dossier(run,plan,allow_terminal_git=True)
         c.require(not current['missing'] and current['proofs']==result['proofs'] and current['source_revision']==result['source_revision'],'finalization-proof-changed')
         receipt={'receipt_id':'POLICY-FINALIZE-'+str(run.pk),'kind':'policy','branch':'TERMINÉ','policy_digest':plan.digest,'nature':plan.policy['nature'],'proofs':current['proofs'],'source_revision':current['source_revision'],'artifact_groups':current['artifact_groups'],'report':report,'sha256':report_sha,'at':timezone.now().isoformat(),'authority':'cab-policy','llm_submission_required':False,'terminal_git':terminal}
+        if terminal is not None:receipt['delivered']=terminal.get('delivered',True)
         if terminal is None and run.configuration.get('host_completion'):
             receipt['host_completion']=run.configuration['host_completion']
             receipt['delivered']=False

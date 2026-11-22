@@ -43,6 +43,43 @@ def sync_binaries(request):return sync_projection(request,'cab_observed_binaries
 
 def sync_interface_preferences(request):return sync_projection(request,'interface_preferences_projection')
 
+def sync_run_data(request,kind):
+    from .core.models import Change,Run
+    tables={
+        'run':('runs','id,project_id,run_id,state,suspension,cycle_steps,stage,phase,updated'),
+        'stages':('change_stages','id,change_id,key,parent_id,iteration_count,duration_seconds,updated_at'),
+        'iterations':('change_stage_iterations','id,stage_id,run_id,parent_id,cycle_id,reference,state,asynchronous,receipt,iteration_number,duration_seconds,started_at,ended_at,description,description_source'),
+        'cycles':('run_cycle_iterations','id,run_id,number,started_at,ended_at,duration_seconds,visited,complete'),
+        'evidence':('run_evidence','id,run_id,source,evidence_id,digest,created'),
+        'finalization':('run_finalization_plans','id,run_id,phase,missing,digest,updated'),
+    }
+    if kind not in tables:return JsonResponse({'error':'not-found'},status=404)
+    try:
+        actor=principal(request);project=Project.objects.get(pk=request.GET.get('project_id',''))
+        scope(actor,project)
+        change_id=request.GET.get('change_id')
+        if kind=='stages' and change_id and not request.GET.get('run_id'):
+            change=Change.objects.get(project=project,pk=change_id)
+            run=None
+        else:
+            run=Run.objects.get(project=project,run_id=request.GET.get('run_id',''))
+            change_id=run.change_record_id
+    except (Refused,Project.DoesNotExist,Run.DoesNotExist,Change.DoesNotExist):return JsonResponse({'error':'project-not-authorized'},status=403)
+    table,columns=tables[kind]
+    if kind=='run':where='id = '+str(run.pk)
+    elif kind=='stages':where="change_id = '"+str(change.pk if run is None else change_id or '').replace("'","''")+"'"
+    else:where='run_id = '+str(run.pk)
+    cfg=config();params={k:request.GET[k] for k in ('offset','handle','live','cursor') if k in request.GET}
+    params.update(table=table,columns=columns,where=where,secret=cfg['electric_secret'])
+    import httpx
+    try:response=httpx.get('http://127.0.0.1:'+str(cfg.get('electric_port',8791))+'/v1/shape',params=params,timeout=65)
+    except httpx.HTTPError:return JsonResponse({'error':'sync-unavailable'},status=503)
+    if response.status_code not in (200,204,304,409):return JsonResponse({'error':'sync-unavailable'},status=503)
+    result=HttpResponse(response.content,status=response.status_code,content_type=response.headers.get('content-type','application/json'))
+    for key,value in response.headers.items():
+        if key.lower().startswith('electric-'):result[key]=value
+    result['Cache-Control']='private, no-store';return result
+
 def all_sessions_where(actor,*,archived=False):
     predicate='archived = true' if archived else 'archived = false'
     if actor.role=='admin':return predicate

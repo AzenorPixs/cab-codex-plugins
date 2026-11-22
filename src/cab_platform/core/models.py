@@ -391,6 +391,7 @@ class GitDeliveryStep(models.Model):
     key=models.CharField(max_length=100)
     state=models.CharField(max_length=24,default='PENDING')
     receipt=models.JSONField(default=dict)
+    stage_iteration=models.ForeignKey('ChangeStageIteration',null=True,on_delete=models.SET_NULL,related_name='delivery_steps')
     created=models.DateTimeField(auto_now_add=True)
     updated=models.DateTimeField(auto_now=True)
     class Meta:
@@ -447,7 +448,11 @@ class Run(models.Model):
 
 class ChangeStage(models.Model):
     change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='stages')
-    key=models.CharField(max_length=32)
+    key=models.CharField(max_length=64)
+    parent=models.ForeignKey('self',null=True,on_delete=models.PROTECT,related_name='children')
+    iteration_count=models.PositiveIntegerField(default=0,db_default=0)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    updated_at=models.DateTimeField(auto_now=True,null=True)
 
     class Meta:
         db_table='change_stages'
@@ -472,10 +477,31 @@ class VersionPolicyMigration(models.Model):
         ]
 
 
+class RunCycleIteration(models.Model):
+    run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='cycle_iterations')
+    number=models.PositiveIntegerField()
+    started_at=models.DateTimeField()
+    ended_at=models.DateTimeField(null=True)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    visited=models.JSONField(default=list)
+    complete=models.BooleanField(default=False)
+    class Meta:
+        db_table='run_cycle_iterations'
+        constraints=[models.UniqueConstraint(fields=['run','number'],name='cab_cycle_iteration_identity')]
+
+
 class ChangeStageIteration(models.Model):
     stage=models.ForeignKey(ChangeStage,on_delete=models.PROTECT,related_name='iterations')
     run=models.ForeignKey(Run,null=True,on_delete=models.SET_NULL,related_name='stage_iterations')
-    started_at=models.DateTimeField()
+    parent=models.ForeignKey('self',null=True,on_delete=models.PROTECT,related_name='children')
+    cycle=models.ForeignKey(RunCycleIteration,null=True,on_delete=models.PROTECT,related_name='stage_iterations')
+    reference=models.CharField(max_length=200,blank=True,default='',db_default='')
+    state=models.CharField(max_length=16,blank=True,default='',db_default='')
+    asynchronous=models.BooleanField(default=False,db_default=False)
+    receipt=models.JSONField(default=dict,db_default={})
+    iteration_number=models.PositiveIntegerField(null=True)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    started_at=models.DateTimeField(null=True)
     ended_at=models.DateTimeField(null=True)
     end_reason=models.CharField(max_length=32,blank=True)
     description=models.TextField(blank=True)
@@ -485,7 +511,8 @@ class ChangeStageIteration(models.Model):
         db_table='change_stage_iterations'
         ordering=['started_at','pk']
         constraints=[
-            models.UniqueConstraint(fields=['run'],condition=models.Q(ended_at__isnull=True),name='cab_one_open_stage_per_run'),
+            models.UniqueConstraint(fields=['run'],condition=models.Q(ended_at__isnull=True,parent__isnull=True,asynchronous=False),name='cab_one_open_stage_per_run'),
+            models.UniqueConstraint(fields=['run','reference'],condition=~models.Q(reference=''),name='cab_stage_effect_reference'),
             models.CheckConstraint(condition=models.Q(ended_at__isnull=True)|models.Q(ended_at__gte=models.F('started_at')),name='cab_change_stage_iteration_dates'),
         ]
 

@@ -13,6 +13,27 @@ from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json,secret,
 
 class BootstrapError(Exception):pass
 
+STAGE_ELECTRIC_SQL = """
+DO $$
+DECLARE table_name text;
+BEGIN
+    FOREACH table_name IN ARRAY ARRAY[
+        'runs', 'change_stages', 'change_stage_iterations', 'run_cycle_iterations',
+        'run_evidence', 'run_finalization_plans'
+    ] LOOP
+        EXECUTE format('GRANT SELECT ON %I TO cab_electric', table_name);
+        EXECUTE format('ALTER TABLE %I REPLICA IDENTITY FULL', table_name);
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables
+            WHERE pubname = 'electric_publication_default'
+              AND schemaname = 'public' AND tablename = table_name
+        ) THEN
+            EXECUTE format('ALTER PUBLICATION electric_publication_default ADD TABLE %I', table_name);
+        END IF;
+    END LOOP;
+END $$;
+"""
+
 def status():
     cfg=runtime_config()
     if not cfg.get('initialized'):return {'state':'UNINITIALIZED','initialized':False,'version':__version__,'port':8790}
@@ -145,6 +166,7 @@ def initialize(data,token):
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_binary_counts')
                     cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries'")
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries')
+                    cursor.execute(STAGE_ELECTRIC_SQL)
                     cursor.execute('ALTER PUBLICATION electric_publication_default OWNER TO cab_electric')
                     cursor.execute('REVOKE CREATE ON DATABASE cab FROM cab_electric')
             finally:db_admin.close()

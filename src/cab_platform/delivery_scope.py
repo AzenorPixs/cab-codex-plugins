@@ -54,7 +54,7 @@ def write_entries(git, project, options, env, entries, oid_width):
     require(result.returncode == 0, 'session-delivery-index-invalid', 409)
 
 
-def capture_full(project, own, options, env, head, gitdir):
+def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=False):
     from .session_delivery import _changed_paths, _git, _index_digest, _temp_index
 
     require(not GitSessionEffect.objects.filter(run__project=project, state__in=('INTENT', 'RUNNING', 'UNKNOWN'))
@@ -62,6 +62,8 @@ def capture_full(project, own, options, env, head, gitdir):
     snapshot = git_snapshot(project)
     require(snapshot.get('head') == head, 'session-delivery-head-changed', 409)
     work, staged = working_paths(snapshot)
+    from .reports_git import report_path
+    if exclude_reports:work={p for p in work if not report_path(p)};staged={p for p in staged if not report_path(p)}
     entries = index_entries(_git, project, options, env, staged - work)
     selected = {path: entries.get(path) for path in staged - work}
     current_head = {}
@@ -81,6 +83,7 @@ def capture_full(project, own, options, env, head, gitdir):
         private = {**env, 'GIT_INDEX_FILE': str(source)}
         changed = {path for path in _changed_paths(project, options, private, index.base_head)
                    if _visible_entry('M.', path) is not None} - work
+        if exclude_reports:changed={p for p in changed if not report_path(p)}
         blobs = index_entries(_git, project, options, private, changed)
         require(_index_digest(source, project.owner_uid) == before, 'session-delivery-index-changed', 409)
         for path in changed:

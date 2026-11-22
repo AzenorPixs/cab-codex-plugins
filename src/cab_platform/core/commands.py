@@ -76,7 +76,7 @@ def revision(run,relocations=None):
         files=sorted(p.rglob('*')) if p.is_dir() else [p]
         for f in files:
             rel=str(f.relative_to(run.project.root))
-            if f.name=='STATISTICS.md' and (rel=='STATISTICS.md' or rel.startswith('openspec/changes/')):continue
+            if f.name in ('STATISTICS.md','BLOCKERS.md') and (rel=='STATISTICS.md' or rel.startswith('openspec/changes/')):continue
             if any(part in PROTECTED or part=='.cab-tests' for part in f.relative_to(run.project.root).parts):continue
             f=safe_path(Path(run.project.root),rel);info=f.stat()
             if f.is_file():
@@ -105,6 +105,7 @@ def event(run,kind,data):
             from cab_platform.change_stage_metrics import STOP_STATES,TRANSITIONS,observe
             if kind in TRANSITIONS or run.suspension or run.state in STOP_STATES:
                 observe(run,record.created)
+        Run.objects.filter(pk=run.pk).update(updated=timezone.now())
 
 def no_pending(run,*,terminal_git=False):
     from .models import GitDelivery,GitSessionEffect,TerminalGitCommit
@@ -274,7 +275,7 @@ def begin_run(actor,data):
         require(not active.exists(),'direct-run-already-active',409)
     else:
         require(not replacing,'run-replacement-direct-only',400)
-    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,mandate={**data,'framing_digest':digest(data)})
+    r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration={'cycle_profile':'publication-12-v1'},mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
     r.source_revision=revision(r);r.save();event(r,'run-created',{'mode':mode})
@@ -296,7 +297,8 @@ def progress(actor,data):
     stage=data.get('stage');phase=data.get('phase',r.phase)
     require(type(stage) is int and 1<=stage<=r.cycle_steps,'run-stage-invalid',400)
     require(isinstance(phase,str) and bool(re.fullmatch(r'[A-Z0-9_-]{0,32}',phase)),'run-phase-invalid',400)
-    if r.cycle_steps == 12 and stage > 6:
+    from cab_platform.change_stage_metrics import number_for
+    if r.cycle_steps == 12 and stage > number_for(r,'version-skill'):
         from cab_platform.version_skill import require_acknowledged
         require_acknowledged(r)
     if r.stage!=stage or r.phase!=phase:
