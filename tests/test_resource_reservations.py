@@ -76,7 +76,8 @@ class ReservationPostgresTests(unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         tools = Path('/usr/lib/postgresql/17/bin')
-        directory = cls.enterClassContext(tempfile.TemporaryDirectory(dir=ROOT / '.cab-tests'))
+        scratch = os.environ.get('TMPDIR', str(ROOT / '.cab-tests'))
+        directory = cls.enterClassContext(tempfile.TemporaryDirectory(dir=scratch))
         folder = Path(directory)
         data = folder / 'db'
         subprocess.run([tools/'initdb', '-D', data, '-A', 'trust', '--no-locale', '--encoding=UTF8'],
@@ -175,3 +176,44 @@ class ReservationPostgresTests(unittest.TestCase):
             cursor.execute(STAGE_ELECTRIC_SQL)
             cursor.execute("SELECT EXISTS(SELECT 1 FROM pg_publication_tables WHERE tablename='resource_reservations')")
             self.assertEqual(cursor.fetchone(), (True,))
+
+    def test_git_reservation_checks_held_file_leases(self):
+        from cab_platform import session_git
+        from cab_platform.core.commands import Refused
+        from cab_platform.core.models import Change, CodingSession, GitChange, Lease, Resource, Run
+        from django.db import transaction
+        from django.utils import timezone
+
+        actor = self.run_row.actor
+        project = self.run_row.project
+        blocked = 'src/cab_platform/session_git.py'
+        free = 'tests/test_resource_reservations.py'
+        with transaction.atomic():
+            change = Change.objects.create(pk='git-guard', project=project, identifier='git-guard')
+            session = CodingSession.objects.create(
+                pk='peer-sid', project=project, native_id='peer-sid', agent=actor.agent, uid=actor.uid,
+            )
+            target = Run.objects.create(
+                project=project, actor=actor, run_id='peer', session_id='peer-sid',
+                mode='direct', change='git-guard', change_record=change, coding_session=session,
+                mandate={'paths': [blocked, free]},
+            )
+            GitChange.objects.create(
+                project=project, change=target.change_record, initial_run=target,
+                baseline={'available': True, 'entries': []}, captured_at=timezone.now(),
+            )
+            resource, _ = Resource.objects.get_or_create(pk='file:' + str(ROOT / 'src'))
+            Lease.objects.create(run=self.run_row, resource=resource, fencing=1)
+            request = {'project_id': project.pk, 'run_id': target.run_id}
+            snapshot = {'available': True, 'branch': 'main', 'head': 'a' * 40, 'entries': []}
+            with (
+                patch.object(session_git, 'context', return_value=({}, {})),
+                patch.object(session_git, 'run', return_value=SimpleNamespace(returncode=1)),
+                patch.object(session_git, 'git_snapshot', return_value=snapshot),
+            ):
+                with self.assertRaisesRegex(Refused, 'session-git-resource-protected'):
+                    session_git.reserve_files(actor, {**request, 'request_id': 'overlap', 'paths': [blocked]})
+                result = session_git.reserve_files(actor, {**request, 'request_id': 'free', 'paths': [free]})
+            self.assertEqual(result['reserved_count'], 1)
+            self.assertEqual([item['description'] for item in result['reservations']], [free])
+            transaction.set_rollback(True)

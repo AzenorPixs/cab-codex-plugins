@@ -160,7 +160,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
         now = timezone.now()
         resource_guard()
         return_idle_files(now, project, paths)
-        other_effects = Lease.objects.filter(state='HELD', resource_id__startswith='file:').exclude(
+        other_effects = Lease.objects.filter(state='HELD', resource__key__startswith='file:').exclude(
             run=current,
         ).values_list('resource_id', flat=True)
         require(not any(overlaps('file:'+str(root/path), key) for key in other_effects for path in paths),

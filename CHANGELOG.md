@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.12.1
+
+- Réservation SCM de nouveau disponible, avec contrôle des baux de fichiers concurrents.
+
 ## 3.12.0
 
 - Réservations de ressources de 300 secondes, renouvellement à 240 secondes, avis d’échéance et de restitution, et protection des effets à réconcilier.
