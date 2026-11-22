@@ -1127,6 +1127,9 @@ def command(request,body:Command):
     if name in ('run.stage.begin','run.stage.validate','run.stage.status'):
         from cab_platform import stage_protocol
         return {'run.stage.begin':stage_protocol.begin,'run.stage.validate':stage_protocol.validate,'run.stage.status':stage_protocol.status}[name](actor,data)
+    if name in ('run.stage.action','run.stage.action_catalogue'):
+        from cab_platform import stage_actions
+        return (stage_actions.declare if name=='run.stage.action' else stage_actions.catalogue)(actor,data)
     if name=='run.stage_substep':
         from cab_platform.stage_substeps import command as record_substep
         return record_substep(actor,data)

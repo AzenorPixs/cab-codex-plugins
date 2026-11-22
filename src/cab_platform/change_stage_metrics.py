@@ -273,7 +273,7 @@ def summarize(change,run=None) -> dict:
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
                 native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from,
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
-                description=record.description or None, receipt=record.receipt or None))
+                description=record.description or None, source=record.description_source or None, receipt=record.receipt or None))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None
             right = ending['created'] if ending else None

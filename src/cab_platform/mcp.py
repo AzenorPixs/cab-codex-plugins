@@ -89,9 +89,9 @@ def project_register(root:str)->dict:
     """Rattache un projet canonique autorisé au compte effectif."""
     return client().command('project.register',{'root':root})
 @public_tool()
-def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None,replaces_run_id:str='')->dict:
+def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None,replaces_run_id:str='',mandates:list[str]|None=None)->dict:
     """Cadre un RUN. Piloté : autorité orchestrateur requise, choix résolus avant codage."""
-    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization,**({'replaces_run_id':replaces_run_id} if replaces_run_id else {})})
+    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization,**({'replaces_run_id':replaces_run_id} if replaces_run_id else {}),**({'mandates':mandates} if mandates is not None else {})})
 @public_tool()
 def run_cancel_replaced(project_id:str,run_id:str,replacement_run_id:str,request_id:str)->dict:
     """Annule sur preuves un RUN direct jamais exécuté, relié au RUN livré."""
@@ -203,6 +203,14 @@ def run_stage_validate(project_id:str,run_id:str,request_id:str,attempt:int,text
 def run_stage_status(project_id:str,run_id:str)->dict:
     """Lit la tentative active et les retours CAB sans relancer leurs effets."""
     return client().command('run.stage.status',locals())
+@public_tool()
+def run_stage_action(project_id:str,run_id:str,request_id:str,attempt:int,action:str,text:str='',mandates:list[str]|None=None)->dict:
+    """Enregistre une validation réellement effectuée dans le passage d’étape courant."""
+    return client().command('run.stage.action',{key:value for key,value in locals().items() if value is not None})
+@public_tool()
+def run_stage_action_catalogue(project_id:str,run_id:str)->dict:
+    """Lit les validations agent possibles pour l’étape et les mandats déclarés à l’Initialisation."""
+    return client().command('run.stage.action_catalogue',locals())
 @public_tool()
 def run_stage_substep(project_id:str,run_id:str,request_id:str,key:str,state:str,description:str)->dict:
     """Enregistre une sous-étape réelle du RUN avec un identifiant par tentative."""

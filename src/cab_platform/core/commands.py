@@ -110,6 +110,9 @@ def event(run,kind,data):
                     if review:finish_iteration(review,record.created,kind)
             elif kind in TRANSITIONS or run.suspension or run.state in STOP_STATES:
                 observe(run,record.created)
+            from cab_platform.stage_actions import TRACKED, observe_event
+            if kind in TRACKED:
+                observe_event(record)
         Run.objects.filter(pk=run.pk).update(updated=timezone.now())
 
 def no_pending(run,*,terminal_git=False):
@@ -246,6 +249,9 @@ def register_project(actor,root):
 @transaction.atomic
 def begin_run(actor,data,*,stage_protocol=False):
     project=Project.objects.get(pk=data['project_id']);scope(actor,project)
+    if 'mandates' in data:
+        from cab_platform.stage_actions import normalize_mandates
+        normalize_mandates(data['mandates'])
     with connection.cursor() as cursor:cursor.execute('SELECT id FROM projects WHERE id=%s FOR KEY SHARE',[project.pk])
     require(project.creation_state=='READY','project-creation-needs-reconciliation')
     from .models import VersionPolicyMigration
@@ -283,7 +289,7 @@ def begin_run(actor,data,*,stage_protocol=False):
     configuration={'cycle_profile':'publication-12-v1'}
     if stage_protocol:
         from cab_platform.stage_protocol import KEY,VERSION
-        configuration[KEY]={'version':VERSION,'active':{}}
+        configuration[KEY]={'version':VERSION,'active':{},'mandate_confirmation':True}
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration=configuration,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))

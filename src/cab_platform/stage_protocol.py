@@ -268,6 +268,11 @@ def validate(actor, data):
     c.require(current and type(data['attempt']) is int and current['attempt']==data['attempt']
               and not current['validated'],'stage-attempt-not-current')
     name=PUBLICATION_KEYS[current['stage']-1]
+    if name=='initialization' and protocol.get('mandate_confirmation'):
+        from .stage_actions import mandates_validated
+        if not mandates_validated(run,current['attempt']):
+            return {'validated':False,'stage':1,'attempt':current['attempt'],
+                    'missing':['stage:1:mandate-confirmation-required'],'reports':reports(run)}
     if name=='version-skill':
         from .version_skill import require_acknowledged
         require_acknowledged(run)

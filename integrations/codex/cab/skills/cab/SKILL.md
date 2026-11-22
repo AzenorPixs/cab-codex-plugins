@@ -164,6 +164,18 @@ connu, préciser `restart=true`. CAB ouvre le passage et lance les tâches prév
 Consulter `run_stage_status` pendant l’attente et transmettre les retours
 utiles au développeur. Si un retour échoue, revenir à l’étape à reprendre.
 
+Déclarer à `run_begin` les mandats effectivement autorisés sous forme de
+liste, par exemple `["SCM","CICDF","CABU"]`. Si aucun mandat n’est nommé,
+CAB expose son cadrage sous le nom `CAB`. Avant de terminer l’Initialisation,
+vérifier cette liste, l’annoncer dans la session, puis la confirmer avec
+`run_stage_action(action="mandats", mandates=[…])` et la tentative courante.
+La confirmation consigne la liste sans changer les droits du RUN.
+
+Pour une autre validation réellement effectuée, lire au besoin les actions
+possibles avec `run_stage_action_catalogue` puis consigner l’action avec
+`run_stage_action`. CAB journalise de lui-même les opérations et reçus connus.
+L’Overview ne présente que les actions effectivement observées.
+
 Quand toutes les tâches CAB du passage sont réussies, l’agent confirme sa
 part avec `run_stage_validate`, en donnant la tentative et les faits vérifiés.
 Avancer après `validated=true`. Pour la Publication, transmettre à l’entrée
