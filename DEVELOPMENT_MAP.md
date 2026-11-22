@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif des contrôles de politique
+
+[correct-model-policy-controls](openspec/changes/archive/2026-11-22-correct-model-policy-controls/),
+code non attribué. Actions après Dernier, exclusion par nom et quatre bornes
+de cache. Vérifications du 22 novembre 2026 sur Chromium, Firefox et PostgreSQL
+isolé, reçus `STAGE-888-7-policy-controls-web` et `STAGE-888-7-policy-controls-data`.
+
 ## Politiques du catalogue de modèles
 
 [filter-agent-model-catalogs](openspec/changes/archive/2026-11-22-filter-agent-model-catalogs/),

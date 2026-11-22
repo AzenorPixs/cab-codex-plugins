@@ -350,6 +350,7 @@ class CatalogRemoval(Schema):
 
 class ModelPolicyInput(Schema):
     name: str
+    model_filter: str = ''
     include_free: bool = True
     include_paid: bool = True
     context_min: int = 0
@@ -358,8 +359,10 @@ class ModelPolicyInput(Schema):
     input_price_max: PolicyPrice = Decimal(0)
     output_price_min: PolicyPrice = Decimal(0)
     output_price_max: PolicyPrice = Decimal(0)
+    cache_read_min: PolicyPrice = Decimal(0)
     cache_read_max: PolicyPrice = Decimal(0)
     cache_write_min: PolicyPrice = Decimal(0)
+    cache_write_max: PolicyPrice = Decimal(0)
 
 
 class ModelPolicyEdit(ModelPolicyInput):

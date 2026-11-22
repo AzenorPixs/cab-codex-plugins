@@ -34,8 +34,8 @@ const pageSize=10
 const collator=new Intl.Collator('fr',{numeric:true,sensitivity:'base'})
 const searchable=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase()
 
-function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,pending,error,viewKey}:{
-  title:string;columns:Column<Row>[];rows:Row[];actions?:ReactNode;toolbar?:ReactNode;
+function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey}:{
+  title:string;columns:Column<Row>[];rows:Row[];actions?:ReactNode;toolbar?:ReactNode;paginationActions?:ReactNode;
   pending:boolean;error:Error|null;viewKey?:number|null
 }){
   const [query,setQuery]=useState('')
@@ -66,6 +66,7 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
     setSort(previous=>({column,descending:previous?.column===column&&!previous.descending}))
     setPage(1)
   }
+  const last=<button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
   return <>
     <section className="project-home project-forges-page">
       <div className="section-heading"><div className="project-identity">
@@ -94,7 +95,7 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
       <button type="button" disabled={current===1} onClick={()=>setPage(current-1)}>Précédent</button>
       <span aria-live="polite">Page {current} / {pages} · {visible.length} résultat{visible.length===1?'':'s'}</span>
       <button type="button" disabled={current===pages} onClick={()=>setPage(current+1)}>Suivant</button>
-      <button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
+      {paginationActions?<div className="model-policy-actions">{last}{paginationActions}</div>:last}
     </nav>
   </>
 }
@@ -300,14 +301,14 @@ function ModelCatalog(){
         aria-selected={selectedId===id} tabIndex={selectedId===id?0:-1} aria-controls="model-catalog-panel"
         onKeyDown={event=>navigate(event,index)} onClick={()=>setTab(id)}>{name}</button>)}
     </div>
-    {selected&&<div className="model-policy-actions">
-      <PolicyOverview key={selected.id} policy={selected} onSaved={save}/>
-      <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
-        name={selected.name} remove={()=>remove(selected.id)}/>
-    </div>}
     {policies.error&&<p role="alert">{policies.error.message}</p>}
   </div>
-  return <CatalogTable viewKey={selectedId} title="Modèles" columns={columns} toolbar={toolbar}
+  const policyActions=selected&&<>
+    <PolicyOverview key={selected.id} policy={selected} onSaved={save}/>
+    <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
+      name={selected.name} remove={()=>remove(selected.id)}/>
+  </>
+  return <CatalogTable viewKey={selectedId} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
     actions={<PolicyOverview onSaved={save}/>} rows={query.data?.models??[]} pending={query.isPending} error={query.error}/>
 }
 

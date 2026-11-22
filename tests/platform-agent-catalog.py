@@ -203,6 +203,40 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(catalog.Refused):
             catalog.models(policy['id'])
 
+    def test_excluded_display_names_and_complete_cache_bounds(self):
+        from cab_platform import agent_catalog as catalog, model_policies as rules
+        from cab_platform.core.models import AgentModel
+        provider = catalog.add_provider('Démo', 'https://example.org', '')
+        base = {'cache_read_cost': '.25', 'cache_write_cost': '.5'}
+        samples = {
+            'included': {**base, 'name': 'Standard'},
+            'first': {**base, 'name': 'Modèle Éclair'},
+            'second': {**base, 'name': 'Version bêta'},
+            'eclair-hidden-id': {**base, 'name': 'Libellé distinct'},
+            'beta-visible-id': base,
+            'too-low': {**base, 'cache_read_cost': '.24'},
+            'too-high': {**base, 'cache_write_cost': '.51'},
+            'unknown': {**base, 'cache_read_cost': None},
+        }
+        for identifier, summary in samples.items():
+            AgentModel.objects.create(provider_id=provider['id'], identifier=identifier, source={}, details={'summary': summary})
+        values = {'name': 'Filtrée', 'include_free': True, 'include_paid': True,
+                  'context_min': 0, 'output_min': 0, **dict.fromkeys(rules.PRICE_FIELDS, Decimal(0)),
+                  'model_filter': ' ECLAIR ; ; beta; '}
+        values.update(cache_read_min=Decimal('.25'), cache_read_max=Decimal('.25'),
+                      cache_write_min=Decimal('.5'), cache_write_max=Decimal('.5'))
+        saved = rules.save_policy(None, values)
+        self.assertEqual(saved['model_filter'], 'ECLAIR ; ; beta;')
+        self.assertEqual([row['identifier'] for row in catalog.models(saved['id'])], ['eclair-hidden-id', 'included'])
+        self.assertEqual(len(catalog.models()), len(samples))
+        for field, value in [('cache_read_min', '.26'), ('cache_write_max', '.49')]:
+            with self.assertRaises(catalog.Refused) as error:
+                rules.save_policy(saved['id'], {**values, field: Decimal(value)})
+            self.assertEqual(error.exception.code, 'agent-model-policy-bounds-invalid')
+        cleared = rules.save_policy(saved['id'], {**values, 'model_filter': ''})
+        self.assertEqual(cleared['model_filter'], '')
+        self.assertEqual(len(catalog.models(saved['id'])), 5)
+
 
 def command(*args):
     run([str(PG / args[0]), *args[1:]], check=True, stdout=DEVNULL)
@@ -211,7 +245,7 @@ def command(*args):
 if __name__ == '__main__':
     with TemporaryDirectory(prefix='cab-pg-catalog-') as directory:
         pgdata = str(Path(directory) / 'db')
-        command('initdb', '-D', pgdata, '-A', 'trust', '-U', 'catalog', '--no-sync', '--locale=C')
+        command('initdb', '-D', pgdata, '-A', 'trust', '-U', 'catalog', '--no-sync', '--locale=C', '--encoding=UTF8')
         command('pg_ctl', '-D', pgdata, '-l', str(Path(directory) / 'postgres.log'),
                 '-o', f"-k {directory} -c listen_addresses='' -c fsync=off", '-w', 'start')
         try:
@@ -228,9 +262,19 @@ if __name__ == '__main__':
                 catalog_state = migration.apply(initial.clone(), schema_editor)
             policy_migration = loader.get_migration('cab_core', '0056_agent_model_policy')
             with connection.schema_editor() as schema_editor:
-                policy_migration.apply(catalog_state.clone(), schema_editor)
+                policy_state = policy_migration.apply(catalog_state.clone(), schema_editor)
+            legacy_model = policy_state.apps.get_model('cab_core', 'AgentModelPolicy')
+            legacy = legacy_model.objects.create(name='Politique 3.15.0', cache_read_max=Decimal('.2'), cache_write_min=Decimal('.3'))
+            controls_migration = loader.get_migration('cab_core', '0057_model_policy_controls')
+            with connection.schema_editor() as schema_editor:
+                controls_migration.apply(policy_state.clone(), schema_editor)
+            from cab_platform.core.models import AgentModelPolicy
+            upgraded = AgentModelPolicy.objects.get(pk=legacy.pk)
+            assert (upgraded.cache_read_max, upgraded.cache_write_min) == (Decimal('.2'), Decimal('.3'))
+            assert (upgraded.model_filter, upgraded.cache_read_min, upgraded.cache_write_max) == ('', 0, 0)
             result = unittest.main(exit=False).result
             with connection.schema_editor() as schema_editor:
+                controls_migration.unapply(policy_state, schema_editor)
                 policy_migration.unapply(catalog_state, schema_editor)
                 migration.unapply(initial, schema_editor)
             assert not {'agent_models', 'agent_model_policies'}.intersection(connection.introspection.table_names())

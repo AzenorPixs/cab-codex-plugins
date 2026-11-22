@@ -44,6 +44,7 @@ class AgentModel(models.Model):
 
 class AgentModelPolicy(models.Model):
     name = models.CharField(max_length=120)
+    model_filter = models.CharField(max_length=2048, blank=True, default='')
     include_free = models.BooleanField(default=True)
     include_paid = models.BooleanField(default=True)
     context_min = models.PositiveIntegerField(default=0)
@@ -52,8 +53,10 @@ class AgentModelPolicy(models.Model):
     input_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     output_price_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     output_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_read_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     cache_read_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     cache_write_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_write_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
 
     class Meta:
         db_table = 'agent_model_policies'

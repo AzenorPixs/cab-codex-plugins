@@ -341,9 +341,10 @@ def remove_key(key_id):
 
 
 def models(policy_id=None):
-    from .model_policies import matches, policy_or_error
+    from .model_policies import excluded_names, matches, policy_or_error
 
     policy = policy_or_error(policy_id) if policy_id is not None else None
+    exclusions = excluded_names(policy.model_filter) if policy else ()
     rows = AgentModel.objects.order_by('provider__name', 'identifier').values(
         'id', 'provider__name', 'identifier', 'details__summary',
         legacy_source=Case(When(details__summary__has_key='cache_read_cost', then=Value(None)),
@@ -358,7 +359,7 @@ def models(policy_id=None):
             summary = {**summary, **merge_cache(cache_prices(obj(item['legacy_source'])),
                                                 cache_prices(obj(item['legacy_metadata'])))}
         row = {'id': item['id'], 'provider': item['provider__name'], 'identifier': item['identifier'], **summary}
-        if policy is None or matches(policy, row):
+        if policy is None or matches(policy, row, exclusions):
             result.append(row)
     return result
 

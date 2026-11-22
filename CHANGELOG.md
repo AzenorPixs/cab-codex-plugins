@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.15.1
+
+- Actions des politiques après Dernier, exclusions par nom et bornes complètes de lecture et d’écriture du cache.
+
 ## 3.15.0
 
 - Recherche instantanée, tri et pages de dix lignes pour les catalogues des agents.

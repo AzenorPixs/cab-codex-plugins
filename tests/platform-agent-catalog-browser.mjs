@@ -77,11 +77,26 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill('dialog[open] [name=cache_read_max]','0.25');
   find('dialog[open] form').requestSubmit();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides'&&rows('Modèles').length===1&&!find('dialog[open]'),'Politique créée et appliquée');
+  const paginationBar=find('nav[aria-label="Pagination Modèles"]');
+  const policyActions=paginationBar.querySelector('.model-policy-actions');
+  const [last,edit,remove]=policyActions.querySelectorAll(':scope > button');
+  check(last.textContent==='Dernier'&&edit.getAttribute('aria-label')==='Éditer la politique de modèles','Éditer après Dernier');
+  check(remove.getAttribute('aria-label')==='Supprimer la politique de modèles','Supprimer après Éditer');
+  check(edit.getBoundingClientRect().left>=last.getBoundingClientRect().right,'Actions à droite de Dernier');
   await click('button[aria-label="Éditer la politique de modèles"]');
   await wait(()=>find('dialog[open] [name=name]')?.value==='Rapides','Politique préremplie');
+  const policyForm=find('dialog[open] form');
+  check(policyForm.elements[0].name==='name'&&policyForm.elements[1].name==='model_filter','Filtre après le nom');
+  const cacheRows=Array.from(policyForm.querySelectorAll('.model-policy-prices')).slice(-2)
+    .map(row=>Array.from(row.querySelectorAll('input'),input=>input.name).join(','));
+  check(cacheRows.join(';')==='cache_write_min,cache_write_max;cache_read_min,cache_read_max','Écriture puis lecture, minimum puis maximum');
   fill('dialog[open] [name=name]','Rapides renommés');
+  fill('dialog[open] [name=model_filter]','modèle 12; bêta');
+  fill('dialog[open] [name=cache_write_max]','0.5');
+  fill('dialog[open] [name=cache_read_min]','0.1');
   find('dialog[open] form').requestSubmit();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
+  await wait(()=>rows('Modèles').length===0,'Le filtre exclut le modèle dans la vue de politique');
   await click('button[aria-label="Supprimer la politique de modèles"]');
   confirm();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
@@ -178,6 +193,7 @@ try{
         assert.equal(values.include_free,false)
         assert.equal(values.include_paid,true)
         assert.equal(values.cache_read_max,'0.25')
+        assert.equal(values.model_filter,'')
         const policy={id:21,...values}
         policies=[policy]
         return json(response,policy)
@@ -186,6 +202,9 @@ try{
         const policy=await body(request)
         assert.equal(policy.id,21)
         assert.equal(policy.name,'Rapides renommés')
+        assert.equal(policy.model_filter,'modèle 12; bêta')
+        assert.equal(policy.cache_write_max,'0.5')
+        assert.equal(policy.cache_read_min,'0.1')
         assert.equal(policy.context_min,500000)
         policies=[policy]
         return json(response,policy)
@@ -200,7 +219,7 @@ try{
           id,identifier:'fixture-'+id,name:'Modèle '+id,provider:'Fournisseur '+id,context:500000+1000*id,output:64000,
           input_cost:0.1,output_cost:0.3,cache_read_cost:0.25,cache_write_cost:0.3,cache_write_duration:'30m',
         }))
-        return json(response,{models:url.searchParams.has('policy_id')?models.slice(-1):models})
+        return json(response,{models:url.searchParams.has('policy_id')?(policies[0]?.model_filter?[]:models.slice(-1)):models})
       }
       if(route==='/api/v1/administration/agent-api-keys'){
         if(!post)return json(response,{keys})
