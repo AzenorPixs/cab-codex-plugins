@@ -1,9 +1,10 @@
+import {TokenSummary} from './cycleTokens'
 import {Link} from '@tanstack/react-router'
 import {useQuery} from '@tanstack/react-query'
 import {useId,useRef,useState} from 'react'
 import {TabBar} from './InterfaceSettings'
 import {useRunElectric} from './useRunElectric'
-import {StageOverview,CompleteCycles,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
+import {StageOverview,CycleIterations,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
 import {api} from './api'
 import {reasonText,runStateLabel,runProtection} from './SessionLifecycle'
 
@@ -18,7 +19,7 @@ const tabs = [
   {id:'cycle',label:'Étapes du cycle'},
   {id:'change',label:'Change'},
 ] as const
-type RunData={cycle_summary?:CycleSummary;replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
+type RunData={mode?:string;cycle_summary?:CycleSummary;replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
 export function RunView({projectId,runId,routeId}:{projectId:string;runId:string;routeId?:string}){
   const live=useRunElectric(projectId,runId)
   const [selectedStage,setSelectedStage]=useState(0)
@@ -42,6 +43,8 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   const visibleEvidence=finalization.data?.evidence.filter(item=>item.source!=='cab-update')||[]
   const run=query.data;const monitor=run.monitor;const change=monitor.change_record
   const summary=run.cycle_summary
+  const piloted=run.mode==='piloted'||metrics.data?.piloted
+  const lastCycle=metrics.data?.cycles?.at(-1)
   const date=(value:string|null|undefined)=>value?new Date(value).toLocaleString('fr-FR'):'Non observée'
   const duration=(value:number|null|undefined,complete?:boolean)=>value==null?'Non observée':stageDuration(value)+(complete===false?' (partielle)':'')
   const labels=monitor.stages?.length?monitor.stages:monitor.cycle_steps===12?versionStages:cycleStages
@@ -87,7 +90,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       {cycleTabs.map(({id},number)=><div key={id} role="tabpanel" id={cyclePrefix+'-panel-'+id}
         aria-labelledby={cyclePrefix+'-tab-'+id} hidden={activeStage!==number} tabIndex={0}>
         {activeStage===number&&(number===0?<>          <section className="run-cycle">
-            <div className="run-cycle-heading"><h2>Les {steps} étapes du cycle</h2><p>Durée totale du dernier cycle : {duration(summary?.last_duration_seconds)}</p></div>
+            <div className="run-cycle-heading"><h2>Les {steps} étapes du cycle</h2><p className="cycle-token-summary"><strong>Dernier Cycle</strong><span>Durée : {duration(summary?.last_duration_seconds)}</span><TokenSummary tokens={lastCycle?.tokens} piloted={piloted}/></p></div>
             <ol>{labels.map((label,index)=><li key={index} className={monitor.stage===index+1?'current-stage':''}
               aria-current={monitor.stage===index+1?'step':undefined}>
               <button type="button" className="action-link" onClick={()=>openStage(index+1)}>
@@ -96,12 +99,13 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>
-          <p>Durée totale de tous les cycles : {duration(summary?.duration_seconds,summary?.duration_complete)}</p>
-          {metrics.data?.cycles&&<CompleteCycles cycles={metrics.data.cycles}/>}
+          <p className="cycle-token-summary"><span>Durée totale de tous les cycles : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={metrics.data?.tokens} piloted={piloted}/></p>
+          <p className="cycle-token-summary"><strong>Total de la session</strong><TokenSummary tokens={metrics.data?.session_tokens} piloted={piloted}/></p>
+          {metrics.data?.cycles&&<CycleIterations cycles={metrics.data.cycles} piloted={piloted}/>}
         </>:<>
           {metrics.isPending&&<p role="status">Chargement de l’étape…</p>}
           {metrics.error&&<p role="alert">Détail de l’étape indisponible.</p>}
-          <StageOverview stage={metrics.data?.stages[number-1]} title={labels[number-1]} expanded/>
+          <StageOverview stage={metrics.data?.stages[number-1]} title={labels[number-1]} piloted={piloted} expanded/>
         </>)}
       </div>)}
     </>,

@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Tokens du cycle de session
+
+[measure-session-cycle-tokens](openspec/changes/archive/2026-11-22-measure-session-cycle-tokens/), code non attribué. Mesures de tokens PostgreSQL par rôle et par action, étape et cycle, cumuls de session et de change actualisés via Electric. Les mandats autorisés peuvent être complétés pendant un RUN avec un reçu distinct. Contrôles locaux le 22 novembre 2026 sur PostgreSQL, Chromium et Firefox. Livraison et activation sont vérifiables sur les reçus CICDF et CABU.
+
 ## Synthèse des itérations de session
 
 [summarize-session-cycle-iterations](openspec/changes/archive/2026-11-22-summarize-session-cycle-iterations/), code non attribué. Synthèse PostgreSQL/Electric des cycles du RUN, Informations réordonnées, distinction cumul/dernier cycle et durée des actions des douze étapes. Validation native le 22 novembre 2026 : 31 tests PostgreSQL, 3 contrôles de formatage, TypeScript/Vite et Chromium/Firefox avec actualisation Electric sans navigation. Sources : tâches du change et reçus STAGE-878-8-cycles / STAGE-878-8-web. Livraison CICDF et activation CABU à vérifier séparément.

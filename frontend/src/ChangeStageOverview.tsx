@@ -1,8 +1,9 @@
+import {TokenSummary} from './cycleTokens'
 import {useEffect,useState} from 'react'
 import {useQuery,useQueryClient} from '@tanstack/react-query'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
-import {CompleteCycles,StageOverview,stageDuration,type StageMetrics} from './StageOverview'
+import {CycleIterations,StageOverview,stageDuration,type StageMetrics} from './StageOverview'
 
 type ChangePage={changes:{id:string;identifier:string}[];has_more:boolean}
 
@@ -24,7 +25,7 @@ export function ChangeStageOverview({projectId}:{projectId:string}){
   },[client,path,projectId,selected])
   const page=(delta:number)=>{setSelected('');setOffset(previous=>previous+delta)}
   return <section className="change-progress">
-    <h2>Durée des changes</h2>
+    <h2>Durées et tokens des changes</h2>
     {list.isPending&&<p role="status">Chargement des changes…</p>}
     {list.error&&<p role="alert">Les changes ne sont pas disponibles.</p>}
     {list.data&&<>
@@ -41,10 +42,11 @@ export function ChangeStageOverview({projectId}:{projectId:string}){
     {selected&&detail.error&&<p role="alert">Les durées ne sont pas disponibles.</p>}
     {selected&&detail.data&&<>
       {detail.data.complete_cycle_duration_seconds!=null&&<p>Durée totale des cycles complets · {stageDuration(detail.data.complete_cycle_duration_seconds)}</p>}
-      <CompleteCycles cycles={detail.data.cycles||[]}/>
+      <p className="cycle-token-summary"><strong>Total du change</strong><TokenSummary tokens={detail.data.tokens} piloted={detail.data.piloted}/></p>
+      <CycleIterations cycles={detail.data.cycles||[]} piloted={detail.data.piloted}/>
       {detail.data.stages.filter(stage=>stage.observed||stage.not_required).map(stage=><details key={stage.key}>
         <summary>{stage.label||stage.key}{stage.work_seconds!=null?' · '+stageDuration(stage.work_seconds)+' de travail':''}{stage.wait_seconds!=null?' · '+stageDuration(stage.wait_seconds)+' d’attente':''}</summary>
-        <StageOverview stage={stage} title={stage.label||stage.key}/>
+        <StageOverview stage={stage} title={stage.label||stage.key} piloted={detail.data.piloted}/>
       </details>)}
     </>}
   </section>

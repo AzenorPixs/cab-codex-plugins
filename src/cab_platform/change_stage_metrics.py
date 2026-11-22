@@ -214,9 +214,10 @@ def split_time(start, end, native, operations, *, wait_only=False, work_from=Non
     return (work or None), None
 
 
-def _timeline(run, *, local_only=False):
+def _timeline(run, *, local_only=False, usage=None):
     from .core.models import Event, Operation
     from .measurement_sources import native_work_time, native_time
+    from .cycle_tokens import native_sources
     events = list(Event.objects.filter(run=run, kind__in=(
         'review-requested', 'review-decided', 'closure-started', 'finalization-started', 'run-closed'
     )).order_by('pk').values('id', 'kind', 'created'))
@@ -225,15 +226,19 @@ def _timeline(run, *, local_only=False):
         start, end = (native_time(receipt.get(key)) for key in ('started', 'finished'))
         if start and end and start <= end:
             intervals.append((start, end))
-    native = native_work_time(run) if not local_only or run.actor.agent in ('codex','codex-cli') else None
-    traces = [native]
-    if run.mode=='piloted':
-        from .core.models import Actor
-        thread=run.configuration.get('reminder_orchestrator_thread')
-        parent=Actor.objects.filter(pk=run.mandate.get('orchestrator_id')).first() if thread else None
-        traces.append(native_work_time(run,actor=parent,thread=thread)
-                      if parent and (not local_only or parent.agent in ('codex','codex-cli')) else None)
-    return events, native, intervals, traces
+    collect = usage is not None and run.cycle_steps == 12 and bool(run.coding_session_id)
+    traces = []
+    for role, actor, thread in native_sources(run):
+        trace = None
+        if not local_only or actor.agent in ('codex','codex-cli'):
+            identity = {'actor': actor, 'thread': thread} if role == 'orchestrator' else {}
+            trace = native_work_time(run, tokens=collect, **identity)
+        if trace is not None and collect:
+            trace, occurrences = trace
+            if occurrences:
+                usage.append((role, actor.pk, thread, occurrences))
+        traces.append(trace)
+    return events, traces[0], intervals, traces
 
 
 def _restore_stage_passages(run, events, present):
@@ -402,7 +407,7 @@ def visible_description(description):
                                                  sentence,re.IGNORECASE)) or None
 
 
-def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
+def summarize(change,run=None,*, projection=None,local_only=False,usage=None) -> dict:
     """Détails observés et travail attesté, distinct du temps mural."""
     rows=ChangeStageIteration.objects.filter(stage__change=change).select_related('stage','run').order_by('started_at','pk')
     if run is not None:rows=rows.filter(run=run)
@@ -418,7 +423,7 @@ def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
     cycle_evidence=defaultdict(list)
     run_traces={}
     for current in runs:
-        events, native, operations, traces = _timeline(current,local_only=local_only)
+        events, native, operations, traces = _timeline(current,local_only=local_only,usage=usage)
         run_traces[current.pk]=traces
         current_rows = rows_by_run[current.pk]
         present = {r.stage.key for r in current_rows if r.parent_id is None}
@@ -490,4 +495,11 @@ def summarize(change,run=None,*, projection=None,local_only=False) -> dict:
                            'duration_seconds':float(item.duration_seconds) if item.duration_seconds is not None else None,**values})
     complete=[r['duration_seconds'] for r in cycle_data if r['complete'] and r['duration_seconds'] is not None]
     measured=[r['duration_seconds'] for r in stages if r['duration_seconds'] is not None]
-    return {'stages':stages,'cycles':cycle_data,'complete_cycle_duration_seconds':sum(complete) if complete else None,'duration_seconds':sum(measured) if measured else None}
+    result = {'stages':stages,'cycles':cycle_data,'complete_cycle_duration_seconds':sum(complete) if complete else None,'duration_seconds':sum(measured) if measured else None}
+    if projection is None:
+        from .cycle_tokens import overview
+        by_stage, total, session = overview(change, run, (item for items in grouped.values() for item in items), cycle_data)
+        for stage in stages:
+            stage['tokens'] = by_stage.get((stage['key'],), {})
+        result.update(tokens=total, session_tokens=session, piloted=any(item.mode == 'piloted' for item in runs))
+    return result

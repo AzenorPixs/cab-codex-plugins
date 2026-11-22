@@ -345,3 +345,9 @@ Le suivi natif constate aussi un arrêt du worker, avec reçu conservé.
 Une reprise de build sans changement de source réutilise le commit existant.
 Une reprise du commit FAILED est permise au propriétaire du RUN et conserve
 les reçus de la tentative précédente. Les commandes Git restent dans CAB.
+
+Pour ajouter des mandats explicitement autorisés pendant un RUN actif, utiliser
+`run_mandates_add` avec les mandats supplémentaires, l’identifiant stable de la
+demande et la référence d’autorisation du développeur. Confirmer la liste du
+reçu. L’ajout est affiché sur l’étape courante et conserve les actions initiales.
+CABU continue son parcours hors des douze étapes.

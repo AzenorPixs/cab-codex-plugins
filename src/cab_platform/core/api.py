@@ -1124,6 +1124,9 @@ def command(request,body:Command):
         from .run_replacement import reconcile
         return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
+    if name=='run.mandates.add':
+        from cab_platform.stage_actions import add_mandates
+        return add_mandates(actor,data)
     if name in ('run.stage.begin','run.stage.validate','run.stage.status'):
         from cab_platform import stage_protocol
         return {'run.stage.begin':stage_protocol.begin,'run.stage.validate':stage_protocol.validate,'run.stage.status':stage_protocol.status}[name](actor,data)

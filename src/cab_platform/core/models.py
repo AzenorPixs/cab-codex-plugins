@@ -621,6 +621,25 @@ class Metric(models.Model):
     class Meta:
         constraints=[models.UniqueConstraint(fields=['run','source','stream'],name='cab_metric_stream')]
 
+class CycleTokenUsage(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    change=models.ForeignKey(Change,on_delete=models.CASCADE)
+    session=models.ForeignKey(CodingSession,on_delete=models.CASCADE)
+    run=models.ForeignKey(Run,on_delete=models.CASCADE)
+    stage_passage=models.ForeignKey(ChangeStageIteration,on_delete=models.CASCADE,related_name='+')
+    action=models.ForeignKey(ChangeStageIteration,null=True,on_delete=models.SET_NULL,related_name='+')
+    native_key=models.CharField(max_length=64)
+    observed_at=models.DateTimeField()
+    role=models.CharField(max_length=12,choices=[('coder','Codeur'),('orchestrator','Orchestrateur')])
+    input_tokens=models.PositiveBigIntegerField(null=True)
+    output_tokens=models.PositiveBigIntegerField(null=True)
+    cache_read_tokens=models.PositiveBigIntegerField(null=True)
+
+    class Meta:
+        db_table='cycle_token_usage'
+        constraints=[models.UniqueConstraint(fields=['project','native_key'],name='cab_cycle_token_native_event')]
+
+
 class MeasurementPeriod(models.Model):
     session=models.ForeignKey(CodingSession,on_delete=models.PROTECT,related_name='measurement_periods')
     run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='measurement_periods')

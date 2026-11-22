@@ -27,10 +27,14 @@ async function firefox(){const p=await port();const profile=join(root,'firefox')
 const {createServer:httpServer}=await import('node:http');
 const {readFile}=await import('node:fs/promises');
 const project={id:'fixture',identifier:'fixture',name:'Projet',root:'/fixture',creation_state:'READY'};
-const run={session_id:'SID-DEMO',run_id:'RUN',change:'change-demo',state:'CLOSED',suspension:'',monitor:{stage:12,cycle_steps:12,stages:Array.from({length:12},(_,i)=>'Étape '+(i+1)),phase:'PHASE FIXTURE',blocking_runs:[],terminal_gate:{branch:'TERMINÉ'},change_record:{tasks_total:1,tasks_done:1,tasks:[{id:1,label:'Tâche visible',completed:true}],source_state:'open',source_path:'tasks.md'}}};
+const run={mode:'piloted',session_id:'SID-DEMO',run_id:'RUN',change:'change-demo',state:'CLOSED',suspension:'',monitor:{stage:12,cycle_steps:12,stages:Array.from({length:12},(_,i)=>'Étape '+(i+1)),phase:'PHASE FIXTURE',blocking_runs:[],terminal_gate:{branch:'TERMINÉ'},change_record:{tasks_total:1,tasks_done:1,tasks:[{id:1,label:'Tâche visible',completed:true}],source_state:'open',source_path:'tasks.md'}}};
 const time='2026-11-22T12:00:00Z';
-const iterations=[1,2,3,4].map(id=>({id,number:id,duration_seconds:[15.8,641.2,3661.2,null][id-1],state:'COMPLETED',started_at:time,ended_at:time,description:'Passage '+id}));
-const metrics={cycle_summary:{iteration_count:2,measured_count:2,duration_complete:true,last_started_at:time,last_ended_at:time,last_duration_seconds:200,duration_seconds:300,cab_seconds:40,agent_seconds:200,waiting_seconds:60},complete_cycle_duration_seconds:64,stages:Array.from({length:12},(_,i)=>({observed:true,iteration_count:2,iterations,children:[{iterations:iterations.map(({id,...item})=>({...item,id:id+10,parent_id:id,description:'Action visible '+id}))}]}))};
+const tokenCounts=(input='1250')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0'},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
+const iterations=[1,2,3,4].map(id=>({id,number:id,duration_seconds:[15.8,641.2,3661.2,null][id-1],state:'COMPLETED',started_at:time,ended_at:time,description:'Passage '+id,tokens:tokenCounts()}));
+const metrics={piloted:true,tokens:tokenCounts(),session_tokens:tokenCounts(),cycles:[
+ {id:1,number:1,started_at:time,ended_at:time,duration_seconds:100,complete:true,tokens:tokenCounts('1')},
+ {id:2,number:2,started_at:time,ended_at:time,duration_seconds:200,complete:true,tokens:tokenCounts()},
+],cycle_summary:{iteration_count:2,measured_count:2,duration_complete:true,last_started_at:time,last_ended_at:time,last_duration_seconds:200,duration_seconds:300,cab_seconds:40,agent_seconds:200,waiting_seconds:60},complete_cycle_duration_seconds:64,stages:Array.from({length:12},(_,i)=>({observed:true,iteration_count:2,iterations,children:[{iterations:iterations.map(({id,...item})=>({...item,id:id+10,parent_id:id,description:'Action visible '+id}))}]}))};
 const fixtures={health:{initialized:true,state:'READY',version:'3.9.14',csrf_token:'fixture'},projects:{projects:[project]},run,finalization:{phase:'CLOSED',missing:[],evidence:[{id:1,source:'cab-operation',payload:{rule_id:'preuve visible',kind:'verification',result:'passed'}}]},'projects/fixture/change-stage-metrics':metrics};
 let revision=1;
 let metricsUnavailable=true;
@@ -41,7 +45,7 @@ const server=httpServer(async(req,res)=>{
   res.end('ok');return;
  }
  if(path==='/mutate'){
-  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:3,duration_seconds:400,last_duration_seconds:100};revision++;
+  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:3,duration_seconds:400,last_duration_seconds:100};metrics.cycles[1].tokens=tokenCounts('4567');revision++;
   res.end('ok');return;
  }
  if(path==='/api/v1/sync/run-data/run'){
@@ -75,7 +79,7 @@ const url='http://127.0.0.1:'+server.address().port+'/projects/fixture/runs/RUN'
 try{
  for(const factory of [chromium,firefox]){
   metricsUnavailable=true;
-  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:2,duration_seconds:300,last_duration_seconds:200};revision++;
+  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:2,duration_seconds:300,last_duration_seconds:200};metrics.cycles[1].tokens=tokenCounts();revision++;
   const browser=await factory();
   try{
    await browser.viewport(1440,900);
@@ -107,19 +111,22 @@ try{
    await click('Change');
    assert(await ev('document.body.innerText.includes("Tâche visible")'));
    await click('Étapes du cycle');
-   assert(await ev('document.querySelectorAll(".run-cycle-tabs [role=tab]").length===13 && document.body.innerText.includes("Durée totale de tous les cycles") && document.body.innerText.includes("Durée totale du dernier cycle")'));
+   assert(await ev('document.querySelectorAll(".run-cycle-tabs [role=tab]").length===13 && document.body.innerText.includes("Durée totale de tous les cycles") && document.body.innerText.includes("Dernier Cycle")'));
    assert(await ev(`parseFloat(getComputedStyle(document.querySelector('.run-cycle-heading p')).borderInlineStartWidth)>0`),'barre verticale');
    await fetch(new URL('/mutate',url));
    await wait(()=>ev(`document.body.innerText.includes('6\\u202fmin 40\\u202fs') && document.body.innerText.includes('1\\u202fmin 40\\u202fs')`),'actualisation Electric sans navigation');
    await fetch(new URL('/restore-metrics',url));
+   await wait(()=>ev('document.querySelector(".run-cycle-heading").innerText.includes("4,57\u202fK")'),'tokens du dernier cycle actualisés');
+   assert(await ev('document.querySelector(".run-cycle-heading").innerText.includes("2,35\u202fB")'));
+   assert(await ev('document.querySelector(".run-cycle-heading").innerText.includes("1\u202fM")'));
    for(let stage=1;stage<=12;stage++){
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 4")'),'actions de l’étape');
-    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
+    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers[5]==='TeCodeur' && headers[10]==='TcOrchestrateur' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
    }
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
-   await browser.screenshot();console.log(browser.name+' '+browser.version+' : synthèse, Electric, 12 tableaux d’actions et largeur mobile vérifiés');
+   await browser.screenshot();console.log(browser.name+' '+browser.version+' : synthèse, tokens des deux rôles, actualisation Electric, 12 tableaux d’actions et largeur mobile vérifiés');
   } finally{await browser.close()}
  }
 }finally{server.close();for(const p of children)if(p.exitCode===null)p.kill('SIGTERM')}

@@ -29,7 +29,7 @@ def main():
             database_name='cab_effects_fixture_cycles'
             subprocess.run([str(PG/'createdb'),'-h','127.0.0.1','-p',str(port),database_name],check=True)
             import py_compile
-            for name in ('src/cab_platform/change_stage_metrics.py','src/cab_platform/time_projection.py','src/cab_platform/web_views.py','src/cab_platform/core/api.py','src/cab_platform/core/models.py','src/cab_platform/core/migrations/0052_run_cycle_summary.py','tests/test_session_cycle_summary.py', 'tests/check_session_cycle_summary.py'):
+            for name in ('src/cab_platform/change_stage_metrics.py','src/cab_platform/time_projection.py','src/cab_platform/web_views.py','src/cab_platform/core/api.py','src/cab_platform/core/models.py','src/cab_platform/core/migrations/0052_run_cycle_summary.py','src/cab_platform/core/migrations/0053_cycle_token_usage.py','src/cab_platform/cycle_tokens.py','src/cab_platform/measurement_sources.py','src/cab_platform/stage_actions.py','src/cab_platform/mcp.py','tests/test_cycle_tokens.py','tests/test_stage_actions.py','tests/test_session_cycle_summary.py', 'tests/check_session_cycle_summary.py'):
                 py_compile.compile(str(ROOT/name),cfile=str(base/(Path(name).name+'c')),doraise=True)
             from django.conf import settings
             settings.configure(SECRET_KEY='isolated-fixture',USE_TZ=True,
@@ -42,11 +42,14 @@ def main():
             call_command('migrate',verbosity=0)
             from django.db import connection
             from django.db.migrations.executor import MigrationExecutor
-            from cab_platform.core.models import Run
+            from cab_platform.core.models import CycleTokenUsage, Run
             state=MigrationExecutor(connection).loader.project_state()
             assert state.apps.get_model('cab_core','Run')._meta.get_field('cycle_summary').deconstruct()[1:] == Run._meta.get_field('cycle_summary').deconstruct()[1:]
+            token_state=state.apps.get_model('cab_core','CycleTokenUsage')
+            assert {field.name: field.deconstruct()[1:] for field in token_state._meta.fields} == {
+                field.name: field.deconstruct()[1:] for field in CycleTokenUsage._meta.fields}
             suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(module) for module in (
-                'test_session_cycle_summary','test_time_projection','test_publication_cycle','test_stage_work_time','test_cycle_attribution'))
+                'test_session_cycle_summary','test_time_projection','test_publication_cycle','test_stage_work_time','test_cycle_attribution','test_cycle_tokens','test_stage_actions','test_measurement_sources'))
             result=unittest.TextTestRunner(verbosity=2).run(suite)
             return result.wasSuccessful() and not result.skipped
         finally:

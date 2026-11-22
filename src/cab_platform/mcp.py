@@ -208,6 +208,10 @@ def run_stage_action(project_id:str,run_id:str,request_id:str,attempt:int,action
     """Enregistre une validation réellement effectuée dans le passage d’étape courant."""
     return client().command('run.stage.action',{key:value for key,value in locals().items() if value is not None})
 @public_tool()
+def run_mandates_add(project_id:str,run_id:str,request_id:str,mandates:list[str],authorization:str)->dict:
+    """Ajoute au RUN actif les mandats explicitement autorisés par le développeur."""
+    return client().command('run.mandates.add',locals())
+@public_tool()
 def run_stage_action_catalogue(project_id:str,run_id:str)->dict:
     """Lit les validations agent possibles pour l’étape et les mandats déclarés à l’Initialisation."""
     return client().command('run.stage.action_catalogue',locals())

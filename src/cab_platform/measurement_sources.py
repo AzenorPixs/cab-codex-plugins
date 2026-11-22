@@ -10,6 +10,34 @@ from django.utils import timezone
 from .native_sources import inspect,indexed_path,NativeSourceError
 
 TOKEN_FIELDS={'input_tokens':'tokens_input','output_tokens':'tokens_output','cached_input_tokens':'tokens_cache_read','cache_write_input_tokens':'tokens_cache_write','reasoning_output_tokens':'tokens_reasoning','total_tokens':'tokens_total'}
+USAGE_FIELDS=('input_tokens','output_tokens','cache_read_tokens')
+_CODEX_USAGE_FIELDS=('input_tokens','output_tokens','cached_input_tokens')
+_MAX_TOKEN_COUNT=2**63-1
+
+
+def _token_count(value):
+    return value if type(value) is int and 0 <= value <= _MAX_TOKEN_COUNT else None
+
+
+def _usage_counts(values, fields):
+    return tuple(_token_count(values.get(field)) for field in fields)
+
+
+def _codex_usage(payload, stamp, previous, usage):
+    info = payload.get('info')
+    if not isinstance(info, dict) or not isinstance(info.get('total_token_usage'), dict):
+        return previous
+    total = _usage_counts(info['total_token_usage'], _CODEX_USAGE_FIELDS)
+    last = info.get('last_token_usage')
+    if previous is None:
+        last = _usage_counts(last, _CODEX_USAGE_FIELDS) if isinstance(last, dict) else (None,)*3
+        delta = tuple(value if value == current else None for value, current in zip(last, total))
+    else:
+        delta = tuple(current - before if current is not None and before is not None and current >= before
+                      else None for current, before in zip(total, previous))
+    if total != previous and (any(delta) or previous is None and 0 in delta):
+        usage.append((stamp, (stamp.isoformat(), total), delta))
+    return total
 
 def native_time(value):
     try:
@@ -24,10 +52,11 @@ def native_time(value):
     return None
 
 
-def _time_lines(stream, size):
+def _time_lines(stream, size, usage=None):
     """Ne garder que les bornes et identifiants des tours de cette session."""
     turns, pending, uncertain = [], {}, []
     covered_from = None
+    previous_usage = None
     progress = deque(maxlen=96)
     remaining = size
     while remaining:
@@ -49,6 +78,8 @@ def _time_lines(stream, size):
         if row.get('type') != 'event_msg':
             continue
         kind, key = payload.get('type'), payload.get('turn_id')
+        if usage is not None and kind == 'token_count':
+            previous_usage = _codex_usage(payload, stamp, previous_usage, usage)
         if kind == 'agent_message':
             progress.append((stamp,key,True))
         if not isinstance(key, str):
@@ -78,10 +109,12 @@ def _codex_time_file(path, uid, device, inode, size, modified):
             info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
         ) != (device, inode, size, modified) or size > 128 * 1024 * 1024:
             raise NativeSourceError('native-source-unavailable')
-        return _time_lines(stream, size)
+        usage = []
+        timing = _time_lines(stream, size, usage)
+        return timing, tuple(usage)
 
 
-def codex_work_time(run, *, actor=None, thread=None):
+def codex_work_time(run, *, actor=None, thread=None, tokens=False):
     """Lire les bornes du seul journal déjà authentifié, sans restituer son contenu."""
     actor = actor or run.actor
     if actor.agent not in ('codex', 'codex-cli'):
@@ -104,15 +137,16 @@ def codex_work_time(run, *, actor=None, thread=None):
         info = os.stat(path, follow_symlinks=False)
         if (info.st_dev, info.st_ino) != (source['device'], source['inode']):
             return None
-        return _codex_time_file(path, actor.uid, info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        timing, usage = _codex_time_file(path, actor.uid, info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        return (timing, usage) if tokens else timing
     except (NativeSourceError, Refused, KeyError, ValueError, OSError):
         return None
 
 
-def native_work_time(run, *, actor=None, thread=None):
+def native_work_time(run, *, actor=None, thread=None, tokens=False):
     actor = actor or run.actor
     if actor.agent != 'opencode':
-        return codex_work_time(run,actor=actor,thread=thread)
+        return codex_work_time(run,actor=actor,thread=thread,tokens=tokens)
     import httpx
     from types import SimpleNamespace
     from .core.commands import Refused
@@ -123,6 +157,7 @@ def native_work_time(run, *, actor=None, thread=None):
     except (Refused,httpx.HTTPError,OSError,ValueError):
         return None
     covered, spans, unfinished, progress = [], [], [], []
+    usage = []
     complete = True
     for row in rows:
         timing = row.get('time') if isinstance(row,dict) else None
@@ -140,9 +175,24 @@ def native_work_time(run, *, actor=None, thread=None):
             if end and end >= start:
                 spans.append((start,end))
                 progress.append((end,row.get('id'),True))
+                if tokens:
+                    counts = _opencode_usage(row)
+                    if counts is not None:
+                        usage.append((end, row['id'], counts))
             else:
                 unfinished.append(start)
-    return (min(covered) if complete else None,spans,unfinished,(),progress) if covered else None
+    timing = (min(covered) if complete else None,spans,unfinished,(),progress) if covered else None
+    return (timing, tuple(usage)) if tokens else timing
+
+
+def _opencode_usage(row):
+    counters = row.get('tokens')
+    if not isinstance(row.get('id'), str) or not row['id'] or not isinstance(counters, dict):
+        return None
+    cache = counters.get('cache')
+    counts = (*_usage_counts(counters, ('input','output')),
+              _token_count(cache.get('read')) if isinstance(cache, dict) else None)
+    return counts if any(value is not None for value in counts) else None
 
 
 def codex_snapshot(run):

@@ -298,3 +298,7 @@ header .brand {
 .run-cycle-heading h2{margin:0}
 .run-cycle-heading p{margin:0;border-inline-start:1px solid var(--border);padding-inline-start:20px}
 @media(max-width:600px){.run-cycle-heading p{padding-inline-start:12px}}
+.cycle-token-summary,.cycle-token-group{display:flex;flex-wrap:wrap;align-items:baseline;gap:.35rem 1rem}
+.cycle-token-group span,.cycle-token-value{white-space:nowrap}
+.cycle-table-scroll{max-width:100%;overflow-x:auto}
+.cycle-table-scroll th small{display:block}

@@ -60,7 +60,48 @@ def normalize_mandates(values):
 
 
 def mandates_for(run):
-    return run.mandate.get('mandates') or ['CAB']
+    return [*(run.mandate.get('mandates') or ['CAB']), *run.configuration.get('added_mandates', [])]
+
+
+@transaction.atomic
+def add_mandates(actor, data):
+    from .stage_protocol import authority, enabled
+    from .publication_boundary import frozen
+    c.require(set(data)=={'project_id','run_id','request_id','mandates','authorization'},
+              'stage-mandate-add-fields-invalid',400)
+    run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
+    c.require(enabled(run) and authority(actor,run),'stage-agent-authority-required',403)
+    key=c.identifier(data['request_id'])
+    fingerprint=c.digest(data)
+    prior=Event.objects.filter(run=run,kind='run-mandates-added',data__request_id=key).first()
+    if prior:
+        c.require(prior.data['fingerprint']==fingerprint,'stage-mandate-add-request-conflict')
+        return prior.data['result']
+    c.require(run.state=='WORKING' and not run.suspension and not frozen(run)
+              and not run.review and c.no_pending(run),'stage-mandate-add-protected')
+    authorization=data['authorization']
+    c.require(isinstance(authorization,str) and 20<=len(authorization.strip())<=1000,
+              'stage-mandate-authorization-required',400)
+    requested=normalize_mandates(data['mandates'])
+    before=mandates_for(run)
+    names=[name.casefold() for name in requested]
+    c.require('cabu' not in names,'host-update-outside-change-cycle',400)
+    c.require(len(before)+len(requested)<=32 and len(set(names))==len(names)
+              and not set(names)&{name.casefold() for name in before},'stage-mandates-divergent',409)
+    current=_current(run)
+    at=timezone.now()
+    name=_stage_name(run)
+    parent=_parent(run,name,at,latest=True) if current and name else None
+    c.require(parent is not None,'stage-parent-not-observed')
+    note=redact(authorization.strip())
+    run.configuration={**run.configuration,'added_mandates':[*run.configuration.get('added_mandates',[]),*requested]}
+    run.save(update_fields=['configuration','updated'])
+    receipt={'attempt':current['attempt'],'request_id':key,'actor':actor.pk,'mandates':requested,'note':note}
+    row=_capture(run,parent,'mandats-ajoutes','Mandats ajoutés à la session','agent','mandate-add:'+key,at,'COMPLETED',receipt)
+    result={'id':row.pk,'added':requested,'mandates':mandates_for(run),'at':at.isoformat()}
+    c.event(run,'run-mandates-added',{'request_id':key,'fingerprint':fingerprint,'actor':actor.pk,
+                                    'before':before,'authorization':note,'result':result})
+    return result
 
 
 def _current(run):
@@ -243,12 +284,12 @@ def catalogue(actor,data):
     options=dict(AGENT_ACTIONS.get(name,{}))
     if name:options['blocage']='Bilan de blocage rédigé'
     return {'stage':name,'attempt':current.get('attempt'),'agent_actions':options,
-            **({'mandates':mandates_for(run)} if name=='initialization' else {})}
+            'mandates':mandates_for(run)}
 
 
 def mandates_validated(run, attempt):
     return ChangeStageIteration.objects.filter(run=run,stage__key='initialization.action-mandats',
-        description_source='agent',state='COMPLETED',receipt__attempt=attempt,receipt__mandates=mandates_for(run)).exists()
+        description_source='agent',state='COMPLETED',receipt__attempt=attempt).exists()
 
 
 def blocker_proof(run, relative, *, since=None):

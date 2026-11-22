@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.11.0
+
+- Tokens entrants, sortants et lus depuis le cache par action, étape et cycle, avec cumuls de session et de change, détail par rôle et actualisation Electric.
+- Ajout tracé de mandats explicitement autorisés pendant un RUN actif.
+
 ## 3.10.1
 
 - Informations de session alignées sur les blocs forge et compteurs persistés servis directement par le détail du RUN.
