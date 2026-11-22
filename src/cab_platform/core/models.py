@@ -427,6 +427,7 @@ class Run(models.Model):
     change_record=models.ForeignKey(Change,null=True,on_delete=models.PROTECT,related_name='runs')
     configuration=models.JSONField(default=dict)
     cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
+    cycle_summary=models.JSONField(default=dict,db_default={})
     stage=models.PositiveSmallIntegerField(null=True,blank=True)
     phase=models.CharField(max_length=32,blank=True)
     state=models.CharField(max_length=32,default='WORKING')

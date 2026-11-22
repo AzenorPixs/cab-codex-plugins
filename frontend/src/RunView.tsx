@@ -40,8 +40,10 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
     </article>
   }
   const visibleEvidence=finalization.data?.evidence.filter(item=>item.source!=='cab-update')||[]
-  const run=query.data;const monitor=run.monitor;const change=monitor.change_record;const gate=monitor.terminal_gate
-  const gateText=run.state==='CLOSURE_INVALID'?'Closure issue':gate?.branch==='HISTORIQUE'?'Historical closure':gate?.branch==='TERMINÉ'?'Closed':gate?.branch==='BLOQUÉ'?'Blocked':gate?.decision==='accept'?'Accepted':gate?.decision==='changes-requested'?'Changes requested':gate?'Observed':'Unknown'
+  const run=query.data;const monitor=run.monitor;const change=monitor.change_record
+  const summary=metrics.data?.cycle_summary
+  const date=(value:string|null|undefined)=>value?new Date(value).toLocaleString('fr-FR'):'Non observée'
+  const duration=(value:number|null|undefined,complete?:boolean)=>value==null?'Non observée':stageDuration(value)+(complete===false?' (partielle)':'')
   const labels=monitor.stages?.length?monitor.stages:monitor.cycle_steps===12?versionStages:cycleStages
   const steps=monitor.cycle_steps||labels.length
   const cycleTabs=[{id:'summary',label:'Résumé'},...labels.map((_,index)=>({id:String(index+1),label:String(index+1)}))]
@@ -53,7 +55,20 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   const panels=[
     <>
       {runProtection(run.suspension)&&<p className="protection-label">{runProtection(run.suspension)}</p>}
-    <dl className="run-metadata"><dt>Étape</dt><dd>{stageLabel(monitor.stage,monitor.cycle_steps,monitor.stages)}</dd><dt>Activité native</dt><dd>{monitor.native_activity?`${monitor.native_activity.source} · observée le ${new Date(monitor.native_activity.observed_at).toLocaleString('fr-FR')}`:'Non observée'}</dd><dt>Mandat courant</dt><dd>{monitor.current_mandate?`Mandat autonome ${monitor.current_mandate.id}`:'Aucun mandat observé'}</dd><dt>Gate terminal</dt><dd>{gateText}</dd><dt>Demandes indécises</dt><dd>{monitor.pending_requests??'—'}</dd><dt>Dernier jalon prouvé</dt><dd>{monitor.last_proven_milestone?`${monitor.last_proven_milestone.label} · ${new Date(monitor.last_proven_milestone.at).toLocaleString('fr-FR')}`:'Non observé'}</dd><dt>Cause / attente</dt><dd>{monitor.waiting_cause||'Non observée'}</dd><dt>RUN bloquants</dt><dd>{monitor.blocking_runs.length?monitor.blocking_runs.join(', '):'Non observés'}</dd></dl>
+    <dl className="run-metadata run-information">
+      <dt>Mandat courant</dt><dd>{monitor.current_mandate?`Mandat autonome ${monitor.current_mandate.id}`:'Aucun mandat observé'}</dd>
+      <dt>Étape</dt><dd>{stageLabel(monitor.stage,monitor.cycle_steps,monitor.stages)}</dd>
+      <dt>Nombre d’itérations du cycle</dt><dd>{summary?.iteration_count??'Non observé'}</dd>
+      <dt>Début du dernier cycle</dt><dd>{date(summary?.last_started_at)}</dd>
+      <dt>Fin du dernier cycle</dt><dd>{date(summary?.last_ended_at)}</dd>
+      <dt>Durée totale des cycles</dt><dd>{duration(summary?.duration_seconds,summary?.duration_complete)}</dd>
+      <dt>Durée totale des cycles « CAB »</dt><dd>{duration(summary?.cab_seconds,summary?.cab_seconds_complete)}</dd>
+      <dt>Durée totale des cycles « Agent(s) »</dt><dd>{duration(summary?.agent_seconds,summary?.agent_seconds_complete)}</dd>
+      <dt>Durée totale des cycles « Attente »</dt><dd>{duration(summary?.waiting_seconds,summary?.waiting_seconds_complete)}</dd>
+      <dt>Demandes indécises</dt><dd>{monitor.pending_requests??'—'}</dd>
+      <dt>Cause / attente</dt><dd>{monitor.waiting_cause||'Non observée'}</dd>
+      <dt>RUN bloquants</dt><dd>{monitor.blocking_runs.length?monitor.blocking_runs.join(', '):'Non observés'}</dd>
+    </dl>
     {monitor.last_reminder?.message&&<aside className="change-progress" aria-label="Dernier rappel CAB">
       <p>{monitor.last_reminder.message}</p>
       <small>{new Date(monitor.last_reminder.at).toLocaleString('fr-FR')} · {monitor.last_reminder.state==='SENT'?'Envoyé à la session':monitor.last_reminder.state==='UNKNOWN'?'Remise indéterminée':monitor.last_reminder.state==='INTENT'?'En cours de remise':'Visible dans CAB'}</small>
@@ -72,7 +87,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       {cycleTabs.map(({id},number)=><div key={id} role="tabpanel" id={cyclePrefix+'-panel-'+id}
         aria-labelledby={cyclePrefix+'-tab-'+id} hidden={activeStage!==number} tabIndex={0}>
         {activeStage===number&&(number===0?<>          <section className="run-cycle">
-            <h2>Les {steps} étapes du cycle</h2>
+            <div className="run-cycle-heading"><h2>Les {steps} étapes du cycle</h2><p>Durée totale du dernier cycle : {duration(summary?.last_duration_seconds)}</p></div>
             <ol>{labels.map((label,index)=><li key={index} className={monitor.stage===index+1?'current-stage':''}
               aria-current={monitor.stage===index+1?'step':undefined}>
               <button type="button" className="action-link" onClick={()=>openStage(index+1)}>
@@ -81,7 +96,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>
-          {metrics.data?.complete_cycle_duration_seconds!=null&&<p>Durée totale du cycle : {stageDuration(metrics.data.complete_cycle_duration_seconds)}</p>}
+          <p>Durée totale de tous les cycles : {duration(summary?.duration_seconds,summary?.duration_complete)}</p>
           {metrics.data?.cycles&&<CompleteCycles cycles={metrics.data.cycles}/>}
         </>:<>
           {metrics.isPending&&<p role="status">Chargement de l’étape…</p>}

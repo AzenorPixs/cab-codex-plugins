@@ -46,7 +46,7 @@ def sync_interface_preferences(request):return sync_projection(request,'interfac
 def sync_run_data(request,kind):
     from .core.models import Change,Run
     tables={
-        'run':('runs','id,project_id,run_id,state,suspension,cycle_steps,stage,phase,updated'),
+        'run':('runs','id,project_id,run_id,state,suspension,cycle_steps,stage,phase,updated,cycle_summary'),
         'stages':('change_stages','id,change_id,key,parent_id,iteration_count,duration_seconds,updated_at'),
         'iterations':('change_stage_iterations','id,stage_id,run_id,parent_id,cycle_id,reference,state,asynchronous,receipt,iteration_number,duration_seconds,started_at,ended_at,description,description_source,time_projection'),
         'cycles':('run_cycle_iterations','id,run_id,number,started_at,ended_at,duration_seconds,visited,complete,time_projection'),

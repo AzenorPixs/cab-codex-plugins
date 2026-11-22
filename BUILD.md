@@ -8,6 +8,11 @@ les effets UNKNOWN restent protégés. Voir docs/platform-operations.md.
 
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La migration additive `0052_run_cycle_summary` ajoute une synthèse dérivée JSON
+sur les RUN. Sauvegarder avant migration ; le retour retire uniquement ce champ
+et ne supprime aucune itération ni preuve temporelle. Le producteur temporel
+existant remplit progressivement les RUN actifs et historiques après activation.
+
 Les RUN de livraison cadrés sur une spécification canonique peuvent publier
 leur rapport réel sous statistics/runs/<identité>/STATISTICS.md, sans migration
 ni faux change. L’activation du paquet précède la reprise automatique de ces

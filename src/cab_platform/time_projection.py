@@ -16,14 +16,15 @@ _cursor=0
 
 
 def refresh(run_id):
-    from .change_stage_metrics import summarize
+    from .change_stage_metrics import cycle_summary, summarize
 
     run=Run.objects.select_related('change_record').filter(pk=run_id).first()
     if not run or not run.change_record_id:
         return False
     anchor=run.updated
     batch={'passes':{},'cycles':{}}
-    summarize(run.change_record,run,projection=batch)
+    overview=summarize(run.change_record,run,projection=batch)
+    summary=cycle_summary(overview['cycles'])
     with transaction.atomic():
         current=Run.objects.select_for_update().get(pk=run_id)
         if current.updated!=anchor:
@@ -45,6 +46,9 @@ def refresh(run_id):
             Run.objects.filter(pk=run_id).update(updated=stamp)
             stages=ChangeStageIteration.objects.filter(run_id=run_id).values('stage_id')
             ChangeStage.objects.filter(pk__in=stages).update(updated_at=stamp)
+        if current.cycle_summary!=summary:
+            Run.objects.filter(pk=run_id).update(cycle_summary=summary,updated=timezone.now())
+            changed=True
         return changed
 
 

@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.10.0
+
+- Synthèse persistée de toutes les itérations de session, diffusée par Electric : cumuls CAB, Agent(s), Attente et durée distincte du dernier cycle.
+- Informations réordonnées et colonne Durée des actions dans les douze étapes, avec unités adaptées.
+
 ## 3.9.14
 
 - Bloc Session aligné sur les blocs forge, avec onglets au-dessus du titre, preuves visibles et un sous-onglet par étape du cycle.

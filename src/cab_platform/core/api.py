@@ -787,8 +787,8 @@ def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,
         from cab_platform.change_stage_metrics import summarize
         run=Run.objects.filter(project=project,run_id=run_id).select_related('change_record').first()
         commands.require(run is not None,'run-not-found',404)
-        if run.change_record is None:return {'run_id':run_id,'stages':[],'cycles':[],'duration_seconds':None,'complete_cycle_duration_seconds':None}
-        return {'identifier':run.change,'run_id':run_id,**summarize(run.change_record,run)}
+        if run.change_record is None:return {'run_id':run_id,'stages':[],'cycles':[],'duration_seconds':None,'complete_cycle_duration_seconds':None,'cycle_summary':run.cycle_summary}
+        return {'identifier':run.change,'run_id':run_id,**summarize(run.change_record,run),'cycle_summary':run.cycle_summary}
     if change_id is not None:
         from cab_platform.change_stage_metrics import summarize
         change=changes.filter(pk=change_id).first()

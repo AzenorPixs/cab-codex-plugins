@@ -1,5 +1,14 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+La synthèse `runs.cycle_summary` conserve le nombre d’itérations, les bornes et
+la durée du dernier cycle, ainsi que les cumuls des durées connues et leurs
+ventilations CAB/Agent(s)/Attente. Les cycles interrompus mesurés sont inclus ;
+les étapes parallèles ne sont pas additionnées. Les indicateurs de couverture
+signalent les cumuls partiels. Le producteur temporel actualise cette synthèse
+sous verrou et le flux Electric autorisé du RUN diffuse ce seul champ public.
+Le Web utilise ces valeurs persistées ; les anciennes données manquantes
+restent non observées jusqu’au rattrapage du producteur.
+
 L’admission administrative session.git.inspect_preexisting / session.git.authorize_preexisting
 porte sur les fichiers réguliers explicitement autorisés du mandat. Le CAS lie
 RUN/SID, cadrage, révision, baseline, HEAD, index éventuel et empreintes entières.

@@ -292,3 +292,10 @@ header .brand {
 .run-cycle-tabs .interface-tabs{flex-wrap:wrap}
 .run-session-card [role=tabpanel]{min-width:0}
 .run-session-card .forge-card-content{overflow:auto}
+
+.run-information{grid-template-columns:minmax(0,1fr);gap:6px}
+.run-information dd{margin-inline-start:20px;margin-bottom:12px}
+.run-cycle-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:12px 20px}
+.run-cycle-heading h2{margin:0}
+.run-cycle-heading p{margin:0;border-inline-start:1px solid var(--border);padding-inline-start:20px}
+@media(max-width:600px){.run-information{grid-template-columns:minmax(0,1fr)}.run-cycle-heading p{padding-inline-start:12px}}

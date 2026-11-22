@@ -4,7 +4,8 @@ type Attribution={cab_seconds?:number|null;agent_seconds?:number|null;waiting_se
 type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
 export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
-export type StageMetrics={stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null}
+export type CycleSummary={iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
+export type StageMetrics={stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null;cycle_summary?:CycleSummary}
 const date=(value:string|null)=>value?new Date(value).toLocaleString('fr-FR'):''
 const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAILED:'Échec',UNKNOWN:'Indéterminé',PENDING:'En attente',SKIPPED:'Non exécuté',NOT_REQUESTED:'Non demandé',CANCELLED:'Annulé'}
 function Waiting({time}:{time:Attribution}){
@@ -23,7 +24,7 @@ function StageActions({stage,expanded}:{stage:StageMetric;expanded:boolean}){
     if(!actions.length)return null
     const title=<>Actions · Itération {passage.number??index+1}{stage.iterations.length>1&&passage.run_id?' · '+passage.run_id:''}</>
     const table=
-      <table className="stage-passages"><thead><tr><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>État</th></tr></thead>
+      <table className="stage-passages"><thead><tr><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><th>État</th></tr></thead>
         <tbody>{actions.map(action=>{
           const mandates=Array.isArray(action.receipt?.mandates)?action.receipt.mandates.filter((value):value is string=>typeof value==='string'):[]
           return <tr key={action.id}>
@@ -34,6 +35,7 @@ function StageActions({stage,expanded}:{stage:StageMetric;expanded:boolean}){
             </td>
             <td>{action.source==='cab'?'CAB':action.source==='agent'?'Agent':''}</td>
             <td>{date(action.started_at)||'Non attesté'}</td><td>{date(action.ended_at)||(passage.ended_at?'Non attestée':'')}</td>
+            <td>{stageDuration(action.duration_seconds)||'Non observée'}</td>
             <td>{action.state?states[action.state]||action.state:''}{typeof action.receipt?.error==='string'&&<p>{action.receipt.error}</p>}</td>
           </tr>
         })}</tbody>

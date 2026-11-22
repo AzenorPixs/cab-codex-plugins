@@ -82,11 +82,38 @@ def finish_cycle(cycle,at,keys):
     ended=cycle.stage_iterations.filter(parent__isnull=True,started_at__isnull=False,ended_at__isnull=False)
     cycle.complete=set(keys).issubset(ended.values_list('stage__key',flat=True))
     cycle.save(update_fields=['ended_at','duration_seconds','complete'])
-    if cycle.complete:
-        projections={'passes':{},'cycles':{}}
-        summarize(cycle.run.change_record,cycle.run,projection=projections,local_only=True)
-        cycle.time_projection=projections['cycles'][cycle.pk]
-        cycle.save(update_fields=['time_projection'])
+    projections={'passes':{},'cycles':{}}
+    summarize(cycle.run.change_record,cycle.run,projection=projections,local_only=True)
+    cycle.time_projection=projections['cycles'][cycle.pk]
+    cycle.save(update_fields=['time_projection'])
+    save_cycle_summary(cycle.run)
+
+
+def cycle_summary(cycles: list[dict]) -> dict:
+    """Cumuler les cycles mesurés, indépendamment de leur complétude métier."""
+    if not cycles:
+        return {}
+    measured=[item for item in cycles if item['duration_seconds'] is not None]
+    last=max(cycles,key=lambda item:item['number'])
+    result={'iteration_count':len(cycles),'measured_count':len(measured),
+            'duration_complete':len(measured)==len(cycles),
+            'last_started_at':last['started_at'].isoformat() if last['started_at'] else None,
+            'last_ended_at':last['ended_at'].isoformat() if last['ended_at'] else None,
+            'last_duration_seconds':last['duration_seconds']}
+    for field in ('duration_seconds',*FIELDS):
+        values=[Decimal(str(item[field])) for item in measured if item.get(field) is not None]
+        result[field]=float(sum(values)) if values else None
+        if field!='duration_seconds':
+            result[field+'_complete']=bool(measured) and len(values)==len(cycles)
+    return result
+
+
+def save_cycle_summary(run: Run) -> None:
+    rows=[{'number':item.number,'started_at':item.started_at,'ended_at':item.ended_at,
+           'duration_seconds':float(item.duration_seconds) if item.duration_seconds is not None else None,
+           **{field:item.time_projection.get(field) for field in FIELDS}}
+          for item in RunCycleIteration.objects.filter(run=run)]
+    Run.objects.filter(pk=run.pk).update(cycle_summary=cycle_summary(rows),updated=timezone.now())
 
 
 @transaction.atomic
@@ -130,6 +157,7 @@ def observe(run: Run, at=None) -> None:
         description=AUTOMATIC_DESCRIPTIONS.get(key,'')
         ChangeStageIteration.objects.create(stage=stage,run=run,cycle=cycle,started_at=at,state='RUNNING',iteration_number=count,description=description,description_source='cab' if description else '')
         refresh_total(stage.pk)
+        save_cycle_summary(run)
 
 
 @transaction.atomic

@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Synthèse des itérations de session
+
+[summarize-session-cycle-iterations](openspec/changes/archive/2026-11-22-summarize-session-cycle-iterations/), code non attribué. Synthèse PostgreSQL/Electric des cycles du RUN, Informations réordonnées, distinction cumul/dernier cycle et durée des actions des douze étapes. Validation native le 22 novembre 2026 : 31 tests PostgreSQL, 3 contrôles de formatage, TypeScript/Vite et Chromium/Firefox avec actualisation Electric sans navigation. Sources : tâches du change et reçus STAGE-878-8-cycles / STAGE-878-8-web. Livraison CICDF et activation CABU à vérifier séparément.
+
 ## Bloc Session et détails du cycle
 
 [correct-session-block-layout](openspec/changes/archive/2026-11-22-correct-session-block-layout/), code non attribué. Change archivé le 22 novembre 2026. TypeScript, compilation Vite, navigation et affichage vérifiés sur Chromium et Firefox. Livraison et activation à vérifier sur les reçus CAB.
