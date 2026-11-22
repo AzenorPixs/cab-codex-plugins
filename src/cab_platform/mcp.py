@@ -204,7 +204,7 @@ def run_stage_status(project_id:str,run_id:str)->dict:
     """Lit la tentative active et les retours CAB sans relancer leurs effets."""
     return client().command('run.stage.status',locals())
 @public_tool()
-def run_stage_action(project_id:str,run_id:str,request_id:str,attempt:int,action:str,text:str='',mandates:list[str]|None=None)->dict:
+def run_stage_action(project_id:str,run_id:str,request_id:str,attempt:int,action:str,text:str='',mandates:list[str]|None=None,blocker_path:str|None=None)->dict:
     """Enregistre une validation réellement effectuée dans le passage d’étape courant."""
     return client().command('run.stage.action',{key:value for key,value in locals().items() if value is not None})
 @public_tool()

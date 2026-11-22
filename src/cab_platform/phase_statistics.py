@@ -1,4 +1,5 @@
 """Phase Statistiques autonome : instantané, rapports et commit local borné."""
+from contextlib import contextmanager
 import copy
 import hashlib
 import os
@@ -41,6 +42,30 @@ def written_reports(root,expected,hashes):
     return result
 
 
+def report_observer(run, reference):
+    labels = {
+        'change': 'Calcul et validation des statistiques du change',
+        'global': 'Calcul et validation des statistiques globales',
+    }
+
+    @contextmanager
+    def observe(key):
+        action = 'calculate-' + key
+        identity = reference + ':' + action
+        clock.update(run,action,identity,'RUNNING',labels[key],phase='statistics')
+        try:
+            yield
+        except Exception as error:
+            code=getattr(error,'code',type(error).__name__)
+            state='UNKNOWN' if 'unknown' in code else 'FAILED'
+            clock.update(run,action,identity,state,labels[key],{'error':code},phase='statistics')
+            raise
+        else:
+            clock.update(run,action,identity,'COMPLETED',labels[key],{'verified':True},phase='statistics')
+
+    return observe
+
+
 def execute(key):
     from .core import statistics_service as service
     from .statistics_documents import read_source,sha
@@ -56,7 +81,6 @@ def execute(key):
     snapshot=service.SNAPSHOT.set({'change_id':run.change_record_id,'contribution':boundary['contribution'],'run_pk':run.pk,'generation':boundary['generation']})
     staged=service.STAGE_DOCUMENTS.set(False)
     try:
-        clock.update(run,'calculate',ref+':calculate','RUNNING','Calcul et validation des statistiques',phase='statistics')
         current=Run.objects.get(pk=run.pk).configuration.get(KEY,{})
         if current.get('state')!='FROZEN' or current.get('generation')!=boundary['generation']:
             job.state='COMPLETED';job.result={'verified':False,'superseded':True};job.save(update_fields=['state','result','updated'])
@@ -68,7 +92,8 @@ def execute(key):
             if eligible(run):
                 from .core.run_finalization import dossier
                 kwargs={'canonical_run':run,'canonical_proofs':dossier(run,run.finalization_plan)['proofs']}
-        rendering=service.sync(run.project,job.request_id+'-render',generate=run.change if source else None,**kwargs)
+        rendering=service.sync(run.project,job.request_id+'-render',generate=run.change if source else None,
+                               observe_report=report_observer(run,ref),**kwargs)
         c.require(rendering['state']=='COMPLETED','statistics-render-not-completed')
         paths=['STATISTICS.md']
         if source:
@@ -83,7 +108,6 @@ def execute(key):
             hashes={p:sha(read_source(Path(run.project.root),Path(run.project.root)/p,64*1024*1024)[0]) for p in paths}
             rendered=StatisticsJob.objects.get(pk=rendering['job_id'],project=run.project,state='COMPLETED')
             modified=written_reports(run.project.root,rendered.expected,hashes)
-            clock.update(run,'calculate',ref+':calculate','COMPLETED','Calcul et validation des statistiques',{'reports':hashes,'modified':modified},phase='statistics')
             receipt={'state':'NOT_REQUESTED','commit':None,'paths':[]}
             if boundary['commit_reports']:
                 c.require(probe(run.project)==1,'statistics-git-unavailable')

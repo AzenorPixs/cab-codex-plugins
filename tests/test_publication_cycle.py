@@ -50,6 +50,14 @@ class PublicationCycleTests(unittest.TestCase):
             self.assertEqual(result['result']['local_commit']['state'], 'NOT_REQUESTED')
             self.assertTrue((archive / 'STATISTICS.md').is_file())
             self.assertTrue((root / 'STATISTICS.md').is_file())
+            overview = metrics.summarize(change,run)
+            statistics = overview['stages'][9]
+            actions = {child['key']:child['iterations'][0] for child in statistics['children']}
+            change_action = actions['statistics.calculate-change']
+            global_action = actions['statistics.calculate-global']
+            self.assertLessEqual(change_action['ended_at'],global_action['started_at'])
+            self.assertEqual([change_action['state'],global_action['state']],['COMPLETED','COMPLETED'])
+            self.assertEqual(change_action['source'],'cab')
             transaction.set_rollback(True)
 
     def test_parallel_phases_keep_distinct_iterations_and_elapsed_cycle(self):

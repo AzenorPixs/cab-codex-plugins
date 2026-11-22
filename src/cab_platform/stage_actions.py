@@ -196,7 +196,7 @@ def observe_event(event):
 @transaction.atomic
 def declare(actor,data):
     c.require({'project_id','run_id','request_id','attempt','action'}<=set(data)
-              <= {'project_id','run_id','request_id','attempt','action','text','mandates'},
+              <= {'project_id','run_id','request_id','attempt','action','text','mandates','blocker_path'},
               'stage-action-fields-invalid',400)
     from .stage_protocol import authority, enabled
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
@@ -214,11 +214,12 @@ def declare(actor,data):
               'stage-attempt-not-current')
     name=PUBLICATION_KEYS[current['stage']-1]
     action=data['action']
-    c.require(isinstance(action,str) and action in AGENT_ACTIONS[name],'stage-action-not-allowed',400)
+    c.require(isinstance(action,str) and (action in AGENT_ACTIONS[name] or action=='blocage'),'stage-action-not-allowed',400)
     at=timezone.now()
     parent=_parent(run,name,at,latest=True)
     c.require(parent is not None,'stage-parent-not-observed')
     receipt={'attempt':current['attempt'],'request_id':key,'actor':actor.pk}
+    label=AGENT_ACTIONS[name].get(action,'Bilan de blocage rédigé')
     if action=='mandats':
         provided=normalize_mandates(data.get('mandates'))
         c.require(set(provided)==set(mandates_for(run)),'stage-mandates-divergent')
@@ -226,11 +227,15 @@ def declare(actor,data):
         receipt['mandates']=mandates_for(run)
     else:
         c.require('mandates' not in data,'stage-action-fields-invalid',400)
+    if action=='blocage':
+        receipt.update(blocker_proof(run,data.get('blocker_path'),since=parent.started_at))
+    else:
+        c.require('blocker_path' not in data,'stage-action-fields-invalid',400)
     note=data.get('text','')
     c.require(isinstance(note,str) and len(note)<=1000,'stage-action-text-invalid',400)
     if note.strip():
         receipt['note']=redact(note.strip())
-    row=_capture(run,parent,action,AGENT_ACTIONS[name][action],'agent','agent:'+key,at,'COMPLETED',receipt)
+    row=_capture(run,parent,action,label,'agent','agent:'+key,at,'COMPLETED',receipt)
     result={'id':row.pk,'attempt':current['attempt'],'action':action,'state':row.state,'at':at.isoformat(),
             **({'mandates':receipt['mandates']} if 'mandates' in receipt else {})}
     c.event(run,'stage-action-declared',{'request_id':key,'fingerprint':fingerprint,'result':result})
@@ -241,10 +246,49 @@ def catalogue(actor,data):
     run=c.run_scope(actor,data['run_id'],data['project_id'],owner=False)
     current=_current(run)
     name=_stage_name(run)
-    return {'stage':name,'attempt':current.get('attempt'),'agent_actions':AGENT_ACTIONS.get(name,{}),
+    options=dict(AGENT_ACTIONS.get(name,{}))
+    if name:options['blocage']='Bilan de blocage rédigé'
+    return {'stage':name,'attempt':current.get('attempt'),'agent_actions':options,
             **({'mandates':mandates_for(run)} if name=='initialization' else {})}
 
 
 def mandates_validated(run, attempt):
     return ChangeStageIteration.objects.filter(run=run,stage__key='initialization.action-mandats',
         description_source='agent',state='COMPLETED',receipt__attempt=attempt,receipt__mandates=mandates_for(run)).exists()
+
+
+def blocker_proof(run, relative, *, since=None):
+    from datetime import datetime, timezone as utc
+    from pathlib import Path
+    from cab_platform.statistics_documents import read_source, sha
+    base=f'openspec/changes/{run.change}/'
+    c.require(relative in (base+'BLOCKERS.md',base+'BLOCKER.md'),'stage-blocker-path-invalid',400)
+    root=Path(run.project.root)
+    path=c.safe_path(root,relative,exists=False)
+    try:
+        raw,info=read_source(root,path,1024*1024)
+    except (OSError,ValueError):
+        raise c.Refused('stage-blocker-unavailable') from None
+    c.require(raw.strip(),'stage-blocker-unavailable')
+    if since is not None:
+        c.require(datetime.fromtimestamp(info.st_mtime,utc.utc)>=since,'stage-blocker-not-produced-in-passage')
+    return {'path':relative,'sha256':sha(raw)}
+
+
+def blocker_observer(run, request_id):
+    """Ancrer le rappel d’écriture avant la bascule vers BLOCKING."""
+    name=_stage_name(run)
+    parent=_parent(run,name,timezone.now()) if name else None
+
+    @transaction.atomic
+    def written(relative, sha256, started, ended):
+        if parent is None:
+            return
+        current=Run.objects.select_for_update().get(pk=run.pk)
+        receipt={'path':relative,'sha256':sha256,'request_id':request_id}
+        reference='blocker:'+request_id
+        _capture(current,parent,'blocage','Bilan de blocage créé par CAB','cab',reference,started,'RUNNING',receipt)
+        _capture(current,parent,'blocage','Bilan de blocage créé par CAB','cab',reference,ended,'COMPLETED',receipt)
+        Run.objects.filter(pk=run.pk).update(updated=timezone.now())
+
+    return written

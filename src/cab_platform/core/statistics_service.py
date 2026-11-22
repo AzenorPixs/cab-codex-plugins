@@ -1,5 +1,5 @@
 """CAB possède les écritures ; fichiers locaux maîtres, PostgreSQL projection."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 import hashlib
 import fcntl
@@ -484,7 +484,7 @@ def stage_blockers(job):
         if digest:stage_document(job,path,digest)
 
 
-def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None):
+def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None,observe_report=None,blocker_written=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
     active_cycles=Run.objects.filter(project=project,configuration__cycle_profile='publication-12-v1',state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'])
@@ -506,7 +506,10 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False,*,cano
                     commands.require(raw.strip(),'blockers-proof-required')
                     stage_document(job,path,documents.sha(raw))
                 else:
-                    _write_locked(job,path,content)
+                    started = timezone.now()
+                    sha256 = _write_locked(job,path,content)
+                    if blocker_written:
+                        blocker_written(relative,sha256,started,timezone.now())
             finally:
                 with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
         targets={generate} if isinstance(generate,str) else set(generate or [])
@@ -514,19 +517,31 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False,*,cano
             targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
             targets.update(Change.objects.filter(pk__in=open_before,source_state='archived').values_list('identifier',flat=True))
             targets.difference_update(active_cycles.values_list('change',flat=True))
+        trace = observe_report or (lambda _key: nullcontext())
         for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():
-            report=generate_change(job,change)
-            if report is not None and report.status=='ready':
-                relative=report.source.path+'/STATISTICS.md'
-                indexed=job.result.get('indexed_documents',{}).get(relative,{})
-                if indexed.get('state')!='COMPLETED' or indexed.get('sha256')!=report.sha256:
-                    stage_document(job,Path(project.root)/relative,report.sha256)
+            with trace('change'):
+                report=generate_change(job,change)
+                if report is not None and report.status=='ready':
+                    relative=report.source.path+'/STATISTICS.md'
+                    indexed=job.result.get('indexed_documents',{}).get(relative,{})
+                    if indexed.get('state')!='COMPLETED' or indexed.get('sha256')!=report.sha256:
+                        stage_document(job,Path(project.root)/relative,report.sha256)
+                    if observe_report:
+                        commands.require(file_hash(project,Path(project.root)/relative)==report.sha256,'statistics-change-report-divergent')
+                elif observe_report:
+                    raise commands.Refused('statistics-change-report-unavailable')
         if canonical_run is not None:
-            from cab_platform.canonical_statistics import generate as generate_canonical
-            report=generate_canonical(job,canonical_run,canonical_proofs or [])
-            job.result={**job.result,'canonical_report':report};job.save(update_fields=['result','updated'])
+            with trace('change'):
+                from cab_platform.canonical_statistics import generate as generate_canonical
+                report=generate_canonical(job,canonical_run,canonical_proofs or [])
+                if observe_report:
+                    commands.require(file_hash(project,Path(project.root)/report['path'])==report['sha256'],'statistics-change-report-divergent')
+                job.result={**job.result,'canonical_report':report};job.save(update_fields=['result','updated'])
         stage_blockers(job)
-        state=generate_global(job)
+        with trace('global'):
+            state=generate_global(job)
+            if observe_report:
+                commands.require(file_hash(project,Path(project.root)/'STATISTICS.md')==state.sha256,'statistics-global-report-divergent')
         if full or state.next_full_sync is None:
             state.last_full_sync=timezone.now();state.next_full_sync=state.last_full_sync+timedelta(seconds=43200+secrets.randbelow(43201));state.save(update_fields=['last_full_sync','next_full_sync'])
         job.result={**job.result,'changes':Change.objects.filter(project=project).count(),'reports':StatisticsDocument.objects.filter(source__change__project=project,status='ready',source__present=True).count(),'global_sha256':state.sha256,'coverage_complete':state.coverage_complete}

@@ -176,6 +176,12 @@ possibles avec `run_stage_action_catalogue` puis consigner l’action avec
 `run_stage_action`. CAB journalise de lui-même les opérations et reçus connus.
 L’Overview ne présente que les actions effectivement observées.
 
+Après avoir produit un bilan de blocage, le déclarer dans le passage courant
+avec `run_stage_action(action="blocage", blocker_path=…)` et sa tentative.
+Utiliser le fichier `BLOCKERS.md` du change. CAB accepte aussi son ancien nom
+`BLOCKER.md`. Lorsque CAB produit le fichier lui-même, son écriture est tracée
+par le service.
+
 Quand toutes les tâches CAB du passage sont réussies, l’agent confirme sa
 part avec `run_stage_validate`, en donnant la tentative et les faits vérifiés.
 Avancer après `validated=true`. Pour la Publication, transmettre à l’entrée

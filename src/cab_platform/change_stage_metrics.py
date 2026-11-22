@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .core.models import ChangeStage, ChangeStageIteration, Run, RunCycleIteration
+from .cycle_attribution import FIELDS, merged, microseconds, missing_intervals, native_complete, partition
 
 
 LEGACY_KEYS = (
@@ -188,7 +189,14 @@ def _timeline(run):
         start, end = (native_time(receipt.get(key)) for key in ('started', 'finished'))
         if start and end and start <= end:
             intervals.append((start, end))
-    return events, native_work_time(run), intervals
+    native = native_work_time(run)
+    traces = [native]
+    if run.mode=='piloted':
+        from .core.models import Actor
+        thread=run.configuration.get('reminder_orchestrator_thread')
+        parent=Actor.objects.filter(pk=run.mandate.get('orchestrator_id')).first() if thread else None
+        traces.append(native_work_time(run,actor=parent,thread=thread) if parent else None)
+    return events, native, intervals, traces
 
 
 def _restore_stage_passages(run, events, present):
@@ -213,19 +221,62 @@ def _restore_stage_passages(run, events, present):
 
 
 def _passage(run_id, identity, start, end, *, number=None, state=None, duration=None,
-             native=None, intervals=(), wait_only=False, work_from=None, **fields):
+             native=None, intervals=(), wait_only=False, work_from=None, attribution=None, **fields):
     if duration is None and start is not None and end is not None:
         duration = (end - start).total_seconds()
     work, wait = split_time(start, end, native, intervals, wait_only=wait_only, work_from=work_from)
     return dict(id=identity, run_id=run_id, number=number, state=state, started_at=start, ended_at=end,
                 duration_seconds=float(duration) if duration is not None else None,
-                work_seconds=work, wait_seconds=wait, **fields)
+                work_seconds=work, wait_seconds=wait, **(attribution or partition(start,end)), **fields)
 
 
 def _stage_total(items, key):
     values = [item[key] for item in items]
     known = [value for value in values if value is not None]
-    return sum(known) if known and (key != 'wait_seconds' or len(known) == len(values)) else None
+    return sum(known) if known and (key not in ('wait_seconds','wait_observed_seconds') or len(known) == len(values)) else None
+
+
+def _responsibility(record, rows, traces, operations, work_from, waiting_review):
+    start,end=record.started_at,record.ended_at
+    if start is None or end is None:
+        return [],[],[]
+    whole=[(start,end)]
+    if record.state=='SKIPPED':
+        return [],[],whole
+    if record.parent_id:
+        cab=whole if record.description_source=='cab' else []
+        agent=whole if record.description_source=='agent' else []
+        return cab,agent,whole if cab or agent else []
+    children=[child for child in rows if child.parent_id==record.pk and child.started_at and child.ended_at and child.state!='SKIPPED']
+    cab=[(child.started_at,child.ended_at) for child in children if child.description_source=='cab']
+    agent=[(child.started_at,child.ended_at) for child in children if child.description_source=='agent']
+    autonomous=record.asynchronous and record.stage.key in ('statistics','publication')
+    if autonomous:
+        return cab,agent,whole if cab and record.state in ('COMPLETED','FAILED') else []
+    cab.extend(operations)
+    if work_from is not None:
+        cab.append((max(start,work_from),end))
+        return cab,agent,whole
+    agent.extend(span for trace in traces if trace for span in trace[1])
+    known=whole if waiting_review or native_complete(traces,start,end) else []
+    return cab,agent,known
+
+
+def _cycle_attribution(cycle,evidence,traces):
+    start,end=cycle.started_at,cycle.ended_at
+    cab=[span for item in evidence for span in item[2]]
+    agent=[span for item in evidence for span in item[3]]
+    covered=[span for item in evidence for span in item[4]]
+    if start and end and native_complete(traces,start,end):
+        intervals=[(item[0],item[1]) for item in evidence]
+        native=[span for trace in traces if trace for span in trace[1]]
+        for left,right in missing_intervals(intervals,start,end):
+            agent.extend(merged(native,left,right))
+            covered.append((left,right))
+    values=partition(start,end,cab,agent,covered,display=True)
+    if values['attribution_complete']:
+        values['display_duration_seconds']=((microseconds(end-start)+50000)//100000)/10
+    return values
 
 
 def summarize(change,run=None) -> dict:
@@ -241,8 +292,11 @@ def summarize(change,run=None) -> dict:
     for record in records:
         rows_by_run[record.run_id].append(record)
     review_required = False
+    cycle_evidence=defaultdict(list)
+    run_traces={}
     for current in runs:
-        events, native, operations = _timeline(current)
+        events, native, operations, traces = _timeline(current)
+        run_traces[current.pk]=traces
         current_rows = rows_by_run[current.pk]
         present = {r.stage.key for r in current_rows if r.parent_id is None}
         plan = getattr(current, 'finalization_plan', None)
@@ -269,17 +323,25 @@ def summarize(change,run=None) -> dict:
                         native_evidence = (start, (), (), (), ())
             waiting_review = key == 'review' and any(e['kind'] == 'review-requested' and start and e['created'] >= start
                                                     and (end is None or e['created'] <= end) for e in events)
+            cab_intervals,agent_intervals,known=_responsibility(
+                record,current_rows,traces,intervals,work_from,waiting_review)
+            attribution=partition(start,end,cab_intervals,agent_intervals,known)
+            if record.cycle_id and record.parent_id is None and start and end:
+                cycle_evidence[record.cycle_id].append((start,end,merged(cab_intervals,start,end),
+                                                       merged(agent_intervals,start,end),known))
             grouped[key].append(_passage(current.run_id, record.pk, start, end,
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
-                native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from,
+                native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
                 description=record.description or None, source=record.description_source or None, receipt=record.receipt or None))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None
             right = ending['created'] if ending else None
             work_from = left if beginning and beginning['kind'] == 'finalization-started' and current.configuration.get('cycle_profile') == PROFILE else None
+            measured=[(left,right)] if left and right and (work_from or key=='review') else []
             grouped[key].append(_passage(current.run_id, 'event-'+str((beginning or ending)['id']), left, right,
-                state='COMPLETED' if ending else 'RUNNING', wait_only=key=='review', work_from=work_from))
+                state='COMPLETED' if ending else 'RUNNING', wait_only=key=='review', work_from=work_from,
+                attribution=partition(left,right,measured if work_from else [],covered=measured)))
     for record in rows_by_run[None]:
         grouped[record.stage.key].append(_passage(None, record.pk, record.started_at, record.ended_at,
             number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
@@ -292,14 +354,16 @@ def summarize(change,run=None) -> dict:
         for child_key,items in grouped.items():
             if child_key.startswith(key+'.'):
                 children.append({'key':child_key,'iterations':items,'iteration_count':sum(i['started_at'] is not None for i in items),
-                                 **{field:_stage_total(items,field) for field in ('duration_seconds','work_seconds','wait_seconds')}})
+                                 **{field:_stage_total(items,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS)}})
         labels=labels_for(run) if run is not None else OLD_LABELS
         stages.append({'key':key,'label':labels.get(key,key),'iterations':iterations,'children':children,
                        'observed':bool(iterations or children),'not_required':key=='review' and not iterations and not review_required,
                        'iteration_count':len(iterations) if iterations else None,
-                       **{field:_stage_total(iterations,field) for field in ('duration_seconds','work_seconds','wait_seconds')}})
+                       'attribution_complete':bool(iterations) and all(i['attribution_complete'] for i in iterations),
+                       **{field:_stage_total(iterations,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS)}})
     cycles=RunCycleIteration.objects.filter(run=run) if run is not None else RunCycleIteration.objects.filter(run__change_record=change)
-    cycle_data=[{'id':r.pk,'run_id':r.run.run_id,'number':r.number,'started_at':r.started_at,'ended_at':r.ended_at,'complete':r.complete,'duration_seconds':float(r.duration_seconds) if r.duration_seconds is not None else None} for r in cycles.select_related('run').order_by('pk')]
+    cycle_data=[{'id':r.pk,'run_id':r.run.run_id,'number':r.number,'started_at':r.started_at,'ended_at':r.ended_at,'complete':r.complete,'duration_seconds':float(r.duration_seconds) if r.duration_seconds is not None else None,
+                 **_cycle_attribution(r,cycle_evidence[r.pk],run_traces.get(r.run_id,[]))} for r in cycles.select_related('run').order_by('pk')]
     complete=[r['duration_seconds'] for r in cycle_data if r['complete'] and r['duration_seconds'] is not None]
     measured=[r['duration_seconds'] for r in stages if r['duration_seconds'] is not None]
     return {'stages':stages,'cycles':cycle_data,'complete_cycle_duration_seconds':sum(complete) if complete else None,'duration_seconds':sum(measured) if measured else None}

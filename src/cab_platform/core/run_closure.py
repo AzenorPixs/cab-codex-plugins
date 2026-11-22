@@ -33,6 +33,7 @@ def close_normal(actor,data,*,automatic=False):
     commands.require(data['branch'] in ('TERMINÉ','BLOQUÉ'),'closure-branch-invalid',400)
     request_id=commands.identifier(data['receipt_id'])
     blocker=None
+    blocker_written=None
     if data['branch']=='TERMINÉ':
         commands.require(candidate.state=='ACCEPTED','final-acceptance-required')
         archive_state(candidate)
@@ -52,6 +53,8 @@ def close_normal(actor,data,*,automatic=False):
                              .exclude(git_index__session_id=candidate.coding_session_id).exists(),'closure-document-reserved')
             if 'dependencies' in data:
                 blocker=(relative,blocker_document(candidate,data['dependencies']))
+                from cab_platform.stage_actions import blocker_observer
+                blocker_written=blocker_observer(candidate,request_id)
             else:
                 commands.require((active/'BLOCKERS.md').is_file(),'blockers-proof-required')
             fingerprint=commands.digest([request_id,blocker])
@@ -62,7 +65,8 @@ def close_normal(actor,data,*,automatic=False):
             candidate.save(update_fields=['configuration','state','updated'])
     end_if_open(actor,candidate)
     from . import statistics_service
-    result=statistics_service.sync(candidate.project,'CLOSE-'+request_id,generate=candidate.change,blocker=blocker)
+    result=statistics_service.sync(candidate.project,'CLOSE-'+request_id,generate=candidate.change,blocker=blocker,
+                                   **({'blocker_written':blocker_written} if blocker_written else {}))
     commands.require(result['state']=='COMPLETED','closure-statistics-job-unconfirmed')
     candidate.change_record.refresh_from_db()
     source=candidate.change_record.local_sources.filter(present=True).order_by('archived','-path').first()
