@@ -464,6 +464,8 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 
 ## Entrées provisoires sans code
 
+[correct-session-block-layout](changes/archive/2026-11-22-correct-session-block-layout/), code non attribué. Change archivé sur la présentation du bloc Session. Attribution ultérieure par ACL.
+
 Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
 État SCM vérifié le 2 novembre 2026 : 134 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state`, `restore-approved-native-operations`, `bind-native-requestid-in-literal-codemode-validation` et `reconcile-persisted-native-rejections`, `forward-recover-cabu-after-controller-rollback-failure` et `preserve-conflicting-restored-accesses` sont archivés sans code ; cette session n’attribue ni ne réserve de code.
 

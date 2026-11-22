@@ -62,7 +62,7 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 
 .forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
 
-.forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading h2{margin-bottom:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
+.forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading :is(h2,.run-card-title){margin:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
 
 .forge-token-field{display:flex;align-items:center;gap:6px}.forge-editor .forge-token-field input{flex:1;min-width:0}.forge-token-eye{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:4px}.forge-token-eye svg{width:21px;height:21px}
 
@@ -283,4 +283,12 @@ header .brand {
   height: var(--ui-menus-tabs-icon);
 }
 
-.run-session-card{margin-top:20px}.run-card-title{margin:0;overflow-wrap:anywhere}.run-development-logo{color:#37a4e9;width:auto;font-family:monospace}.run-session-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}.run-session-card .run-metadata{margin-top:12px}.run-session-card .interface-tabs{margin-top:12px}.run-session-card [role=tabpanel]{min-width:0}.run-session-card .run-metadata dd{overflow-wrap:anywhere}
+.run-session-block{margin-top:20px}
+.run-session-block>.interface-tabs{margin-bottom:0}
+.run-session-card{margin-top:0;border-start-start-radius:0}
+.run-card-title{min-width:0;overflow-wrap:anywhere;border-inline-start:3px solid var(--accent);padding-inline-start:12px}
+.run-development-logo{color:var(--accent-text);width:auto;font-family:monospace}
+.run-session-card .run-metadata,.run-cycle-tabs{margin-top:12px}
+.run-cycle-tabs .interface-tabs{flex-wrap:wrap}
+.run-session-card [role=tabpanel]{min-width:0}
+.run-session-card .forge-card-content{overflow:auto}

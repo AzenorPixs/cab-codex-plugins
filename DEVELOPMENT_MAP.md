@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Bloc Session et détails du cycle
+
+[correct-session-block-layout](openspec/changes/archive/2026-11-22-correct-session-block-layout/), code non attribué. Change archivé le 22 novembre 2026. TypeScript, compilation Vite, navigation et affichage vérifiés sur Chromium et Firefox. Livraison et activation à vérifier sur les reçus CAB.
+
 ## Tableau des incidents CCAB — 19 novembre 2026
 
 `show-project-ccab-incidents-table`, code non attribué : tableau paginé par projet,

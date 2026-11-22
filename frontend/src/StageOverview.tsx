@@ -14,15 +14,15 @@ function Passages({items}:{items:Passage[]}){
   if(items.length===0)return null
   return <table className="stage-passages"><thead><tr><th>Itération</th><th>Début</th><th>Fin</th><th>Travail observé par CAB</th><th>Agent(s)</th><th>Attente</th><th>État</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td><td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td><td>{item.state?states[item.state]||item.state:''}{item.description&&<p>{item.description}</p>}{typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}</td></tr>)}</tbody></table>
 }
-function StageActions({stage}:{stage:StageMetric}){
+function StageActions({stage,expanded}:{stage:StageMetric;expanded:boolean}){
   const observed=(stage.children||[]).flatMap(child=>child.iterations)
     .filter(item=>(item.started_at||item.ended_at)&&!['SKIPPED','NOT_REQUESTED'].includes(item.state||''))
     .sort((a,b)=>(a.started_at||a.ended_at||'').localeCompare(b.started_at||b.ended_at||''))
   return <>{stage.iterations.map((passage,index)=>{
     const actions=observed.filter(action=>action.parent_id===passage.id)
     if(!actions.length)return null
-    return <details key={passage.id} open={stage.iterations.length===1}>
-      <summary>Actions · Itération {passage.number??index+1}{stage.iterations.length>1&&passage.run_id?' · '+passage.run_id:''}</summary>
+    const title=<>Actions · Itération {passage.number??index+1}{stage.iterations.length>1&&passage.run_id?' · '+passage.run_id:''}</>
+    const table=
       <table className="stage-passages"><thead><tr><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>État</th></tr></thead>
         <tbody>{actions.map(action=>{
           const mandates=Array.isArray(action.receipt?.mandates)?action.receipt.mandates.filter((value):value is string=>typeof value==='string'):[]
@@ -38,15 +38,16 @@ function StageActions({stage}:{stage:StageMetric}){
           </tr>
         })}</tbody>
       </table>
-    </details>
+    return expanded?<section key={passage.id}><h3>{title}</h3>{table}</section>
+      :<details key={passage.id} open={stage.iterations.length===1}><summary>{title}</summary>{table}</details>
   })}</>
 }
-export function StageOverview({stage,title}:{stage:StageMetric|undefined;title:string}){
+export function StageOverview({stage,title,expanded=false}:{stage:StageMetric|undefined;title:string;expanded?:boolean}){
   return <section className="change-progress stage-overview" aria-label="Overview de l’étape"><h2>{title}</h2>{stage?.not_required&&<p>Revue non requise pour ce RUN.</p>}{stage?.observed&&<>
     <dl className="run-metadata">{stage.iteration_count!=null&&<><dt>Itérations</dt><dd>{stage.iteration_count}</dd></>}{stage.cab_seconds!=null&&<><dt>Travail observé par CAB</dt><dd>{stageDuration(stage.cab_seconds)}</dd></>}{stage.agent_seconds!=null&&<><dt>Agent(s)</dt><dd>{stageDuration(stage.agent_seconds)}</dd></>}{stage.waiting_seconds!=null&&<><dt>Attente</dt><dd><Waiting time={stage}/></dd></>}</dl>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
     <Passages items={stage.iterations}/>
-    <StageActions stage={stage}/>
+    <StageActions stage={stage} expanded={expanded}/>
   </>}</section>
 }
 export function CompleteCycles({cycles}:{cycles:CycleMetric[]}){

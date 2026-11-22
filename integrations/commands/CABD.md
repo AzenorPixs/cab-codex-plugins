@@ -1,6 +1,6 @@
 ---
 description: Configurer et vérifier le lancement GNOME sur le daemon Codex local
-version: 3.9.13
+version: 3.9.14
 ---
 
 Charger le skill `cabd` du plugin CABD et suivre sa procédure.

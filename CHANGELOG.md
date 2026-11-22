@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.9.14
+
+- Bloc Session aligné sur les blocs forge, avec onglets au-dessus du titre, preuves visibles et un sous-onglet par étape du cycle.
+
 ## 3.9.3
 
 - Réconciliation sur preuves du dernier rapport rendu obsolète par un archivage, avec conservation des publications déjà achevées et du reçu UNKNOWN.
