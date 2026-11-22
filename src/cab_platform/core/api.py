@@ -350,6 +350,8 @@ class CatalogRemoval(Schema):
 
 class ModelPolicyInput(Schema):
     name: str
+    sort_column: Literal['input_cost', 'output_cost', 'cache_read_cost', 'cache_write_cost'] = 'input_cost'
+    sort_descending: bool = False
     model_filter: str = ''
     include_free: bool = True
     include_paid: bool = True

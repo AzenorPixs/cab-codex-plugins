@@ -20,7 +20,8 @@ MODEL_BOUNDS = {
     'cache_read_cost': ('cache_read_min', 'cache_read_max'),
     'cache_write_cost': ('cache_write_min', 'cache_write_max'),
 }
-POLICY_FIELDS = ('id', 'name', 'model_filter', 'include_free', 'include_paid', 'context_min', 'output_min', *PRICE_FIELDS)
+POLICY_FIELDS = ('id', 'name', 'model_filter', 'include_free', 'include_paid', 'context_min', 'output_min',
+                 'sort_column', 'sort_descending', *PRICE_FIELDS)
 FREE_WORD = re.compile(r'(?<![^\W_])free(?![^\W_])', re.IGNORECASE)
 
 
@@ -109,3 +110,13 @@ def matches(policy, model, exclusions):
             if value is None or (minimum and value < minimum) or (maximum and value > maximum):
                 return False
     return True
+
+
+def sort_models(policy, rows):
+    def key(model):
+        price = comparable_cost(model.get(policy.sort_column))
+        if price is None:
+            return True, 0
+        return False, -price if policy.sort_descending else price
+
+    rows.sort(key=key)

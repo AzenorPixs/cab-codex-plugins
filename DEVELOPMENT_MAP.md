@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Tri des politiques de modèles
+
+[configure-model-policy-sort](openspec/changes/archive/2026-11-22-configure-model-policy-sort/),
+code non attribué. Tri tarifaire enregistré, numérotation des résultats des
+politiques et Overview élargi. Vérifications du 22 novembre 2026 dans CAB
+sur Chromium, Firefox et PostgreSQL isolé, reçus `STAGE-889-7-model-sort-web`
+et `STAGE-889-7-model-sort-data`.
+
 ## Correctif des contrôles de politique
 
 [correct-model-policy-controls](openspec/changes/archive/2026-11-22-correct-model-policy-controls/),

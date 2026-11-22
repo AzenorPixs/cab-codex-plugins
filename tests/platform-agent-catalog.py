@@ -197,7 +197,7 @@ class CatalogTests(unittest.TestCase):
                   'name': 'Gratuits', 'include_free': True, 'include_paid': False}
         rules.save_policy(policy['id'], edited)
         self.assertEqual(rules.policy_list()[0]['name'], 'Gratuits')
-        self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], ['tagged:free', 'zero'])
+        self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], ['zero', 'tagged:free'])
         self.assertEqual(rules.remove_policy(policy['id']), {'removed': True})
         self.assertFalse(AgentModelPolicy.objects.exists())
         with self.assertRaises(catalog.Refused):
@@ -237,6 +237,36 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(cleared['model_filter'], '')
         self.assertEqual(len(catalog.models(saved['id'])), 5)
 
+    def test_policy_sort_is_persisted_numeric_stable_and_missing_last(self):
+        from cab_platform import agent_catalog as catalog, model_policies as rules
+        from cab_platform.core.models import AgentModel
+        provider = catalog.add_provider('Demo', 'https://example.org', '')
+        summaries = {
+            'a': {'input_cost': '10', 'output_cost': '1', 'cache_read_cost': '.5', 'cache_write_cost': '3'},
+            'b': {'input_cost': 0, 'output_cost': '10', 'cache_read_cost': '.2', 'cache_write_cost': None},
+            'c': {'input_cost': '2', 'output_cost': '2', 'cache_read_cost': '.5', 'cache_write_cost': '12'},
+            'd': {'input_cost': None, 'output_cost': None, 'cache_read_cost': None, 'cache_write_cost': '5'},
+        }
+        for identifier, summary in summaries.items():
+            AgentModel.objects.create(provider_id=provider['id'], identifier=identifier, source={}, details={'summary': summary})
+        values = {'name': 'Tri', 'include_free': True, 'include_paid': True, 'context_min': 0, 'output_min': 0,
+                  **dict.fromkeys(rules.PRICE_FIELDS, Decimal(0))}
+        policy = rules.save_policy(None, values)
+        self.assertEqual((policy['sort_column'], policy['sort_descending']), ('input_cost', False))
+        self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], ['b', 'c', 'a', 'd'])
+        situations = [
+            ('input_cost', True, ['a', 'c', 'b', 'd']),
+            ('output_cost', False, ['a', 'c', 'b', 'd']),
+            ('cache_read_cost', True, ['a', 'c', 'b', 'd']),
+            ('cache_write_cost', False, ['a', 'd', 'c', 'b']),
+        ]
+        for column, descending, expected in situations:
+            with self.subTest(column=column, descending=descending):
+                rules.save_policy(policy['id'], {**values, 'sort_column': column, 'sort_descending': descending})
+                reloaded, = rules.policy_list()
+                self.assertEqual((reloaded['sort_column'], reloaded['sort_descending']), (column, descending))
+                self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], expected)
+
 
 def command(*args):
     run([str(PG / args[0]), *args[1:]], check=True, stdout=DEVNULL)
@@ -267,13 +297,18 @@ if __name__ == '__main__':
             legacy = legacy_model.objects.create(name='Politique 3.15.0', cache_read_max=Decimal('.2'), cache_write_min=Decimal('.3'))
             controls_migration = loader.get_migration('cab_core', '0057_model_policy_controls')
             with connection.schema_editor() as schema_editor:
-                controls_migration.apply(policy_state.clone(), schema_editor)
+                controls_state = controls_migration.apply(policy_state.clone(), schema_editor)
+            sort_migration = loader.get_migration('cab_core', '0058_model_policy_sort')
+            with connection.schema_editor() as schema_editor:
+                sort_migration.apply(controls_state.clone(), schema_editor)
             from cab_platform.core.models import AgentModelPolicy
             upgraded = AgentModelPolicy.objects.get(pk=legacy.pk)
             assert (upgraded.cache_read_max, upgraded.cache_write_min) == (Decimal('.2'), Decimal('.3'))
             assert (upgraded.model_filter, upgraded.cache_read_min, upgraded.cache_write_max) == ('', 0, 0)
+            assert (upgraded.sort_column, upgraded.sort_descending) == ('input_cost', False)
             result = unittest.main(exit=False).result
             with connection.schema_editor() as schema_editor:
+                sort_migration.unapply(controls_state, schema_editor)
                 controls_migration.unapply(policy_state, schema_editor)
                 policy_migration.unapply(catalog_state, schema_editor)
                 migration.unapply(initial, schema_editor)

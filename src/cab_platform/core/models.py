@@ -43,6 +43,12 @@ class AgentModel(models.Model):
 
 
 class AgentModelPolicy(models.Model):
+    class SortColumn(models.TextChoices):
+        INPUT = 'input_cost', 'Coût entrée / M'
+        OUTPUT = 'output_cost', 'Coût sortie / M'
+        CACHE_READ = 'cache_read_cost', 'Lecture cache / M'
+        CACHE_WRITE = 'cache_write_cost', 'Écriture cache / M'
+
     name = models.CharField(max_length=120)
     model_filter = models.CharField(max_length=2048, blank=True, default='')
     include_free = models.BooleanField(default=True)
@@ -57,6 +63,9 @@ class AgentModelPolicy(models.Model):
     cache_read_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     cache_write_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
     cache_write_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+
+    sort_column = models.CharField(max_length=20, choices=SortColumn, default=SortColumn.INPUT)
+    sort_descending = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'agent_model_policies'

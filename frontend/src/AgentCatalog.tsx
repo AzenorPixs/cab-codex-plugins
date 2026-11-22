@@ -29,17 +29,19 @@ export function AgentNavigation(){
 }
 
 type CellValue=string|number|null
-type Column<Row>={label:string;value?:(row:Row)=>CellValue;render?:(row:Row)=>ReactNode;search?:(row:Row)=>string}
+type Column<Row>={label:string;className?:string;value?:(row:Row)=>CellValue;render?:(row:Row)=>ReactNode;search?:(row:Row)=>string}
+type TableSort={column:number;descending:boolean}
 const pageSize=10
 const collator=new Intl.Collator('fr',{numeric:true,sensitivity:'base'})
 const searchable=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase()
 
-function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey}:{
+function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey,defaultSort,numbered=false}:{
   title:string;columns:Column<Row>[];rows:Row[];actions?:ReactNode;toolbar?:ReactNode;paginationActions?:ReactNode;
-  pending:boolean;error:Error|null;viewKey?:number|null
+  pending:boolean;error:Error|null;viewKey?:number|null;defaultSort?:TableSort;numbered?:boolean
 }){
   const [query,setQuery]=useState('')
-  const [sort,setSort]=useState<{column:number;descending:boolean}|null>(null)
+  const [manualSort,setSort]=useState<TableSort|undefined>(defaultSort)
+  const sort=numbered?undefined:manualSort
   const [page,setPage]=useState(1)
   const [previousView,setPreviousView]=useState(viewKey)
   if(previousView!==viewKey){setPreviousView(viewKey);setPage(1)}
@@ -81,14 +83,15 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
     {pending&&<p role="status">Chargement…</p>}
     <div id={viewKey!==undefined?'model-catalog-panel':undefined} role={viewKey!==undefined?'tabpanel':undefined}
       aria-labelledby={viewKey!==undefined?'model-tab-'+(viewKey??'all'):undefined} className="table-wrap"><table className="monitor-table" aria-label={title}>
-      <thead><tr>{columns.map((column,index)=><th key={column.label} scope="col"
+      <thead><tr>{numbered&&<th scope="col"><span>N°</span></th>}{columns.map((column,index)=><th key={column.label} scope="col" className={column.className}
         aria-sort={sort?.column===index?(sort.descending?'descending':'ascending'):undefined}>
-        {column.value?<button className="binary-sort" type="button" onClick={()=>selectSort(index)}>
+        {column.value&&!numbered?<button className="binary-sort" type="button" onClick={()=>selectSort(index)}>
           {column.label}{sort?.column===index&&<span aria-hidden="true">{sort.descending?'↓':'↑'}</span>}
         </button>:<span>{column.label}</span>}
       </th>)}</tr></thead>
-      <tbody>{visible.slice((current-1)*pageSize,current*pageSize).map(row=><tr key={row.id}>{columns.map(column=>
-        <td key={column.label} data-label={column.label}>{column.render?column.render(row):column.value?.(row)??'—'}</td>)}</tr>)}</tbody>
+      <tbody>{visible.slice((current-1)*pageSize,current*pageSize).map((row,index)=><tr key={row.id}>
+        {numbered&&<td data-label="N°">{(current-1)*pageSize+index+1}</td>}
+        {columns.map(column=><td key={column.label} data-label={column.label} className={column.className}>{column.render?column.render(row):column.value?.(row)??'—'}</td>)}</tr>)}</tbody>
     </table>{!pending&&!error&&!visible.length&&<p className="empty">{words.length?'Aucun résultat.':'Aucune entrée.'}</p>}</div>
     <nav className="git-overview-controls" aria-label={'Pagination '+title}>
       <button type="button" disabled={current===1} onClick={()=>setPage(1)}>Premier</button>
@@ -100,7 +103,7 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
   </>
 }
 
-function AddOverview({title,children,submit,onClose,edit=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;edit?:boolean}){
+function AddOverview({title,children,submit,onClose,edit=false,wide=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;edit?:boolean;wide?:boolean}){
   const dialog=useRef<HTMLDialogElement>(null)
   const form=useRef<HTMLFormElement>(null)
   const [pending,setPending]=useState(false)
@@ -118,7 +121,7 @@ function AddOverview({title,children,submit,onClose,edit=false}:{title:string;ch
   }
   return <>
     <button className={edit?"secondary-button":"add-project"} type="button" aria-label={title} title={title} onClick={()=>dialog.current?.showModal()}>{edit?"Éditer":"+"}</button>
-    <dialog ref={dialog} className="lifecycle-dialog" onCancel={event=>{if(pending)event.preventDefault()}}
+    <dialog ref={dialog} className={wide?"lifecycle-dialog model-policy-overview":"lifecycle-dialog"} onCancel={event=>{if(pending)event.preventDefault()}}
       onClose={()=>{form.current?.reset();setError('');onClose?.()}}>
       <h2>{title}</h2>
       <form ref={form} className="settings-form" onSubmit={event=>void save(event)}>
@@ -240,26 +243,29 @@ function PolicyOverview({policy,onSaved}:{policy?:Policy;onSaved:(policy:Policy)
     const saved=await api<Policy>(policy?policyPath+'/edit':policyPath,policy?{id:policy.id,...payload}:payload)
     await onSaved(saved)
   }
-  return <AddOverview edit={!!policy} title={policy?'Éditer la politique de modèles':'Ajouter une politique de modèles'}
+  return <AddOverview wide edit={!!policy} title={policy?'Éditer la politique de modèles':'Ajouter une politique de modèles'}
     submit={save} onClose={()=>setFormVersion(version=>version+1)}>
     <ModelPolicyFields key={formVersion} policy={policy}/>
   </AddOverview>
 }
 
+const inputPriceLabel='Coût entrée / M'
 const columns:Column<Model>[]=[
-  {label:'Modèle',value:row=>row.name||row.identifier,search:row=>row.identifier,
+  {label:'Modèles',value:row=>row.name||row.identifier,search:row=>row.identifier,
     render:row=><>{row.name||row.identifier}{row.name&&row.name!==row.identifier&&<small>{row.identifier}</small>}</>},
-  {label:'Fournisseur',value:row=>row.provider},
+  {label:'Fournisseurs',className:'model-catalog-provider',value:row=>row.provider},
   {label:'Contexte',value:row=>row.context,render:row=>number(row.context)},
   {label:'Sortie maximale',value:row=>row.output,render:row=>number(row.output)},
   {label:'Entrées',value:row=>modalities(row.input_modalities)||null},
   {label:'Sorties',value:row=>modalities(row.output_modalities)||null},
-  {label:'Coût entrée / M',value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},
+  {label:inputPriceLabel,value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},
   {label:'Coût sortie / M',value:row=>priceValue(row.output_cost),render:row=>price(row.output_cost)},
   {label:'Lecture cache / M',value:row=>priceValue(row.cache_read_cost),render:row=>price(row.cache_read_cost)},
   {label:'Écriture cache / M',value:row=>priceValue(row.cache_write_cost),search:row=>row.cache_write_duration??'',
     render:row=><>{price(row.cache_write_cost)}{row.cache_write_duration&&<small>{row.cache_write_duration}</small>}</>},
 ]
+
+const initialModelSort={column:columns.findIndex(column=>column.label===inputPriceLabel),descending:false}
 
 function ModelCatalog(){
   const client=useQueryClient()
@@ -308,7 +314,7 @@ function ModelCatalog(){
     <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
       name={selected.name} remove={()=>remove(selected.id)}/>
   </>
-  return <CatalogTable viewKey={selectedId} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
+  return <CatalogTable viewKey={selectedId} numbered={selectedId!==null} defaultSort={initialModelSort} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
     actions={<PolicyOverview onSaved={save}/>} rows={query.data?.models??[]} pending={query.isPending} error={query.error}/>
 }
 

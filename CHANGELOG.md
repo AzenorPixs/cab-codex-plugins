@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.16.0
+
+- Tri tarifaire enregistré par politique, résultats numérotés et tri initial de Tous par coût d’entrée croissant.
+- Overview des politiques élargi et réorganisé en deux colonnes.
+
 ## 3.15.1
 
 - Actions des politiques après Dernier, exclusions par nom et bornes complètes de lecture et d’écriture du cache.

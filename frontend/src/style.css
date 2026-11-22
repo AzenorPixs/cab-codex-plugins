@@ -322,3 +322,9 @@ header .brand {
 .model-policy-switches{border:1px solid var(--border)}
 .model-policy-switches label{display:flex;align-items:center;gap:6px}
 .model-policy-switches input{width:auto}
+.lifecycle-dialog.model-policy-overview{width:min(46rem,90vw)}
+.model-policy-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px}
+.model-policy-pair fieldset{min-width:0;margin:0}
+.model-policy-sort{display:grid;gap:8px;border:1px solid var(--border)}
+@media(min-width:761px){.monitor-table .model-catalog-provider{min-inline-size:12ch}}
+@media(max-width:550px){.model-policy-pair{grid-template-columns:minmax(0,1fr)}}

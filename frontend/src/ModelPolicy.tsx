@@ -13,7 +13,15 @@ const priceRows=[
 ] as const
 const priceFields=priceRows.flat()
 
-export type Policy={id:number;name:string;model_filter:string;include_free:boolean;include_paid:boolean;context_min:number;output_min:number}
+const sortColumns=[
+  ['input_cost','Coût entrée / M'],
+  ['output_cost','Coût Sortie / M'],
+  ['cache_read_cost','Lecture Cache / M'],
+  ['cache_write_cost','Écriture Cache'],
+] as const
+
+export type Policy={id:number;name:string;model_filter:string;include_free:boolean;include_paid:boolean;context_min:number;output_min:number;
+  sort_column:typeof sortColumns[number][0];sort_descending:boolean}
   & Record<typeof priceFields[number][0],string|number>
 
 export function policyPayload(values:FormData){
@@ -24,6 +32,8 @@ export function policyPayload(values:FormData){
     include_paid:values.has('include_paid'),
     context_min:Number(values.get('context_min')),
     output_min:Number(values.get('output_min')),
+    sort_column:values.get('sort_column'),
+    sort_descending:values.get('sort_direction')==='descending',
     ...Object.fromEntries(priceFields.map(([name])=>[name,values.get(name)||'0'])),
   }
 }
@@ -42,18 +52,34 @@ function Limit({name,label,steps,initial}:{name:string;label:string;steps:number
 export function ModelPolicyFields({policy}:{policy?:Policy}){
   const filterHelp=useId()
   return <>
-    <label>Nom de la politique<input name="name" required maxLength={120} defaultValue={policy?.name}/></label>
-    <label>Filtre de modèles<input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}
-      aria-describedby={filterHelp}/><span className="field-help" id={filterHelp}>
-        Séparez par des points-virgules les termes à exclure des noms de modèles.
-      </span></label>
-    <fieldset className="model-policy-switches">
-      <legend>Modèles à inclure</legend>
-      <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
-      <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
-    </fieldset>
-    <Limit name="context_min" label="Contexte minimum" steps={contextSteps} initial={policy?.context_min??0}/>
-    <Limit name="output_min" label="Sortie maximale minimum" steps={outputSteps} initial={policy?.output_min??0}/>
+    <div className="model-policy-pair">
+      <label>Nom de la politique<input name="name" required maxLength={120} defaultValue={policy?.name}/></label>
+      <label>Filtre de modèles<input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}
+        aria-describedby={filterHelp}/><span className="field-help" id={filterHelp}>
+          Séparez par des points-virgules les termes à exclure des noms de modèles.
+        </span></label>
+    </div>
+    <div className="model-policy-pair">
+      <Limit name="context_min" label="Contexte minimum" steps={contextSteps} initial={policy?.context_min??0}/>
+      <Limit name="output_min" label="Sortie maximale minimum" steps={outputSteps} initial={policy?.output_min??0}/>
+    </div>
+    <div className="model-policy-pair">
+      <fieldset className="model-policy-switches">
+        <legend>Modèles à inclure</legend>
+        <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
+        <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
+      </fieldset>
+      <fieldset className="model-policy-sort">
+        <legend>Triage</legend>
+        <label>Colonne de tri<select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>
+          {sortColumns.map(([key,label])=><option key={key} value={key}>{label}</option>)}
+        </select></label>
+        <label>Tri<select name="sort_direction" defaultValue={policy?.sort_descending?'descending':'ascending'}>
+          <option value="ascending">Du - Cher au + Cher</option>
+          <option value="descending">Du + Cher au - Cher</option>
+        </select></label>
+      </fieldset>
+    </div>
     <p className="field-help">Tarifs en dollars par million de tokens. La valeur 0 désactive la borne.</p>
     {priceRows.map(pair=><div className="model-policy-prices" key={pair[0][0]}>
       {pair.map(([name,label])=><label key={name}>{label}<input name={name} type="number" min={0} step="any" defaultValue={policy?.[name]??0}/></label>)}

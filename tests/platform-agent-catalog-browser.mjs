@@ -62,8 +62,18 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill(search('Fournisseurs'),'fournisseur temoin');
   await wait(()=>rows('Fournisseurs').length===1&&readRows('Fournisseurs')[0].includes('Fournisseur témoin'),'Recherche sans accent');
   await click('nav[aria-label="Agents"] a[href="/agents/models"]');
-  await pagination('Modèles','Modèle 12');
+  await pagination('Modèles','fixture-12');
   check(find('[role=tab][aria-selected=true]').textContent==='Tous','Onglet initial Tous');
+  const headers=()=>Array.from(find('table[aria-label="Modèles"] thead tr').cells);
+  check(headers()[0].textContent==='Modèles'&&headers()[1].textContent==='Fournisseurs','En-têtes au pluriel');
+  check(headers()[1].classList.contains('model-catalog-provider'),'Largeur fournisseur dédiée');
+  check(readRows('Modèles')[0].includes('Modèle 2')&&headers()[6].getAttribute('aria-sort')==='ascending','Tri initial par coût d’entrée, gratuit en premier');
+  const modelsPagination='nav[aria-label="Pagination Modèles"]';
+  const nextModels=()=>Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Suivant');
+  nextModels().click();
+  await wait(()=>rows('Modèles').length===2,'Dernière page du tri de coût');
+  check(readRows('Modèles').at(-1).includes('Modèle 12'),'Coût inconnu en dernier');
+  Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Premier').click();
   check(find('table[aria-label="Modèles"] thead').textContent.includes('Lecture cache / M'),'Colonne lecture du cache');
   check(readRows('Modèles')[0].includes('30m'),'Durée de cache affichée');
   const contextSort='table[aria-label="Modèles"] th:nth-child(3) button';
@@ -71,12 +81,27 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await click(contextSort);
   check(readRows('Modèles')[0].includes('Modèle 12'),'Tri numérique du contexte');
   await click('button[aria-label="Ajouter une politique de modèles"]');
+  const addForm=find('dialog[open] form');
+  check(addForm.closest('dialog').getBoundingClientRect().width>650,'Overview élargi');
+  const pairs=Array.from(addForm.querySelectorAll('.model-policy-pair'));
+  check(pairs.length===3&&pairs.every(row=>row.children[1].getBoundingClientRect().left>row.children[0].getBoundingClientRect().left),'Trois paires de champs côte à côte');
+  const sortColumn=addForm.elements.namedItem('sort_column');
+  const sortDirection=addForm.elements.namedItem('sort_direction');
+  check(sortColumn.value==='input_cost'&&sortColumn.options.length===4&&sortDirection.value==='ascending','Valeurs par défaut du tri');
+  sortColumn.value='cache_read_cost';
+  sortDirection.value='descending';
   fill('dialog[open] [name=name]','Rapides');
   find('dialog[open] [name=include_free]').click();
   fill('dialog[open] input[type=range]','2');
   fill('dialog[open] [name=cache_read_max]','0.25');
   find('dialog[open] form').requestSubmit();
-  await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides'&&rows('Modèles').length===1&&!find('dialog[open]'),'Politique créée et appliquée');
+  await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides'&&rows('Modèles').length===10&&!find('dialog[open]'),'Politique créée et appliquée');
+  check(headers()[0].textContent==='N°'&&!headers().some(th=>th.querySelector('button')),'Numérotation et absence de tri manuel dans la politique');
+  check(readRows('Modèles')[0].startsWith('1Modèle 12'),'Ordre de politique fourni par le serveur');
+  nextModels().click();
+  await wait(()=>rows('Modèles').length===2,'Seconde page de la politique');
+  check(rows('Modèles')[0].cells[0].textContent==='11'&&rows('Modèles')[1].cells[0].textContent==='12','Numérotation continue');
+  Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Premier').click();
   const paginationBar=find('nav[aria-label="Pagination Modèles"]');
   const policyActions=paginationBar.querySelector('.model-policy-actions');
   const [last,edit,remove]=policyActions.querySelectorAll(':scope > button');
@@ -86,6 +111,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await click('button[aria-label="Éditer la politique de modèles"]');
   await wait(()=>find('dialog[open] [name=name]')?.value==='Rapides','Politique préremplie');
   const policyForm=find('dialog[open] form');
+  check(policyForm.elements.namedItem('sort_column').value==='cache_read_cost'&&policyForm.elements.namedItem('sort_direction').value==='descending','Tri enregistré prérempli');
   check(policyForm.elements[0].name==='name'&&policyForm.elements[1].name==='model_filter','Filtre après le nom');
   const cacheRows=Array.from(policyForm.querySelectorAll('.model-policy-prices')).slice(-2)
     .map(row=>Array.from(row.querySelectorAll('input'),input=>input.name).join(','));
@@ -96,7 +122,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill('dialog[open] [name=cache_read_min]','0.1');
   find('dialog[open] form').requestSubmit();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
-  await wait(()=>rows('Modèles').length===0,'Le filtre exclut le modèle dans la vue de politique');
+  await wait(()=>readRows('Modèles')[0]?.startsWith('1Modèle 11'),'Le filtre retire le modèle exclu et conserve le tri');
   await click('button[aria-label="Supprimer la politique de modèles"]');
   confirm();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
@@ -147,9 +173,13 @@ let server
 try{
   execFileSync(process.execPath,['node_modules/typescript/bin/tsc','--noEmit'],{cwd:frontend,stdio:'inherit'})
   execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build','--logLevel','error','--outDir',web],{cwd:frontend,stdio:'inherit'})
-  const index=await readFile(join(web,'index.html'))
+  // Dans l’atelier réseau isolé, seul le serveur de test en loopback doit compter.
+  const index=(await readFile(join(web,'index.html'),'utf8')).replace('<head>', `<head><script>
+    Object.defineProperty(navigator,'onLine',{get:()=>true});
+    addEventListener('offline',event=>event.stopImmediatePropagation(),true);
+  </script>`)
   const assets=new Map()
-  for(const name of index.toString().match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
+  for(const name of index.match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
   let report
   let providers, keys, reminders, policies
   const fixtureRows=Array.from({length:12},(_,index)=>index+1)
@@ -194,6 +224,8 @@ try{
         assert.equal(values.include_paid,true)
         assert.equal(values.cache_read_max,'0.25')
         assert.equal(values.model_filter,'')
+        assert.equal(values.sort_column,'cache_read_cost')
+        assert.equal(values.sort_descending,true)
         const policy={id:21,...values}
         policies=[policy]
         return json(response,policy)
@@ -205,6 +237,8 @@ try{
         assert.equal(policy.model_filter,'modèle 12; bêta')
         assert.equal(policy.cache_write_max,'0.5')
         assert.equal(policy.cache_read_min,'0.1')
+        assert.equal(policy.sort_column,'cache_read_cost')
+        assert.equal(policy.sort_descending,true)
         assert.equal(policy.context_min,500000)
         policies=[policy]
         return json(response,policy)
@@ -217,9 +251,11 @@ try{
       if(route==='/api/v1/administration/agent-models'){
         const models=fixtureRows.map(id=>({
           id,identifier:'fixture-'+id,name:'Modèle '+id,provider:'Fournisseur '+id,context:500000+1000*id,output:64000,
-          input_cost:0.1,output_cost:0.3,cache_read_cost:0.25,cache_write_cost:0.3,cache_write_duration:'30m',
+          input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
         }))
-        return json(response,{models:url.searchParams.has('policy_id')?(policies[0]?.model_filter?[]:models.slice(-1)):models})
+        if(!url.searchParams.has('policy_id'))return json(response,{models})
+        const results=policies[0]?.model_filter?models.filter(model=>model.id!==12):models
+        return json(response,{models:results.reverse()})
       }
       if(route==='/api/v1/administration/agent-api-keys'){
         if(!post)return json(response,{keys})
