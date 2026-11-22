@@ -42,8 +42,8 @@ export function ChangeStageOverview({projectId}:{projectId:string}){
     {selected&&detail.data&&<>
       {detail.data.complete_cycle_duration_seconds!=null&&<p>Durée totale des cycles complets · {stageDuration(detail.data.complete_cycle_duration_seconds)}</p>}
       <CompleteCycles cycles={detail.data.cycles||[]}/>
-      {detail.data.stages.filter(stage=>stage.observed).map(stage=><details key={stage.key}>
-        <summary>{stage.label||stage.key}{stage.duration_seconds!=null?' · '+stageDuration(stage.duration_seconds):''}</summary>
+      {detail.data.stages.filter(stage=>stage.observed||stage.not_required).map(stage=><details key={stage.key}>
+        <summary>{stage.label||stage.key}{stage.work_seconds!=null?' · '+stageDuration(stage.work_seconds)+' de travail':''}{stage.wait_seconds!=null?' · '+stageDuration(stage.wait_seconds)+' d’attente':''}</summary>
         <StageOverview stage={stage} title={stage.label||stage.key}/>
       </details>)}
     </>}

@@ -585,6 +585,7 @@ class SessionProjection(models.Model):
     change=models.CharField(max_length=200)
     generation=models.PositiveBigIntegerField()
     cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
+    cycle_profile=models.CharField(max_length=32,blank=True,default='',db_default='')
     stage=models.PositiveSmallIntegerField(null=True)
     phase=models.CharField(max_length=32,blank=True)
     tasks_done=models.PositiveIntegerField(null=True)

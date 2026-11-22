@@ -48,7 +48,10 @@ def _bounded_process(argv,uid,timeout_ms,on_start=None):
     user=pwd.getpwuid(uid);options={}
     if os.getuid()==0:options={'user':uid,'group':user.pw_gid,'extra_groups':os.getgrouplist(user.pw_name,user.pw_gid)}
     env={'PATH':'/usr/bin:/bin','HOME':user.pw_dir,'LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1'}
-    process=subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=env,start_new_session=True,**options)
+    try:
+        process=subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=env,start_new_session=True,**options)
+    except FileNotFoundError:
+        return 'FAILED_TO_START', None, 'Exécutable introuvable ; aucun processus de contrôle démarré.'
     data=bytearray();deadline=time.monotonic()+timeout_ms/1000;state='COMPLETED';selector=selectors.DefaultSelector();selector.register(process.stdout,selectors.EVENT_READ)
     stopped=False;drain_deadline=None
     def stop_once():

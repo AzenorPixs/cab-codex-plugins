@@ -246,6 +246,26 @@ def administration_agents(request):
     from cab_platform.agent_binaries import inventory
     return inventory()
 
+
+class AgentReminderSettings(Schema):
+    seconds: int
+    second_seconds: int
+    last_seconds: int
+
+
+@api.get('/administration/agent-reminders')
+def agent_reminder_settings(request):
+    principal(request,admin=True)
+    from cab_platform.stage_reminders import settings
+    return settings()
+
+
+@api.post('/administration/agent-reminders')
+def save_agent_reminder_settings(request,body:AgentReminderSettings):
+    principal(request,admin=True)
+    from cab_platform.stage_reminders import configure
+    return configure(**body.model_dump())
+
 @api.get('/administration/agent-status')
 def administration_agent_status(request):
     principal(request,admin=True)
@@ -323,7 +343,7 @@ def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
     change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'cycle_profile':run.configuration.get('cycle_profile',''),'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
 
 def operation_data(op):
     resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
@@ -1090,7 +1110,16 @@ def command(request,body:Command):
         a=Actor.objects.create(pk=commands.identifier(data['id']),uid=uid,role=role,agent=data['agent'],token_hash=hashlib.sha256(token.encode()).hexdigest(),native=data.get('native',{}))
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
-    if name=='run.begin':return run_data(commands.begin_run(actor,data))
+    if name=='run.begin':
+        run=commands.begin_run(actor,data)
+        if native_thread and run.mode=='piloted' and run.mandate.get('orchestrator_id')==actor.pk:
+            from uuid import UUID
+            try:thread=str(UUID(native_thread))
+            except ValueError:thread=None
+            if thread and not run.configuration.get('reminder_orchestrator_thread'):
+                run.configuration={**run.configuration,'reminder_orchestrator_thread':thread}
+                run.save(update_fields=['configuration'])
+        return run_data(run)
     if name=='run.cancel_replaced':
         from .run_replacement import reconcile
         return reconcile(actor,data)

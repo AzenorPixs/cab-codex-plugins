@@ -106,7 +106,8 @@ def prepare_review(run,plan,result):
     submission['digest']=c.digest(submission)
     previous=run.review.get('submission',{})
     if previous.get('digest')==submission['digest']:return
-    run.review={'submission':submission};run.state='REVIEW_PENDING';run.stage=run.cycle_steps-3;run.save(update_fields=['review','state','stage','updated'])
+    from cab_platform.change_stage_metrics import number_for
+    run.review={'submission':submission};run.state='REVIEW_PENDING';run.stage=number_for(run,'review');run.save(update_fields=['review','state','stage','updated'])
     c.event(run,'review-requested',{'submission_digest':submission['digest'],'assembled_by':'cab-policy'})
 
 def process(run_id):

@@ -92,7 +92,7 @@ def projection(run):
     ensure_records(run)
     change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
     from .models import SessionArchive
-    values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'cycle_steps':run.cycle_steps,'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
+    values={'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'state':run.state,'suspension':run.suspension,'archived':SessionArchive.objects.filter(run=run).exists(),'change':run.change,'generation':run.generation,'cycle_steps':run.cycle_steps,'cycle_profile':run.configuration.get('cycle_profile',''),'stage':run.stage,'phase':run.phase,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None}
     existing=SessionProjection.objects.filter(binding=run).first()
     if existing and all(getattr(existing,key)==value for key,value in values.items()):return
     SessionProjection.objects.update_or_create(binding=run,defaults=values)
@@ -102,8 +102,13 @@ def event(run,kind,data):
     if run:
         projection(run)
         if run.cycle_steps == 12:
-            from cab_platform.change_stage_metrics import STOP_STATES,TRANSITIONS,observe
-            if kind in TRANSITIONS or run.suspension or run.state in STOP_STATES:
+            from cab_platform.change_stage_metrics import STOP_STATES,TRANSITIONS,observe,finish_iteration
+            if kind=='review-decided':
+                from .models import ChangeStageIteration
+                with transaction.atomic():
+                    review=ChangeStageIteration.objects.select_for_update(of=('self',)).filter(run=run,stage__key='review',ended_at__isnull=True,parent__isnull=True).first()
+                    if review:finish_iteration(review,record.created,kind)
+            elif kind in TRANSITIONS or run.suspension or run.state in STOP_STATES:
                 observe(run,record.created)
         Run.objects.filter(pk=run.pk).update(updated=timezone.now())
 

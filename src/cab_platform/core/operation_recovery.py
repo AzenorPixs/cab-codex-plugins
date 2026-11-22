@@ -77,13 +77,41 @@ def stopped_host_validation(op):
     return {'environment': 'host-authorized', 'executor': executor, 'process_group_stopped': True}
 
 
+def host_executable_missing(op):
+    """Classer l’ancien reçu d’un lancement qui n’a créé aucun exécuteur."""
+    import shutil
+    receipt, request = op.receipt, op.request
+    auth = request.get('host_authorization', {})
+    plan = FinalizationPlan.objects.get(run=op.run)
+    rule = next((rule for rule in plan.policy['checks'] if rule['id']==auth.get('check_id')), None)
+    argv = request.get('argv', [])
+    c.require(request.get('kind')=='local' and receipt.get('execution_environment')=='host-authorized'
+              and receipt.get('error')=='FileNotFoundError' and receipt.get('exit_code') is None
+              and 'executor' not in receipt and argv and '/' not in argv[0]
+              and shutil.which(argv[0],path='/usr/bin:/bin') is None,
+              'operation-recovery-host-executable-unverified')
+    c.require(rule and rule['argv']==argv and rule['executor']=='local'
+              and auth.get('policy_digest')==plan.digest==c.digest(plan.policy)
+              and auth.get('check_revision')==plan.check_revisions.get(rule['id'],1)
+              and request.get('session_id')==op.run.session_id and request.get('generation')==op.run.generation
+              and c.digest(request)==op.input_digest==receipt.get('input_digest')
+              and receipt.get('request_id')==op.request_id and receipt.get('source_revision')==op.source_revision,
+              'operation-recovery-host-authorization-divergent')
+    c.require(Event.objects.filter(run=op.run,kind='host-check-authorized',data__request_id=op.request_id,
+                                  data__input_digest=op.input_digest,data__administrator=auth.get('administrator')).exists()
+              and Event.objects.filter(run=op.run,kind='operation-dispatched',data__request_id=op.request_id).exists()
+              and not Event.objects.filter(run=op.run,kind='operation-process-started',data__operation_id=op.pk).exists(),
+              'operation-recovery-host-executable-unverified')
+    return {'environment':'host-authorized','executor_started':False,'reason':'host-executable-not-found'}
+
+
 def stopped_facts(op):
     c.require(op.state=='UNKNOWN' and op.receipt.get('state')=='UNKNOWN','operation-recovery-not-applicable')
     c.require(op.dispatched and op.receipt.get('dispatched') is True and op.receipt.get('finished'),'operation-recovery-receipt-incomplete')
     c.require(not (STATE/'receipts'/(str(op.pk)+'.json')).exists(),'operation-recovery-spool-pending')
     c.require(not Operation.objects.filter(run=op.run,state__in=['INTENT','RUNNING']).exclude(pk=op.pk).exists(),'operation-recovery-run-active')
     if op.request.get('host_authorization'):
-        facts = stopped_host_validation(op)
+        facts = host_executable_missing(op) if op.receipt.get('error')=='FileNotFoundError' else stopped_host_validation(op)
         held = list(Lease.objects.filter(operation=op, state='HELD').select_related('resource'))
         c.require(all(row.run_id == op.run_id and row.resource_id.startswith('file:' + op.run.project.root + '/')
                       and row.fencing == row.resource.fencing for row in held),
