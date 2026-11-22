@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Catalogue des agents et des fournisseurs
+
+[manage-agent-provider-catalogs](openspec/changes/archive/2026-11-22-manage-agent-provider-catalogs/),
+code non attribué. Rappels sous Administration → Agents, clés chiffrées au TPM,
+catalogues PostgreSQL et enrichissement quotidien par models.dev. Vérifications CAB
+du 22 novembre 2026 sur Chromium, Firefox et PostgreSQL isolé, reçus
+`STAGE-886-11-agent-catalog-web` et `STAGE-886-11-agent-catalog-data`.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
 ## Réservations de ressources
 
 [unify-resource-reservations](openspec/changes/archive/2026-11-22-unify-resource-reservations/),

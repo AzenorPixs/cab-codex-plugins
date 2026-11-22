@@ -6,6 +6,15 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'agent-provider-name-invalid':'Saisir un nom de fournisseur valide.',
+  'agent-provider-duplicate':'Ce fournisseur existe déjà.',
+  'agent-provider-not-found':'Ce fournisseur est introuvable.',
+  'agent-catalog-url-invalid':'Saisir une URL valide. La liste de modèles requiert une URL HTTPS publique.',
+  'agent-catalog-format-invalid':'Le catalogue ne contient pas de liste de modèles valide.',
+  'agent-catalog-unavailable':'La liste des modèles est indisponible.',
+  'agent-api-key-invalid':'Saisir une clé API valide.',
+  'agent-api-key-tpm-unavailable':'Le TPM est indisponible. La clé API n’a pas été enregistrée.',
+  'agent-api-key-not-found':'Cette clé API est introuvable.',
   'incident-not-found':'Cette déclaration ne figure plus dans le registre de ce projet.',
   'incident-unresolved':'La déclaration doit être résolue avant de pouvoir être supprimée.',
   'incident-snapshot-stale':'La déclaration a changé. Fermez la fenêtre et vérifiez son état avant de recommencer.',

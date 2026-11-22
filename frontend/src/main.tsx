@@ -1,7 +1,8 @@
+import {agentCatalogPages} from './AgentCatalog'
 import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {createRoot} from 'react-dom/client'
 import {QueryClient,QueryClientProvider,useQuery,useQueryClient} from '@tanstack/react-query'
-import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate,Navigate} from '@tanstack/react-router'
+import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate} from '@tanstack/react-router'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
 import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle,useTablePageSize} from './Appearance'
@@ -137,11 +138,12 @@ const administrationBinariesRoute=createRoute({
 })
 const agentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/agents',component:()=> <Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate>})
 const agentPages=([['codex','codex_desktop'],['codex-cli','codex'],['opencode','opencode']] as const).map(([path,agent])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${path}`,component:()=> <Gate><ConfigurationAccess section="agents" selectedAgent={agent} login={<Login/>}/></Gate>}))
-const legacyAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <Navigate to="/agents" replace/>})
+const agentCatalogueRoutes=agentCatalogPages.map(([catalog])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${catalog}` as const,component:()=> <Gate><ConfigurationAccess section="agents" catalog={catalog} login={<Login/>}/></Gate>}))
+const administrationAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="agent-administration" login={<Login/>}/></Gate></AdministrationShell>})
 const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/git',component:()=> <AdministrationShell><Gate><GitMonitorSettings/></Gate></AdministrationShell>})
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

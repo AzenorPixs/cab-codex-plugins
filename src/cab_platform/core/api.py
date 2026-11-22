@@ -14,7 +14,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 from ninja import NinjaAPI,Schema
 from ninja.security import HttpBearer,APIKeyHeader,APIKeyCookie
-from pydantic import Field
+from pydantic import Field, SecretStr
 from cab_platform import __version__
 from cab_platform.connector_process import identity,alive
 from cab_platform import bootstrap
@@ -282,6 +282,69 @@ def save_agent_reminder_settings(request,body:AgentReminderSettings):
     principal(request,admin=True)
     from cab_platform.stage_reminders import configure
     return configure(**body.model_dump())
+
+class AgentProviderInput(Schema):
+    name: str
+    api_url: str
+    models_url: str = ''
+
+
+class AgentApiKeyInput(Schema):
+    provider_id: int = Field(gt=0, lt=2**63)
+    key: SecretStr
+
+
+class AgentApiKeyRemoval(Schema):
+    id: UUID
+
+
+def agent_catalog_response(key, data):
+    response = JsonResponse({key: data})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@api.get('/administration/agent-providers')
+def agent_providers(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import providers
+    return agent_catalog_response('providers', providers())
+
+
+@api.post('/administration/agent-providers')
+def save_agent_provider(request, body: AgentProviderInput):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import add_provider
+    return add_provider(**body.model_dump())
+
+
+@api.get('/administration/agent-api-keys')
+def agent_api_keys(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import keys
+    return agent_catalog_response('keys', keys())
+
+
+@api.post('/administration/agent-api-keys')
+def save_agent_api_key(request, body: AgentApiKeyInput):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import add_key
+    return add_key(body.provider_id, body.key.get_secret_value())
+
+
+@api.post('/administration/agent-api-keys/remove')
+def delete_agent_api_key(request, body: AgentApiKeyRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import remove_key
+    return remove_key(body.id)
+
+
+@api.get('/administration/agent-models')
+def agent_models(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import models
+    return agent_catalog_response('models', models())
+
 
 @api.get('/administration/agent-status')
 def administration_agent_status(request):

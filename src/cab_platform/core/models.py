@@ -11,6 +11,37 @@ class Agent(models.Model):
     mcp_versions=models.JSONField(default=list)
     class Meta:db_table='agents'
 
+class AgentProvider(models.Model):
+    name = models.CharField(max_length=160, unique=True)
+    models_url = models.URLField(max_length=2048, blank=True)
+    api_url = models.URLField(max_length=2048)
+    refresh_after = models.DateTimeField(null=True, db_index=True)
+    refreshed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = 'agent_providers'
+
+
+class AgentApiKey(models.Model):
+    id = models.UUIDField(primary_key=True, editable=False)
+    provider = models.ForeignKey(AgentProvider, on_delete=models.PROTECT)
+    ciphertext = models.TextField(editable=False)
+
+    class Meta:
+        db_table = 'agent_api_keys'
+
+
+class AgentModel(models.Model):
+    provider = models.ForeignKey(AgentProvider, on_delete=models.CASCADE, related_name='catalog')
+    identifier = models.CharField(max_length=255)
+    source = models.JSONField()
+    details = models.JSONField()
+
+    class Meta:
+        db_table = 'agent_models'
+        constraints = [models.UniqueConstraint(fields=['provider', 'identifier'], name='agent_model_identity')]
+
+
 class AgentUser(models.Model):
     agent=models.ForeignKey(Agent,on_delete=models.PROTECT,related_name='users')
     uid=models.PositiveBigIntegerField()

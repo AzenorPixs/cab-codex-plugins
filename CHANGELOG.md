@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.14.0
+
+- Rappels d’inactivité déplacés sous Administration → Agents dans un tableau.
+- Pages Agents pour les clés API chiffrées au TPM, les fournisseurs et les modèles, avec import PostgreSQL quotidien et enrichissement depuis models.dev.
+
 ## 3.13.0
 
 - Confirmation explicite pour supprimer une session de codage sans preuve de clôture lorsqu’aucune autre protection ne s’y oppose.

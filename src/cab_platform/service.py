@@ -202,6 +202,7 @@ def run(port=8790):
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
     update_future=None;availability_future=None;native_future=None;next_native=0
     agents_future=None;next_agents=0
+    catalog_future=None;next_catalog=0
     agent_config_future=None;next_agent_config=0
     forge_version_future=None;next_forge_version=0
     git_monitor_thread=None;next_git_monitor=0
@@ -215,6 +216,8 @@ def run(port=8790):
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
+    from .agent_catalog import refresh as refresh_agent_catalog
+    catalog_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-catalog')
     agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
     agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
     forge_version_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-forge-version')
@@ -238,6 +241,12 @@ def run(port=8790):
             api=api_recovery.tick()
             if not config().get('initialized'):continue
             electric=electric_recovery.tick()
+            if catalog_future is not None and catalog_future.done():
+                try:catalog_future.result()
+                except Exception as error:log.warning('agent catalog unavailable',extra={'code':type(error).__name__})
+                catalog_future=None
+            if catalog_future is None and time.monotonic()>=next_catalog:
+                catalog_future=catalog_pool.submit(refresh_agent_catalog);next_catalog=time.monotonic()+15
             if time.monotonic()>=next_daemon_report:
                 next_daemon_report=time.monotonic()+5
                 observe_daemon()
@@ -362,6 +371,7 @@ def run(port=8790):
         postgres_thread.join(timeout=10)
         forge_version_pool.shutdown(wait=True,cancel_futures=True)
         agent_config_pool.shutdown(wait=True,cancel_futures=True)
+        catalog_pool.shutdown(wait=True,cancel_futures=True)
         agents_pool.shutdown(wait=True,cancel_futures=True)
         native_pool.shutdown(wait=True,cancel_futures=True)
         update_pool.shutdown(wait=True,cancel_futures=True)

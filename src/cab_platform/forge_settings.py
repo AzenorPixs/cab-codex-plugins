@@ -112,12 +112,16 @@ def token_read(project,forge):
 
 def crypt(project,forge,data,decrypt=False):
     name='cab-forge-'+hashlib.sha256((project.pk+':'+forge).encode()).hexdigest()[:24]
+    return crypt_credential(name, data, decrypt)
+
+
+def crypt_credential(name, data, decrypt=False, failure='forge-tpm-unavailable'):
     argv=['/usr/bin/systemd-creds','--name='+name]
     if not decrypt:argv+=['--with-key=tpm2','--tpm2-device=/dev/tpmrm0']
     argv+=['decrypt' if decrypt else 'encrypt','-','-']
     try:r=subprocess.run(argv,input=data,capture_output=True,timeout=20,env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'})
-    except (OSError,subprocess.TimeoutExpired):raise Refused('forge-tpm-unavailable',503) from None
-    require(r.returncode==0,'forge-tpm-unavailable',503)
+    except (OSError,subprocess.TimeoutExpired):raise Refused(failure,503) from None
+    require(r.returncode==0,failure,503)
     return r.stdout
 
 

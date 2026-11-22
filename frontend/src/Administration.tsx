@@ -1,3 +1,4 @@
+import {AgentCatalog,AgentNavigation,type CatalogPage} from './AgentCatalog'
 import {McpVersions} from './McpConnections'
 import {AgentUsers} from './AgentUsers'
 import {AgentMcpConfigurations} from './AgentMcpConfigurations'
@@ -8,8 +9,8 @@ import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 import {InterfaceSettings} from './InterfaceSettings'
 
-type Section='agents'|'database'|'interface'|'projects'|'web-server'
-const pages=[['database','Base de données'],['binaries','Binaires'],['git','Git'],['interface','Interface'],['update','Mise à jour'],['projects','Projets'],['web-server','Serveur Web']] as const
+type Section='agents'|'agent-administration'|'database'|'interface'|'projects'|'web-server'
+const pages=[['agents','Agents'],['database','Base de données'],['binaries','Binaires'],['git','Git'],['interface','Interface'],['update','Mise à jour'],['projects','Projets'],['web-server','Serveur Web']] as const
 export function AdministrationShell({children}:{children:ReactNode}){
   const path=useRouterState({select:state=>state.location.pathname})
   return <div className="administration-layout administration-shell"><aside className="administration-sidebar"><h2>Administration</h2><nav aria-label="Administration">{pages.map(([id,label])=><Link key={id} to={`/administration/${id}`} activeOptions={{exact:true}} className={path===`/administration/${id}`?'selected':''}>{label}</Link>)}</nav></aside><div className="administration-content">{children}</div></div>
@@ -22,18 +23,19 @@ type AgentStatuses={agents:AgentStatus[]}
 type Field={key:string;label:string;kind?:'list'|'port'|'secret'|'logging';help?:string}
 const fields:Record<Section,Field[]>={
   agents:[],
+  'agent-administration':[],
   database:[{key:'database_host',label:'Hôte PostgreSQL'},{key:'database_port',label:'Port PostgreSQL',kind:'port'},{key:'database',label:'Nom de la base'},{key:'database_user',label:'Compte applicatif'},{key:'database_password',label:'Mot de passe applicatif',kind:'secret'},{key:'migrator_user',label:'Compte de migration'},{key:'migrator_password',label:'Mot de passe de migration',kind:'secret'},{key:'electric_user',label:'Compte de réplication Electric'},{key:'electric_password',label:'Mot de passe Electric',kind:'secret'}],
   interface:[],
   projects:[{key:'projects_root',label:'Chemin absolu des projets',help:'Dossier existant utilisé pour les nouvelles créations.'},{key:'projects_user',label:'Compte POSIX'},{key:'projects_group',label:'Groupe POSIX'}],
   'web-server':[{key:'web_public_urls',label:'URLs des virtual hosts déclarés',kind:'list',help:'Une origine complète par ligne, par exemple https://cab.example.org. Aucun proxy ni certificat n’est créé.'},{key:'web_allowed_hosts',label:'Noms d’hôtes supplémentaires autorisés',kind:'list',help:'Un nom DNS ou une adresse IP par ligne. Les noms des URLs déclarées sont également autorisés.'},{key:'web_csrf_trusted_origins',label:'Origines CSRF de confiance',kind:'list',help:'Une origine http:// ou https:// par ligne, avec le port si nécessaire. La protection CSRF reste active.'},{key:'electric_port',label:'Port interne Electric',kind:'port'},{key:'electric_secret',label:'Secret interne Electric',kind:'secret'},{key:'logging',label:'Niveau de journalisation',kind:'logging'}],
 }
-export function ConfigurationAccess({login,section,selectedAgent}:{login:ReactNode;section:Section;selectedAgent?:string}){
+export function ConfigurationAccess({login,section,selectedAgent,catalog}:{login:ReactNode;section:Section;selectedAgent?:string;catalog?:CatalogPage}){
   const [notice,setNotice]=useState('')
   const query=useQuery({queryKey:['service-configuration'],queryFn:()=>api<Configuration>('administration/configuration')})
   if(query.isPending)return <p role="status">Chargement de la configuration…</p>
   if(query.error)return login
   const initial=query.data
-  if(section==='agents')return <Agents selectedAgent={selectedAgent}/>
+  if(section==='agents'||section==='agent-administration')return <Agents selectedAgent={selectedAgent} catalog={catalog} administration={section==='agent-administration'}/>
   return <section className="administration"><h1>{pages.find(([id])=>id===section)?.[1]}</h1>
     {notice&&<p role="status">{notice}</p>}
     {initial.restart_required&&<p role="status" className="pending-configuration">Redémarrage nécessaire pour appliquer : {initial.pending_fields.join(', ')}. La configuration active est conservée jusque-là.</p>}
@@ -63,20 +65,25 @@ function AgentReminders(){
     <h2>Rappels d’inactivité</h2>
     <p>Le délai court depuis la dernière activité ou le dernier rappel. Saisir 0 au premier délai désactive les rappels.</p>
     <form onSubmit={event=>{event.preventDefault();save.mutate(values)}}>
-      {fields.map(([key,label])=><label key={key}>{label} (secondes)
-        <input type="number" required min={key==='seconds'?0:30} max={86400} step={1} value={values[key]}
-          onChange={event=>setDraft({...values,[key]:event.target.valueAsNumber})}/>
-      </label>)}
+      <div className="table-wrap"><table className="monitor-table" aria-label="Rappels d’inactivité">
+        <thead><tr><th scope="col">Relance</th><th scope="col">Délai (secondes)</th></tr></thead>
+        <tbody>{fields.map(([key,label])=><tr key={key}>
+          <td data-label="Relance"><label htmlFor={'agent-reminder-'+key}>{label}</label></td>
+          <td data-label="Délai (secondes)"><input id={'agent-reminder-'+key} type="number" required min={key==='seconds'?0:30} max={86400} step={1} value={values[key]}
+            onChange={event=>setDraft({...values,[key]:event.target.valueAsNumber})}/></td>
+        </tr>)}</tbody>
+      </table></div>
       <button type="submit" disabled={!draft||save.isPending}>Enregistrer les rappels</button>
       {save.isError&&<p role="alert">Saisir des délais croissants. Le premier délai est compris entre 30 secondes et un jour, ou vaut 0.</p>}
       {save.isSuccess&&!draft&&<p role="status">Délais enregistrés.</p>}
     </form>
   </section>
 }
-function Agents({selectedAgent}:{selectedAgent?:string}){
+
+function Agents({selectedAgent,catalog,administration}:{selectedAgent?:string;catalog?:CatalogPage;administration:boolean}){
   const client=useQueryClient()
   const status=useQuery({queryKey:['agent-status'],queryFn:()=>api<AgentStatuses>('administration/agent-status')})
-  const query=useQuery({queryKey:['agents-inventory'],queryFn:()=>api<Inventory>('administration/agents')})
+  const query=useQuery({queryKey:['agents-inventory'],queryFn:()=>api<Inventory>('administration/agents'),enabled:!catalog})
   useEffect(()=>{
     const controller=new AbortController()
     const boolean=(value:unknown):boolean|null=>value===true||value==='true'?true:value===false||value==='false'?false:null
@@ -92,7 +99,7 @@ function Agents({selectedAgent}:{selectedAgent?:string}){
   const selected=status.data.agents.find(agent=>agent.id===selectedAgent)
   const placeholder:Agent|undefined=selected?{agent:selected.id,label:selected.label,runtime:{running:false,mcp_running:false,mcp_connected:false,mcp_state:'unverified'},release:{},connector_path:'',connector_agent:'',path:'',resolved_path:'',state:'loading',version:null,mcp_configurations:[]}:undefined
   const displayedAgents=selectedAgent&&selected?[query.data?.agents.find(agent=>agent.agent===selectedAgent)||placeholder!]:query.data?.agents||[]
-  return <div className="administration-layout"><aside className="administration-sidebar"><h2>Agents</h2><nav aria-label="Liste des agents">{status.data.agents.map(agent=><Link to={'/agents/'+paths[agent.id]} key={agent.id} className={selectedAgent===agent.id?'selected':''} aria-current={selectedAgent===agent.id?'page':undefined}>{agent.label}</Link>)}</nav></aside><div className="administration-content">{selectedAgent&&<nav className="project-tabs" aria-label="Agent"><Link to="/agents" activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil des agents" title="Accueil des agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link></nav>}<section className={selectedAgent?'administration agent-detail':'administration agents-overview'}><div className="agent-title"><h1 className={selected?.installed===true?'agent-installed':selected?.installed===false?'agent-missing':undefined}>{selected?.label||'Agents'}</h1>{selected?.installed===true&&<>{selected.running!==null&&<span className={'status-dot '+(selected.running?'status-up':'status-down')} role="img" aria-label={selected.running?'Agent démarré':'Agent arrêté'} title={selected.running?'Agent démarré':'Agent arrêté'}/>}<span className="installed-version" aria-label="Version installée">{selected.local_version||'Version inconnue'}</span></>}{selected&&<><span className="agent-title-separator" aria-hidden="true">|</span><span className={'mcp-live-badge '+(selected.mcp_connected===true?'':'mcp-not-connected')} title={selected.mcp_connected===true?'MCP connecté':selected.mcp_connected===false?'MCP déconnecté ; dernière version observée':'État MCP non observé'}><span className={'status-dot '+(selected.mcp_connected===true?'status-up':selected.mcp_connected===false?'status-down':'status-unknown')} role="img" aria-label={selected.mcp_connected===true?'MCP connecté':selected.mcp_connected===false?'MCP déconnecté':'État MCP non observé'}/>MCP {selected.label}{selected.mcp_versions.length>0&&' '+selected.mcp_versions.join(', ')}</span></>}</div>{query.isPending&&<p role="status">Chargement des informations détaillées…</p>}{query.error&&<p role="alert">Inventaire des agents indisponible : {query.error.message}</p>}{!selectedAgent&&<AgentReminders/>}<div className={selectedAgent?'agents-grid agent-detail-grid':'agents-grid'}>{displayedAgents.map(agent=>{
+  const overview=<section className={selectedAgent?'administration agent-detail':'administration agents-overview'}><div className="agent-title"><h1 className={selected?.installed===true?'agent-installed':selected?.installed===false?'agent-missing':undefined}>{selected?.label||'Agents'}</h1>{selected?.installed===true&&<>{selected.running!==null&&<span className={'status-dot '+(selected.running?'status-up':'status-down')} role="img" aria-label={selected.running?'Agent démarré':'Agent arrêté'} title={selected.running?'Agent démarré':'Agent arrêté'}/>}<span className="installed-version" aria-label="Version installée">{selected.local_version||'Version inconnue'}</span></>}{selected&&<><span className="agent-title-separator" aria-hidden="true">|</span><span className={'mcp-live-badge '+(selected.mcp_connected===true?'':'mcp-not-connected')} title={selected.mcp_connected===true?'MCP connecté':selected.mcp_connected===false?'MCP déconnecté ; dernière version observée':'État MCP non observé'}><span className={'status-dot '+(selected.mcp_connected===true?'status-up':selected.mcp_connected===false?'status-down':'status-unknown')} role="img" aria-label={selected.mcp_connected===true?'MCP connecté':selected.mcp_connected===false?'MCP déconnecté':'État MCP non observé'}/>MCP {selected.label}{selected.mcp_versions.length>0&&' '+selected.mcp_versions.join(', ')}</span></>}</div>{query.isPending&&<p role="status">Chargement des informations détaillées…</p>}{query.error&&<p role="alert">Inventaire des agents indisponible : {query.error.message}</p>}<div className={selectedAgent?'agents-grid agent-detail-grid':'agents-grid'}>{displayedAgents.map(agent=>{
     const installed=agent.state==='available';const runtime=agent.runtime;const release=agent.release
     return <div key={agent.agent} className={selectedAgent?'agent-detail-blocks':undefined}><section className="agent-card" data-agent={agent.agent}>
       {selectedAgent&&<h2 className="agent-block-heading">Informations</h2>}
@@ -103,5 +110,14 @@ function Agents({selectedAgent}:{selectedAgent?:string}){
       {!release.version&&<p className="release-note">Vérification quotidienne des versions planifiée.</p>}
       </div>
     </section>{selectedAgent&&<><AgentUsers agent={agent.agent}/><AgentMcpConfigurations agent={agent.agent}/><section className="agent-card"><h2 className="agent-block-heading">Configuration Générale</h2><div className="agent-card-content"/></section><section className="agent-card"><h2 className="agent-block-heading">Configuration Plugins</h2><div className="agent-card-content"/></section></>}</div>
-  })}</div></section></div></div>
+  })}</div>{administration&&<AgentReminders/>}</section>
+  if(administration)return overview
+  return <div className="administration-layout">
+    <aside className="administration-sidebar"><h2>Agents</h2>
+      <nav aria-label="Liste des agents">{status.data.agents.map(agent=><Link to={'/agents/'+paths[agent.id]}
+        key={agent.id} className={selectedAgent===agent.id?'selected':''}
+        aria-current={selectedAgent===agent.id?'page':undefined}>{agent.label}</Link>)}</nav>
+    </aside>
+    <div className="administration-content"><AgentNavigation/>{catalog?<AgentCatalog page={catalog}/>:overview}</div>
+  </div>
 }
