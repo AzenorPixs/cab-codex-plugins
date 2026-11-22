@@ -36491,6 +36491,106 @@ Diagnostics HTTP loopback authentifiés de l'API OpenCode 2.2.0 et des services 
 La livraison 2.1.0 impose le redémarrage des trois services et, si OpenCode est actif, le rechargement natif du broker avec preuve fraîche de version. CABU prépare les fichiers avant coupure, réutilise les validations syntaxiques par empreinte, regroupe les opérations systemd et vérifie les versions en parallèle. Les RUN ne sont ni avertis ni modifiés ; aucune permission consommée n'est rejouée. Les tests couvrent la conservation des preuves et la récupération transactionnelle. Le bilan documentaire par fichier figure dans PREUVES-SCM.json. Les mesures indisponibles restent N/A. Les six sections, UTF-8/LF et totaux sont vérifiés.
 
 
+## Change `fix-session-forge-rows-and-cycle-summary` — openspec/changes/archive/2026-11-22-fix-session-forge-rows-and-cycle-summary/STATISTICS.md
+
+
+# Statistiques du change — fix-session-forge-rows-and-cycle-summary
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `fix-session-forge-rows-and-cycle-summary` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | 101.762828 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 101.762828 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 2712717 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 3509 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 76 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 2703488 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 2716226 | Périodes CAB : bornes et empreintes de l’export. |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:05a808402359b0e77738856b554581b5f05dfeb90b6cb64a7682ea8a5413fac5
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 2 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7d0df7bb09d4cf6a53dabe19e9f4070526168156c6b9ddd262003e5f053bb0f6", "generated_at": "2026-11-22T13:29:10.440799+00:00", "revision": "7d0df7bb09d4cf6a53dabe19e9f4070526168156c6b9ddd262003e5f053bb0f6", "scope": "change"} -->
+
+
 ## Change `fix-sgs-report-isolation-and-compatibility` — openspec/changes/archive/2026-11-06-fix-sgs-report-isolation-and-compatibility/STATISTICS.md
 
 
@@ -76625,4 +76725,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "894a7f5480d1a7d6578805323194245bcf5511c603043ddcdb924c09aa635fc2", "generated_at": "2026-11-22T13:20:21.941830+00:00", "revision": "894a7f5480d1a7d6578805323194245bcf5511c603043ddcdb924c09aa635fc2", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f388ad12e81273ad9e262487ba80845871f2da0f7e3ab969599f441e1c2b059c", "generated_at": "2026-11-22T13:29:12.934213+00:00", "revision": "f388ad12e81273ad9e262487ba80845871f2da0f7e3ab969599f441e1c2b059c", "scope": "project"} -->
