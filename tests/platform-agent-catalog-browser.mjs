@@ -29,20 +29,68 @@ function fill(selector,value){
   Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype,'value').set.call(input,value);
   input.dispatchEvent(new win.Event('input',{bubbles:true}));
 }
+const rows=title=>Array.from(find('table[aria-label="'+title+'"] tbody')?.rows??[]);
+const search=title=>'input[aria-label="Rechercher dans '+title+'"]';
+const readRows=title=>rows(title).map(row=>row.textContent);
+async function pagination(title,needle){
+  await wait(()=>rows(title).length===10,'Dix entrées '+title);
+  const pag='nav[aria-label="Pagination '+title+'"]';
+  find(pag).querySelectorAll('button')[2].click();
+  await wait(()=>rows(title).length===2,'Deux entrées en seconde page '+title);
+  fill(search(title),needle);
+  await wait(()=>rows(title).length===1&&readRows(title)[0].includes(needle),'Recherche instantanée sur toutes les pages '+title);
+  fill(search(title),'');
+  await wait(()=>rows(title).length===10,'Retour première page '+title);
+}
+const confirm=()=>Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Supprimer').click();
 const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)});
 (async()=>{
   await wait(()=>find('[data-agent="codex"]'),'Carte Codex');
   check(!find('table[aria-label="Rappels d’inactivité"]'),'Rappels absents de l’accueil Agents');
   await click('nav[aria-label="Agents"] a[href="/agents/providers"]');
+  await pagination('Fournisseurs','Fournisseur 12');
+  const supplierSort='table[aria-label="Fournisseurs"] th:first-child button';
+  await click(supplierSort);
+  await click(supplierSort);
+  check(find(supplierSort).parentElement.getAttribute('aria-sort')==='descending'&&readRows('Fournisseurs')[0].includes('Fournisseur 12'),'Tri des fournisseurs');
   await click('button[aria-label="Ajouter un fournisseur"]');
   fill('dialog[open] [name=name]','Fournisseur témoin');
   fill('dialog[open] [name=models_url]','https://example.org/models');
   fill('dialog[open] [name=api_url]','https://example.org/v1');
   find('dialog[open] form').requestSubmit();
-  await wait(()=>find('table[aria-label="Fournisseurs"] tbody td')?.textContent==='Fournisseur témoin'&&!find('dialog[open]'),'Fournisseur enregistré');
+  await wait(()=>!find('dialog[open]'),'Fournisseur enregistré');
+  fill(search('Fournisseurs'),'fournisseur temoin');
+  await wait(()=>rows('Fournisseurs').length===1&&readRows('Fournisseurs')[0].includes('Fournisseur témoin'),'Recherche sans accent');
   await click('nav[aria-label="Agents"] a[href="/agents/models"]');
-  await wait(()=>find('table[aria-label="Modèles"] tbody')?.textContent.includes('Modèle témoin'),'Modèle affiché');
+  await pagination('Modèles','Modèle 12');
+  check(find('[role=tab][aria-selected=true]').textContent==='Tous','Onglet initial Tous');
+  check(find('table[aria-label="Modèles"] thead').textContent.includes('Lecture cache / M'),'Colonne lecture du cache');
+  check(readRows('Modèles')[0].includes('30m'),'Durée de cache affichée');
+  const contextSort='table[aria-label="Modèles"] th:nth-child(3) button';
+  await click(contextSort);
+  await click(contextSort);
+  check(readRows('Modèles')[0].includes('Modèle 12'),'Tri numérique du contexte');
+  await click('button[aria-label="Ajouter une politique de modèles"]');
+  fill('dialog[open] [name=name]','Rapides');
+  find('dialog[open] [name=include_free]').click();
+  fill('dialog[open] input[type=range]','2');
+  fill('dialog[open] [name=cache_read_max]','0.25');
+  find('dialog[open] form').requestSubmit();
+  await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides'&&rows('Modèles').length===1&&!find('dialog[open]'),'Politique créée et appliquée');
+  await click('button[aria-label="Éditer la politique de modèles"]');
+  await wait(()=>find('dialog[open] [name=name]')?.value==='Rapides','Politique préremplie');
+  fill('dialog[open] [name=name]','Rapides renommés');
+  find('dialog[open] form').requestSubmit();
+  await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
+  await click('button[aria-label="Supprimer la politique de modèles"]');
+  confirm();
+  await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
   await click('nav[aria-label="Agents"] a[href="/agents/api-keys"]');
+  await pagination('Clés API','Clé 12');
+  const keySort='table[aria-label="Clés API"] th:nth-child(2) button';
+  await click(keySort);
+  await click(keySort);
+  check(readRows('Clés API')[0].includes('Clé 12'),'Tri numérique des quotas');
   await click('button[aria-label="Ajouter une clé API"]');
   const provider=await wait(()=>find('dialog[open] [name=provider_id] option[value="1"]')?.parentElement,'Fournisseur de la clé');
   provider.value='1';
@@ -52,13 +100,21 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   check(find('dialog[open] input[name=key]').type==='text','Affichage de la saisie');
   await click('button[aria-label="Masquer la clé API"]');
   find('dialog[open] form').requestSubmit();
-  await wait(()=>find('table[aria-label="Clés API"] tbody tr')&&!find('dialog[open]'),'Clé enregistrée');
-  await click('button[aria-label^="Supprimer une clé API"]');
+  await wait(()=>!find('dialog[open]'),'Clé enregistrée');
+  fill(search('Clés API'),'témoin');
+  await wait(()=>rows('Clés API').length===1&&readRows('Clés API')[0].includes('Fournisseur témoin'),'Clé de test affichée');
+  await click('button[aria-label="Supprimer une clé API de Fournisseur témoin"]');
   check(find('table[aria-label="Clés API"] tbody').textContent.includes('—'),'Quota inconnu');
   check(!find('table[aria-label="Clés API"]').textContent.includes('fixture-key'),'Clé absente de la liste');
-  const remove=Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Supprimer');
-  remove.click();
+  confirm();
   await wait(()=>!find('table[aria-label="Clés API"] tbody tr')&&!find('dialog[open]'),'Suppression de la clé');
+  await click('nav[aria-label="Agents"] a[href="/agents/providers"]');
+  await wait(()=>rows('Fournisseurs').length===10,'Retour fournisseurs');
+  fill(search('Fournisseurs'),'témoin');
+  await click('button[aria-label="Supprimer le fournisseur Fournisseur témoin"]');
+  check(find('dialog[open]').textContent.includes('seront retirés du catalogue'),'Confirmation des modèles liés');
+  confirm();
+  await wait(()=>rows('Fournisseurs').length===0&&!find('dialog[open]'),'Fournisseur supprimé');
   await click('nav[aria-label="Agents"] a[aria-label="Accueil des agents"]');
   await wait(()=>frame.contentWindow.location.pathname==='/agents','Retour sur Agents');
   frame.src='/administration/agents';
@@ -80,11 +136,13 @@ try{
   const assets=new Map()
   for(const name of index.toString().match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
   let report
-  let providers, keys, reminders
+  let providers, keys, reminders, policies
+  const fixtureRows=Array.from({length:12},(_,index)=>index+1)
   const json=(response,value,status=200)=>response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value))
   const body=async request=>{let data='';for await(const part of request)data+=part;return JSON.parse(data)}
   server=createServer(async(request,response)=>{
-    const route=new URL(request.url,'http://localhost').pathname
+    const url=new URL(request.url,'http://localhost')
+    const route=url.pathname
     const post=request.method==='POST'
     try{
       if(route==='/observation'&&post){report(await body(request));return response.writeHead(204).end()}
@@ -102,21 +160,58 @@ try{
         if(!post)return json(response,{providers})
         const values=await body(request)
         assert.deepEqual(values,{name:'Fournisseur témoin',models_url:'https://example.org/models',api_url:'https://example.org/v1'})
-        providers=[{id:1,...values}]
-        return json(response,providers[0])
+        const provider={id:1,...values}
+        providers.push(provider)
+        return json(response,provider)
       }
-      if(route==='/api/v1/administration/agent-models')return json(response,{models:providers.length?[{
-        id:1,identifier:'fixture',name:'Modèle témoin',provider:providers[0].name,context:131072,output:16384,input_cost:0.1,output_cost:0.3,
-      }]:[]})
+      if(route==='/api/v1/administration/agent-providers/remove'){
+        assert.deepEqual(await body(request),{id:1})
+        providers=providers.filter(provider=>provider.id!==1)
+        return json(response,{removed:true})
+      }
+      if(route==='/api/v1/administration/agent-model-policies'){
+        if(!post)return json(response,{policies})
+        const values=await body(request)
+        assert.equal(values.name,'Rapides')
+        assert.equal(values.context_min,500000)
+        assert.equal(values.output_min,0)
+        assert.equal(values.include_free,false)
+        assert.equal(values.include_paid,true)
+        assert.equal(values.cache_read_max,'0.25')
+        const policy={id:21,...values}
+        policies=[policy]
+        return json(response,policy)
+      }
+      if(route==='/api/v1/administration/agent-model-policies/edit'){
+        const policy=await body(request)
+        assert.equal(policy.id,21)
+        assert.equal(policy.name,'Rapides renommés')
+        assert.equal(policy.context_min,500000)
+        policies=[policy]
+        return json(response,policy)
+      }
+      if(route==='/api/v1/administration/agent-model-policies/remove'){
+        assert.deepEqual(await body(request),{id:21})
+        policies=[]
+        return json(response,{removed:true})
+      }
+      if(route==='/api/v1/administration/agent-models'){
+        const models=fixtureRows.map(id=>({
+          id,identifier:'fixture-'+id,name:'Modèle '+id,provider:'Fournisseur '+id,context:500000+1000*id,output:64000,
+          input_cost:0.1,output_cost:0.3,cache_read_cost:0.25,cache_write_cost:0.3,cache_write_duration:'30m',
+        }))
+        return json(response,{models:url.searchParams.has('policy_id')?models.slice(-1):models})
+      }
       if(route==='/api/v1/administration/agent-api-keys'){
         if(!post)return json(response,{keys})
         assert.deepEqual(await body(request),{provider_id:1,key:'fixture-key'})
-        keys=[{id:'key-1',provider:providers[0].name,day:null,week:null,month:null,credits:null}]
-        return json(response,keys[0])
+        const key={id:'key-1',provider:providers.find(provider=>provider.id===1).name,day:null,week:null,month:null,credits:null}
+        keys.push(key)
+        return json(response,key)
       }
       if(route==='/api/v1/administration/agent-api-keys/remove'){
         assert.deepEqual(await body(request),{id:'key-1'})
-        keys=[]
+        keys=keys.filter(key=>key.id!=='key-1')
         return json(response,{removed:true})
       }
       if(route.startsWith('/api/v1/sync/')){
@@ -138,7 +233,10 @@ try{
     ['Chromium','/usr/bin/chromium',['--headless','--no-sandbox','--disable-background-networking','--user-data-dir='+join(workspace,'chromium')]],
     ['Firefox','/usr/bin/firefox',['--headless','--no-remote','--profile',await mkdtemp(join(workspace,'firefox-'))]],
   ]){
-    providers=[];keys=[];reminders={seconds:300,second_seconds:1800,last_seconds:14400}
+    providers=fixtureRows.map(id=>({id:id+10,name:'Fournisseur '+id,models_url:'',api_url:'https://example.org/'+id}))
+    keys=fixtureRows.map(id=>({id:'fixture-'+id,provider:'Clé '+id,day:id,week:null,month:null,credits:null}))
+    policies=[]
+    reminders={seconds:300,second_seconds:1800,last_seconds:14400}
     const observation=new Promise(resolve=>{report=resolve})
     const child=spawn(binary,[...args,'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
     const closed=once(child,'close')
@@ -147,7 +245,7 @@ try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' : '+result.error+' (fournisseurs fixture : '+providers.length+')')
       assert.equal(reminders.seconds,420)
-      console.log(name+' : navigation, ajout fournisseur et clé, masquage, suppression et changement de délai vérifiés.')
+      console.log(name+' : pagination, recherche, tri, suppressions et politiques de modèles vérifiés.')
     }finally{clearTimeout(timer);child.kill();await closed}
   }
 }finally{

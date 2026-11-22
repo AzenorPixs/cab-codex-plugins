@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 from datetime import timedelta
+from decimal import Decimal
 
 if sys.executable != '/usr/bin/python3.13':
     os.execv('/usr/bin/python3.13', ['/usr/bin/python3.13', __file__])
@@ -29,7 +30,8 @@ REFERENCE = {'opencode-go': {'models': {'sample': {'id': 'sample', 'name': 'Othe
 
 class CatalogTests(unittest.TestCase):
     def setUp(self):
-        from cab_platform.core.models import AgentApiKey, AgentModel, AgentProvider
+        from cab_platform.core.models import AgentApiKey, AgentModel, AgentModelPolicy, AgentProvider
+        AgentModelPolicy.objects.all().delete()
         AgentApiKey.objects.all().delete()
         AgentModel.objects.all().delete()
         AgentProvider.objects.all().delete()
@@ -113,6 +115,94 @@ class CatalogTests(unittest.TestCase):
                     connection_class.assert_called_once()
                     response.read1.assert_not_called()
 
+    def test_provider_removal_protects_keys_and_survives_refresh(self):
+        from cab_platform import agent_catalog as catalog
+        from cab_platform.core.models import AgentApiKey, AgentModel, AgentProvider
+        with patch.object(catalog, 'fetch', return_value=OPEN_CODE):
+            provider = catalog.add_provider('Demo', 'https://example.org', 'https://example.org/models')
+        identifier = provider['id']
+        with patch.object(catalog, 'crypt_credential', return_value=b'fixture-ciphertext'):
+            key = catalog.add_key(identifier, 'fixture-key')
+        with self.assertRaises(catalog.Refused) as error:
+            catalog.remove_provider(identifier)
+        self.assertEqual(error.exception.code, 'agent-provider-keys-linked')
+        self.assertTrue(AgentApiKey.objects.filter(pk=key['id']).exists())
+        self.assertTrue(AgentModel.objects.filter(provider_id=identifier).exists())
+        catalog.remove_key(key['id'])
+        AgentProvider.objects.filter(pk=identifier).update(refresh_after=timezone.now())
+        def remove_during_fetch(_):
+            self.assertEqual(catalog.remove_provider(identifier), {'removed': True})
+            return OPEN_CODE
+        with patch.object(catalog, 'refresh_reference'), patch.object(catalog, 'fetch', side_effect=remove_during_fetch):
+            catalog.refresh()
+        self.assertFalse(AgentProvider.objects.filter(pk=identifier).exists())
+        self.assertFalse(AgentModel.objects.filter(provider_id=identifier).exists())
+
+    def test_cache_prices_preserve_zero_shortest_duration_and_legacy_models(self):
+        from cab_platform import agent_catalog as catalog
+        from cab_platform.core.models import AgentModel
+        source = {'id': 'prices', 'cost': {'text': {'input': {'cache': {
+            'read': 0, 'write': {'12h': 0.5, '30m': 0.25},
+        }}}}}
+        reference = {'prices': {'cost': {'cache_read': 4, 'cache_write': 5}}}
+        details = catalog.model_details('prices', source, reference)
+        expected = {'cache_read_cost': 0, 'cache_write_cost': 0.25, 'cache_write_duration': '30m'}
+        self.assertEqual({key: details['summary'][key] for key in expected}, expected)
+        priced = catalog.cache_prices({'pricing': {'input_cache_read': '0.00000025', 'input_cache_write': '0.0000015'}})
+        self.assertEqual(Decimal(priced['cache_read_cost']), Decimal('.25'))
+        self.assertEqual(Decimal(priced['cache_write_cost']), Decimal('1.5'))
+        provider = catalog.add_provider('Demo', 'https://example.org', '')
+        legacy = {'summary': catalog.normalize(source), 'metadata': details['metadata']}
+        AgentModel.objects.create(provider_id=provider['id'], identifier='prices', source=source, details=legacy)
+        row, = catalog.models()
+        self.assertEqual({key: row[key] for key in expected}, expected)
+
+    def test_policy_crud_filters_inclusively_and_excludes_unknowns(self):
+        from cab_platform import agent_catalog as catalog, model_policies as rules
+        from cab_platform.core.models import AgentModel, AgentModelPolicy
+        provider = catalog.add_provider('Demo', 'https://example.org', '')
+        base = {'context': 500_000, 'output': 64_000, 'input_cost': '1.25', 'output_cost': 2,
+                'cache_read_cost': .1, 'cache_write_cost': .3}
+        summaries = {
+            'paid': base,
+            'tagged:free': base,
+            'zero': {**base, 'input_cost': '0', 'output_cost': 0},
+            'partial': {**base, 'output_cost': None},
+            'smaller': {**base, 'context': 262_144},
+        }
+        for identifier, summary in summaries.items():
+            AgentModel.objects.create(provider_id=provider['id'], identifier=identifier, source={}, details={'summary': summary})
+        values = {'name': ' Démo ', 'include_free': False, 'include_paid': True, 'context_min': 500_000,
+                  'output_min': 64_000, **dict.fromkeys(rules.PRICE_FIELDS, Decimal(0))}
+        values.update(input_price_min=Decimal('1.25'), input_price_max=Decimal('1.25'),
+                      output_price_min=Decimal(2), output_price_max=Decimal(2),
+                      cache_read_max=Decimal('.1'), cache_write_min=Decimal('.3'))
+        policy = rules.save_policy(None, values)
+        self.assertEqual(policy['name'], 'Démo')
+        self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], ['paid'])
+        self.assertEqual(len(catalog.models()), 5)
+        deliberately_invalid = [
+            ({'name': 'Tous'}, 'agent-model-policy-name-invalid'),
+            ({'context_min': 400_000}, 'agent-model-policy-slider-invalid'),
+            ({'input_price_max': Decimal(1)}, 'agent-model-policy-bounds-invalid'),
+        ]
+        for fields, code in deliberately_invalid:
+            with self.assertRaises(catalog.Refused) as error:
+                rules.save_policy(policy['id'], {**values, **fields})
+            self.assertEqual(error.exception.code, code)
+        with self.assertRaises(catalog.Refused) as error:
+            rules.save_policy(None, {**values, 'name': 'démo'})
+        self.assertEqual(error.exception.code, 'agent-model-policy-duplicate')
+        edited = {**values, **dict.fromkeys(rules.PRICE_FIELDS, Decimal(0)),
+                  'name': 'Gratuits', 'include_free': True, 'include_paid': False}
+        rules.save_policy(policy['id'], edited)
+        self.assertEqual(rules.policy_list()[0]['name'], 'Gratuits')
+        self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], ['tagged:free', 'zero'])
+        self.assertEqual(rules.remove_policy(policy['id']), {'removed': True})
+        self.assertFalse(AgentModelPolicy.objects.exists())
+        with self.assertRaises(catalog.Refused):
+            catalog.models(policy['id'])
+
 
 def command(*args):
     run([str(PG / args[0]), *args[1:]], check=True, stdout=DEVNULL)
@@ -135,11 +225,15 @@ if __name__ == '__main__':
             initial = loader.project_state([('cab_core', '0054_resource_reservations')])
             migration = loader.get_migration(*target)
             with connection.schema_editor() as schema_editor:
-                migration.apply(initial.clone(), schema_editor)
+                catalog_state = migration.apply(initial.clone(), schema_editor)
+            policy_migration = loader.get_migration('cab_core', '0056_agent_model_policy')
+            with connection.schema_editor() as schema_editor:
+                policy_migration.apply(catalog_state.clone(), schema_editor)
             result = unittest.main(exit=False).result
             with connection.schema_editor() as schema_editor:
+                policy_migration.unapply(catalog_state, schema_editor)
                 migration.unapply(initial, schema_editor)
-            assert 'agent_models' not in connection.introspection.table_names()
+            assert not {'agent_models', 'agent_model_policies'}.intersection(connection.introspection.table_names())
         finally:
             connection.close()
             command('pg_ctl', '-D', pgdata, '-m', 'immediate', '-w', 'stop')

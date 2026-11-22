@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Politiques du catalogue de modèles
+
+[filter-agent-model-catalogs](openspec/changes/archive/2026-11-22-filter-agent-model-catalogs/),
+code non attribué. Tableaux paginés, suppression protégée des fournisseurs,
+tarifs de cache et politiques de modèles persistantes. Vérifications CAB
+du 22 novembre 2026 sur PostgreSQL, Chromium et Firefox, reçus
+`STAGE-887-7-catalog-rules` et `STAGE-887-7-catalog-web`.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
 ## Catalogue des agents et des fournisseurs
 
 [manage-agent-provider-catalogs](openspec/changes/archive/2026-11-22-manage-agent-provider-catalogs/),

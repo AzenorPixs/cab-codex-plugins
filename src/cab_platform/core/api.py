@@ -2,8 +2,9 @@
 import hashlib
 import json
 import secrets
+from decimal import Decimal
 from pathlib import Path
-from typing import Any,Literal
+from typing import Annotated,Any,Literal
 from uuid import UUID
 from django.contrib.auth import authenticate,login,logout
 from django.db import transaction
@@ -339,11 +340,72 @@ def delete_agent_api_key(request, body: AgentApiKeyRemoval):
     return remove_key(body.id)
 
 
+CatalogID = Annotated[int, Field(gt=0, lt=2**63)]
+PolicyPrice = Annotated[Decimal, Field(ge=0, max_digits=24, decimal_places=12)]
+
+
+class CatalogRemoval(Schema):
+    id: CatalogID
+
+
+class ModelPolicyInput(Schema):
+    name: str
+    include_free: bool = True
+    include_paid: bool = True
+    context_min: int = 0
+    output_min: int = 0
+    input_price_min: PolicyPrice = Decimal(0)
+    input_price_max: PolicyPrice = Decimal(0)
+    output_price_min: PolicyPrice = Decimal(0)
+    output_price_max: PolicyPrice = Decimal(0)
+    cache_read_max: PolicyPrice = Decimal(0)
+    cache_write_min: PolicyPrice = Decimal(0)
+
+
+class ModelPolicyEdit(ModelPolicyInput):
+    id: CatalogID
+
+
+@api.post('/administration/agent-providers/remove')
+def delete_agent_provider(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import remove_provider
+    return remove_provider(body.id)
+
+
 @api.get('/administration/agent-models')
-def agent_models(request):
+def agent_models(request, policy_id: CatalogID | None = None):
     principal(request, admin=True)
     from cab_platform.agent_catalog import models
-    return agent_catalog_response('models', models())
+    return agent_catalog_response('models', models(policy_id))
+
+
+@api.get('/administration/agent-model-policies')
+def list_agent_model_policies(request):
+    principal(request, admin=True)
+    from cab_platform.model_policies import policy_list
+    return agent_catalog_response('policies', policy_list())
+
+
+@api.post('/administration/agent-model-policies')
+def add_agent_model_policy(request, body: ModelPolicyInput):
+    principal(request, admin=True)
+    from cab_platform.model_policies import save_policy
+    return save_policy(None, body.model_dump())
+
+
+@api.post('/administration/agent-model-policies/edit')
+def edit_agent_model_policy(request, body: ModelPolicyEdit):
+    principal(request, admin=True)
+    from cab_platform.model_policies import save_policy
+    return save_policy(body.id, body.model_dump(exclude={'id'}))
+
+
+@api.post('/administration/agent-model-policies/remove')
+def delete_agent_model_policy(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.model_policies import remove_policy
+    return remove_policy(body.id)
 
 
 @api.get('/administration/agent-status')

@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 3.15.0
+
+- Recherche instantanée, tri et pages de dix lignes pour les catalogues des agents.
+- Suppression de fournisseurs avec protection des clés liées.
+- Onglets de politiques de modèles persistants et tarifs de lecture et d’écriture du cache.
+
 ## 3.14.0
 
 - Rappels d’inactivité déplacés sous Administration → Agents dans un tableau.

@@ -7,6 +7,7 @@ import json
 import logging
 from math import isfinite
 from random import randint
+import re
 import socket
 import ssl
 from time import monotonic
@@ -16,6 +17,8 @@ from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.db import IntegrityError, close_old_connections, transaction
+from django.db.models import Case, F, JSONField, Value, When
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from .core.commands import Refused, require
@@ -145,7 +148,44 @@ def modality_list(value):
 
 def base_cost(cost, direction):
     value = cost.get(direction, obj(obj(cost.get('text')).get(direction)).get('price'))
+    return native_cost(value)
+
+
+def native_cost(value):
     return value if type(value) in (int, float) and 0 <= value < 10**15 else None
+
+
+def first_price(*values):
+    return next((value for value in values if value is not None), None)
+
+
+def cache_prices(record):
+    cost = obj(record.get('cost'))
+    pricing = obj(record.get('pricing'))
+    cache = obj(obj(obj(cost.get('text')).get('input')).get('cache'))
+    read = first_price(native_cost(cache.get('read')), cost_per_million(pricing.get('input_cache_read')),
+                       native_cost(cost.get('cache_read')))
+    write = native_cost(cache.get('write'))
+    duration = None
+    if write is None:
+        units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+        options = []
+        for label, value in obj(cache.get('write')).items():
+            match = re.fullmatch(r'([1-9][0-9]{0,5})([smhd])', label)
+            price = native_cost(value)
+            if match and price is not None:
+                options.append((int(match[1]) * units[match[2]], label, price))
+        if options:
+            _, duration, write = min(options)
+    write = first_price(write, cost_per_million(pricing.get('input_cache_write')),
+                        native_cost(cost.get('cache_write')))
+    return {'cache_read_cost': read, 'cache_write_cost': write, 'cache_write_duration': duration}
+
+
+def merge_cache(primary, fallback):
+    if primary['cache_write_cost'] is not None:
+        fallback = {**fallback, 'cache_write_duration': primary['cache_write_duration']}
+    return merge_missing(primary, fallback)
 
 
 def normalize(record):
@@ -208,7 +248,8 @@ def model_details(identifier, record, reference):
                       and (key in ids or value.get('canonical_model_id') in ids)]
         if len(candidates) == 1:
             match = candidates[0]
-    return {'summary': merge_missing(normalize(record), normalize(match)),
+    cache = merge_cache(cache_prices(record), cache_prices(match))
+    return {'summary': {**merge_missing(normalize(record), normalize(match)), **cache},
             'metadata': merge_missing(record, match)}
 
 
@@ -253,6 +294,17 @@ def add_provider(name, api_url, models_url):
     return {'id': provider.pk, 'name': provider.name, 'api_url': provider.api_url, 'models_url': provider.models_url}
 
 
+@transaction.atomic
+def remove_provider(provider_id):
+    provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
+    require(provider is not None, 'agent-provider-not-found', 404)
+    try:
+        provider.delete()
+    except ProtectedError:
+        raise Refused('agent-provider-keys-linked', 409) from None
+    return {'removed': True}
+
+
 def key_metadata(key_id, provider_name):
     return {'id': key_id, 'provider': provider_name, 'day': None, 'week': None,
             'month': None, 'credits': None}
@@ -271,13 +323,15 @@ def add_key(provider_id, secret):
     require(0 < len(encoded) <= 16_384 and secret == secret.strip()
             and not any(char.isspace() or ord(char) < 32 for char in secret),
             'agent-api-key-invalid', 400)
-    provider_name = AgentProvider.objects.filter(pk=provider_id).values_list('name', flat=True).first()
-    require(provider_name is not None, 'agent-provider-not-found', 404)
+    require(AgentProvider.objects.filter(pk=provider_id).exists(), 'agent-provider-not-found', 404)
     key_id = uuid4()
     ciphertext = crypt_credential('cab-agent-api-' + key_id.hex, encoded,
                                   failure='agent-api-key-tpm-unavailable').decode()
-    AgentApiKey.objects.create(id=key_id, provider_id=provider_id, ciphertext=ciphertext)
-    return key_metadata(key_id, provider_name)
+    with transaction.atomic():
+        provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
+        require(provider is not None, 'agent-provider-not-found', 404)
+        AgentApiKey.objects.create(id=key_id, provider=provider, ciphertext=ciphertext)
+    return key_metadata(key_id, provider.name)
 
 
 def remove_key(key_id):
@@ -286,11 +340,27 @@ def remove_key(key_id):
     return {'removed': True}
 
 
-def models():
+def models(policy_id=None):
+    from .model_policies import matches, policy_or_error
+
+    policy = policy_or_error(policy_id) if policy_id is not None else None
     rows = AgentModel.objects.order_by('provider__name', 'identifier').values(
-        'id', 'provider__name', 'identifier', 'details__summary')
-    return [{'id': row['id'], 'provider': row['provider__name'], 'identifier': row['identifier'],
-             **row['details__summary']} for row in rows]
+        'id', 'provider__name', 'identifier', 'details__summary',
+        legacy_source=Case(When(details__summary__has_key='cache_read_cost', then=Value(None)),
+                           default=F('source'), output_field=JSONField()),
+        legacy_metadata=Case(When(details__summary__has_key='cache_read_cost', then=Value(None)),
+                             default=F('details__metadata'), output_field=JSONField()),
+    )
+    result = []
+    for item in rows.iterator():
+        summary = item['details__summary']
+        if 'cache_read_cost' not in summary:
+            summary = {**summary, **merge_cache(cache_prices(obj(item['legacy_source'])),
+                                                cache_prices(obj(item['legacy_metadata'])))}
+        row = {'id': item['id'], 'provider': item['provider__name'], 'identifier': item['identifier'], **summary}
+        if policy is None or matches(policy, row):
+            result.append(row)
+    return result
 
 
 def refresh_reference():
@@ -302,9 +372,12 @@ def refresh_reference():
         reference = fetch(MODELS_DEV_URL)
         require(isinstance(reference, dict) and any(obj(item).get('models') for item in reference.values()),
                 'agent-catalog-format-invalid', 422)
-        for provider in AgentProvider.objects.iterator():
-            matches = reference_for(provider, reference)
+        for provider_id in AgentProvider.objects.values_list('id', flat=True).iterator():
             with transaction.atomic():
+                provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
+                if provider is None:
+                    continue
+                matches = reference_for(provider, reference)
                 rows = list(provider.catalog.all())
                 for row in rows:
                     row.details = model_details(row.identifier, row.source, matches)
@@ -324,10 +397,11 @@ def refresh():
         try:
             records = read_catalog(fetch(provider.models_url))
             with transaction.atomic():
-                save_catalog(provider, records, _reference)
+                current = AgentProvider.objects.select_for_update().filter(pk=provider.pk).first()
+                if current is not None:
+                    save_catalog(current, records, _reference)
         except Refused:
-            provider.refresh_after = timezone.now() + RETRY_DELAY
-            provider.save(update_fields=['refresh_after'])
+            AgentProvider.objects.filter(pk=provider.pk).update(refresh_after=timezone.now() + RETRY_DELAY)
             LOG.warning('Catalogue fournisseur indisponible', extra={'provider_id': provider.pk})
     finally:
         close_old_connections()

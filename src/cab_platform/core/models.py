@@ -42,6 +42,24 @@ class AgentModel(models.Model):
         constraints = [models.UniqueConstraint(fields=['provider', 'identifier'], name='agent_model_identity')]
 
 
+class AgentModelPolicy(models.Model):
+    name = models.CharField(max_length=120)
+    include_free = models.BooleanField(default=True)
+    include_paid = models.BooleanField(default=True)
+    context_min = models.PositiveIntegerField(default=0)
+    output_min = models.PositiveIntegerField(default=0)
+    input_price_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    input_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    output_price_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    output_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_read_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_write_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+
+    class Meta:
+        db_table = 'agent_model_policies'
+        constraints = [models.UniqueConstraint(models.functions.Lower('name'), name='agent_model_policy_name')]
+
+
 class AgentUser(models.Model):
     agent=models.ForeignKey(Agent,on_delete=models.PROTECT,related_name='users')
     uid=models.PositiveBigIntegerField()
