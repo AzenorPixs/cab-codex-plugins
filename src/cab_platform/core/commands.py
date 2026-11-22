@@ -402,8 +402,12 @@ def claim_operation(operation_id):
     working(r)
     # Un effet incertain conserve sa ressource. Pas de blocage des autres RUN.
     file_keys=['file:'+r.project.root+'/'+p for p in r.mandate['paths']] if op.request['kind']=='local' else []
-    keys=sorted(set(file_keys+op.request.get('resources',[])))
-    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
+    bank_keys=[]
+    if op.request['kind']=='external':
+        bank_keys=[r.mandate['external_adapters'][op.request['adapter_id']]['resource_key']]
+    keys=sorted(set(file_keys+bank_keys+op.request.get('resources',[])))
+    from cab_platform.resource_reservations import overlaps, resource_guard
+    resource_guard()
     working(r)
     require(len(keys)<=128 and all(isinstance(k,str) and len(k)<=1800 for k in keys),'resources-invalid',400)
     allowed=r.mandate.get('resources',[])
@@ -411,10 +415,16 @@ def claim_operation(operation_id):
         require(key in allowed or key.startswith('file:'+r.project.root+'/') and any(key=='file:'+r.project.root+'/'+p or key.startswith('file:'+r.project.root+'/'+p+'/') for p in r.mandate['paths']),'resource-outside-mandate',403)
         Resource.objects.get_or_create(pk=key)
     resources=list(Resource.objects.select_for_update().filter(pk__in=keys).order_by('pk'))
-    for held in Lease.objects.filter(state='HELD').select_related('resource'):
+    for held in Lease.objects.filter(state='HELD'):
         if held.run_id==r.pk and held.operation_id is None:continue
-        for key in keys:
-            if key==held.resource_id or key.startswith('file:') and held.resource_id.startswith('file:') and (key.startswith(held.resource_id+'/') or held.resource_id.startswith(key+'/')):return None
+        if any(overlaps(key, held.resource_id) for key in keys):return None
+    if file_keys:
+        from .models import GitFileReservation
+        guards = GitFileReservation.objects.filter(active=True).exclude(
+            git_index__change=r.change_record_id, git_index__session=r.coding_session_id,
+        ).values_list('project__root','path')
+        if any(overlaps(key, 'file:'+root+'/'+path) for root,path in guards for key in file_keys):
+            return None
     if Lease.objects.filter(resource__in=resources,state='HELD').exclude(run=r).exists():return None
     if Lease.objects.filter(resource__in=resources,state='HELD',operation__isnull=False).exclude(operation=op).exists():return None
     for resource in resources:
@@ -509,12 +519,24 @@ def coordinate(actor,data):
 
 @transaction.atomic
 def reserve_bank(actor,data):
-    r=run_scope(actor,data['run_id'],data['project_id'],lock=True);working(r);key=data['resource'];require(key in r.mandate.get('resources',[]) and key.startswith(('lxc:','docker:','browser:')),'bank-outside-mandate',403)
+    from cab_platform.resource_reservations import live, resource_guard, return_unused_banks
+    r=run_scope(actor,data['run_id'],data['project_id'],lock=True);working(r);key=data['resource']
+    require(key in r.mandate.get('resources',[]) and key.startswith(('lxc:','docker:','browser:')),'bank-outside-mandate',403)
+    resource_guard()
+    return_unused_banks(timezone.now(), key)
     resource,_=Resource.objects.get_or_create(pk=key);resource=Resource.objects.select_for_update().get(pk=key)
     existing=Lease.objects.filter(resource=resource,state='HELD').first()
-    if existing:require(existing.run_id==r.pk,'bank-held');return {'lease_id':existing.pk,'fencing':existing.fencing}
-    resource.fencing+=1;resource.save();lease=Lease.objects.create(resource=resource,run=r,fencing=resource.fencing)
-    event(r,'bank-held',{'resource':key,'fencing':lease.fencing});return {'lease_id':lease.pk,'fencing':lease.fencing}
+    if existing:
+        require(existing.run_id==r.pk,'bank-held')
+        reservation=live('lease', existing.pk).first()
+        require(reservation is not None,'reservation-expired',409)
+    else:
+        resource.fencing+=1;resource.save()
+        existing=Lease.objects.create(resource=resource,run=r,fencing=resource.fencing)
+        reservation=live('lease', existing.pk).get()
+        event(r,'bank-held',{'resource':key,'fencing':existing.fencing})
+    return {'lease_id':existing.pk,'fencing':existing.fencing,'reservation_id':reservation.pk,
+            'expires':reservation.expires.isoformat()}
 
 @transaction.atomic
 def exception(actor,data):
@@ -573,9 +595,26 @@ def suspend(actor,data):
 
 @transaction.atomic
 def release_bank(actor,data):
+    from cab_platform.resource_reservations import bank_activity, resource_guard
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True)
-    lease=Lease.objects.select_for_update().get(pk=data['lease_id'],run=r);require(lease.state=='HELD' and no_pending(r),'bank-release-not-ready')
-    clean=Operation.objects.get(run=r,request_id=data['cleanup_request_id']);verify=Operation.objects.get(run=r,request_id=data['verification_request_id'])
-    require(clean.request.get('phase')=='cleanup' and verify.request.get('phase')=='verify-cleanup' and clean.state==verify.state=='COMPLETED' and clean.receipt.get('exit_code')==verify.receipt.get('exit_code')==0 and clean.updated<verify.created,'cleanup-not-proven')
-    require(lease.resource_id in clean.request.get('resources',[]) and lease.resource_id in verify.request.get('resources',[]),'cleanup-resource-divergent')
-    lease.state='RELEASED';lease.evidence={'cleanup':clean.receipt_digest,'verification':verify.receipt_digest};lease.save();event(r,'bank-released',{'lease_id':lease.pk});return {'state':'RELEASED'}
+    resource_guard()
+    lease=Lease.objects.select_for_update().get(pk=data['lease_id'],run=r,operation__isnull=True);require(lease.state=='HELD' and no_pending(r),'bank-release-not-ready')
+    cleanup=data.get('cleanup_request_id')
+    verification=data.get('verification_request_id')
+    if not cleanup and not verification:
+        require(not bank_activity(lease.run_id, lease.resource_id, lease.created).exists(),'cleanup-not-proven')
+        lease.evidence={'disposition':'unused'}
+    else:
+        require(cleanup and verification,'cleanup-not-proven')
+        clean=Operation.objects.get(run=r,request_id=cleanup)
+        verify=Operation.objects.get(run=r,request_id=verification)
+        require(clean.request.get('phase')=='cleanup' and verify.request.get('phase')=='verify-cleanup'
+                and clean.state==verify.state=='COMPLETED' and clean.receipt.get('exit_code')==verify.receipt.get('exit_code')==0
+                and lease.created<=clean.created and clean.updated<verify.created,'cleanup-not-proven')
+        require(lease.resource_id in clean.request.get('resources',[]) and lease.resource_id in verify.request.get('resources',[]),
+                'cleanup-resource-divergent')
+        lease.evidence={'cleanup':clean.receipt_digest,'verification':verify.receipt_digest}
+    lease.state='RELEASED'
+    lease.save(update_fields=['state','evidence'])
+    event(r,'bank-released',{'lease_id':lease.pk})
+    return {'state':'RELEASED'}

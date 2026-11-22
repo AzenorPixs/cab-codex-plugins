@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Réservations de ressources
+
+[unify-resource-reservations](openspec/changes/archive/2026-11-22-unify-resource-reservations/),
+code non attribué. Table PostgreSQL des baux, échéances et notifications,
+restitution protégée et page Electric. La qualification locale du 22 novembre 2026 couvre PostgreSQL éphémère,
+TypeScript/Vite et Chromium/Firefox avec un flux Electric simulé. La
+publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
 ## Tokens du cycle de session
 
 [measure-session-cycle-tokens](openspec/changes/archive/2026-11-22-measure-session-cycle-tokens/), code non attribué. Mesures de tokens PostgreSQL par rôle et par action, étape et cycle, cumuls de session et de change actualisés via Electric. Les mandats autorisés peuvent être complétés pendant un RUN avec un reçu distinct. Contrôles locaux le 22 novembre 2026 sur PostgreSQL, Chromium et Firefox. Livraison et activation sont vérifiables sur les reçus CICDF et CABU.

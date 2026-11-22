@@ -1,5 +1,19 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Baux de ressources
+
+La table PostgreSQL `resource_reservations` matérialise les baux actifs des
+réservations Git et des baux d’opération ou de banc. Des triggers suivent les
+transitions sources et la migration reprend les baux existants. Une Shape
+Electric filtrée par projet projette les champs d’affichage. La surveillance
+à la seconde traite les échéances et enregistre les avis. Au bout de 300
+secondes sans renouvellement, le bail disparaît. Les effets à réconcilier
+restent protégés dans leur enregistrement source.
+
+L’aperçu de fichier s’exécute sous l’UID du propriétaire du bail, borne la
+lecture UTF-8 et exige un bail courant et une empreinte de contenu inchangée
+pour une écriture.
+
 La synthèse `runs.cycle_summary` conserve le nombre d’itérations, les bornes et
 la durée du dernier cycle, ainsi que les cumuls des durées connues et leurs
 ventilations CAB/Agent(s)/Attente. Les cycles interrompus mesurés sont inclus ;

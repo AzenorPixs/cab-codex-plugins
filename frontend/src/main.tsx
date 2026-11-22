@@ -14,6 +14,7 @@ import {ProjectHome} from './ProjectHome'
 import {ProjectForges} from './ProjectForges'
 import {ProjectFactory} from './ProjectFactory'
 import {ProjectIncidents} from './ProjectIncidents'
+import {ProjectReservations} from './ProjectReservations'
 import {UpdateBadge,HomeVersionCheck,SystemUpdatePage} from './SystemUpdate'
 import {RunView,stageLabel} from './RunView'
 import {SessionActions,SessionArchives,useEvaluations,runStateLabel,runProtection} from './SessionLifecycle'
@@ -107,7 +108,7 @@ function ProjectPageTitle({project,title}:{project:Project;title:string}){
   return <section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{values.PROJECT_NAME||project.name}</h1>{values.PROJECT_VERSION&&<span className="project-version project-release-version">{values.PROJECT_VERSION}</span>}<span className="project-version" aria-hidden="true">|</span><span className="project-page-title">{title}</span></div></div></section>
 }
 const rootRoute=createRootRoute({component:Layout})
-function ProjectsNavigation(){return <nav className="project-tabs" aria-label="Projets"><Link to="/projects" activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil des projets" title="Accueil des projets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/archives">Archives</Link><Link to="/projects/sessions">Sessions</Link></nav>}
+function ProjectsNavigation(){return <nav className="project-tabs" aria-label="Projets"><Link to="/projects" activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil des projets" title="Accueil des projets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/archives">Archives</Link><Link to="/projects/sessions">Sessions</Link><Link to="/projects/reservations">Réservations</Link></nav>}
 function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link><Link to="/projects/$projectId/factory" params={{projectId}}>Fabrique</Link><Link to="/projects/$projectId/forges" params={{projectId}}>Forges</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link></nav>}
 const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof search.project==='string'?{project:search.project}:{}
 const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:HomeVersionCheck})
@@ -117,6 +118,11 @@ const projectFactoryRoute=createRoute({getParentRoute:()=>rootRoute,path:'/proje
 const projectForgesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/forges',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} forges/>}</Projects></Gate>})
 const allProjectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/archives',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects} archives/>}</Projects></Gate>})
 const allProjectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/sessions',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects}/>}</Projects></Gate>})
+const projectReservationsRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/reservations',
+  component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><ProjectReservations projects={projects}/></section></div>}</Projects></Gate>,
+})
 const projectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/sessions',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} sessions/>}</Projects></Gate>})
 const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/runs/$runId',component:()=> <Gate><Projects>{projects=><ProjectRunScreen projects={projects}/>}</Projects></Gate>})
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
@@ -136,6 +142,6 @@ const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/ad
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

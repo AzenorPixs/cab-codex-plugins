@@ -849,3 +849,26 @@ class NotificationReceipt(models.Model):
     actor=models.ForeignKey(Actor,null=True,on_delete=models.SET_NULL)
     created=models.DateTimeField(auto_now_add=True)
     class Meta:db_table='cab_notification_receipts'
+
+
+class ResourceReservation(models.Model):
+    """Baux courants publiables dans Electric."""
+
+    run = models.ForeignKey(Run, on_delete=models.CASCADE)
+    project_id = models.CharField(max_length=64, db_index=True)
+    session_id = models.CharField(max_length=200)
+    change = models.CharField(max_length=200)
+    source = models.CharField(max_length=8)
+    source_id = models.PositiveBigIntegerField()
+    kind = models.CharField(max_length=16)
+    description = models.CharField(max_length=1800)
+    count = models.PositiveBigIntegerField(default=1)
+    started = models.DateTimeField()
+    expires = models.DateTimeField(db_index=True)
+    warned = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'resource_reservations'
+        constraints = [
+            models.UniqueConstraint(fields=('source', 'source_id'), name='cab_reservation_source'),
+        ]

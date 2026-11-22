@@ -133,14 +133,30 @@ def session_delivery_status(version:str,project_id:str='',run_id:str='')->dict:
     return client().command('session.delivery.status',{'version':version,**run_target(project_id,run_id)})
 
 @public_tool()
+def session_reservations(project_id:str='', run_id:str='')->dict:
+    """Lit les réservations actives et les avis d’échéance et de restitution de la session."""
+    return client().command('session.reservations', run_target(project_id, run_id))
+
+
+@public_tool()
+def session_reservations_renew(reservation_ids:list[int], request_id:str, project_id:str='', run_id:str='')->dict:
+    """Renouvelle les réservations encore utilisées à 240 secondes, avant leur échéance."""
+    return client().command('session.reservations.renew', {
+        'reservation_ids':reservation_ids, 'request_id':request_id, **run_target(project_id, run_id),
+    })
+
+
+@public_tool()
 def session_git_context(project_id:str='',run_id:str='')->dict:
     """Identifie le RUN attaché à cette connexion MCP."""
     return client().command('session.git.context',run_target(project_id,run_id))
 
 @public_tool()
-def session_git_release(request_id:str,project_id:str='',run_id:str='')->dict:
-    """Libère les fichiers validés et indexés en fin de travail sans livraison ; conserve l'index, aucun commit ni push."""
-    return client().command('session.git.release',{'request_id':request_id,**run_target(project_id,run_id)})
+def session_git_release(request_id:str,project_id:str='',run_id:str='',paths:list[str]|None=None)->dict:
+    """Libère les fichiers validés et indexés, tous ou seulement les chemins précisés."""
+    data={'request_id':request_id,**run_target(project_id,run_id)}
+    if paths is not None:data['paths']=paths
+    return client().command('session.git.release',data)
 
 @public_tool()
 def session_git_reserve(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
@@ -313,8 +329,8 @@ def bank_reserve(project_id:str,run_id:str,resource:str)->dict:
     """Réserve une ressource déjà cadrée ; ne crée pas d’autorisation métier."""
     return client().command('bank.reserve',{'project_id':project_id,'run_id':run_id,'resource':resource})
 @public_tool()
-def external_release(project_id:str,run_id:str,lease_id:int,cleanup_request_id:str,verification_request_id:str)->dict:
-    """Restitue un banc après nettoyage et vérification corrélés, sans effet incertain."""
+def external_release(project_id:str,run_id:str,lease_id:int,cleanup_request_id:str='',verification_request_id:str='')->dict:
+    """Restitue un banc inutilisé ou un banc avec preuves de nettoyage et de vérification corrélées."""
     return client().command('bank.release',locals())
 @public_tool()
 def external_attach(project_id:str,run_id:str,profile:dict)->dict:

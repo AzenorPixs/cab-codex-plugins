@@ -1,5 +1,12 @@
 # Codex Approval Bridge — CAB
 
+## Réservations du projet
+
+Le menu **Projet → Réservations** affiche les baux actifs et leurs échéances
+en temps réel. Les fichiers s’ouvrent dans un aperçu texte. Une session
+renouvelle une réservation encore nécessaire après 240 secondes pour éviter
+son expiration à 300 secondes.
+
 
 CAB prend officiellement en charge PostgreSQL17 et18 (Debian Trixie/Forky).
 La référence est conservée sous /etc/cab ; voir [le parcours PostgreSQL](docs/postgresql.md).

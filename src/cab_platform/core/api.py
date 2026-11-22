@@ -135,6 +135,23 @@ class NotificationRead(Schema):
 class NotificationAnswer(NotificationRead):
     choice:str=Field(min_length=1,max_length=100)
 
+class ReservationFileUpdate(Schema):
+    content: str = Field(max_length=262144)
+    digest: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+@api.get('/reservations/{reservation_id}/file')
+def reservation_file(request, reservation_id: int):
+    from cab_platform.reservation_file_view import view
+    return view(principal(request), reservation_id)
+
+
+@api.post('/reservations/{reservation_id}/file')
+def reservation_file_update(request, reservation_id: int, body: ReservationFileUpdate):
+    from cab_platform.reservation_file_view import view
+    return view(principal(request), reservation_id, body)
+
+
 @api.get('/notifications')
 def notifications_list(request):
     from cab_platform.notifications import administrator,serialize
@@ -1231,6 +1248,16 @@ def command(request,body:Command):
         return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,
                 'session_id':current.session_id,'cycle_steps':current.cycle_steps,
                 'version_policy':version_policy(current),'version_skill':version_skill_status(current)}
+    if name in ('session.reservations', 'session.reservations.renew'):
+        from .connectors import current_worker_run, worker_connector
+        from cab_platform.resource_reservations import session_reservations
+        peer = getattr(request, 'cab_peer', None)
+        renewal = name.endswith('.renew')
+        current = current_worker_run(actor, peer, read_only=not renewal, native_thread=native_thread,
+                                     project_id=data.get('project_id', ''), run_id=data.get('run_id', ''))
+        connector = worker_connector(actor, peer)
+        commands.require(connector is not None, 'session-connector-unbound', 409)
+        return session_reservations(actor, current, connector.pk, data, renewal=renewal)
     if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
         from .connectors import current_worker_run,worker_connector
         from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files

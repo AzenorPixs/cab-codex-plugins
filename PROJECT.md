@@ -1,5 +1,13 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Réservations de ressources
+
+Les sessions réservent les fichiers et ressources avant leur usage, prorogent
+le bail à 240 secondes si nécessaire, puis libèrent les ressources dès la fin
+d’usage. La page Projet [Réservations](http://127.0.0.1:8790/projects/reservations)
+affiche les baux actifs via Electric. Le propriétaire reçoit les avis à
+30 secondes de l’échéance et lors de la restitution s’il est encore joignable.
+
 Le centre de notifications de la top barre remplace le journal de livraison du
 bloc Git. PostgreSQL conserve les messages et questions ; Electric actualise la
 cloche. L'expéditeur est le projet concerné, ou CAB pour les messages globaux.

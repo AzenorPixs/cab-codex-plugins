@@ -90,6 +90,9 @@ def _external_prepare(op,status=False):
     key=profile['resource_key']
     bank=Lease.objects.filter(run=r,resource_id=key,state='HELD',operation__isnull=True).first()
     commands.require(bank is not None,'external-bank-required')
+    if not status and op.request.get('phase') not in ('cleanup', 'verify-cleanup'):
+        from .resource_reservations import live
+        commands.require(live('lease',bank.pk).exists(),'reservation-expired',409)
     packet={'protocol':'cab-external-exec-v1','action':'status' if status else 'execute','job_id':commands.digest([r.run_id,op.request_id]),'input_digest':op.input_digest,'scope_digest':commands.digest([r.project.root,r.run_id]),'container':profile['container'],'target_fingerprint':target}
     if not status:packet.update(argv=op.request['argv'],timeout_ms=op.request.get('timeout_ms',120000))
     envelope={'action':'prepare-external','directory':r.project.root,'profile':profile,'packet':packet,'files':op.request.get('files',[]) if not status else [],'read_roots':[str(Path(r.project.root)/v) for v in r.mandate['paths']]}

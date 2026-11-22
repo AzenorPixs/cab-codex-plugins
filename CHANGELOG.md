@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.12.0
+
+- Réservations de ressources de 300 secondes, renouvellement à 240 secondes, avis d’échéance et de restitution, et protection des effets à réconcilier.
+- Page Projet Réservations synchronisée par Electric et aperçu de fichiers avec édition sous bail actif.
+
 ## 3.11.1
 
 - Cumuls de tokens intégrés au bloc des durées de chaque étape, avec disposition adaptée aux écrans étroits.

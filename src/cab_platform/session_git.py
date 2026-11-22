@@ -155,11 +155,24 @@ def _reserve_files_locked(actor, data, connector_id=None):
         prior_dirty = {name for entry in baseline.baseline.get('entries', []) for name in (entry.get('path'), entry.get('previous')) if name}
         current_dirty = {name for entry in snapshot['entries'] for name in (entry.get('path'), entry.get('previous')) if name}
         relocated_paths=[];preexisting_authorizations=[];clean_initial_paths=[];direct_preexisting_paths=[]
+        from .core.models import Lease
+        from .resource_reservations import live, overlaps, renew_rows, resource_guard, return_idle_files
+        now = timezone.now()
+        resource_guard()
+        return_idle_files(now, project, paths)
+        other_effects = Lease.objects.filter(state='HELD', resource_id__startswith='file:').exclude(
+            run=current,
+        ).values_list('resource_id', flat=True)
+        require(not any(overlaps('file:'+str(root/path), key) for key in other_effects for path in paths),
+                'session-git-resource-protected', 409)
         for path in sorted(paths):
             key = hashlib.sha256(path.encode('utf-8')).hexdigest()
             existing = GitFileReservation.objects.select_for_update().filter(project=project, path_digest=key, active=True).first()
             if existing is not None:
                 require(existing.path == path and existing.git_index_id == index.pk, 'session-git-reserved', 409)
+                row = live('git', existing.pk).select_for_update().first()
+                require(row is not None and row.run_id == current.pk, 'reservation-expired', 409)
+                renew_rows([row], timezone.now())
                 continue
             if path in prior_dirty or path in current_dirty:
                 from .preexisting_git import clean_at_head,matching_authorization
@@ -179,7 +192,13 @@ def _reserve_files_locked(actor, data, connector_id=None):
             GitFileReservation.objects.create(project=project, git_index=index, path=path, path_digest=key)
         if reopening:
             index.state='OPEN';index.save(update_fields=['state','updated']);event(current,'git-index-reopened',{'request_id':request_id,'previous_release':index.origin.get('release',{})})
-        receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change, 'session_id': current.session_id}
+        from .core.models import ResourceReservation
+        from .resource_reservations import public_row
+        reserved = GitFileReservation.objects.filter(git_index=index, active=True, path__in=paths)
+        rows = ResourceReservation.objects.filter(source='git', source_id__in=reserved.values('pk'))
+        rows.exclude(run=current).update(run=current, session_id=current.session_id, change=current.change)
+        receipt = {'reserved_count': len(paths), 'request_id': request_id, 'change': current.change,
+                   'session_id': current.session_id, 'reservations': [public_row(row) for row in rows]}
         event(current, 'git-files-reserved', {'request_id': request_id, 'digest': fingerprint, 'receipt': receipt,'archive_reconciled_paths':relocated_paths,'preexisting_authorizations':preexisting_authorizations,'clean_initial_paths':clean_initial_paths,'direct_preexisting_paths':direct_preexisting_paths})
         return receipt
 
@@ -387,7 +406,11 @@ def _stage_files_locked(actor, data, connector_id=None):
         require(not pending(current),'session-effect-unresolved',409)
         require(not active_deliveries(current,index).exists(),'session-delivery-active',409)
         require(not index.effects.filter(state__in=('INTENT', 'RUNNING', 'UNKNOWN')).exists(), 'session-git-effect-unresolved', 409)
-        recorded = {entry.path for entry in GitFileReservation.objects.filter(git_index=index, active=True)}
+        from .core.models import ResourceReservation
+        reservations = ResourceReservation.objects.filter(run=current, source='git', expires__gt=timezone.now())
+        recorded = set(GitFileReservation.objects.filter(
+            git_index=index, active=True, pk__in=reservations.values('source_id'),
+        ).values_list('path', flat=True))
         require(set(paths).issubset(recorded), 'session-git-reservation-required', 409)
         for path in paths:
             safe_path(__import__('pathlib').Path(current.project.root), path, exists=False)
@@ -524,14 +547,21 @@ def release_files(actor,data,connector_id=None):
     from django.db import transaction
     from .core import commands as c
     from .core.models import Event,GitDelivery,GitFileReservation,GitSessionIndex,Operation
-    require(set(data)=={'project_id','run_id','request_id'},'session-git-fields-invalid',400)
+    required={'project_id','run_id','request_id'}
+    require(required<=set(data)<=required|{'paths'},'session-git-fields-invalid',400)
+    requested=data.get('paths')
+    require(requested is None or isinstance(requested,list) and 0<len(requested)<=256 and
+            all(isinstance(path,str) and path for path in requested) and len(set(requested))==len(requested),
+            'session-git-paths-invalid',400)
     request_id=c.identifier(data['request_id'])
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     try:
         with transaction.atomic():
             current=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
             prior=Event.objects.filter(run=current,kind='git-files-released',data__request_id=request_id).first()
-            if prior:return prior.data['receipt']
+            if prior:
+                require(prior.data.get('paths')==requested,'session-git-request-conflict',409)
+                return prior.data['receipt']
             c.working(current);require(c.no_pending(current),'session-git-effect-unresolved',409)
             if connector_id is not None:
                 from .core.connectors import lock_worker_binding
@@ -543,16 +573,21 @@ def release_files(actor,data,connector_id=None):
             validations=Operation.objects.filter(run=current,state='COMPLETED',source_revision=revision).order_by('-updated')[:50]
             require(any(op.receipt.get('exit_code')==0 and (op.request.get('phase') in ('test','verify','verification') or isinstance(op.request.get('host_authorization'),dict)) for op in validations),'session-git-validation-required',409)
             paths=list(GitFileReservation.objects.select_for_update().filter(git_index=index,active=True).values_list('path',flat=True))
-            require(paths,'session-git-reservation-required',409)
+            require(paths and (requested is None or set(requested)<=set(paths)),'session-git-reservation-required',409)
+            releasing=paths if requested is None else requested
+            entire_index=len(releasing)==len(paths)
             options,env=context(current.project)
             require(index.index_path==_index_path(current.project,index,options,env) and index.keep_ref and index.keep_oid,'session-git-index-unavailable',409)
             keep=run(current.project,options,env,'rev-parse','--verify',index.keep_ref)
             require(keep.returncode==0 and keep.stdout.decode('ascii').strip()==index.keep_oid,'session-git-index-unavailable',409)
-            digest=verify_releasable_index(current.project,index.index_path,paths)
-            receipt={'request_id':request_id,'released_count':len(paths),'state':'RELEASED','source_revision':revision,'index_sha256':digest,'index_preserved':True,'delivered':False}
-            GitFileReservation.objects.filter(git_index=index,active=True).update(active=False,released=timezone.now())
-            index.state='RELEASED';index.origin={**index.origin,'release':receipt};index.save(update_fields=['state','origin','updated'])
-            c.event(current,'git-files-released',{'request_id':request_id,'receipt':receipt})
+            digest=verify_releasable_index(current.project,index.index_path,releasing)
+            receipt={'request_id':request_id,'released_count':len(releasing),'state':'RELEASED','source_revision':revision,'index_sha256':digest,'index_preserved':True,'delivered':False}
+            GitFileReservation.objects.filter(git_index=index,active=True,path__in=releasing).update(active=False,released=timezone.now())
+            if entire_index:
+                index.state='RELEASED'
+                index.origin={**index.origin,'release':receipt}
+                index.save(update_fields=['state','origin','updated'])
+            c.event(current,'git-files-released',{'request_id':request_id,'paths':requested,'receipt':receipt})
             return receipt
     finally:
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])

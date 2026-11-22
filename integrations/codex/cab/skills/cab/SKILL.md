@@ -72,6 +72,23 @@ livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
 
+Réserver chaque fichier et ressource avant usage, y compris les bancs Docker,
+LXC et navigateurs. Les baux durent 300 secondes. À 240 secondes, renouveler
+avec `session_reservations_renew` les seuls IDs encore nécessaires. Employer un
+identifiant de demande stable pour une même prorogation. `session_reservations`
+donne les IDs, les échéances et les avis. À 30 secondes de l’échéance, CAB
+avertit le propriétaire encore actif. Cesser l’usage dès expiration et vérifier
+la restitution avant de réacquérir une ressource protégée.
+
+Libérer chaque ressource dès la fin d’usage. `session_git_release(paths=[…])`
+rend les fichiers validés qui correspondent à l’index de session. Pour un banc
+inutilisé, appeler `external_release` sans reçus de nettoyage. Pour un banc
+utilisé, fournir les preuves corrélées de nettoyage et de vérification.
+CAB adresse l’avis de restitution à la session de codage encore active et
+conserve l’avis dans son registre si la remise native n’est pas disponible.
+Une échéance retire le bail du registre courant. Un effet actif ou indéterminé
+conserve sa protection jusqu’à réconciliation.
+
 Dans un RUN direct, le propriétaire peut inspecter puis admettre les
 préexistants du mandat avec `session.git.inspect_preexisting` et
 `session.git.authorize_preexisting` sous son identité CAB habituelle.

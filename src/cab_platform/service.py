@@ -283,6 +283,8 @@ def run(port=8790):
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1
+                    from .resource_reservations import launch as launch_reservations
+                    launch_reservations()
                 if time.monotonic()>=next_update:
                     from .update_availability import check as check_update
                     for future in (update_future,availability_future):

@@ -19,6 +19,10 @@ def frontend(request,path=''):
 
 def sync_sessions(request):return sync_projection(request,'cab_core_sessionprojection')
 
+def sync_reservations(request):
+    return sync_projection(request, 'resource_reservations', all_projects=True)
+
+
 def sync_project_sessions(request):return sync_projection(request,'cab_core_sessionprojection',all_projects=True)
 
 def sync_project_archives(request):return sync_projection(request,'cab_core_sessionprojection',all_projects=True,archived=True)
@@ -80,8 +84,8 @@ def sync_run_data(request,kind):
         if key.lower().startswith('electric-'):result[key]=value
     result['Cache-Control']='private, no-store';return result
 
-def all_sessions_where(actor,*,archived=False):
-    predicate='archived = true' if archived else 'archived = false'
+def all_sessions_where(actor,*,archived=False, predicate=None):
+    predicate=predicate or ('archived = true' if archived else 'archived = false')
     if actor.role=='admin':return predicate
     identities=list(actor.projects.values_list('pk',flat=True))
     if not identities:return 'false'
@@ -93,7 +97,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
         actor=None if table in ('cab_version_projection','interface_preferences_projection') else principal(request)
         if all_projects:
             if not actor.active:raise Refused('project-not-authorized',403)
-            if table!='cab_core_sessionprojection':raise Refused('session-projection-invalid',403)
+            if table not in ('cab_core_sessionprojection', 'resource_reservations'):raise Refused('session-projection-invalid',403)
             project=None
         elif table in ('cab_version_projection','interface_preferences_projection'):project=None
         elif table in ('agents','agent_users','cab_notifications','cab_binary_counts','cab_observed_binaries'):
@@ -106,7 +110,8 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
     cfg=config();params={k:request.GET[k] for k in ('offset','handle','live','cursor') if k in request.GET}
     if table in ('cab_version_projection','interface_preferences_projection') and (not cfg.get('initialized') or not cfg.get('electric_secret')):return JsonResponse({'error':'sync-unavailable'},status=503)
     # L'identifiant est encodé comme littéral SQL même pour un catalogue importé.
-    if all_projects:where=all_sessions_where(actor,archived=archived)
+    if table=='resource_reservations':where=all_sessions_where(actor,predicate='true')
+    elif all_projects:where=all_sessions_where(actor,archived=archived)
     elif table in ('cab_version_projection','interface_preferences_projection','cab_binary_counts'):where='id = 1'
     elif table in ('agents','cab_notifications','cab_observed_binaries'):where='true'
     elif table=='agent_users':where="agent_id = '"+request.GET['agent']+"'"
@@ -115,6 +120,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
         identity=project.pk.replace("'","''")
         where=("id" if table=='project_metadata_projection' else 'project_id')+" = '"+identity+"'"
     params.update(table=table,where=where,secret=cfg['electric_secret'])
+    if table=='resource_reservations':params['columns']='id,project_id,session_id,change,kind,description,count,started,expires'
     if table=='project_metadata_projection':params['columns']='id,public_metadata'
     if table=='project_forge_artifacts':params['columns']='id,project_id,forge,source,artifacts'
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'

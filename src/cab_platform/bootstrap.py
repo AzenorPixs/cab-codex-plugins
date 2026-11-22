@@ -19,7 +19,7 @@ DECLARE table_name text;
 BEGIN
     FOREACH table_name IN ARRAY ARRAY[
         'runs', 'change_stages', 'change_stage_iterations', 'run_cycle_iterations',
-        'run_evidence', 'run_finalization_plans'
+        'run_evidence', 'run_finalization_plans', 'resource_reservations'
     ] LOOP
         EXECUTE format('GRANT SELECT ON %I TO cab_electric', table_name);
         EXECUTE format('ALTER TABLE %I REPLICA IDENTITY FULL', table_name);
