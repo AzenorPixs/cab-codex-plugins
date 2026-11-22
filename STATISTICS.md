@@ -38603,14 +38603,14 @@ Change : `freeze-statistics-before-publication` · état local : `archived`. Les
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 30438.38582 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 30438.38582 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 53884287 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 232129 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 158808 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 53396352 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 54116416 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -38624,7 +38624,7 @@ Change : `freeze-statistics-before-publication` · état local : `archived`. Les
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:44ed47b789e9fe35fb994c4afb394f31bbbd15aa4f976d45c3261ae672f75d04
+Provenance : change-periods:3d203417434ebab840be522e33e4e752e5b36df00deec81d5bc9b96deee342f4
 
 ## 2. Messages et outils
 
@@ -38686,21 +38686,8 @@ Provenance : change-periods:44ed47b789e9fe35fb994c4afb394f31bbbd15aa4f976d45c326
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 45758080 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 46226177 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 226482 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 157005 | bounded |
-| SCM-CCAB-PUBLICATION-CYCLE-395-20261122 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 46452659 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b916786dbfdb58286de156efab188cdbdc44c0cf47c913059da9f27f0c3c14be", "generated_at": "2026-11-22T08:34:31.067898+00:00", "revision": "b916786dbfdb58286de156efab188cdbdc44c0cf47c913059da9f27f0c3c14be", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9a08d43442e75eef48b86652150102665ce21d7c14b08c73b5f4432ea8377c91", "generated_at": "2026-11-22T08:38:42.953891+00:00", "revision": "9a08d43442e75eef48b86652150102665ce21d7c14b08c73b5f4432ea8377c91", "scope": "change"} -->
 
 
 ## Change `guard-multiresource-native-once` — openspec/changes/archive/2026-11-07-guard-multiresource-native-once/STATISTICS.md
@@ -75647,4 +75634,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "5df6d97fabc9ca69833ad0901cb03a901840bf2ebaf9f55fcbebb597bd479fca", "generated_at": "2026-11-22T08:34:32.514157+00:00", "revision": "5df6d97fabc9ca69833ad0901cb03a901840bf2ebaf9f55fcbebb597bd479fca", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "8a662b261458eb206c1e1def5d54725f84883e0450ebc1dd3fa2a1a84c554995", "generated_at": "2026-11-22T08:38:49.975911+00:00", "revision": "8a662b261458eb206c1e1def5d54725f84883e0450ebc1dd3fa2a1a84c554995", "scope": "project"} -->
