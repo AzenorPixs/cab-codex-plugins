@@ -27,7 +27,7 @@ class AttributionTests(unittest.TestCase):
         result=clock.partition(start,end,
             [(self.at(3),self.at(7)),(self.at(4),self.at(9))],
             [(self.at(1),self.at(5)),(self.at(6),self.at(10))],[(start,end)])
-        self.assertEqual(result,dict(cab_seconds=6,agent_seconds=3,wait_observed_seconds=3,attribution_complete=True))
+        self.assertEqual(result,dict(cab_seconds=6,agent_seconds=3,wait_observed_seconds=3,unattributed_seconds=0,attribution_complete=True))
 
     def test_missing_coverage_is_not_waiting(self):
         result=clock.partition(self.at(0),self.at(10),[(self.at(0),self.at(2))])

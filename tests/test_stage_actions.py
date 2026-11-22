@@ -46,7 +46,7 @@ class ObservedActionTests(unittest.TestCase):
         self.assertEqual(row.stage.key,'initialization.action-mandats')
         self.assertEqual(row.parent.stage.key,'initialization')
         self.assertEqual(row.receipt['mandates'],['SCM','CICDF','CABU'])
-        self.assertIsNone(row.started_at)
+        self.assertEqual(row.started_at,row.ended_at)
         self.assertIsNotNone(row.ended_at)
         self.assertFalse(ChangeStageIteration.objects.filter(run=self.run,stage__key='initialization.action-prevol').exists())
         second=self.begin(1)

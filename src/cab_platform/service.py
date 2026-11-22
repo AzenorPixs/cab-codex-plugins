@@ -131,11 +131,13 @@ def background_updates():
     from .phase_statistics import dispatch as dispatch_statistics
     from .stage_reminders import launch as launch_reminders
     from .stage_protocol import dispatch as dispatch_stage_protocol
+    from .time_projection import launch as launch_time_projection
     dispatch()
     dispatch_artifact()
     dispatch_statistics()
     launch_reminders()
     dispatch_stage_protocol()
+    launch_time_projection()
     from .forge_publish_artifacts import dispatch as dispatch_publication
     dispatch_publication()
 

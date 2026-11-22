@@ -44,6 +44,7 @@ def written_reports(root,expected,hashes):
 
 def report_observer(run, reference):
     labels = {
+        'preparation': 'Préparation des données et des rapports',
         'change': 'Calcul et validation des statistiques du change',
         'global': 'Calcul et validation des statistiques globales',
     }
@@ -64,6 +65,16 @@ def report_observer(run, reference):
             clock.update(run,action,identity,'COMPLETED',labels[key],{'verified':True},phase='statistics')
 
     return observe
+
+
+def lock_observer(run, reference):
+    def observed(start,end):
+        identity=reference+':acquire-lock'
+        label='Acquisition du verrou des statistiques'
+        receipt={'time_role':'wait'}
+        clock.update(run,'acquire-lock',identity,'RUNNING',label,receipt,phase='statistics',at=start)
+        clock.update(run,'acquire-lock',identity,'COMPLETED',label,receipt,phase='statistics',at=end)
+    return observed
 
 
 def execute(key):
@@ -93,7 +104,7 @@ def execute(key):
                 from .core.run_finalization import dossier
                 kwargs={'canonical_run':run,'canonical_proofs':dossier(run,run.finalization_plan)['proofs']}
         rendering=service.sync(run.project,job.request_id+'-render',generate=run.change if source else None,
-                               observe_report=report_observer(run,ref),**kwargs)
+                               observe_report=report_observer(run,ref),lock_observed=lock_observer(run,ref),**kwargs)
         c.require(rendering['state']=='COMPLETED','statistics-render-not-completed')
         paths=['STATISTICS.md']
         if source:
@@ -113,7 +124,15 @@ def execute(key):
                 c.require(probe(run.project)==1,'statistics-git-unavailable')
                 if modified:
                     clock.update(run,'commit',ref+':commit','RUNNING','Commit local des seuls rapports CAB modifiés par cette phase',phase='statistics')
-                    receipt=commit(run,sorted(modified),'STATS-'+key,expected_hashes=modified)
+                    try:
+                        receipt=commit(run,sorted(modified),'STATS-'+key,expected_hashes=modified)
+                    except Exception as error:
+                        code=getattr(error,'code',type(error).__name__)
+                        clock.update(run,'commit',ref+':commit',
+                                     'UNKNOWN' if 'unknown' in code else 'FAILED',
+                                     'Commit local des seuls rapports CAB modifiés par cette phase',
+                                     {'error':code},phase='statistics')
+                        raise
                     clock.update(run,'commit',ref+':commit','COMPLETED','Commit local des seuls rapports CAB modifiés par cette phase',receipt,phase='statistics')
                 else:receipt={'state':'NO_CHANGE','commit':None,'paths':[],'local_only':True}
             job.result={'verified':True,'reports':hashes,'modified_reports':modified,'local_commit':receipt,'source_revision':boundary['source_revision'],'input_digest':job.expected['input_digest']}

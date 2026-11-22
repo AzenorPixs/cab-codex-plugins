@@ -485,6 +485,7 @@ class RunCycleIteration(models.Model):
     duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
     visited=models.JSONField(default=list)
     complete=models.BooleanField(default=False)
+    time_projection=models.JSONField(default=dict,db_default={})
     class Meta:
         db_table='run_cycle_iterations'
         constraints=[models.UniqueConstraint(fields=['run','number'],name='cab_cycle_iteration_identity')]
@@ -506,6 +507,7 @@ class ChangeStageIteration(models.Model):
     end_reason=models.CharField(max_length=32,blank=True)
     description=models.TextField(blank=True)
     description_source=models.CharField(max_length=12,blank=True)
+    time_projection=models.JSONField(default=dict,db_default={})
 
     class Meta:
         db_table='change_stage_iterations'

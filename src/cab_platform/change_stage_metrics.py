@@ -66,10 +66,12 @@ def refresh_total(stage_id):
 
 def finish_iteration(record,at,reason,state='COMPLETED'):
     if record.ended_at is not None:return
-    record.ended_at=max(record.started_at,at) if record.started_at else at
+    if record.started_at is None:
+        record.started_at=at
+    record.ended_at=max(record.started_at,at)
     record.end_reason=reason;record.state=state
     record.duration_seconds=Decimal(str((record.ended_at-record.started_at).total_seconds())) if record.started_at else None
-    record.save(update_fields=['ended_at','end_reason','state','duration_seconds'])
+    record.save(update_fields=['started_at','ended_at','end_reason','state','duration_seconds'])
     refresh_total(record.stage_id)
 
 
@@ -233,32 +235,37 @@ def _passage(run_id, identity, start, end, *, number=None, state=None, duration=
 def _stage_total(items, key):
     values = [item[key] for item in items]
     known = [value for value in values if value is not None]
-    return sum(known) if known and (key not in ('wait_seconds','wait_observed_seconds') or len(known) == len(values)) else None
+    return sum(known) if known and (key != 'wait_seconds' or len(known) == len(values)) else None
 
 
-def _responsibility(record, rows, traces, operations, work_from, waiting_review):
-    start,end=record.started_at,record.ended_at
+def _responsibility(record, rows, traces, operations, work_from, waiting_review, observed_end=None):
+    start,end=record.started_at,record.ended_at or observed_end
     if start is None or end is None:
         return [],[],[]
     whole=[(start,end)]
     if record.state=='SKIPPED':
         return [],[],whole
     if record.parent_id:
+        if record.receipt.get('time_role')=='wait':
+            return [],[],whole
         cab=whole if record.description_source=='cab' else []
         agent=whole if record.description_source=='agent' else []
         return cab,agent,whole if cab or agent else []
-    children=[child for child in rows if child.parent_id==record.pk and child.started_at and child.ended_at and child.state!='SKIPPED']
-    cab=[(child.started_at,child.ended_at) for child in children if child.description_source=='cab']
+    children=[child for child in rows if child.parent_id==record.pk and child.started_at and child.ended_at
+              and child.started_at < child.ended_at and child.state!='SKIPPED']
+    waiting=[(child.started_at,child.ended_at) for child in children if child.receipt.get('time_role')=='wait']
+    cab=[(child.started_at,child.ended_at) for child in children
+         if child.description_source=='cab' and child.receipt.get('time_role')!='wait']
     agent=[(child.started_at,child.ended_at) for child in children if child.description_source=='agent']
     autonomous=record.asynchronous and record.stage.key in ('statistics','publication')
     if autonomous:
-        return cab,agent,whole if cab and record.state in ('COMPLETED','FAILED') else []
+        return cab,agent,whole if cab and record.state in ('COMPLETED','FAILED') else waiting
     cab.extend(operations)
     if work_from is not None:
         cab.append((max(start,work_from),end))
         return cab,agent,whole
     agent.extend(span for trace in traces if trace for span in trace[1])
-    known=whole if waiting_review or native_complete(traces,start,end) else []
+    known=whole if waiting_review or native_complete(traces,start,end) else waiting
     return cab,agent,known
 
 
@@ -279,7 +286,27 @@ def _cycle_attribution(cycle,evidence,traces):
     return values
 
 
-def summarize(change,run=None) -> dict:
+def _projection(row, values, target, kind, evidence, witnesses):
+    if target is None:
+        return row.time_projection or partition(None,None)
+    from .core.commands import digest
+    record = {**values,'basis':{'schema':1,'stage_iteration_ids':sorted(witnesses),
+                                'interval_digest':digest(repr(evidence))}}
+    target[kind][row.pk] = record
+    return record
+
+
+def _observed_end(record, rows, traces, operations):
+    if record.ended_at or record.started_at is None or record.parent_id:
+        return record.ended_at
+    ends = [row.ended_at for row in rows if row.parent_id==record.pk and row.ended_at]
+    if record.stage.key not in ('statistics','publication'):
+        ends.extend(right for _,right in operations if right >= record.started_at)
+        ends.extend(right for trace in traces if trace for _,right in trace[1] if right >= record.started_at)
+    return max(ends,default=None)
+
+
+def summarize(change,run=None,*, projection=None) -> dict:
     """Détails observés et travail attesté, distinct du temps mural."""
     rows=ChangeStageIteration.objects.filter(stage__change=change).select_related('stage','run').order_by('started_at','pk')
     if run is not None:rows=rows.filter(run=run)
@@ -323,12 +350,18 @@ def summarize(change,run=None) -> dict:
                         native_evidence = (start, (), (), (), ())
             waiting_review = key == 'review' and any(e['kind'] == 'review-requested' and start and e['created'] >= start
                                                     and (end is None or e['created'] <= end) for e in events)
+            observed_end=_observed_end(record,current_rows,traces,operations)
             cab_intervals,agent_intervals,known=_responsibility(
-                record,current_rows,traces,intervals,work_from,waiting_review)
-            attribution=partition(start,end,cab_intervals,agent_intervals,known)
+                record,current_rows,traces,intervals,work_from,waiting_review,observed_end)
+            attribution=partition(start,observed_end,cab_intervals,agent_intervals,known)
+            if not end and observed_end:
+                attribution.update(attribution_complete=False, measured_until=observed_end.isoformat())
+            witnesses=[record.pk,*[r.pk for r in current_rows if r.parent_id==record.pk]]
+            attribution=_projection(record,attribution,projection,'passes',
+                  [record.reference,start,observed_end,sorted(cab_intervals),sorted(agent_intervals),sorted(known)],witnesses)
             if record.cycle_id and record.parent_id is None and start and end:
                 cycle_evidence[record.cycle_id].append((start,end,merged(cab_intervals,start,end),
-                                                       merged(agent_intervals,start,end),known))
+                                                       merged(agent_intervals,start,end),known,record.pk))
             grouped[key].append(_passage(current.run_id, record.pk, start, end,
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
                 native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
@@ -354,16 +387,22 @@ def summarize(change,run=None) -> dict:
         for child_key,items in grouped.items():
             if child_key.startswith(key+'.'):
                 children.append({'key':child_key,'iterations':items,'iteration_count':sum(i['started_at'] is not None for i in items),
-                                 **{field:_stage_total(items,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS)}})
+                                 **{field:_stage_total(items,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS,'unattributed_seconds')}})
         labels=labels_for(run) if run is not None else OLD_LABELS
         stages.append({'key':key,'label':labels.get(key,key),'iterations':iterations,'children':children,
                        'observed':bool(iterations or children),'not_required':key=='review' and not iterations and not review_required,
                        'iteration_count':len(iterations) if iterations else None,
                        'attribution_complete':bool(iterations) and all(i['attribution_complete'] for i in iterations),
-                       **{field:_stage_total(iterations,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS)}})
+                       **{field:_stage_total(iterations,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS,'unattributed_seconds')}})
     cycles=RunCycleIteration.objects.filter(run=run) if run is not None else RunCycleIteration.objects.filter(run__change_record=change)
-    cycle_data=[{'id':r.pk,'run_id':r.run.run_id,'number':r.number,'started_at':r.started_at,'ended_at':r.ended_at,'complete':r.complete,'duration_seconds':float(r.duration_seconds) if r.duration_seconds is not None else None,
-                 **_cycle_attribution(r,cycle_evidence[r.pk],run_traces.get(r.run_id,[]))} for r in cycles.select_related('run').order_by('pk')]
+    cycle_data=[]
+    for item in cycles.select_related('run').order_by('pk'):
+        evidence=cycle_evidence[item.pk]
+        totals=_cycle_attribution(item,evidence,run_traces.get(item.run_id,[]))
+        values=_projection(item,totals,projection,'cycles',[item.started_at,item.ended_at,evidence],[row[5] for row in evidence])
+        cycle_data.append({'id':item.pk,'run_id':item.run.run_id,'number':item.number,
+                           'started_at':item.started_at,'ended_at':item.ended_at,'complete':item.complete,
+                           'duration_seconds':float(item.duration_seconds) if item.duration_seconds is not None else None,**values})
     complete=[r['duration_seconds'] for r in cycle_data if r['complete'] and r['duration_seconds'] is not None]
     measured=[r['duration_seconds'] for r in stages if r['duration_seconds'] is not None]
     return {'stages':stages,'cycles':cycle_data,'complete_cycle_duration_seconds':sum(complete) if complete else None,'duration_seconds':sum(measured) if measured else None}

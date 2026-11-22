@@ -95,7 +95,7 @@ def _capture(run, parent, key, label, source, reference, at, state, receipt):
                        key=f'{parent.stage.key}.action-{key}',defaults={'parent':parent.stage})
         row=ChangeStageIteration.objects.create(run=run,stage=stage,parent=parent,cycle=parent.cycle,
             reference=ref,state=state,description=label,description_source=source,
-            started_at=at if state=='RUNNING' else None,
+            started_at=at,
             iteration_number=stage.iterations.filter(run=run).count()+1,receipt=receipt)
     elif state!='RUNNING':
         row.receipt={**row.receipt,**receipt}

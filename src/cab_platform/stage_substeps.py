@@ -7,10 +7,10 @@ from .change_stage_metrics import PROFILE,observe,finish_iteration,refresh_total
 
 
 @transaction.atomic
-def update(run,key,reference,state,description='',receipt=None,source='cab',phase=None):
+def update(run,key,reference,state,description='',receipt=None,source='cab',phase=None,at=None):
     if run.configuration.get('cycle_profile')!=PROFILE:return None
     run=Run.objects.select_for_update().get(pk=run.pk)
-    reference=c.digest([run.pk,reference]);now=timezone.now()
+    reference=c.digest([run.pk,reference]);now=at or timezone.now()
     row=ChangeStageIteration.objects.filter(run=run,reference=reference).first()
     if row and row.ended_at is not None:return row
     if row is None:
@@ -23,7 +23,7 @@ def update(run,key,reference,state,description='',receipt=None,source='cab',phas
         c.require(len(stage_key)<=64,'stage-substep-key-invalid',400)
         stage,_=ChangeStage.objects.get_or_create(change_id=run.change_record_id,key=stage_key,defaults={'parent':parent.stage})
         row=ChangeStageIteration.objects.create(stage=stage,run=run,parent=parent,cycle=parent.cycle,reference=reference,description=description,description_source=source,state=state)
-    if state=='RUNNING' and row.started_at is None:
+    if state in ('RUNNING','UNKNOWN','COMPLETED','FAILED','CANCELLED','SKIPPED') and row.started_at is None:
         row.started_at=now;row.iteration_number=ChangeStageIteration.objects.filter(run=run,stage=row.stage,started_at__isnull=False).count()+1
     row.state=state
     if receipt is not None:row.receipt=receipt

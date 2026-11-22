@@ -265,18 +265,25 @@ def recover_lock(lock):
     job.state='FAILED';job.result={**job.result,'recovered':'writer-stopped-files-verified'};job.save();lock.owner=None;lock.save()
 
 @contextmanager
-def guarded(project,action,request_id):
-    with transaction.atomic():
-        Project.objects.select_for_update().get(pk=project.pk)
-        lock,_=StatisticsLock.objects.get_or_create(project=project)
-        lock=StatisticsLock.objects.select_for_update(of=('self',)).select_related('owner__project').get(pk=project.pk)
-        previous=StatisticsJob.objects.filter(project=project,request_id=request_id).first()
-        if previous:
-            commands.require(previous.action==action,'statistics-request-conflict')
-            yield None,previous;return
-        recover_lock(lock)
-        job=StatisticsJob.objects.create(pk=secrets.token_hex(16),project=project,action=action,request_id=request_id,owner_pid=os.getpid(),owner_start=process_identity(os.getpid()))
-        lock.owner=job;lock.fencing+=1;lock.save()
+def guarded(project,action,request_id,lock_observed=None):
+    lock_started=lock_end=None
+    try:
+        with transaction.atomic():
+            if lock_observed:lock_started=timezone.now()
+            Project.objects.select_for_update().get(pk=project.pk)
+            lock,_=StatisticsLock.objects.get_or_create(project=project)
+            lock=StatisticsLock.objects.select_for_update(of=('self',)).select_related('owner__project').get(pk=project.pk)
+            if lock_started:lock_end=timezone.now()
+            previous=StatisticsJob.objects.filter(project=project,request_id=request_id).first()
+            if previous:
+                commands.require(previous.action==action,'statistics-request-conflict')
+                yield None,previous;return
+            recover_lock(lock)
+            job=StatisticsJob.objects.create(pk=secrets.token_hex(16),project=project,action=action,request_id=request_id,owner_pid=os.getpid(),owner_start=process_identity(os.getpid()))
+            lock.owner=job;lock.fencing+=1;lock.save()
+    finally:
+        if lock_started and lock_end:
+            lock_observed(lock_started,lock_end)
     ACTIVE.add(job.pk)
     try:
         yield job,None
@@ -484,7 +491,7 @@ def stage_blockers(job):
         if digest:stage_document(job,path,digest)
 
 
-def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None,observe_report=None,blocker_written=None):
+def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None,observe_report=None,blocker_written=None,lock_observed=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
     active_cycles=Run.objects.filter(project=project,configuration__cycle_profile='publication-12-v1',state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'])
@@ -492,8 +499,9 @@ def sync(project,request_id=None,generate=None,full=False,automatic=False,*,cano
         return {'state':'DEFERRED','reason':'publication-cycle-reports-owned-by-statistics-phase'}
     open_before=set(Change.objects.filter(project=project,source_state='open').values_list('pk',flat=True))
     # Une protection d’écriture incertaine ne bloque pas la projection du maître local.
-    discover(project)
-    with guarded(project,'sync',request_id or 'SYNC-'+secrets.token_hex(12)) as (job,previous):
+    with (observe_report('preparation') if observe_report else nullcontext()):
+        discover(project)
+    with guarded(project,'sync',request_id or 'SYNC-'+secrets.token_hex(12),lock_observed) as (job,previous):
         if previous:return {'job_id':previous.pk,'state':previous.state,'result':previous.result}
         retire_file_lock(project)
         if blocker:
