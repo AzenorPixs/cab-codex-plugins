@@ -302,3 +302,12 @@ header .brand {
 .cycle-token-group span,.cycle-token-value{white-space:nowrap}
 .cycle-table-scroll{max-width:100%;overflow-x:auto}
 .cycle-table-scroll th small{display:block}
+.run-metadata.stage-metadata{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
+.stage-duration-totals{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;row-gap:12px;margin:0}
+.stage-metadata .stage-duration-totals dd{margin:0}
+.stage-token-totals{display:flex;flex-direction:column;align-items:flex-start;gap:10px;border-inline-start:1px solid var(--border);padding-inline-start:24px}
+.stage-token-totals .cycle-token-group{display:grid}
+@media(max-width:700px){
+  .run-metadata.stage-metadata{grid-template-columns:minmax(0,1fr)}
+  .stage-token-totals{border-inline-start:0;padding-inline-start:0;border-block-start:1px solid var(--border);padding-block-start:14px}
+}

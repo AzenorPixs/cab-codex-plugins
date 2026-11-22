@@ -89,7 +89,7 @@ def finish_cycle(cycle,at,keys):
     save_cycle_summary(cycle.run)
 
 
-def cycle_summary(cycles: list[dict]) -> dict:
+def cycle_summary(cycles: list[dict], *, tokens=None) -> dict:
     """Cumuler les cycles mesurés, indépendamment de leur complétude métier."""
     if not cycles:
         return {}
@@ -100,6 +100,8 @@ def cycle_summary(cycles: list[dict]) -> dict:
             'last_started_at':last['started_at'].isoformat() if last['started_at'] else None,
             'last_ended_at':last['ended_at'].isoformat() if last['ended_at'] else None,
             'last_duration_seconds':last['duration_seconds']}
+    if tokens:
+        result['tokens']=tokens
     for field in ('duration_seconds',*FIELDS):
         values=[Decimal(str(item[field])) for item in measured if item.get(field) is not None]
         result[field]=float(sum(values)) if values else None
@@ -109,11 +111,13 @@ def cycle_summary(cycles: list[dict]) -> dict:
 
 
 def save_cycle_summary(run: Run) -> None:
+    from .cycle_tokens import run_totals
+
     rows=[{'number':item.number,'started_at':item.started_at,'ended_at':item.ended_at,
            'duration_seconds':float(item.duration_seconds) if item.duration_seconds is not None else None,
            **{field:item.time_projection.get(field) for field in FIELDS}}
           for item in RunCycleIteration.objects.filter(run=run)]
-    Run.objects.filter(pk=run.pk).update(cycle_summary=cycle_summary(rows),updated=timezone.now())
+    Run.objects.filter(pk=run.pk).update(cycle_summary=cycle_summary(rows,tokens=run_totals(run)),updated=timezone.now())
 
 
 @transaction.atomic

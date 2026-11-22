@@ -8,7 +8,7 @@ from unittest.mock import patch
 from django.utils import timezone
 import test_stage_protocol as fixtures
 
-from cab_platform.change_stage_metrics import summarize
+from cab_platform.change_stage_metrics import save_cycle_summary, summarize
 from cab_platform.core.models import Actor, ChangeStage, ChangeStageIteration, CycleTokenUsage, RunCycleIteration
 from cab_platform.measurement_sources import _opencode_usage, _time_lines
 from cab_platform.time_projection import refresh
@@ -84,6 +84,10 @@ class CycleTokenTests(unittest.TestCase):
         self.assertTrue(view['piloted'])
         self.assertEqual(view['tokens']['coder'],{'input_tokens':'15','output_tokens':'4','cache_read_tokens':'1'})
         self.assertEqual(view['session_tokens'],view['tokens'])
+        self.assertEqual(self.run.cycle_summary['tokens'],view['tokens'])
+        save_cycle_summary(self.run)
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.cycle_summary['tokens'],view['tokens'])
         self.assertEqual(summarize(self.run.change_record)['tokens'],view['tokens'])
         self.assertEqual(view['cycles'][0]['tokens']['coder']['input_tokens'],'12')
         self.assertEqual(view['cycles'][1]['tokens']['coder']['input_tokens'],'3')

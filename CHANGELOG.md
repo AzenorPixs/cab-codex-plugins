@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.11.1
+
+- Cumuls de tokens intégrés au bloc des durées de chaque étape, avec disposition adaptée aux écrans étroits.
+- Totaux de tokens dans Informations et ligne de cumul simplifiée dans Résumé.
+
 ## 3.11.0
 
 - Tokens entrants, sortants et lus depuis le cache par action, étape et cycle, avec cumuls de session et de change, détail par rôle et actualisation Electric.

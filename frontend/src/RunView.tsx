@@ -1,4 +1,4 @@
-import {TokenSummary} from './cycleTokens'
+import {formatTokens,TokenSummary} from './cycleTokens'
 import {Link} from '@tanstack/react-router'
 import {useQuery} from '@tanstack/react-query'
 import {useId,useRef,useState} from 'react'
@@ -44,6 +44,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   const run=query.data;const monitor=run.monitor;const change=monitor.change_record
   const summary=run.cycle_summary
   const piloted=run.mode==='piloted'||metrics.data?.piloted
+  const cycleTokens=summary?.tokens??metrics.data?.tokens
   const lastCycle=metrics.data?.cycles?.at(-1)
   const date=(value:string|null|undefined)=>value?new Date(value).toLocaleString('fr-FR'):'Non observée'
   const duration=(value:number|null|undefined,complete?:boolean)=>value==null?'Non observée':stageDuration(value)+(complete===false?' (partielle)':'')
@@ -68,6 +69,16 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       <div><dt>Durée totale des cycles « CAB »</dt><dd>{duration(summary?.cab_seconds,summary?.cab_seconds_complete)}</dd></div>
       <div><dt>Durée totale des cycles « Agent(s) »</dt><dd>{duration(summary?.agent_seconds,summary?.agent_seconds_complete)}</dd></div>
       <div><dt>Durée totale des cycles « Attente »</dt><dd>{duration(summary?.waiting_seconds,summary?.waiting_seconds_complete)}</dd></div>
+      {([
+        ['input_tokens','Tokens Entrant total des cycles'],
+        ['output_tokens','Tokens Sortant total des cycles'],
+        ['cache_read_tokens','Tokens en Cache total des cycles'],
+      ] as const).map(([field,label])=><div key={field}><dt>{label}</dt><dd>
+        {piloted?<span className="cycle-token-group">
+          <span>Codeur : {formatTokens(cycleTokens?.coder?.[field])}</span>
+          <span>Orchestrateur : {formatTokens(cycleTokens?.orchestrator?.[field])}</span>
+        </span>:formatTokens(cycleTokens?.coder?.[field])}
+      </dd></div>)}
       <div><dt>Demandes indécises</dt><dd>{monitor.pending_requests??'—'}</dd></div>
       <div><dt>Cause / attente</dt><dd>{monitor.waiting_cause||'Non observée'}</dd></div>
       <div><dt>RUN bloquants</dt><dd>{monitor.blocking_runs.length?monitor.blocking_runs.join(', '):'Non observés'}</dd></div>
@@ -99,8 +110,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>
-          <p className="cycle-token-summary"><span>Durée totale de tous les cycles : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={metrics.data?.tokens} piloted={piloted}/></p>
-          <p className="cycle-token-summary"><strong>Total de la session</strong><TokenSummary tokens={metrics.data?.session_tokens} piloted={piloted}/></p>
+          <p className="cycle-token-summary cycle-total"><span><strong>Totale de tous les cycles</strong> : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={cycleTokens} piloted={piloted}/></p>
           {metrics.data?.cycles&&<CycleIterations cycles={metrics.data.cycles} piloted={piloted}/>}
         </>:<>
           {metrics.isPending&&<p role="status">Chargement de l’étape…</p>}

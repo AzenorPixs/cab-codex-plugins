@@ -95,6 +95,10 @@ def token_totals(query, *dimensions):
     return grouped
 
 
+def run_totals(run):
+    return token_totals(CycleTokenUsage.objects.filter(run=run)).get((), {})
+
+
 def overview(change, run, records, cycles):
     query = CycleTokenUsage.objects.filter(change=change)
     if run is not None:
