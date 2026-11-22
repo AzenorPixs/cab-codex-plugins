@@ -85,7 +85,7 @@ function ComponentStyleControls({group,profile}:{group:StyleGroup;profile:Profil
 
 type Tab={id:string;label:string;width?:number}
 
-function TabBar({items,selected,select,prefix,label,secondary=false}:{
+export function TabBar({items,selected,select,prefix,label,secondary=false}:{
   items:readonly Tab[];selected:number;select:(index:number)=>void;prefix:string;label:string;secondary?:boolean
 }){
   function navigate(event:KeyboardEvent<HTMLButtonElement>,index:number){

@@ -56,7 +56,7 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 .agents-overview .agents-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,max(400px,calc((100% - 72px)/4))),1fr))}
 .agents-overview .agent-title h2{font-size:calc(19px * var(--font-scale))}.agents-overview .installed-version{font-size:calc(12px * var(--font-scale))}.agents-overview .agent-title-separator{font-size:calc(16px * var(--font-scale))}.agents-overview .mcp-live-badge{font-size:.66rem}@media(min-width:1400px){.agents-overview .agents-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
-.forge-card h2{display:flex;align-items:center;gap:10px}.forge-logo{width:1.15em;height:1.15em;flex:none;fill:currentColor}.forge-logo-forgejo{color:#f05a28}.project-git-logo{color:#f05032}.forge-edit.git-refresh{color:#52b5ee}@keyframes git-refresh-spin{to{transform:rotate(360deg)}}.git-refresh.is-loading svg{animation:git-refresh-spin .85s linear infinite}@media(prefers-reduced-motion:reduce){.git-refresh.is-loading svg{animation:none}}.project-git-version{align-self:flex-end;transform:translateY(-2px);font-size:.65em;font-weight:600;color:var(--muted)}.forge-logo-gitlab{color:#fc6d26}
+.forge-card :is(h2,.run-card-title){display:flex;align-items:center;gap:10px}.forge-logo{width:1.15em;height:1.15em;flex:none;fill:currentColor}.forge-logo-forgejo{color:#f05a28}.project-git-logo{color:#f05032}.forge-edit.git-refresh{color:#52b5ee}@keyframes git-refresh-spin{to{transform:rotate(360deg)}}.git-refresh.is-loading svg{animation:git-refresh-spin .85s linear infinite}@media(prefers-reduced-motion:reduce){.git-refresh.is-loading svg{animation:none}}.project-git-version{align-self:flex-end;transform:translateY(-2px);font-size:.65em;font-weight:600;color:var(--muted)}.forge-logo-gitlab{color:#fc6d26}
 
 .forge-card dl>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;align-items:start}.forge-card dd{min-width:0;margin:0}
 
@@ -92,7 +92,7 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 @media(min-width:1400px){.agent-detail-blocks{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .agent-detail-blocks .agent-card{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 .agent-detail-blocks .agent-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
-.forge-card h2{font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
+.forge-card :is(h2,.run-card-title){font-size:calc(clamp(19px,calc(15.429px + .22321vw),24px) * var(--font-scale))}
 .forge-card dt,.forge-card dd{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 .agent-detail-blocks .binary-info>span,.agent-detail-blocks .connector-info>span,.agent-detail-blocks .binary-info code,.agent-detail-blocks .connector-info code,.agent-detail-blocks .agent-user-row{font-size:calc(clamp(14.8px,calc(10.6px + .21875vw),19px) * var(--font-scale))}
 
@@ -282,3 +282,5 @@ header .brand {
   width: var(--ui-menus-tabs-icon);
   height: var(--ui-menus-tabs-icon);
 }
+
+.run-session-card{margin-top:20px}.run-card-title{margin:0;overflow-wrap:anywhere}.run-development-logo{color:#37a4e9;width:auto;font-family:monospace}.run-session-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}.run-session-card .run-metadata{margin-top:12px}.run-session-card .interface-tabs{margin-top:12px}.run-session-card [role=tabpanel]{min-width:0}.run-session-card .run-metadata dd{overflow-wrap:anywhere}
