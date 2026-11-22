@@ -8,14 +8,14 @@ Change : `deliver-local-recovery-corrections` · état local : `archived`. Les v
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée globale | 5337.053969 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 5337.053969 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 44054425 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 186468 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 128526 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 43573504 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 44240893 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -29,7 +29,7 @@ Change : `deliver-local-recovery-corrections` · état local : `archived`. Les v
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:e306ed7e6fd69bdfd1ec5e88839176a277c74943a99a7920b998d843c240be62
+Provenance : change-periods:6bb0f54c7b29774ef9cfeac0ad279fe067861599bf143fc846139b7099b8f9f5
 
 ## 2. Messages et outils
 
@@ -91,18 +91,5 @@ Provenance : change-periods:e306ed7e6fd69bdfd1ec5e88839176a277c74943a99a7920b998
 | Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 
 
-
-Mesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.
-
-| RUN | SID | Compteur | Incrément observé | Couverture |
-| --- | --- | --- | --- | --- |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_read | 31844736 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_cache_write | 0 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_input | 32033875 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_output | 130418 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_reasoning | 75577 | bounded |
-| SCM-CCAB-DELIVER-LOCAL-RECOVERY-20261121 | 01a1f00f-a302-7b03-af50-296640aa5a37 | tokens_total | 32164293 | bounded |
-
-
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "d68fc45397140635caaa352b239f0c5ff998c0c7969514c23052fe86d46662d7", "generated_at": "2026-11-21T23:45:03.469014+00:00", "revision": "d68fc45397140635caaa352b239f0c5ff998c0c7969514c23052fe86d46662d7", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "7d55e45aa354a1068118d3a3af4a828abe9016d9c0b28d228b4be44eae132c48", "generated_at": "2026-11-22T00:11:39.336675+00:00", "revision": "7d55e45aa354a1068118d3a3af4a828abe9016d9c0b28d228b4be44eae132c48", "scope": "change"} -->
