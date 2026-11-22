@@ -4,11 +4,13 @@ from pathlib import Path
 import pwd
 import subprocess
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from cab_platform import bootstrap
 from cab_platform.paths import STATE
 from . import commands as c
 from .models import Run,Event,Incident,Lease,Notice,Subscription,Operation,Metric,MeasurementPeriod,MeasurementAction,RunEvidence,FinalizationPlan,SessionArchive,SessionProjection,Workshop,CodingSession
+from .models import ChangeStageIteration, CycleTokenUsage, GitDelivery, GitFileReservation, GitSessionIndex, ResourceReservation, RunCycleIteration
 
 
 def identity(run):return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'generation':run.generation,'change':run.change,'mode':run.mode}
@@ -95,17 +97,53 @@ def retire(run,authority):
 def linked(query):return [{'run_id':row.run_id,'project':row.project.identifier or row.project_id} for row in query.select_related('project').order_by('pk')]
 
 
+def stage_passages(run):
+    return ChangeStageIteration.objects.filter(Q(run=run) | Q(run__isnull=True, cycle__run=run))
+
+
+def delete_stage_history(run):
+    from cab_platform.change_stage_metrics import refresh_total
+
+    passages = stage_passages(run)
+    stage_ids = sorted(set(passages.values_list('stage_id', flat=True)))
+    while passages.exists():
+        # Les actions portent une référence protégée vers leur passage parent.
+        deleted, _ = passages.filter(children__isnull=True).delete()
+        c.require(deleted, 'session-shared-stage-protected')
+    RunCycleIteration.objects.filter(run=run).delete()
+    for stage_id in stage_ids:
+        refresh_total(stage_id)
+
+
 def deletion_preview(actor,data,lock=False):
     from .run_lifecycle import scoped,guard,terminal_proof
     run=scoped(actor,data,lock=lock);shared=[];reasons=[]
+    if lock and run.coding_session_id:
+        CodingSession.objects.select_for_update().get(pk=run.coding_session_id)
     try:
-        guard(run);c.require(run.state=='CLOSED','session-not-closed');terminal_proof(run)
+        guard(run)
         c.require(not Incident.objects.filter(run=run).exclude(state='RESOLVED').exists(),'session-incident-unresolved')
         c.require(not Lease.objects.filter(operation__run=run).exclude(run=run).exists(),'session-shared-lease-protected')
         c.require(not any((STATE/'receipts'/(str(pk)+'.json')).exists() for pk in run.operation_set.values_list('pk',flat=True)),'session-receipt-pending')
+        c.require(not ResourceReservation.objects.filter(run=run, expires__gt=timezone.now()).exists()
+                  and not GitFileReservation.objects.filter(git_index__initial_run=run, active=True).exists(),
+                  'session-reservation-protected')
+        c.require(not GitDelivery.objects.filter(run=run,state__in=('PENDING','RUNNING','UNKNOWN','PARTIAL')).exists(),
+                  'closure-effects-protected')
     except (c.Refused,OSError,ValueError) as error:reasons.append(getattr(error,'code','session-proof-unavailable'))
+    closure_reason = None
+    if not reasons:
+        try:
+            c.require(run.state=='CLOSED','session-not-closed')
+            terminal_proof(run)
+        except c.Refused as error:
+            if error.code in ('maintenance-in-progress','closure-effects-protected','closure-measurement-open','closure-exception-unresolved'):
+                reasons.append(error.code)
+            else:
+                closure_reason = error.code
+        except (OSError, ValueError):
+            closure_reason = 'session-proof-unavailable'
     if run.coding_session_id:
-        from .models import GitSessionIndex
         peers=Run.objects.filter(coding_session_id=run.coding_session_id).exclude(pk=run.pk)
         if peers.exists():shared.append({'kind':'session','label':'Même SID de codage','runs':linked(peers),'preserved':True})
         elif GitSessionIndex.objects.filter(session_id=run.coding_session_id).exclude(state='RETIRED').exists():
@@ -123,9 +161,25 @@ def deletion_preview(actor,data,lock=False):
         external.extend([s.run_id for s in subscribers])
     if external:
         reasons.append('session-shared-coordination-protected');shared.append({'kind':'coordination','label':'Avis utilisés par d’autres sessions','runs':linked(Run.objects.filter(pk__in=external)),'preserved':True})
+    passages = stage_passages(run)
+    passage_ids = passages.values('pk')
+    foreign_passages = ChangeStageIteration.objects.filter(
+        Q(parent_id__in=passage_ids) | Q(cycle__run=run),
+    ).exclude(pk__in=passage_ids)
+    foreign_tokens = CycleTokenUsage.objects.filter(
+        Q(stage_passage_id__in=passage_ids) | Q(action_id__in=passage_ids),
+    ).exclude(run=run)
+    if foreign_passages.exists() or foreign_tokens.exists():
+        reasons.append('session-shared-stage-protected')
     counts={model._meta.model_name:model.objects.filter(run=run).count() for model in (Operation,Lease,Subscription,Event,Incident,Metric,MeasurementPeriod,MeasurementAction,RunEvidence,FinalizationPlan,SessionArchive,Workshop)}
     counts['notice']=len(notices);counts['projection']=SessionProjection.objects.filter(binding=run).count()
-    result={'project_id':run.project_id,'run_id':run.run_id,'identity':identity(run),'allowed':not reasons,'reasons':sorted(set(reasons)),'shared':shared,'counts':counts,'files_deleted':False}
+    counts.update(stage_passages=passages.count(), cycles=RunCycleIteration.objects.filter(run=run).count(),
+                  token_usage=CycleTokenUsage.objects.filter(run=run).count())
+    result={'project_id':run.project_id,'run_id':run.run_id,'identity':identity(run),
+            'state':run.state,'suspension':run.suspension,'allowed':not reasons and not closure_reason,
+            'allowed_without_closure':not reasons and closure_reason is not None and run.mode in ('direct','piloted'),
+            'reasons':sorted(set(reasons + ([closure_reason] if closure_reason else []))),
+            'shared':shared,'counts':counts,'files_deleted':False}
     result['deletion_digest']=c.digest(result);return result
 
 
@@ -136,11 +190,13 @@ def delete(actor,data):
     if previous:
         c.require((actor.role=='admin' or previous.data['actor']==actor.pk) and previous.data['receipt']['run_id']==data['run_id'] and previous.data['input_digest']==c.digest(data),'session-delete-request-conflict')
         return previous.data['receipt']
-    preview=deletion_preview(actor,data,lock=True);c.require(preview['allowed'],'session-delete-protected')
+    preview=deletion_preview(actor,data,lock=True)
     c.require(preview['deletion_digest']==data.get('expected_deletion_digest'),'session-delete-preview-stale')
+    without_closure = preview['allowed_without_closure'] and data.get('confirm_without_closure') is True
+    c.require(preview['allowed'] or without_closure,'session-delete-protected')
     c.require(not preview['shared'] or data.get('confirm_shared') is True,'session-delete-shared-confirmation-required',400)
     run=Run.objects.get(project_id=data['project_id'],run_id=data['run_id']);sid=run.coding_session_id;project=run.project
-    from .models import GitChange,GitSessionIndex,GitSessionEffect,GitDelivery
+    from .models import GitChange,GitSessionEffect
     origin={'run_id':run.run_id,'session_id':run.session_id}
     GitChange.objects.filter(initial_run=run,origin={}).update(origin=origin)
     for index in GitSessionIndex.objects.filter(initial_run=run,origin={}).select_related('session'):
@@ -149,11 +205,11 @@ def delete(actor,data):
         index.origin=details;index.save(update_fields=['origin'])
     GitSessionEffect.objects.filter(run=run,origin={}).update(origin=origin)
     GitDelivery.objects.filter(run=run,origin={}).update(origin=origin)
-    if sid:CodingSession.objects.select_for_update().get(pk=sid)
+    delete_stage_history(run)
     for model in (Lease,MeasurementAction,MeasurementPeriod,RunEvidence,FinalizationPlan,SessionArchive,Workshop,Metric,Incident,Subscription):model.objects.filter(run=run).delete()
     Notice.objects.filter(producer=run).delete();SessionProjection.objects.filter(binding=run).delete();Event.objects.filter(run=run).delete();Operation.objects.filter(run=run).delete();run.delete()
     removed_sid=False
     if sid and not Run.objects.filter(coding_session_id=sid).exists() and not MeasurementPeriod.objects.filter(session_id=sid).exists():CodingSession.objects.filter(pk=sid).delete();removed_sid=True
-    receipt={'request_id':key,'run_id':data['run_id'],'deleted':True,'deleted_at':timezone.now().isoformat(),'coding_session_deleted':removed_sid,'shared_resources_preserved':True,'files_deleted':False}
+    receipt={'request_id':key,'run_id':data['run_id'],'deleted':True,'deleted_at':timezone.now().isoformat(),'coding_session_deleted':removed_sid,'shared_resources_preserved':True,'files_deleted':False,'closure_bypassed':without_closure}
     Event.objects.create(project=project,kind='session-deleted',data={'request_id':key,'input_digest':c.digest(data),'actor':actor.pk,'receipt':receipt})
     return receipt

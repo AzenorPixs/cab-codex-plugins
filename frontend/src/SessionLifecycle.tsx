@@ -17,6 +17,10 @@ const reasons:Record<string,string>={
   'session-shared-coordination-protected':'D’autres sessions utilisent encore ses avis de coordination.',
   'session-incident-unresolved':'Un incident non résolu référence encore cette session.',
   'session-receipt-pending':'Un reçu d’exécution reste à réconcilier.',
+  'session-reservation-protected':'Une réservation de cette session est encore active.',
+  'session-shared-lease-protected':'Une autre session utilise un bail lié à cette exécution.',
+  'session-shared-stage-protected':'Une autre session dépend encore d’une étape de cette session.',
+  'session-proof-unavailable':'Les preuves de clôture sont indisponibles.',
   'legacy-service-still-running':'Le composant historique fonctionne encore.',
   'legacy-service-observation-unavailable':'Le retrait du composant historique ne peut pas être vérifié.',
   'finalization-contract-required':'Le contrat initial de finalisation manque.',
@@ -74,13 +78,60 @@ export function SessionActions({projectId,runId,evaluation}:{projectId:string;ru
     <SessionTrash projectId={projectId} runId={runId}/><dialog ref={dialog} className="lifecycle-dialog" onClose={()=>setView(undefined)}><h2>Réévaluer / clôturer</h2><p><strong>{runId}</strong> · {view&&runStateLabel(view.state,view.suspension)}</p>{view&&runProtection(view.suspension)&&<p>{runProtection(view.suspension)}</p>}{view?.reasons.map(r=><p key={r}>{reasonText(r)}</p>)}{view?.archive_path&&<p>Archive : <code>{view.archive_path}</code></p>}{view?.action==='closed'&&<p>La clôture est prouvée. La session peut être archivée si le bouton est disponible.</p>}{view?.action==='historical'&&<><p>Cette régularisation ne reconstitue aucune acceptation normale et ne rejoue aucun travail.</p><label>Justification<textarea value={reason} onChange={event=>setReason(event.target.value)} minLength={10} maxLength={4000}/></label><label className="historical-consent"><input type="checkbox" checked={authorized} onChange={event=>setAuthorized(event.target.checked)}/>J’autorise explicitement cette régularisation historique sur les preuves présentées.</label><button type="button" disabled={pending||!authorized||reason.trim().length<10} onClick={()=>void closeHistorical()}>Confirmer la clôture historique</button></>}{error&&<p role="alert">{error}</p>}<button type="button" onClick={()=>dialog.current?.close()}>Fermer</button></dialog>
   </div>
 }
-type DeletePreview={allowed:boolean;reasons:string[];deletion_digest:string;shared:{kind:string;label:string;preserved:boolean;runs:{project:string;run_id:string}[]}[]}
+type DeletePreview={allowed:boolean;allowed_without_closure:boolean;reasons:string[];deletion_digest:string;shared:{kind:string;label:string;preserved:boolean;runs:{project:string;run_id:string}[]}[]}
 export function SessionTrash({projectId,runId}:{projectId:string;runId:string}){
   const client=useQueryClient();const dialog=useRef<HTMLDialogElement>(null);const request=useRef(newRequestId())
   const [preview,setPreview]=useState<DeletePreview>();const [pending,setPending]=useState(false);const [error,setError]=useState('');const [confirmed,setConfirmed]=useState(false);const [sharedConfirmed,setSharedConfirmed]=useState(false)
-  async function open(){setPending(true);setError('');setConfirmed(false);setSharedConfirmed(false);try{setPreview(await api<DeletePreview>('command',{name:'session.delete_preview',data:{project_id:projectId,run_id:runId}}))}catch(e){setPreview(undefined);setError(e instanceof Error?reasonText(e.message):'Vérification impossible.')}finally{setPending(false);dialog.current?.showModal()}}
-  async function remove(){if(!preview?.allowed||!confirmed||preview.shared.length&&!sharedConfirmed)return;setPending(true);setError('');try{await api('command',{name:'session.delete',data:{project_id:projectId,run_id:runId,request_id:'WEB-DELETE-'+request.current,expected_deletion_digest:preview.deletion_digest,confirm_irreversible:confirmed,confirm_shared:sharedConfirmed}});dialog.current?.close();await client.invalidateQueries({queryKey:['closures',projectId]});await client.invalidateQueries({queryKey:['session-archives']});await client.invalidateQueries({queryKey:['sessions',projectId]})}catch(e){setError(e instanceof Error?reasonText(e.message):'Suppression refusée.')}finally{setPending(false)}}
-  return <><button type="button" className="lifecycle-icon danger session-trash" disabled={pending} title="Supprimer définitivement cette session de CAB" aria-label={'Supprimer définitivement '+runId} onClick={()=>void open()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button><dialog ref={dialog} className="lifecycle-dialog deletion-dialog"><h2>Suppression définitive</h2><p><strong>{runId}</strong></p><p className="deletion-warning">Attention : cette action est irréversible. La session et ses données propres seront supprimées de CAB.</p><p>Le projet, ses fichiers et les ressources partagées seront conservés.</p>{preview?.reasons.map(reason=><p role="alert" key={reason}>{reasonText(reason)}</p>)}{!!preview?.shared.length&&<section className="shared-warning"><h3>Attention : ressources CAB partagées</h3><p>Cette suppression est transversale. Vérifiez les liens ci-dessous ; les ressources partagées seront conservées.</p>{preview.shared.map(group=><details key={group.kind}><summary>{group.label} · {group.runs.length} autre(s) RUN</summary><ul>{group.runs.map(row=><li key={row.project+row.run_id}><Link to="/projects/$projectId/runs/$runId" params={{projectId:row.project,runId:row.run_id}}>{row.project} / {row.run_id}</Link></li>)}</ul></details>)}<label className="historical-consent"><input type="checkbox" checked={sharedConfirmed} onChange={e=>setSharedConfirmed(e.target.checked)}/>J’ai vérifié les liens et les ressources partagées indiqués.</label></section>}<label className="historical-consent"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Je comprends que cette suppression est irréversible.</label>{error&&<p role="alert">{error}</p>}<div className="deletion-buttons"><button type="button" disabled={pending} onClick={()=>dialog.current?.close()}>Annuler</button><button type="button" className="danger" disabled={pending||!preview?.allowed||!confirmed||!!preview?.shared.length&&!sharedConfirmed} onClick={()=>void remove()}>Supprimer définitivement</button></div></dialog></>
+  const [withoutClosure,setWithoutClosure]=useState(false)
+  const canRemove=preview&&confirmed&&(!preview.shared.length||sharedConfirmed)
+    && (preview.allowed || (preview.allowed_without_closure&&withoutClosure))
+  async function open(){
+    setPending(true);setError('');setConfirmed(false);setSharedConfirmed(false);setWithoutClosure(false)
+    try{setPreview(await api<DeletePreview>('command',{name:'session.delete_preview',data:{project_id:projectId,run_id:runId}}))}
+    catch(e){setPreview(undefined);setError(e instanceof Error?reasonText(e.message):'Vérification impossible.')}
+    finally{setPending(false);dialog.current?.showModal()}
+  }
+  async function remove(){
+    if(!preview||!canRemove)return
+    setPending(true);setError('')
+    try{
+      await api('command',{name:'session.delete',data:{
+        project_id:projectId,run_id:runId,request_id:'WEB-DELETE-'+request.current,
+        expected_deletion_digest:preview.deletion_digest,confirm_irreversible:confirmed,
+        confirm_shared:sharedConfirmed,confirm_without_closure:withoutClosure,
+      }})
+      dialog.current?.close()
+      await client.invalidateQueries({queryKey:['closures',projectId]})
+      await client.invalidateQueries({queryKey:['session-archives']})
+      await client.invalidateQueries({queryKey:['sessions',projectId]})
+    }catch(e){setError(e instanceof Error?reasonText(e.message):'Suppression refusée.')}
+    finally{setPending(false)}
+  }
+  return <>
+    <button type="button" className="lifecycle-icon danger session-trash" disabled={pending} title="Supprimer définitivement cette session de CAB" aria-label={'Supprimer définitivement '+runId} onClick={()=>void open()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+    <dialog ref={dialog} className="lifecycle-dialog deletion-dialog">
+      <h2>Suppression définitive</h2>
+      <p><strong>{runId}</strong></p>
+      <p className="deletion-warning">Attention : cette action est irréversible. La session et ses données propres seront supprimées de CAB.</p>
+      <p>Le projet, ses fichiers et les ressources partagées seront conservés.</p>
+      {preview?.reasons.map(reason=><p role="alert" key={reason}>{reasonText(reason)}</p>)}
+      {!!preview?.shared.length&&<section className="shared-warning">
+        <h3>Attention : ressources CAB partagées</h3>
+        <p>Vérifiez les liens avec les autres sessions.</p>
+        {preview.shared.map(group=><details key={group.kind}><summary>{group.label} · {group.runs.length} autre(s) RUN</summary>
+          {!!group.runs.length&&<ul>{group.runs.map(row=><li key={row.project+row.run_id}><Link to="/projects/$projectId/runs/$runId" params={{projectId:row.project,runId:row.run_id}}>{row.project} / {row.run_id}</Link></li>)}</ul>}
+        </details>)}
+        <label className="historical-consent"><input type="checkbox" checked={sharedConfirmed} onChange={e=>setSharedConfirmed(e.target.checked)}/>J’ai vérifié les liens et les ressources partagées indiqués.</label>
+      </section>}
+      <label className="historical-consent"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Je comprends que cette suppression est irréversible.</label>
+      {preview?.allowed_without_closure&&<label className="historical-consent"><input type="checkbox" checked={withoutClosure} onChange={e=>setWithoutClosure(e.target.checked)}/>J’autorise la suppression de cette session sans preuve de clôture.</label>}
+      {error&&<p role="alert">{error}</p>}
+      <div className="deletion-buttons">
+        <button type="button" disabled={pending} onClick={()=>dialog.current?.close()}>Annuler</button>
+        <button type="button" className="danger" disabled={pending||!canRemove} onClick={()=>void remove()}>Supprimer définitivement</button>
+      </div>
+    </dialog>
+  </>
 }
 type ArchivedSession={replacement?:{run_id:string}|null;project_id:string;run_id:string;session_id:string;change:string;state:string;stage:number|null;cycle_steps?:number;cycle_profile?:string;archived_at:string}
 type ArchivePage={sessions:ArchivedSession[];page:number;total_pages:number;total:number;has_next:boolean}

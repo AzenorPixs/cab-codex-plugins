@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.13.0
+
+- Confirmation explicite pour supprimer une session de codage sans preuve de clôture lorsqu’aucune autre protection ne s’y oppose.
+- Nettoyage transactionnel des cycles, passages et mesures propres à la session, avec recalcul des agrégats du change.
+
 ## 3.12.1
 
 - Réservation SCM de nouveau disponible, avec contrôle des baux de fichiers concurrents.

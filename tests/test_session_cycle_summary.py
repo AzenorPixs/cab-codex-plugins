@@ -85,3 +85,116 @@ class CycleSummaryTests(unittest.TestCase):
             get.reset_mock()
             self.assertEqual(web_views.sync_run_data(request,'run').status_code,403)
             get.assert_not_called()
+
+
+class SessionDeletionTests(unittest.TestCase):
+    setUp = fixtures.ProtocolTests.setUp
+    finish = fixtures.ProtocolTests.finish
+    begin = fixtures.ProtocolTests.begin
+
+    def removal(self, preview, **confirmations):
+        from cab_platform.core.session_cleanup import delete
+
+        return delete(self.actor, {
+            **self.ids, 'request_id': 'remove-session',
+            'expected_deletion_digest': preview['deletion_digest'],
+            'confirm_irreversible': True, **confirmations,
+        })
+
+    def test_delete_without_closure_cleans_owned_cycles_and_keeps_shared_data(self):
+        from cab_platform.change_stage_metrics import refresh_total
+        from cab_platform.core.commands import Refused
+        from cab_platform.core.models import ChangeStageIteration, CodingSession, CycleTokenUsage, Run, SessionProjection
+        from cab_platform.core.session_cleanup import deletion_preview
+
+        self.begin(1)
+        self.run.refresh_from_db()
+        cycle = self.run.cycle_iterations.get()
+        main = self.run.stage_iterations.get(parent__isnull=True)
+        change, sid = self.run.change_record, self.run.coding_session
+        other = Run.objects.create(
+            project=self.project, actor=self.actor, change_record=change, coding_session=sid,
+            run_id='peer', session_id=self.run.session_id, change=self.run.change, mode='direct',
+        )
+        child = ChangeStageIteration.objects.create(
+            stage=main.stage, parent=main, cycle=cycle, run=self.run, started_at=main.started_at,
+        )
+        peer = ChangeStageIteration.objects.create(
+            stage=main.stage, run=other, started_at=main.started_at,
+            ended_at=main.started_at + timedelta(seconds=12), duration_seconds=12,
+        )
+        refresh_total(main.stage_id)
+        CycleTokenUsage.objects.create(
+            project=self.project, change=change, session=sid, run=self.run, stage_passage=main,
+            action=child, native_key='usage-own', observed_at=main.started_at, role='coder', input_tokens=11,
+        )
+        own_run = self.run.pk
+        view = deletion_preview(self.actor, self.ids)
+        self.assertEqual(view['reasons'], ['session-not-closed'])
+        self.assertFalse(view['allowed'])
+        self.assertTrue(view['allowed_without_closure'])
+        self.assertEqual(view['counts']['token_usage'], 1)
+        with self.assertRaisesRegex(Refused, 'session-delete-protected'):
+            self.removal(view, confirm_shared=True)
+        with self.assertRaisesRegex(Refused, 'session-delete-shared-confirmation-required'):
+            self.removal(view, confirm_without_closure=True)
+        receipt = self.removal(view, confirm_without_closure=True, confirm_shared=True)
+        self.assertTrue(receipt['closure_bypassed'])
+        self.assertEqual(receipt, self.removal(view, confirm_without_closure=True, confirm_shared=True))
+        self.assertFalse(Run.objects.filter(pk=own_run).exists())
+        self.assertFalse(RunCycleIteration.objects.filter(pk=cycle.pk).exists())
+        self.assertFalse(ChangeStageIteration.objects.filter(pk__in=[main.pk, child.pk]).exists())
+        self.assertFalse(CycleTokenUsage.objects.filter(native_key='usage-own').exists())
+        self.assertFalse(SessionProjection.objects.filter(binding_id=own_run).exists())
+        self.assertTrue(CodingSession.objects.filter(pk=sid.pk).exists())
+        self.assertTrue(ChangeStageIteration.objects.filter(pk=peer.pk, run=other).exists())
+        stage = main.stage
+        stage.refresh_from_db()
+        self.assertEqual((stage.iteration_count, stage.duration_seconds), (1, Decimal('12')))
+        self.assertEqual((self.root/'code.txt').read_text(), 'fixture')
+
+    def test_current_preview_cannot_override_effects_or_shared_stage_links(self):
+        from cab_platform.core.commands import Refused
+        from cab_platform.core.models import ChangeStageIteration, Operation, Run
+        from cab_platform.core.session_cleanup import deletion_preview
+
+        self.begin(1)
+        current = deletion_preview(self.actor, self.ids)
+        operation = Operation.objects.create(run=self.run, request_id='unknown', state='UNKNOWN')
+        with self.assertRaisesRegex(Refused, 'session-delete-preview-stale'):
+            self.removal(current, confirm_without_closure=True)
+        protected = deletion_preview(self.actor, self.ids)
+        self.assertIn('closure-effects-protected', protected['reasons'])
+        self.assertFalse(protected['allowed_without_closure'])
+        with self.assertRaisesRegex(Refused, 'session-delete-protected'):
+            self.removal(protected, confirm_without_closure=True)
+        operation.delete()
+        other = Run.objects.create(
+            project=self.project, actor=self.actor, run_id='other', session_id='other',
+            change=self.run.change, mode='direct',
+        )
+        parent = self.run.stage_iterations.get(parent__isnull=True)
+        ChangeStageIteration.objects.create(stage=parent.stage, parent=parent, run=other)
+        protected = deletion_preview(self.actor, self.ids)
+        self.assertIn('session-shared-stage-protected', protected['reasons'])
+        self.assertFalse(protected['allowed_without_closure'])
+
+    def test_proven_closure_uses_existing_confirmations_and_removes_unused_sid(self):
+        from cab_platform.core.models import CodingSession, Event
+        from cab_platform.core.session_cleanup import deletion_preview
+
+        self.run.refresh_from_db()
+        sid = self.run.coding_session_id
+        self.assertIsNotNone(sid)
+        receipt = {'branch': 'TERMINÉ'}
+        self.run.state = 'CLOSED'
+        self.run.review = {'closure': receipt}
+        self.run.save(update_fields=['state', 'review'])
+        Event.objects.create(project=self.project, run=self.run, kind='run-closed', data=receipt)
+        view = deletion_preview(self.actor, self.ids)
+        self.assertTrue(view['allowed'])
+        self.assertFalse(view['allowed_without_closure'])
+        result = self.removal(view)
+        self.assertFalse(result['closure_bypassed'])
+        self.assertTrue(result['coding_session_deleted'])
+        self.assertFalse(CodingSession.objects.filter(pk=sid).exists())
