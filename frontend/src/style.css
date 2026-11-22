@@ -318,13 +318,18 @@ header .brand {
 .model-policy-toolbar .project-tabs{margin:0}
 .model-policy-toolbar [role="tab"]{background:var(--surface);color:var(--text);border:1px solid var(--border)}
 .model-policy-toolbar [aria-selected="true"]{background:var(--accent);color:#fff}
-.model-policy-switches,.model-policy-prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:12px}
-.model-policy-switches{border:1px solid var(--border)}
-.model-policy-switches label{display:flex;align-items:center;gap:6px}
+.model-policy-prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:12px}
+.model-policy-switches,.model-policy-providers{border:1px solid var(--border)}
+.model-policy-switches label{display:flex;align-items:center;gap:6px;margin:0}
 .model-policy-switches input{width:auto}
-.lifecycle-dialog.model-policy-overview{width:min(46rem,90vw)}
+.lifecycle-dialog.model-policy-overview{width:min(46rem,90vw);max-height:92dvh}
 .model-policy-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px}
 .model-policy-pair fieldset{min-width:0;margin:0}
+.model-policy-overview .model-policy-pair+.model-policy-pair{margin-block-start:12px}
+.model-policy-overview .model-policy-label{display:grid;gap:6px;margin:0}
+.model-policy-label>:is(input,select){margin-block-start:0}
+.model-policy-types{display:flex;gap:18px;margin-block-end:10px}
+.model-policy-provider-list{display:grid;gap:6px;margin-block-start:6px;max-block-size:8rem;overflow-y:auto}
 .model-policy-sort{display:grid;gap:8px;border:1px solid var(--border)}
 @media(min-width:761px){.monitor-table .model-catalog-provider{min-inline-size:12ch}}
 @media(max-width:550px){.model-policy-pair{grid-template-columns:minmax(0,1fr)}}

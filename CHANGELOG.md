@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.17.0
+
+- Sélection multiple des fournisseurs enregistrée dans les politiques de modèles.
+- Overview des politiques rehaussé et contrôles d’inclusion regroupés.
+
 ## 3.16.0
 
 - Tri tarifaire enregistré par politique, résultats numérotés et tri initial de Tous par coût d’entrée croissant.

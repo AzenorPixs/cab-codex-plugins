@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Filtre de fournisseurs des politiques de modèles
+
+[filter-model-policy-providers](openspec/changes/archive/2026-11-22-filter-model-policy-providers/),
+code non attribué. Sélection multiple des fournisseurs et ajustements de
+l’Overview. Vérifications du 22 novembre 2026 sur Chromium, Firefox et
+PostgreSQL isolé, reçus `STAGE-890-7-policy-providers-web` et
+`STAGE-890-7-policy-providers-data`.
+
 ## Tri des politiques de modèles
 
 [configure-model-policy-sort](openspec/changes/archive/2026-11-22-configure-model-policy-sort/),

@@ -20,7 +20,10 @@ const sortColumns=[
   ['cache_write_cost','Écriture Cache'],
 ] as const
 
-export type Policy={id:number;name:string;model_filter:string;include_free:boolean;include_paid:boolean;context_min:number;output_min:number;
+type PolicyProvider={id:number;name:string}
+export type PolicyProviders={providers?:PolicyProvider[];error?:Error|null}
+
+export type Policy={id:number;name:string;model_filter:string;provider_ids:number[]|null;include_free:boolean;include_paid:boolean;context_min:number;output_min:number;
   sort_column:typeof sortColumns[number][0];sort_descending:boolean}
   & Record<typeof priceFields[number][0],string|number>
 
@@ -28,6 +31,7 @@ export function policyPayload(values:FormData){
   return {
     name:values.get('name'),
     model_filter:values.get('model_filter')||'',
+    provider_ids:JSON.parse(String(values.get('provider_ids')??'null')) as number[]|null,
     include_free:values.has('include_free'),
     include_paid:values.has('include_paid'),
     context_min:Number(values.get('context_min')),
@@ -41,7 +45,7 @@ export function policyPayload(values:FormData){
 function Limit({name,label,steps,initial}:{name:string;label:string;steps:number[];initial:number}){
   const [position,setPosition]=useState(Math.max(0,steps.indexOf(initial)))
   const value=steps[position]
-  return <label>{label} <output>{value?format.format(value)+' tokens':'Désactivé'}</output>
+  return <label className="model-policy-label"><span>{label} <output>{value?format.format(value)+' tokens':'Désactivé'}</output></span>
     <input type="range" aria-label={label} min={0} max={steps.length-1} step={1} value={position}
       aria-valuetext={value?format.format(value)+' tokens':'Désactivé'}
       onChange={event=>setPosition(event.target.valueAsNumber)}/>
@@ -49,12 +53,40 @@ function Limit({name,label,steps,initial}:{name:string;label:string;steps:number
   </label>
 }
 
-export function ModelPolicyFields({policy}:{policy?:Policy}){
+function ProviderFilter({initial,options}:{initial:number[]|null;options:PolicyProviders}){
+  const [selection,setSelection]=useState(initial)
+  const {providers,error}=options
+  const all=selection===null
+  const ids=providers?.map(row=>row.id)
+  const available=new Set(ids)
+  const availableSelection=selection===null||!ids?selection:selection.filter(id=>available.has(id))
+  const checkedIds=new Set(availableSelection??[])
+  function toggle(id:number,checked:boolean){
+    const current=availableSelection??ids??[]
+    setSelection(checked?[...current,id]:current.filter(item=>item!==id))
+  }
+  return <fieldset className="model-policy-providers">
+    <legend>Fournisseurs</legend>
+    <input type="hidden" name="provider_ids" value={JSON.stringify(availableSelection)}/>
+    <label><input type="checkbox" checked={all} disabled={all&&!ids}
+      onChange={event=>setSelection(event.target.checked?null:[])}/> Tous les fournisseurs</label>
+    {error?<p role="alert">{error.message}</p>:!providers?<p role="status">Chargement des fournisseurs…</p>:
+      !providers.length?<p className="field-help">Aucun fournisseur enregistré.</p>:
+      <div className="model-policy-provider-list">
+        {providers.map(provider=><label key={provider.id}>
+          <input type="checkbox" checked={all||checkedIds.has(provider.id)}
+            onChange={event=>toggle(provider.id,event.target.checked)}/> {provider.name}
+        </label>)}
+      </div>}
+  </fieldset>
+}
+
+export function ModelPolicyFields({policy,providerOptions}:{policy?:Policy;providerOptions:PolicyProviders}){
   const filterHelp=useId()
   return <>
     <div className="model-policy-pair">
-      <label>Nom de la politique<input name="name" required maxLength={120} defaultValue={policy?.name}/></label>
-      <label>Filtre de modèles<input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}
+      <label className="model-policy-label">Nom de la politique<input name="name" required maxLength={120} defaultValue={policy?.name}/></label>
+      <label className="model-policy-label">Filtre de modèles<input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}
         aria-describedby={filterHelp}/><span className="field-help" id={filterHelp}>
           Séparez par des points-virgules les termes à exclure des noms de modèles.
         </span></label>
@@ -66,15 +98,18 @@ export function ModelPolicyFields({policy}:{policy?:Policy}){
     <div className="model-policy-pair">
       <fieldset className="model-policy-switches">
         <legend>Modèles à inclure</legend>
-        <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
-        <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
+        <div className="model-policy-types">
+          <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
+          <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
+        </div>
+        <ProviderFilter initial={policy?.provider_ids??null} options={providerOptions}/>
       </fieldset>
       <fieldset className="model-policy-sort">
         <legend>Triage</legend>
-        <label>Colonne de tri<select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>
+        <label className="model-policy-label">Colonne de tri<select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>
           {sortColumns.map(([key,label])=><option key={key} value={key}>{label}</option>)}
         </select></label>
-        <label>Tri<select name="sort_direction" defaultValue={policy?.sort_descending?'descending':'ascending'}>
+        <label className="model-policy-label">Tri<select name="sort_direction" defaultValue={policy?.sort_descending?'descending':'ascending'}>
           <option value="ascending">Du - Cher au + Cher</option>
           <option value="descending">Du + Cher au - Cher</option>
         </select></label>

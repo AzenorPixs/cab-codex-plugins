@@ -267,6 +267,45 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual((reloaded['sort_column'], reloaded['sort_descending']), (column, descending))
                 self.assertEqual([row['identifier'] for row in catalog.models(policy['id'])], expected)
 
+    def test_provider_selection_persists_and_all_includes_later_providers(self):
+        from cab_platform import agent_catalog as catalog, model_policies as rules
+        from cab_platform.core.models import AgentModel
+
+        def provider_with_model(name):
+            provider_id = catalog.add_provider(name, 'https://example.org', '')['id']
+            details = {'summary': {'input_cost': 1, 'cache_read_cost': None}}
+            AgentModel.objects.create(provider_id=provider_id, identifier=name, source={}, details=details)
+            return provider_id
+
+        def names(policy_id):
+            return [row['provider'] for row in catalog.models(policy_id)]
+
+        first = provider_with_model('A')
+        second = provider_with_model('B')
+        values = {'name': 'Fournisseurs', 'include_free': True, 'include_paid': True, 'context_min': 0,
+                  'output_min': 0, **dict.fromkeys(rules.PRICE_FIELDS, Decimal(0))}
+        policy = rules.save_policy(None, values)
+        policy_id = policy['id']
+        self.assertIsNone(policy['provider_ids'])
+        self.assertEqual(names(policy_id), ['A', 'B'])
+        third = provider_with_model('C')
+        self.assertEqual(names(policy_id), ['A', 'B', 'C'])
+        updated = rules.save_policy(policy_id, {**values, 'provider_ids': [third, first, third]})
+        self.assertEqual(updated['provider_ids'], [first, third])
+        self.assertEqual(rules.policy_list()[0]['provider_ids'], [first, third])
+        self.assertEqual(names(policy_id), ['A', 'C'])
+        self.assertEqual(rules.save_policy(policy_id, values)['provider_ids'], [first, third])
+        catalog.remove_provider(first)
+        self.assertEqual(names(policy_id), ['C'])
+        with self.assertRaises(catalog.Refused) as error:
+            rules.save_policy(policy_id, {**values, 'provider_ids': [first]})
+        self.assertEqual(error.exception.code, 'agent-model-policy-provider-invalid')
+        rules.save_policy(policy_id, {**values, 'provider_ids': []})
+        self.assertEqual(names(policy_id), [])
+        rules.save_policy(policy_id, {**values, 'provider_ids': None})
+        self.assertEqual(names(policy_id), ['B', 'C'])
+        self.assertNotIn(second, updated['provider_ids'])
+
 
 def command(*args):
     run([str(PG / args[0]), *args[1:]], check=True, stdout=DEVNULL)
@@ -300,14 +339,19 @@ if __name__ == '__main__':
                 controls_state = controls_migration.apply(policy_state.clone(), schema_editor)
             sort_migration = loader.get_migration('cab_core', '0058_model_policy_sort')
             with connection.schema_editor() as schema_editor:
-                sort_migration.apply(controls_state.clone(), schema_editor)
+                sort_state = sort_migration.apply(controls_state.clone(), schema_editor)
+            provider_migration = loader.get_migration('cab_core', '0059_model_policy_providers')
+            with connection.schema_editor() as schema_editor:
+                provider_migration.apply(sort_state.clone(), schema_editor)
             from cab_platform.core.models import AgentModelPolicy
             upgraded = AgentModelPolicy.objects.get(pk=legacy.pk)
             assert (upgraded.cache_read_max, upgraded.cache_write_min) == (Decimal('.2'), Decimal('.3'))
             assert (upgraded.model_filter, upgraded.cache_read_min, upgraded.cache_write_max) == ('', 0, 0)
             assert (upgraded.sort_column, upgraded.sort_descending) == ('input_cost', False)
+            assert upgraded.provider_ids is None
             result = unittest.main(exit=False).result
             with connection.schema_editor() as schema_editor:
+                provider_migration.unapply(sort_state, schema_editor)
                 sort_migration.unapply(controls_state, schema_editor)
                 controls_migration.unapply(policy_state, schema_editor)
                 policy_migration.unapply(catalog_state, schema_editor)

@@ -348,8 +348,12 @@ class CatalogRemoval(Schema):
     id: CatalogID
 
 
+PolicyProviderID = Annotated[int, Field(strict=True, gt=0, lt=2**63)]
+
+
 class ModelPolicyInput(Schema):
     name: str
+    provider_ids: list[PolicyProviderID] | None = None
     sort_column: Literal['input_cost', 'output_cost', 'cache_read_cost', 'cache_write_cost'] = 'input_cost'
     sort_descending: bool = False
     model_filter: str = ''
@@ -403,7 +407,10 @@ def add_agent_model_policy(request, body: ModelPolicyInput):
 def edit_agent_model_policy(request, body: ModelPolicyEdit):
     principal(request, admin=True)
     from cab_platform.model_policies import save_policy
-    return save_policy(body.id, body.model_dump(exclude={'id'}))
+    values = body.model_dump(exclude={'id'})
+    if 'provider_ids' not in body.model_fields_set:
+        values.pop('provider_ids')
+    return save_policy(body.id, values)
 
 
 @api.post('/administration/agent-model-policies/remove')

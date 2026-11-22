@@ -6,7 +6,7 @@ from unicodedata import category, normalize
 from django.db import IntegrityError, transaction
 
 from .core.commands import Refused, require
-from .core.models import AgentModelPolicy
+from .core.models import AgentModelPolicy, AgentProvider
 
 CONTEXT_STEPS = (0, 262_144, 500_000, 1_000_000, 1_048_576)
 OUTPUT_STEPS = (0, 64_000, 500_000, 1_000_000, 1_048_576)
@@ -20,7 +20,7 @@ MODEL_BOUNDS = {
     'cache_read_cost': ('cache_read_min', 'cache_read_max'),
     'cache_write_cost': ('cache_write_min', 'cache_write_max'),
 }
-POLICY_FIELDS = ('id', 'name', 'model_filter', 'include_free', 'include_paid', 'context_min', 'output_min',
+POLICY_FIELDS = ('id', 'name', 'model_filter', 'provider_ids', 'include_free', 'include_paid', 'context_min', 'output_min',
                  'sort_column', 'sort_descending', *PRICE_FIELDS)
 FREE_WORD = re.compile(r'(?<![^\W_])free(?![^\W_])', re.IGNORECASE)
 
@@ -51,6 +51,11 @@ def save_policy(policy_id, values):
             require(not maximum or minimum <= maximum, 'agent-model-policy-bounds-invalid', 400)
     try:
         with transaction.atomic():
+            if (selection := values.get('provider_ids')) is not None:
+                provider_ids = sorted(set(selection))
+                require(AgentProvider.objects.filter(pk__in=provider_ids).count() == len(provider_ids),
+                        'agent-model-policy-provider-invalid', 400)
+                values['provider_ids'] = provider_ids
             if policy_id is None:
                 policy = AgentModelPolicy.objects.create(**values)
             else:

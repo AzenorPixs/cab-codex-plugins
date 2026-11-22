@@ -11,6 +11,7 @@ const messages:Record<string,string>={
   'agent-provider-not-found':'Ce fournisseur est introuvable.',
   'agent-provider-keys-linked':'Supprimez les clés API liées avant de supprimer ce fournisseur.',
   'agent-model-policy-not-found':'Cette politique de modèles est introuvable.',
+  'agent-model-policy-provider-invalid':'Un fournisseur sélectionné a été supprimé. Actualisez la liste des fournisseurs.',
   'agent-model-policy-filter-invalid':'Saisir un filtre valide de 2 048 caractères au maximum.',
   'agent-model-policy-name-invalid':'Saisir un nom de politique valide. Le nom Tous est réservé.',
   'agent-model-policy-duplicate':'Une politique porte déjà ce nom.',

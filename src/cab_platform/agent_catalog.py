@@ -345,7 +345,10 @@ def models(policy_id=None):
 
     policy = policy_or_error(policy_id) if policy_id is not None else None
     exclusions = excluded_names(policy.model_filter) if policy else ()
-    rows = AgentModel.objects.order_by('provider__name', 'identifier').values(
+    catalog = AgentModel.objects.all()
+    if policy is not None and policy.provider_ids is not None:
+        catalog = catalog.filter(provider_id__in=policy.provider_ids)
+    rows = catalog.order_by('provider__name', 'identifier').values(
         'id', 'provider__name', 'identifier', 'details__summary',
         legacy_source=Case(When(details__summary__has_key='cache_read_cost', then=Value(None)),
                            default=F('source'), output_field=JSONField()),

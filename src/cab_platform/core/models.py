@@ -51,6 +51,7 @@ class AgentModelPolicy(models.Model):
 
     name = models.CharField(max_length=120)
     model_filter = models.CharField(max_length=2048, blank=True, default='')
+    provider_ids = models.JSONField(null=True, blank=True, default=None)
     include_free = models.BooleanField(default=True)
     include_paid = models.BooleanField(default=True)
     context_min = models.PositiveIntegerField(default=0)

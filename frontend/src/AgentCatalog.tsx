@@ -2,7 +2,7 @@ import {useRef,useState,type FormEvent,type KeyboardEvent,type ReactNode} from '
 import {useQuery,useQueryClient} from '@tanstack/react-query'
 import {Link} from '@tanstack/react-router'
 import {api} from './api'
-import {ModelPolicyFields,policyPath,policyPayload,type Policy} from './ModelPolicy'
+import {ModelPolicyFields,policyPath,policyPayload,type Policy,type PolicyProviders} from './ModelPolicy'
 
 const providerPath='administration/agent-providers'
 const keyPath='administration/agent-api-keys'
@@ -236,7 +236,7 @@ function KeyCatalog(){
       </AddOverview>}/>
 }
 
-function PolicyOverview({policy,onSaved}:{policy?:Policy;onSaved:(policy:Policy)=>Promise<void>}){
+function PolicyOverview({policy,providerOptions,onSaved}:{policy?:Policy;providerOptions:PolicyProviders;onSaved:(policy:Policy)=>Promise<void>}){
   const [formVersion,setFormVersion]=useState(0)
   async function save(values:FormData){
     const payload=policyPayload(values)
@@ -245,7 +245,7 @@ function PolicyOverview({policy,onSaved}:{policy?:Policy;onSaved:(policy:Policy)
   }
   return <AddOverview wide edit={!!policy} title={policy?'Éditer la politique de modèles':'Ajouter une politique de modèles'}
     submit={save} onClose={()=>setFormVersion(version=>version+1)}>
-    <ModelPolicyFields key={formVersion} policy={policy}/>
+    <ModelPolicyFields key={formVersion} policy={policy} providerOptions={providerOptions}/>
   </AddOverview>
 }
 
@@ -269,6 +269,8 @@ const initialModelSort={column:columns.findIndex(column=>column.label===inputPri
 
 function ModelCatalog(){
   const client=useQueryClient()
+  const providers=useQuery({queryKey:[providerPath],queryFn:loadProviders,networkMode:'always'})
+  const providerOptions={providers:providers.data?.providers,error:providers.error}
   const policies=useQuery({queryKey:[policyPath],queryFn:()=>api<{policies:Policy[]}>(policyPath),networkMode:'always'})
   const [tab,setTab]=useState<number|null>(null)
   const entries=policies.data?.policies??[]
@@ -310,12 +312,12 @@ function ModelCatalog(){
     {policies.error&&<p role="alert">{policies.error.message}</p>}
   </div>
   const policyActions=selected&&<>
-    <PolicyOverview key={selected.id} policy={selected} onSaved={save}/>
+    <PolicyOverview key={selected.id} policy={selected} providerOptions={providerOptions} onSaved={save}/>
     <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
       name={selected.name} remove={()=>remove(selected.id)}/>
   </>
   return <CatalogTable viewKey={selectedId} numbered={selectedId!==null} defaultSort={initialModelSort} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
-    actions={<PolicyOverview onSaved={save}/>} rows={query.data?.models??[]} pending={query.isPending} error={query.error}/>
+    actions={<PolicyOverview providerOptions={providerOptions} onSaved={save}/>} rows={query.data?.models??[]} pending={query.isPending} error={query.error}/>
 }
 
 export function AgentCatalog({page}:{page:CatalogPage}){

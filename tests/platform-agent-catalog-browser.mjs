@@ -43,6 +43,8 @@ async function pagination(title,needle){
   await wait(()=>rows(title).length===10,'Retour première page '+title);
 }
 const confirm=()=>Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Supprimer').click();
+const providerBox=name=>Array.from(find('dialog[open] .model-policy-providers').querySelectorAll('label'))
+  .find(label=>label.textContent.trim()===name)?.querySelector('input[type=checkbox]');
 const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)});
 (async()=>{
   await wait(()=>find('[data-agent="codex"]'),'Carte Codex');
@@ -85,6 +87,17 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   check(addForm.closest('dialog').getBoundingClientRect().width>650,'Overview élargi');
   const pairs=Array.from(addForm.querySelectorAll('.model-policy-pair'));
   check(pairs.length===3&&pairs.every(row=>row.children[1].getBoundingClientRect().left>row.children[0].getBoundingClientRect().left),'Trois paires de champs côte à côte');
+  const checkboxLabels=Array.from(addForm.querySelectorAll('.model-policy-types label'));
+  check(checkboxLabels.length===2&&checkboxLabels[0].getBoundingClientRect().top===checkboxLabels[1].getBoundingClientRect().top
+    &&checkboxLabels[0].getBoundingClientRect().left<checkboxLabels[1].getBoundingClientRect().left,'Free et Payant sur la même ligne');
+  const providerFieldset=addForm.querySelector('.model-policy-providers');
+  check(providerFieldset.getBoundingClientRect().top>=checkboxLabels[0].getBoundingClientRect().bottom,'Fournisseurs sous les options de modèles');
+  const dialogStyle=frame.contentWindow.getComputedStyle(addForm.closest('dialog'));
+  check(parseFloat(dialogStyle.maxHeight)>frame.contentWindow.innerHeight*0.9,'Overview rehaussé');
+  const labelGaps=['name','model_filter','sort_column'].map(name=>frame.contentWindow.getComputedStyle(addForm.elements.namedItem(name).closest('label')).rowGap);
+  check(labelGaps.every(gap=>gap===labelGaps[0])&&Array.from(addForm.querySelectorAll('input[type=range]')).every(input=>frame.contentWindow.getComputedStyle(input.closest('label')).rowGap===labelGaps[0]),'Espacement des labels aligné');
+  await wait(()=>providerBox('Fournisseur témoin')?.checked,'Liste des fournisseurs du catalogue et sélection par défaut');
+  check(providerBox('Tous les fournisseurs').checked&&providerBox('Fournisseur 11').checked,'Tous sélectionnés par défaut');
   const sortColumn=addForm.elements.namedItem('sort_column');
   const sortDirection=addForm.elements.namedItem('sort_direction');
   check(sortColumn.value==='input_cost'&&sortColumn.options.length===4&&sortDirection.value==='ascending','Valeurs par défaut du tri');
@@ -116,13 +129,25 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   const cacheRows=Array.from(policyForm.querySelectorAll('.model-policy-prices')).slice(-2)
     .map(row=>Array.from(row.querySelectorAll('input'),input=>input.name).join(','));
   check(cacheRows.join(';')==='cache_write_min,cache_write_max;cache_read_min,cache_read_max','Écriture puis lecture, minimum puis maximum');
+  check(providerBox('Tous les fournisseurs').checked,'Défaut persisté dans l’édition');
+  providerBox('Tous les fournisseurs').click();
+  check(!providerBox('Fournisseur 11').checked,'Désactiver Tous vide la sélection');
+  providerBox('Fournisseur 11').click();
+  providerBox('Fournisseur 12').click();
   fill('dialog[open] [name=name]','Rapides renommés');
   fill('dialog[open] [name=model_filter]','modèle 12; bêta');
   fill('dialog[open] [name=cache_write_max]','0.5');
   fill('dialog[open] [name=cache_read_min]','0.1');
   find('dialog[open] form').requestSubmit();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
-  await wait(()=>readRows('Modèles')[0]?.startsWith('1Modèle 11'),'Le filtre retire le modèle exclu et conserve le tri');
+  await wait(()=>rows('Modèles').length===1&&readRows('Modèles')[0]?.startsWith('1Modèle 11'),'Filtrage par fournisseurs et nom, tri conservé');
+  await click('button[aria-label="Éditer la politique de modèles"]');
+  check(!providerBox('Tous les fournisseurs').checked&&providerBox('Fournisseur 11').checked
+    &&providerBox('Fournisseur 12').checked&&!providerBox('Fournisseur 10').checked,'Sélection multiple persistée');
+  providerBox('Fournisseur 11').click();
+  providerBox('Fournisseur 12').click();
+  find('dialog[open] form').requestSubmit();
+  await wait(()=>rows('Modèles').length===0&&!find('dialog[open]'),'Une sélection vide exclut tous les modèles');
   await click('button[aria-label="Supprimer la politique de modèles"]');
   confirm();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
@@ -226,6 +251,7 @@ try{
         assert.equal(values.model_filter,'')
         assert.equal(values.sort_column,'cache_read_cost')
         assert.equal(values.sort_descending,true)
+        assert.equal(values.provider_ids,null)
         const policy={id:21,...values}
         policies=[policy]
         return json(response,policy)
@@ -239,6 +265,7 @@ try{
         assert.equal(policy.cache_read_min,'0.1')
         assert.equal(policy.sort_column,'cache_read_cost')
         assert.equal(policy.sort_descending,true)
+        assert.deepEqual(policy.provider_ids,policies[0].provider_ids===null?[21,22]:[])
         assert.equal(policy.context_min,500000)
         policies=[policy]
         return json(response,policy)
@@ -254,7 +281,9 @@ try{
           input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
         }))
         if(!url.searchParams.has('policy_id'))return json(response,{models})
-        const results=policies[0]?.model_filter?models.filter(model=>model.id!==12):models
+        const policy=policies[0]
+        const results=models.filter(model=>(!policy?.model_filter||model.id!==12)
+          &&(policy?.provider_ids==null||policy.provider_ids.includes(model.id+10)))
         return json(response,{models:results.reverse()})
       }
       if(route==='/api/v1/administration/agent-api-keys'){
