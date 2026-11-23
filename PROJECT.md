@@ -12,6 +12,8 @@ Le centre de notifications de la top barre remplace le journal de livraison du
 bloc Git. PostgreSQL conserve les messages et questions ; Electric actualise la
 cloche. L'expéditeur est le projet concerné, ou CAB pour les messages globaux.
 Les messages sont consommés à la lecture, les questions restent jusqu'à réponse.
+La fenêtre garde une taille constante et fait défiler les contenus longs.
+**Effacer les messages** purge les messages de tous les projets et de CAB.
 
 ## Plateforme CAB 3.2.8
 

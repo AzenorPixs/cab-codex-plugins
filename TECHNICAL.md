@@ -47,6 +47,11 @@ Electric `/api/v1/sync/notifications` reste authentifié et réservé aux admins
 retourne l'`id` corrélé. `notification.receipt` consulte son état READ/ANSWERED
 et la réponse sans recréer la notification. Les réponses sont accessibles au
 producteur CAB autorisé ; leur prise en compte conserve les règles du mandat.
+Le POST administrateur `/api/v1/notifications/clear-messages` retire uniquement
+les lignes `message`, tous projets confondus. Les nouveaux reçus `CLEARED`
+empêchent la republication de la même identité. La suppression et ses reçus
+sont transactionnels. Le retour des identifiants retirés permet à l’aperçu
+d’ignorer les lignes déjà purgées pendant que le flux Electric se met à jour.
 
 ## Architecture CAB 3.2.8
 

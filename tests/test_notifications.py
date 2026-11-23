@@ -13,7 +13,8 @@ if LIVE:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
 else:
     from django.conf import settings
-    settings.configure(SECRET_KEY='fixture',INSTALLED_APPS=['cab_platform.core'],DATABASES={'default':{'ENGINE':'django.db.backends.dummy'}})
+    settings.configure(SECRET_KEY='fixture',INSTALLED_APPS=['cab_platform.core'],
+                       DATABASES={'default':{'ENGINE':'django.db.backends.sqlite3','NAME':':memory:'}})
 import django
 django.setup()
 from cab_platform import notifications as n
@@ -90,6 +91,45 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(terminal.kwargs['body'].splitlines()[0],'Terminé')
         self.assertIs(terminal.kwargs['project'],delivery.project)
         self.assertIn('report demandé',terminal.kwargs['body'])
+
+
+@unittest.skipIf(LIVE,'La purge globale s’exerce uniquement sur une base isolée')
+class ClearMessagesTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from django.db import connection
+        from cab_platform.core.models import Actor, Project
+        cls.Actor, cls.Project = Actor, Project
+        cls.models = (Project, Actor, n.Notification, n.NotificationReceipt)
+        with connection.schema_editor() as schema:
+            for model in cls.models:
+                schema.create_model(model)
+        cls.addClassCleanup(cls.drop_tables)
+
+    @classmethod
+    def drop_tables(cls):
+        from django.db import connection
+        with connection.schema_editor() as schema:
+            for model in reversed(cls.models):
+                schema.delete_model(model)
+
+    def test_purge_globale_preserve_questions_et_recus(self):
+        admin = self.Actor.objects.create(id='admin', uid=42, role='admin', token_hash='admin-fixture')
+        project = self.Project.objects.create(id='p', name='Projet', root='/fixture', owner_uid=42, owner_gid=42)
+        global_message = n.Notification.objects.create(id=uuid.uuid4(), fingerprint='global')
+        project_message = n.Notification.objects.create(id=uuid.uuid4(), project=project, fingerprint='project')
+        question = n.Notification.objects.create(id=uuid.uuid4(), kind='question', fingerprint='question')
+        previous = n.NotificationReceipt.objects.create(id=uuid.uuid4(), state='READ', fingerprint='previous', actor=admin)
+
+        with self.assertRaises(Refused):
+            n.clear_messages(types.SimpleNamespace(active=True, role='coder'))
+        self.assertEqual(n.Notification.objects.count(), 3)
+        self.assertCountEqual(n.clear_messages(admin)['cleared_ids'], [str(global_message.pk), str(project_message.pk)])
+        self.assertEqual(list(n.Notification.objects.values_list('pk', flat=True)), [question.pk])
+        self.assertEqual(n.NotificationReceipt.objects.get(pk=previous.pk).state, 'READ')
+        self.assertCountEqual(n.NotificationReceipt.objects.filter(state='CLEARED').values_list('fingerprint', flat=True),
+                              ['global', 'project'])
+        self.assertEqual(n.clear_messages(admin), {'cleared_ids': []})
 
 
 @unittest.skipUnless(LIVE,'PG réel réservé au contrôle hôte explicite')

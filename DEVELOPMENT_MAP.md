@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Centre de notifications
+
+[uniform-notification-popup-and-clear-messages](openspec/changes/archive/2026-11-23-uniform-notification-popup-and-clear-messages/),
+code non attribué. Ce change fixe la taille de la popup et ajoute la purge
+globale des messages administrateur, avec maintien des questions et reçus.
+Il s’appuie sur le centre de notifications du socle `system-platform`.
+Le 23 novembre 2026, le test de persistance isolé et les contrôles Chromium
+et Firefox ont réussi, ainsi que la compilation du frontend.
+
 ## Diagnostics des actions Git et de la publication Docker
 
 [diagnose-project-forge-actions](openspec/changes/archive/2026-11-23-diagnose-project-forge-actions/),

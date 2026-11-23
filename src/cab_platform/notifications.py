@@ -48,11 +48,12 @@ def publish(key,*,title,body,project=None,kind='message',choices=None):
     fingerprint=validated(title,body,kind,choices);pk=identifier(key)
     # Sérialise publication/lecture/réponse du même message sans verrou fichier.
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[int.from_bytes(pk.bytes[:8],'big',signed=True)])
+    row=Notification.objects.select_for_update().filter(pk=pk).first()
+    # Une purge concurrente peut avoir retiré la ligne et créé son reçu.
     receipt=NotificationReceipt.objects.filter(pk=pk).first()
     if receipt:
         require(kind!='question' or receipt.fingerprint==fingerprint,'notification-question-conflict',409)
         return receipt_view(receipt)
-    row=Notification.objects.select_for_update().filter(pk=pk).first()
     if row:
         require(row.project_id==(project.pk if project else None) and row.kind==kind,'notification-identity-conflict',409)
         require(kind!='question' or row.fingerprint==fingerprint,'notification-question-conflict',409)
@@ -80,6 +81,20 @@ def read(actor,pk):
     receipt=NotificationReceipt.objects.create(id=row.pk,state='READ',fingerprint=row.fingerprint,actor=actor)
     row.delete()
     return receipt_view(receipt)
+
+
+@transaction.atomic
+def clear_messages(actor):
+    administrator(actor)
+    messages = list(Notification.objects.select_for_update().filter(kind='message')
+                    .order_by('pk').values_list('pk', 'fingerprint'))
+    NotificationReceipt.objects.bulk_create([
+        NotificationReceipt(id=pk, state='CLEARED', fingerprint=fingerprint, actor=actor)
+        for pk, fingerprint in messages
+    ])
+    ids = [pk for pk, _ in messages]
+    Notification.objects.filter(pk__in=ids).delete()
+    return {'cleared_ids': [str(pk) for pk in ids]}
 
 
 @transaction.atomic

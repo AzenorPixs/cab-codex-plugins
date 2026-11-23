@@ -174,6 +174,11 @@ def notifications_answer(request,body:NotificationAnswer):
     from cab_platform.notifications import answer
     return answer(request.auth,body.id,body.choice)
 
+@api.post('/notifications/clear-messages')
+def notifications_clear_messages(request):
+    from cab_platform.notifications import clear_messages
+    return clear_messages(request.auth)
+
 @api.get('/health',auth=None)
 def health(request):return {**bootstrap.status(),'csrf_token':get_token(request)}
 
