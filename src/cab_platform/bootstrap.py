@@ -13,6 +13,9 @@ from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json,secret,
 
 class BootstrapError(Exception):pass
 
+# Electric 1.8.1 recognizes an existing slot by PostgreSQL's English message.
+ELECTRIC_MESSAGES_SQL = "ALTER ROLE cab_electric IN DATABASE cab SET lc_messages TO 'C';"
+
 STAGE_ELECTRIC_SQL = """
 DO $$
 DECLARE table_name text;
@@ -107,6 +110,7 @@ def initialize(data,token):
                 cursor.execute('GRANT cab_owner TO cab_migrate')
                 cursor.execute('ALTER ROLE cab_electric REPLICATION')
                 if not exists:cursor.execute('CREATE DATABASE cab OWNER cab_owner')
+                cursor.execute(ELECTRIC_MESSAGES_SQL)
             cfg.update(initializing=True,database='cab',database_host=host,database_port=port,database_user='cab_app',database_password=passwords['cab_app'],migrator_user='cab_migrate',migrator_password=passwords['cab_migrate'],electric_user='cab_electric',electric_password=passwords['cab_electric'],electric_secret=secrets.token_urlsafe(48),schema_version=1,version=__version__)
             if not admin_dsn:cfg['postgresql']=reference(int(major),port)
             atomic_json(CONFIG,cfg)

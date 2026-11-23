@@ -1,10 +1,11 @@
-"""À exécuter uniquement dans cab-300-package-test, aucun secret réel."""
+"""À exécuter dans un conteneur Debian dédié, avec des données synthétiques."""
 import hashlib
 import json
 import os
 from pathlib import Path
 import select
 import subprocess
+import sys
 import time
 import httpx
 
@@ -21,6 +22,109 @@ def ready(client,state='READY',timeout=40):
         except httpx.HTTPError:pass
         time.sleep(.2)
     raise AssertionError('service-state-timeout: '+state)
+
+
+def qualify_electric_upgrade(package):
+    if os.environ.get('CAB_ELECTRIC_UPGRADE_FIXTURE') != '1':
+        raise AssertionError('electric-upgrade-fixture-required')
+    cfg = json.loads(Path('/etc/cab/cab.json').read_text())
+    assert cfg['initialized'] and cfg['database'] == 'cab' and cfg['database_port'] == 5433
+    slot = 'electric_slot_default'
+
+    def sql(statement):
+        return subprocess.check_output(
+            ['/usr/sbin/runuser', '-u', 'postgres', '--', '/usr/bin/psql',
+             '-X', '-v', 'ON_ERROR_STOP=1', '-p', '5433', '-d', 'cab', '-Atqc', statement],
+            text=True,
+        ).strip()
+
+    assert int(sql('SHOW server_version_num')) // 10000 == 17
+    assert sql('SHOW lc_messages').startswith('fr_FR')
+    slot_query = f"FROM pg_replication_slots WHERE slot_name = '{slot}'"
+    assert sql(f"SELECT active AND NOT temporary AND plugin = 'pgoutput' {slot_query}") == 't'
+    previous = subprocess.check_output(
+        ['/usr/bin/dpkg-query', '-W', '-f=${Version}', 'cab'], text=True,
+    )
+    version = subprocess.check_output(
+        ['/usr/bin/dpkg-deb', '-f', package, 'Version'], text=True,
+    ).strip()
+    subprocess.run(['/usr/bin/dpkg', '--compare-versions', version, 'gt', previous], check=True)
+    sql("""
+        CREATE TABLE electric_restart_fixture (id integer PRIMARY KEY, value text NOT NULL);
+        ALTER TABLE electric_restart_fixture REPLICA IDENTITY FULL;
+        GRANT SELECT ON electric_restart_fixture TO cab_electric;
+        ALTER PUBLICATION electric_publication_default ADD TABLE electric_restart_fixture;
+        INSERT INTO electric_restart_fixture VALUES (1, 'before-restart');
+    """)
+
+    with httpx.Client(timeout=15) as web:
+        def shape(offset, handle=None):
+            params = {'table': 'electric_restart_fixture', 'offset': offset, 'secret': cfg['electric_secret']}
+            if handle is not None:
+                params['handle'] = handle
+            return web.get(f"http://127.0.0.1:{cfg.get('electric_port', 8791)}/v1/shape", params=params)
+
+        def verify_package():
+            health = ready(web)
+            assert health['version'] == version and health['electric']
+            assert subprocess.check_output(
+                ['/usr/bin/dpkg-query', '-W', '-f=${Status}|${Version}', 'cab'], text=True,
+            ) == f'install ok installed|{version}'
+            receipt = json.loads(Path('/var/lib/cab/maintenance-receipt.json').read_text())
+            assert receipt['state'] == 'COMPLETED' and receipt['verified_version'] == version
+            assert sql(f'SELECT active AND NOT temporary {slot_query}') == 't'
+            assert sql('SHOW lc_messages').startswith('fr_FR')
+
+        before = shape('-1')
+        assert before.status_code == 200
+        assert any(row.get('value', {}).get('value') == 'before-restart' for row in before.json())
+        handle = before.headers['electric-handle']
+        offset = before.headers['electric-offset']
+        assert offset != '-1'
+
+        sql('ALTER ROLE cab_electric IN DATABASE cab RESET lc_messages')
+        subprocess.run(['/usr/bin/dpkg', '--unpack', package], check=True)
+        assert sql(f'SELECT NOT active {slot_query}') == 't'
+        flush = sql(f'SELECT confirmed_flush_lsn {slot_query}')
+        assert flush
+        sql("UPDATE electric_restart_fixture SET value = 'while-stopped' WHERE id = 1")
+        subprocess.run(['/usr/bin/dpkg', '--configure', 'cab'], check=True)
+        verify_package()
+        assert sql(f"SELECT confirmed_flush_lsn >= '{flush}'::pg_lsn {slot_query}") == 't'
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            resumed = shape(offset, handle)
+            assert resumed.status_code in (200, 204)
+            if resumed.status_code == 200:
+                assert resumed.headers['electric-handle'] == handle
+                if any(row.get('value', {}).get('value') == 'while-stopped' for row in resumed.json()):
+                    break
+                offset = resumed.headers.get('electric-offset', offset)
+            time.sleep(.2)
+        else:
+            raise AssertionError('electric-wal-change-not-received-after-upgrade')
+
+        subprocess.run(['/usr/bin/dpkg', '--unpack', package], check=True)
+        assert sql(f'SELECT NOT active {slot_query}') == 't'
+        # Le retrait est intentionnel et limité au slot de ce conteneur de recette.
+        sql(f"SELECT pg_drop_replication_slot('{slot}')")
+        assert sql(f'SELECT active {slot_query}') == ''
+        sql("UPDATE electric_restart_fixture SET value = 'before-resnapshot' WHERE id = 1")
+        subprocess.run(['/usr/bin/dpkg', '--configure', 'cab'], check=True)
+        verify_package()
+        assert shape(offset, handle).status_code == 409
+        rebuilt = shape('-1')
+        assert rebuilt.status_code == 200 and rebuilt.headers['electric-handle'] != handle
+        assert any(row.get('value', {}).get('value') == 'before-resnapshot' for row in rebuilt.json())
+    print(json.dumps({'electric_slot_resumed': True, 'electric_shape_rebuilt': True, 'dpkg_version': version}))
+
+
+if len(sys.argv) == 3 and sys.argv[1] == '--electric-upgrade':
+    qualify_electric_upgrade(sys.argv[2])
+    sys.exit(0)
+if len(sys.argv) != 1:
+    raise SystemExit('usage: platform-package-qualification.py [--electric-upgrade /chemin/cab.deb]')
+
 
 with httpx.Client(timeout=120) as web:
     h=ready(web,'UNINITIALIZED')

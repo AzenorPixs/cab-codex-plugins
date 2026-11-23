@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Reprendre le slot de réplication Electric après une mise à jour Debian sur un PostgreSQL localisé, en conservant le WAL et les abonnements.
 - Préciser les échecs DNS, TCP, TLS et HTTP dans la console d’authentification de GitLab, GitHub et Forgejo, y compris lors de la vérification des dépôts.
 
 ## 3.18.0

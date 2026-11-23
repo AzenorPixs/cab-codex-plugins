@@ -94,6 +94,13 @@ migrent uniquement une base déjà initialisée, redémarrent et vérifient le m
 reçu. Un effet incertain n’est pas réémis. Une première installation reste en
 mode Web bootstrap ; le parcours authentifié crée la base et ses tables.
 
+Sur PostgreSQL localisé, le rôle Electric reçoit `lc_messages=C` uniquement
+dans la base CAB. Electric 1.8.1 utilise le libellé anglais de PostgreSQL pour
+reconnaître le slot persistant existant au redémarrage. La mise à niveau vérifie
+le slot avant de démarrer CAB. En cas de `electric-replication-slot-incompatible`,
+examiner sa base, son plugin, sa persistance et son état WAL avant toute reprise.
+Le paquet conserve le slot et le stockage des abonnements lors de ce refus.
+
 Les plugins CAB/CCAB/CABU/CICD distribués par le catalogue viennent désormais de
 integrations/codex ; commandes minimes sous integrations/commands. Les anciens
 plugins du répertoire plugins restent sources historiques et ne sont plus les
