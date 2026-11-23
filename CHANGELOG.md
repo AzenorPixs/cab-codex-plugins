@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Ajouter dans l’Overview Fournisseur la saisie d’une clé API associée avec bouton œil, et intégrer le catalogue OpenAI avec ses tarifs Standard sur un créneau aléatoire par journée UTC.
+
 - Afficher la dernière construction Debian ou Docker dans la Fabrique, y compris les réussites issues de CICD et CICDF, avec la provenance du reçu et un détail accessible.
 
 - Autoriser la republication d’un artefact sous un tag existant sur Forgejo, GitHub et GitLab. Après confirmation, conserver la dernière image Docker avec son alias `latest` et les sept dernières versions de chaque paquet Debian et architecture.

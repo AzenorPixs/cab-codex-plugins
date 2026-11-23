@@ -9,7 +9,8 @@ export type CatalogFile={id:string;provider_id:number|null;url:string;valid:bool
 export type ApiKey={id:string;provider_id:number;day:number|null;week:number|null;month:number|null;credits:number|null}
 export type Model={id:number;provider_id:number;identifier:string;name:string|null;context:number|null;output:number|null;
   input_modalities:string[]|null;output_modalities:string[]|null;input_cost:string|number|null;output_cost:string|number|null;
-  cache_read_cost:string|number|null;cache_write_cost:string|number|null;cache_write_duration:string|null}
+  cache_read_cost:string|number|null;cache_write_cost:string|number|null;cache_write_duration:string|null;
+  cache_write_rates?:Record<string,number>}
 type CatalogRows={providers:Provider[];keys:ApiKey[];models:Model[];policies:Policy[];files:CatalogFile[]}
 type Projection={id:string;kind:string;data:unknown}
 
@@ -84,7 +85,8 @@ export function CatalogRefresh({source,path,providerId}:{source?:CatalogFile;pat
       </svg>
     </button>
     {refresh.error&&<small role="alert">{refresh.error.message}</small>}
-    {source?.state==='error'&&<small role="status">Dernière actualisation en échec</small>}
+    {source?.state==='error'&&<small role="status">{source.error==='agent-catalog-key-required'
+      ?'Ajoutez une clé API pour actualiser le catalogue.':'Dernière actualisation en échec'}</small>}
   </>
 }
 

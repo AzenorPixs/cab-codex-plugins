@@ -1,5 +1,5 @@
-"""Catalogues publics des fournisseurs et clés conservées au TPM."""
-from datetime import timedelta
+"""Catalogues des fournisseurs et clés conservées au TPM."""
+from datetime import UTC, timedelta
 from decimal import Decimal, InvalidOperation
 from http import client
 from ipaddress import ip_address, ip_network
@@ -25,9 +25,10 @@ from .core.models import AgentApiKey, AgentModel, AgentProvider
 from .forge_settings import crypt_credential
 
 MODELS_DEV_URL = 'https://models.dev/api.json'
+OPENAI_MODELS_URL = 'https://api.openai.com/v1/models'
+OPENAI_PRICING_URL = 'https://developers.openai.com/api/docs/pricing.md'
 MAX_CATALOG_BYTES = 16 * 1024 * 1024
 MAX_MODELS = 10_000
-RETRY_DELAY = timedelta(minutes=30)
 _TRANSITION = tuple(map(ip_network, ('2002::/16', '64:ff9b::/96', '64:ff9b:1::/48', '2001::/32')))
 
 
@@ -55,9 +56,13 @@ def public_address(host):
     return str(addresses[0])
 
 
-def download(url):
+def download(url, *, openai_key=None):
+    require(openai_key is None or url == OPENAI_MODELS_URL, 'agent-catalog-auth-url-invalid', 400)
     parts = parse_url(url, public=True)
     target = (parts.path or '/') + ('?' + parts.query if parts.query else '')
+    headers = {'Accept': 'text/markdown' if url == OPENAI_PRICING_URL else 'application/json'}
+    if openai_key is not None:
+        headers['Authorization'] = 'Bearer ' + openai_key
     deadline = monotonic() + 15
     connection = client.HTTPSConnection(parts.hostname, timeout=5)
     try:
@@ -65,7 +70,7 @@ def download(url):
         with socket.create_connection((address, 443), timeout=5) as raw_socket:
             with ssl.create_default_context().wrap_socket(raw_socket, server_hostname=parts.hostname) as tls:
                 connection.sock = tls
-                connection.request('GET', target, headers={'Accept': 'application/json'})
+                connection.request('GET', target, headers=headers)
                 with connection.getresponse() as response:
                     if response.status != 200:
                         raise ValueError
@@ -125,6 +130,72 @@ def read_catalog(data):
                 'agent-catalog-format-invalid', 422)
         result[identifier] = row
     return result
+
+
+def openai_standard_prices(payload):
+    """Rapprocher les taux publiés par million, sans inférer de prix pour les alias."""
+    try:
+        text = payload.decode('utf-8')
+    except UnicodeError:
+        raise Refused('agent-catalog-format-invalid', 422) from None
+    fields = {'input': 'input', 'output': 'output', 'cached input': 'cache_read',
+              '30m write': '30m', '12h write': '12h'}
+    prices = {}
+    columns = []
+    standard = False
+    for line in text.splitlines():
+        if line.startswith('### '):
+            if standard:
+                break
+            standard = line == '### Standard pricing data'
+        if not standard or not line.startswith('|'):
+            continue
+        model, *cells = (cell.strip() for cell in line.strip().strip('|').split('|'))
+        if model == 'Model':
+            columns = []
+            for cell in cells:
+                context = 'default'
+                for prefix in ('short', 'long'):
+                    if cell.casefold().startswith(prefix + ' context '):
+                        context = prefix
+                        cell = cell[len(prefix + ' context '):]
+                        break
+                columns.append((context, fields.get(cell.casefold())))
+            continue
+        model = re.sub(r' \(<[0-9]+K context length\)$', '', model)
+        row_columns = columns
+        # Some Markdown exports label only the short half of the Standard table.
+        if columns == [('short', field) for field in fields.values()] and len(cells) == 10:
+            row_columns = [*columns, *(('long', field) for _, field in columns)]
+        if len(cells) != len(row_columns) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,254}', model):
+            continue
+        for (context, field), value in zip(row_columns, cells):
+            if field and re.fullmatch(r'\$[0-9]{1,7}(?:\.[0-9]{1,10})?', value):
+                prices.setdefault(model, {}).setdefault(context, {})[field] = float(value[1:])
+    require(any('input' in rates and 'output' in rates for contexts in prices.values() for rates in contexts.values()),
+            'agent-catalog-format-invalid', 422)
+    return prices
+
+
+def openai_catalog(provider_id):
+    key = AgentApiKey.objects.filter(provider_id=provider_id).order_by('id').first()
+    require(key is not None, 'agent-catalog-key-required', 422)
+    try:
+        secret = crypt_credential('cab-agent-api-' + key.id.hex, key.ciphertext.encode(),
+                                  decrypt=True, failure='agent-api-key-tpm-unavailable').decode('ascii')
+    except UnicodeError:
+        raise Refused('agent-api-key-invalid', 422) from None
+    records = read_catalog(parse_document(download(OPENAI_MODELS_URL, openai_key=secret)))
+    prices = openai_standard_prices(download(OPENAI_PRICING_URL))
+    for identifier, record in records.items():
+        rates = prices.get(identifier, {})
+        record['openai_standard_prices'] = rates
+        selected = rates.get('short', rates.get('default', {}))
+        record['cost'] = {name: selected[name] for name in ('input', 'output', 'cache_read') if name in selected}
+        writes = {name: selected[name] for name in ('30m', '12h') if name in selected}
+        if writes:
+            record['cost']['text'] = {'input': {'cache': {'write': writes}}}
+    return json.dumps({'data': list(records.values())}, ensure_ascii=False, allow_nan=False).encode()
 
 
 def cost_per_million(raw):
@@ -252,12 +323,24 @@ def model_details(identifier, record, reference):
         if len(candidates) == 1:
             match = candidates[0]
     cache = merge_cache(cache_prices(record), cache_prices(match))
-    return {'summary': {**merge_missing(normalize(record), normalize(match)), **cache},
+    summary = {**merge_missing(normalize(record), normalize(match)), **cache}
+    if 'openai_standard_prices' in record:
+        rates = obj(record['openai_standard_prices'])
+        official = rates.get('short', rates.get('default', {}))
+        summary.update({
+            'input_cost': official.get('input'),
+            'output_cost': official.get('output'),
+            **cache_prices(record),
+            'cache_write_rates': {name: official[name] for name in ('30m', '12h') if name in official},
+        })
+    return {'summary': summary,
             'metadata': merge_missing(record, match)}
 
 
 def next_refresh():
-    return timezone.now() + timedelta(seconds=randint(18 * 3600, 24 * 3600 - 60))
+    tomorrow = (timezone.now().astimezone(UTC) + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    return tomorrow + timedelta(seconds=randint(0, 24 * 3600 - 1))
 
 
 def save_catalog(provider, records, reference):
@@ -275,12 +358,12 @@ def providers():
     return list(AgentProvider.objects.order_by('name', 'id').values('id', 'name', 'api_url', 'models_url'))
 
 
-def add_provider(name, api_url, models_url):
-    return save_provider(None, name, api_url, models_url)
+def add_provider(name, api_url, models_url, key=None):
+    return save_provider(None, name, api_url, models_url, key)
 
 
 @transaction.atomic
-def save_provider(provider_id, name, api_url, models_url):
+def save_provider(provider_id, name, api_url, models_url, key=None):
     from .agent_catalog_files import configure_source
 
     name, api_url, models_url = name.strip(), api_url.strip(), models_url.strip()
@@ -304,6 +387,8 @@ def save_provider(provider_id, name, api_url, models_url):
     except IntegrityError:
         raise Refused('agent-provider-duplicate', 409) from None
     configure_source('provider-'+str(provider.pk), models_url, provider)
+    if key is not None:
+        add_key(provider.pk, key)
     return {'id': provider.pk, **fields}
 
 @transaction.atomic
@@ -343,6 +428,9 @@ def add_key(provider_id, secret):
         provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
         require(provider is not None, 'agent-provider-not-found', 404)
         AgentApiKey.objects.create(id=key_id, provider=provider, ciphertext=ciphertext)
+        if provider.models_url == OPENAI_MODELS_URL:
+            from .agent_catalog_files import request_download
+            request_download('provider-'+str(provider.pk), supersede=True)
     return key_metadata(key_id, provider.name)
 
 

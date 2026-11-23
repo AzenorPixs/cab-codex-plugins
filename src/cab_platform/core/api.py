@@ -297,6 +297,7 @@ class AgentProviderInput(Schema):
     name: str
     api_url: str
     models_url: str = ''
+    key: SecretStr | None = None
 
 
 class AgentApiKeyInput(Schema):
@@ -325,7 +326,8 @@ def agent_providers(request):
 def save_agent_provider(request, body: AgentProviderInput):
     principal(request, admin=True)
     from cab_platform.agent_catalog import add_provider
-    return add_provider(**body.model_dump())
+    return add_provider(**body.model_dump(exclude={'key'}),
+                        key=body.key.get_secret_value() if body.key else None)
 
 
 @api.get('/administration/agent-api-keys')
@@ -418,7 +420,8 @@ def scan_agent_catalog(request):
 def edit_agent_provider(request, body: AgentProviderEdit):
     principal(request, admin=True)
     from cab_platform.agent_catalog import save_provider
-    return save_provider(body.id, **body.model_dump(exclude={'id'}))
+    return save_provider(body.id, **body.model_dump(exclude={'id', 'key'}),
+                         key=body.key.get_secret_value() if body.key else None)
 
 
 @api.post('/administration/agent-providers/refresh')

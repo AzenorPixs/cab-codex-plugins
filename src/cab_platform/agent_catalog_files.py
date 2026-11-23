@@ -58,11 +58,12 @@ def request_scan():
 
 
 @transaction.atomic
-def request_download(key):
+def request_download(key, *, supersede=False):
     source = AgentCatalogFile.objects.select_for_update().filter(pk=key).first()
     require(source is not None and source.url, 'agent-catalog-source-unavailable', 404)
-    if source.state not in ('queued', 'downloading'):
-        save_fields(source, state='queued', error='', refresh_after=timezone.now())
+    if supersede or source.state not in ('queued', 'downloading'):
+        save_fields(source, state='queued', error='', refresh_after=timezone.now(),
+                    generation=source.generation + int(supersede))
     return {'queued': True}
 
 
@@ -164,7 +165,10 @@ def download_source(source):
     if not AgentCatalogFile.objects.filter(pk=source.pk, generation=source.generation).update(state='downloading', error=''):
         return None
     try:
-        payload = catalog.download(source.url)
+        payload = (catalog.openai_catalog(source.provider_id)
+                   if source.provider_id and source.url == catalog.OPENAI_MODELS_URL
+                   else catalog.download(source.url))
+        require(len(payload) <= catalog.MAX_CATALOG_BYTES, 'agent-catalog-format-invalid', 422)
         validate_file(source, payload)
         with transaction.atomic():
             current = AgentCatalogFile.objects.select_for_update().filter(pk=source.pk, generation=source.generation).first()
@@ -176,7 +180,7 @@ def download_source(source):
     except (Refused, OSError) as error:
         AgentCatalogFile.objects.filter(pk=source.pk, generation=source.generation).update(
             state='error', error=getattr(error, 'code', 'agent-catalog-file-unavailable'),
-            refresh_after=timezone.now()+catalog.RETRY_DELAY)
+            refresh_after=catalog.next_refresh())
     return None
 
 

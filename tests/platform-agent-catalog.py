@@ -29,6 +29,14 @@ OPEN_ROUTER = {'data': [{'id': 'lab/sample', 'name': 'Router model', 'context_le
                          'pricing': {'prompt': '0.00000125'}, 'top_provider': {'max_completion_tokens': 25}}]}
 REFERENCE = {'opencode-go': {'models': {'sample': {'id': 'sample', 'name': 'Other label',
              'limit': {'context': 10, 'output': 10}, 'cost': {'input': 2}, 'family': 'demo'}}}}
+OPENAI_PRICES = b"""### Standard pricing data
+| Model | Short context input | Short context output | Short context cached input | Short context 30m write | Short context 12h write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-fixture (<272K context length) | $2 | $10 | $0.10 | $2.50 | $5 | $4 | $30 | $0.20 | $5 | $10 |
+### Batch pricing data
+| Model | Input | Output | Cached input |
+| gpt-fixture | $1 | $5 | $0.05 |
+"""
 
 
 class CatalogTests(unittest.TestCase):
@@ -63,8 +71,7 @@ class CatalogTests(unittest.TestCase):
         row = AgentModel.objects.get(provider_id=go['id'])
         self.assertEqual(row.source, OPEN_CODE['data'][0])
         source = AgentCatalogFile.objects.get(provider_id=go['id'])
-        self.assertLessEqual(source.refresh_after - source.refreshed_at, timedelta(hours=24))
-        self.assertGreaterEqual(source.refresh_after - source.refreshed_at, timedelta(hours=18, seconds=-1))
+        self.assertEqual(source.refresh_after.date(), source.refreshed_at.date() + timedelta(days=1))
         self.assertEqual(row.details['summary']['input_cost'], 0.15)
         self.assertEqual(row.details['summary']['context'], 1_000_000)
         self.assertEqual(row.details['summary']['output'], 10)
@@ -172,6 +179,60 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog.remove_key(key_id), {'removed': True})
         self.assertFalse(AgentApiKey.objects.exists())
 
+    def test_provider_and_key_are_saved_atomically(self):
+        from cab_platform import agent_catalog as catalog
+        from cab_platform.core.models import AgentApiKey, AgentCatalogFile, AgentProvider
+        fields = ('Demo', 'https://example.org/v1', 'https://example.org/models')
+        with patch.object(catalog, 'crypt_credential', side_effect=catalog.Refused('tpm', 503)):
+            with self.assertRaises(catalog.Refused):
+                catalog.add_provider(*fields, key='fixture-key')
+        self.assertFalse(AgentProvider.objects.exists())
+        self.assertFalse(AgentCatalogFile.objects.filter(provider__isnull=False).exists())
+        with patch.object(catalog, 'crypt_credential', return_value=b'fixture-ciphertext'):
+            provider = catalog.add_provider(*fields, key='fixture-key')
+        self.assertNotIn('key', provider)
+        self.assertEqual(AgentApiKey.objects.get().provider_id, provider['id'])
+        with patch.object(catalog, 'crypt_credential', side_effect=catalog.Refused('tpm', 503)):
+            with self.assertRaises(catalog.Refused):
+                catalog.save_provider(provider['id'], 'Refusé', *fields[1:], key='fixture-key')
+        self.assertEqual(AgentProvider.objects.get(pk=provider['id']).name, 'Demo')
+
+    def test_openai_auth_prices_daily_refresh_and_last_valid_data(self):
+        from cab_platform import agent_catalog as catalog, agent_catalog_files as files
+        from cab_platform.core.models import AgentCatalogFile, AgentCatalogProjection, AgentModel
+        provider = catalog.add_provider('OpenAI', 'https://api.openai.com/v1', catalog.OPENAI_MODELS_URL)
+        source_key = 'provider-'+str(provider['id'])
+        with patch.object(catalog, 'download') as fetch:
+            files.refresh()
+            fetch.assert_not_called()
+        self.assertEqual(AgentCatalogFile.objects.get(pk=source_key).error, 'agent-catalog-key-required')
+        with patch.object(catalog, 'crypt_credential', return_value=b'fixture-ciphertext'):
+            catalog.save_provider(provider['id'], provider['name'], provider['api_url'],
+                                  provider['models_url'], key='fixture-key')
+        models = json.dumps({'data': [{'id': 'gpt-fixture'}, {'id': 'no-price'}]}).encode()
+        with patch.object(catalog, 'crypt_credential', return_value=b'fixture-key'), \
+             patch.object(catalog, 'download', side_effect=[models, OPENAI_PRICES]) as fetch:
+            files.refresh()
+            from unittest.mock import call
+            self.assertEqual(fetch.call_args_list, [call(catalog.OPENAI_MODELS_URL, openai_key='fixture-key'),
+                                                    call(catalog.OPENAI_PRICING_URL)])
+            files.refresh()
+            self.assertEqual(fetch.call_count, 2)
+        model = AgentModel.objects.get(identifier='gpt-fixture')
+        summary = AgentCatalogProjection.objects.get(pk='model:'+str(model.pk)).data
+        self.assertEqual([summary[field] for field in ('input_cost','output_cost','cache_read_cost')],
+                         [2, 10, 0.1])
+        self.assertEqual(summary['cache_write_rates'], {'30m': 2.5, '12h': 5})
+        self.assertEqual(model.source['openai_standard_prices']['long']['12h'], 10)
+        self.assertIsNone(AgentModel.objects.get(identifier='no-price').details['summary']['input_cost'])
+        self.assertNotIn('fixture-key', files.read_file(files.source_path(AgentCatalogFile.objects.get(pk=source_key))).decode())
+        files.request_download(source_key)
+        with patch.object(catalog, 'crypt_credential', return_value=b'fixture-key'), \
+             patch.object(catalog, 'download', side_effect=[models, b'invalid pricing']):
+            files.refresh()
+        self.assertTrue(AgentCatalogFile.objects.get(pk=source_key).valid)
+        self.assertEqual(AgentModel.objects.get(pk=model.pk).details['summary']['input_cost'], 2)
+
     def test_public_fetch_rejects_private_addresses_and_redirects(self):
         from cab_platform import agent_catalog as catalog
         with patch.object(catalog.socket, 'getaddrinfo',
@@ -182,6 +243,8 @@ class CatalogTests(unittest.TestCase):
                 connect.assert_not_called()
         with self.assertRaises(catalog.Refused):
             catalog.download('https://secret@example.org/models')
+        with self.assertRaises(catalog.Refused):
+            catalog.download('https://example.org/models', openai_key='fixture-key')
         with patch.object(catalog, 'public_address', return_value='93.184.216.34'):
             with patch.object(catalog.socket, 'create_connection'), patch.object(catalog.ssl, 'create_default_context'):
                 with patch.object(catalog.client, 'HTTPSConnection') as connection_class:
@@ -437,8 +500,14 @@ if __name__ == '__main__':
                 details={'summary': {'name': 'Existant'}, 'metadata': {'fixture-private': True}})
             live_migration = loader.get_migration('cab_core', '0060_agent_catalog_live')
             with connection.schema_editor() as schema_editor:
-                live_migration.apply(live_previous.clone(), schema_editor)
-            from cab_platform.core.models import AgentCatalogFile, AgentCatalogProjection, AgentModelPolicy
+                live_state = live_migration.apply(live_previous.clone(), schema_editor)
+            openai_migration = loader.get_migration('cab_core', '0062_openai_catalog')
+            with connection.schema_editor() as schema_editor:
+                openai_migration.apply(live_state.clone(), schema_editor)
+            from cab_platform.core.models import AgentCatalogFile, AgentCatalogProjection, AgentModelPolicy, AgentProvider
+            openai = AgentProvider.objects.get(name='OpenAI')
+            assert openai.api_url == 'https://api.openai.com/v1'
+            assert AgentCatalogFile.objects.get(provider_id=openai.pk).url == 'https://api.openai.com/v1/models'
             assert AgentCatalogFile.objects.get(provider_id=old_provider.pk).state == 'queued'
             assert AgentCatalogProjection.objects.get(pk='key:'+str(old_key_id)).data['provider_id'] == old_provider.pk
             assert 'ciphertext' not in AgentCatalogProjection.objects.get(pk='key:'+str(old_key_id)).data

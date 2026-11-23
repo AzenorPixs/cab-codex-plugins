@@ -70,8 +70,23 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill('dialog[open] [name=name]','Fournisseur témoin');
   fill('dialog[open] [name=models_url]','https://example.org/models');
   fill('dialog[open] [name=api_url]','https://example.org/v1');
+  check(find('dialog[open] [name=key]').type==='password','Clé fournisseur masquée');
+  fill('dialog[open] [name=key]','fixture-provider-key');
+  await click('dialog[open] button[aria-label="Afficher la clé API"]');
+  check(find('dialog[open] [name=key]').type==='text','Œil de l’Overview fournisseur');
+  await click('dialog[open] button[aria-label="Masquer la clé API"]');
   find('dialog[open] form').requestSubmit();
   await wait(()=>!find('dialog[open]'),'Fournisseur enregistré');
+  await click('nav[aria-label="Agents"] a[href="/agents/api-keys"]');
+  await wait(()=>find(search('Clés API')),'Recherche des clés API');
+  fill(search('Clés API'),'témoin');
+  await wait(()=>readRows('Clés API')[0]?.includes('Fournisseur témoin'),'Clé associée créée avec le fournisseur');
+  check(!find('table[aria-label="Clés API"]').textContent.includes('fixture-provider-key'),'Secret exclu de la liste');
+  await click('button[aria-label="Supprimer une clé API de Fournisseur témoin"]');
+  confirm();
+  await wait(()=>!rows('Clés API').length&&!find('dialog[open]'),'Clé témoin retirée');
+  await click('nav[aria-label="Agents"] a[href="/agents/providers"]');
+  await wait(()=>find(search('Fournisseurs')),'Recherche des fournisseurs');
   fill(search('Fournisseurs'),'fournisseur temoin');
   await wait(()=>rows('Fournisseurs').length===1&&readRows('Fournisseurs')[0].includes('Fournisseur témoin'),'Recherche sans accent');
   const providerTable=find('table[aria-label="Fournisseurs"]');
@@ -81,6 +96,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
   await click('button[aria-label="Éditer le fournisseur"]');
   check(find('dialog[open] [name=api_url]').closest('label').textContent==='Base URL API','Base URL API dans l’éditeur');
+  check(find('dialog[open] [name=key]').type==='password'&&!find('dialog[open] [name=key]').value,'Édition sans lecture du secret');
   fill('dialog[open] [name=api_url]','https://example.org/v2');
   find('dialog[open] form').requestSubmit();
   await wait(()=>readRows('Fournisseurs')[0]?.includes('/v2')&&!find('dialog[open]'),'Édition propagée par Electric');
@@ -102,6 +118,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Premier').click();
   check(find('table[aria-label="Modèles"] thead').textContent.includes('Lecture cache / M'),'Colonne lecture du cache');
   check(readRows('Modèles')[0].includes('30m'),'Durée de cache affichée');
+  await wait(()=>readRows('Modèles')[0]?.includes('12h'),'Deuxième tarif d’écriture affiché');
   const contextSort='table[aria-label="Modèles"] th:nth-child(3) button';
   await click(contextSort);
   await click(contextSort);
@@ -263,6 +280,7 @@ try{
   const modelData=()=>fixtureRows.map(id=>({
     id,identifier:'fixture-'+id,name:'Modèle '+id,provider_id:id+10,context:500000+1000*id,output:64000,
     input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
+    cache_write_rates:id===2?{'30m':0.3,'12h':0.6}:undefined,
   }))
   function publish(){
     projections=new Map(Object.entries({provider:providers,key:keys,policy:policies,file:files,model:modelData()})
@@ -330,10 +348,12 @@ try{
       }
       if(route==='/api/v1/administration/agent-providers'){
         if(!post)return json(response,{providers})
-        const values=await body(request)
+        const {key,...values}=await body(request)
+        assert.equal(key,'fixture-provider-key')
         assert.deepEqual(values,{name:'Fournisseur témoin',models_url:'https://example.org/models',api_url:'https://example.org/v1'})
         const provider={id:1,...values}
         providers.push(provider)
+        keys.push({id:'provider-fixture-key',provider_id:1})
         files.push({id:'provider-1',provider_id:1,url:provider.models_url,valid:true,state:'idle',error:'',refreshed_at:'2026-11-23T06:00:00Z'})
         publish()
         return json(response,provider)
@@ -393,8 +413,9 @@ try{
         return json(response,key)
       }
       if(route==='/api/v1/administration/agent-api-keys/remove'){
-        assert.deepEqual(await body(request),{id:'key-1'})
-        keys=keys.filter(key=>key.id!=='key-1')
+        const {id}=await body(request)
+        assert(['provider-fixture-key','key-1'].includes(id))
+        keys=keys.filter(key=>key.id!==id)
         publish()
         return json(response,{removed:true})
       }

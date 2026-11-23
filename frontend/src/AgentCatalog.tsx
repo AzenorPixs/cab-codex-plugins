@@ -151,15 +151,27 @@ function DeleteOverview({label,title,name,detail,remove,trash=false}:{label:stri
   </>
 }
 
+function SecretKeyField({visible,toggle,required=false}:{visible:boolean;toggle:()=>void;required?:boolean}){
+  return <>
+    <label>{required?'Clé API':'Clé API (facultatif)'}<input name="key" type={visible?'text':'password'} autoComplete="off" spellCheck={false} maxLength={16384} required={required}/></label>
+    <button className="lifecycle-icon" type="button" aria-label={visible?'Masquer la clé API':'Afficher la clé API'} aria-pressed={visible} onClick={toggle}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>{visible&&<path d="m3 3 18 18"/>}</svg>
+    </button>
+  </>
+}
+
 function ProviderOverview({provider}:{provider?:Provider}){
+  const [visible,setVisible]=useState(false)
   async function save(values:FormData){
+    if(!values.get('key'))values.delete('key')
     const payload=Object.fromEntries(values)
     await api(provider?providerPath+'/edit':providerPath,provider?{...payload,id:provider.id}:payload)
   }
-  return <AddOverview edit={!!provider} title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save}>
+  return <AddOverview edit={!!provider} title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save} onClose={()=>setVisible(false)}>
     <label>Fournisseur<input name="name" required maxLength={160} defaultValue={provider?.name}/></label>
     <label>Liste des Modèles (facultatif)<input name="models_url" type="url" maxLength={2048} defaultValue={provider?.models_url}/></label>
     <label>Base URL API<input name="api_url" type="url" maxLength={2048} required defaultValue={provider?.api_url}/></label>
+    <SecretKeyField visible={visible} toggle={()=>setVisible(!visible)}/>
   </AddOverview>
 }
 
@@ -210,10 +222,7 @@ function KeyCatalog({catalog}:{catalog:Catalog}){
         </select></label>
         {catalog.error&&<p role="alert">{catalog.error.message}</p>}
         {!catalog.pending&&!catalog.error&&!catalog.data.providers.length&&<p><Link to="/agents/providers">Ajouter d’abord un fournisseur</Link></p>}
-        <label>Clé API<input name="key" type={visible?'text':'password'} autoComplete="off" spellCheck={false} maxLength={16384} required/></label>
-        <button className="lifecycle-icon" type="button" aria-label={visible?'Masquer la clé API':'Afficher la clé API'} aria-pressed={visible} onClick={()=>setVisible(!visible)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>{visible&&<path d="m3 3 18 18"/>}</svg>
-        </button>
+        <SecretKeyField visible={visible} toggle={()=>setVisible(!visible)} required/>
       </AddOverview>}/>
 }
 
@@ -242,8 +251,14 @@ const columns:Column<ModelRow>[]=[
   {label:inputPriceLabel,value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},
   {label:'Coût sortie / M',value:row=>priceValue(row.output_cost),render:row=>price(row.output_cost)},
   {label:'Lecture cache / M',value:row=>priceValue(row.cache_read_cost),render:row=>price(row.cache_read_cost)},
-  {label:'Écriture cache / M',value:row=>priceValue(row.cache_write_cost),search:row=>row.cache_write_duration??'',
-    render:row=><>{price(row.cache_write_cost)}{row.cache_write_duration&&<small>{row.cache_write_duration}</small>}</>},
+  {label:'Écriture cache / M',value:row=>priceValue(row.cache_write_cost),
+    search:row=>Object.keys(row.cache_write_rates??{}).join(' ')||row.cache_write_duration||'',
+    render:row=>{
+      const writes=['30m','12h'].filter(duration=>row.cache_write_rates?.[duration]!=null)
+      return writes.length
+        ? <>{writes.map(duration=><small key={duration}>{duration} · {price(row.cache_write_rates?.[duration]??null)}</small>)}</>
+        : <>{price(row.cache_write_cost)}{row.cache_write_duration&&<small>{row.cache_write_duration}</small>}</>
+    }},
 ]
 
 const initialModelSort={column:columns.findIndex(column=>column.label===inputPriceLabel),descending:false}
