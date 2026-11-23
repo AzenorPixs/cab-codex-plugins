@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Synchronisation bidirectionnelle des forges
+
+[allow-fresh-forge-sync-after-divergence](openspec/changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué.
+L’Overview permet de choisir le dépôt source ou de clore une tentative
+divergente avant un nouvel aperçu. Les tests Python, Chromium et Firefox
+ont passé le 23 novembre 2026 sur les trois forges de test.
+
+```mermaid
+flowchart LR
+    forgeResume["allow-fresh-forge-sync-after-divergence<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeResume provisional
+```
+
 ## Réconciliation des envois de forge
 
 [reconcile-uncertain-forge-operations](openspec/changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. L’Overview

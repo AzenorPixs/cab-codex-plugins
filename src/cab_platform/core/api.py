@@ -1085,6 +1085,12 @@ def stream_forge_authentication(request,project_id:str,forge:str):
 class ForgePushInput(Schema):
     nonce:str
 
+class ForgeSyncInput(Schema):
+    source:Literal['local','remote']='local'
+
+class ForgeReconcileInput(Schema):
+    confirmation:str|None=None
+
 @api.post('/projects/{project_id}/forges/{forge}/push-prepare')
 def prepare_forge_push(request,project_id:str,forge:str):
     actor=principal(request,admin=True)
@@ -1098,10 +1104,10 @@ def execute_forge_push(request,project_id:str,forge:str,body:ForgePushInput):
     return execute(project_id,forge.upper(),actor.pk,body.nonce)
 
 @api.post('/projects/{project_id}/forges/{forge}/sync-prepare')
-def prepare_forge_sync(request,project_id:str,forge:str):
+def prepare_forge_sync(request,project_id:str,forge:str,body:ForgeSyncInput):
     actor=principal(request,admin=True)
     from cab_platform.forge_sync import prepare
-    return prepare(project_id,forge.upper(),actor.pk)
+    return prepare(project_id,forge.upper(),actor.pk,source=body.source)
 
 @api.post('/projects/{project_id}/forges/{forge}/sync')
 def execute_forge_sync(request,project_id:str,forge:str,body:ForgePushInput):
@@ -1110,13 +1116,14 @@ def execute_forge_sync(request,project_id:str,forge:str,body:ForgePushInput):
     return execute(project_id,forge.upper(),actor.pk,body.nonce)
 
 @api.post('/projects/{project_id}/forges/{forge}/reconcile')
-def reconcile_forge_operation(request,project_id:str,forge:str):
+def reconcile_forge_operation(request,project_id:str,forge:str,body:ForgeReconcileInput):
     actor=principal(request,admin=True)
     from cab_platform.forge_repository import FORGES
     from cab_platform.forge_sync import reconcile
     forge=forge.upper()
     commands.require(forge in FORGES,'forge-refresh-invalid',400)
-    return reconcile(project_id,forge,actor.pk)
+    result=reconcile(project_id,forge,actor.pk,body.confirmation)
+    return result if result['reconciled'] else api.create_response(request,result,status=409)
 
 @api.post('/projects/{project_id}/forges/{forge}/refresh')
 def refresh_one_forge(request,project_id:str,forge:str,automatic:bool=False):

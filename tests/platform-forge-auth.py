@@ -358,6 +358,8 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
         local.mkdir()
         self.git(local, 'init', '--initial-branch=main')
         for message in ('ancien', 'nouveau'):
+            (local/'etat.txt').write_text(message)
+            self.git(local, 'add', 'etat.txt')
             self.git(local, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', message)
         previous = self.git(local, 'rev-parse', 'HEAD^')
         head = self.git(local, 'rev-parse', 'HEAD')
@@ -381,6 +383,32 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                     head+':'+branch, tag+':'+tag)
                 self.assertEqual(sync.returncode, 0)
                 self.assertEqual(forge_push.remote_head(*context, url, 'main'), head)
+                self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
+                target = self.workspace / ('reception-' + forge)
+                target.mkdir()
+                self.git(target, 'init', '--initial-branch=travail')
+                (target/'local.txt').write_text('local')
+                self.git(target, 'add', 'local.txt')
+                self.git(target, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '-m', 'local')
+                local_head = self.git(target, 'rev-parse', 'HEAD')
+                self.git(target, 'tag', 'locale')
+                self.git(target, 'branch', 'autre')
+                receiving = SimpleNamespace(root=str(target), owner_uid=os.getuid(), configuration=project.configuration)
+                record = {'head': local_head, 'remote': head, 'local_branch': 'travail',
+                          'source_tags': {'refs/tags/locale':local_head}, 'remote_tags': {tag:head}}
+                (target/'non-commite.txt').touch()
+                with self.assertRaises(forge_sync.Refused) as blocked:
+                    forge_sync.receive(receiving, forge, 'groupe', os.getgid(), {}, self.git_env, url, 'main', record)
+                self.assertEqual(blocked.exception.code, 'forge-sync-local-dirty')
+                self.assertEqual(self.git(target, 'rev-parse', 'HEAD'), local_head)
+                (target/'non-commite.txt').unlink()
+                forge_sync.receive(receiving, forge, 'groupe', os.getgid(), {}, self.git_env, url, 'main', record)
+                self.assertEqual(self.git(target, 'rev-parse', 'HEAD'), head)
+                self.assertEqual(self.git(target, 'rev-parse', 'autre'), local_head)
+                self.assertEqual(self.git(target, 'tag'), 'fixture')
+                self.assertEqual((target/'etat.txt').read_text(), 'nouveau')
+                self.assertFalse((target/'local.txt').exists())
+                self.assertEqual(self.git(target, 'status', '--porcelain'), '')
                 self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
 
 
@@ -417,8 +445,8 @@ class ForgeReconciliationTests(unittest.TestCase):
         self.project.configuration['forge_sync'] = self.project.configuration.pop('forge_push')
         self.locked.configuration = deepcopy(self.project.configuration)
 
-    def reconcile(self):
-        return forge_sync.reconcile('projet', 'GITLAB', '8')
+    def reconcile(self, confirmation=None):
+        return forge_sync.reconcile('projet', 'GITLAB', '8', confirmation)
 
     def refused(self, code):
         with self.assertRaises(forge_sync.Refused) as failure:
@@ -464,12 +492,40 @@ class ForgeReconciliationTests(unittest.TestCase):
 
     def test_divergent_branch_stays_protected(self):
         self.branch.return_value = self.before
-        self.refused('forge-reconcile-branch-diverged')
+        result = self.reconcile()
+        self.assertFalse(result['reconciled'])
+        self.assertEqual(result['error'], 'forge-reconcile-branch-diverged')
+        self.assertEqual(result['details']['observed'], self.before)
+        self.event.assert_not_called()
+        self.locked.save.assert_not_called()
 
     def test_additional_remote_tag_stays_protected(self):
         self.as_sync()
         self.refs.return_value = (self.head, {**self.tags, 'refs/tags/autre': self.before}, {})
-        self.refused('forge-reconcile-tags-diverged')
+        result = self.reconcile()
+        self.assertEqual(result['error'], 'forge-reconcile-tags-diverged')
+        self.assertEqual(result['details']['tag_count'], 1)
+        self.event.assert_not_called()
+        self.locked.save.assert_not_called()
+
+    def test_admin_closes_divergence_after_same_observation(self):
+        self.branch.return_value = self.before
+        confirmation = self.reconcile()['details']['confirmation']
+        result = self.reconcile(confirmation)
+        self.assertTrue(result['closed_unconfirmed'])
+        self.assertEqual(self.locked.configuration['forge_push']['GITLAB']['state'], 'CLOSED_UNCONFIRMED')
+        self.assertEqual(self.event.call_args.kwargs['data']['receipt']['state'], 'UNKNOWN')
+        self.assertEqual(self.branch.call_count, 2)
+
+    def test_confirmation_rejects_changed_observation(self):
+        self.branch.return_value = self.before
+        confirmation = self.reconcile()['details']['confirmation']
+        self.branch.return_value = 'c' * 40
+        with self.assertRaises(forge_sync.Refused) as failure:
+            self.reconcile(confirmation)
+        self.assertEqual(failure.exception.code, 'forge-reconcile-observation-changed')
+        self.event.assert_not_called()
+        self.locked.save.assert_not_called()
 
     def test_unavailable_remote_stays_protected(self):
         self.branch.side_effect = forge_sync.Refused('forge-push-preflight-unavailable', 409)

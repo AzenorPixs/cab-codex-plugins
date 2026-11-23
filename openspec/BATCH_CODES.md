@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Synchronisation bidirectionnelle des forges — 23 novembre 2026
+
+[allow-fresh-forge-sync-after-divergence](changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Réconciliation des envois de forge — 23 novembre 2026
 
 [reconcile-uncertain-forge-operations](changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. Change archivé. Attribution ultérieure par ACL.

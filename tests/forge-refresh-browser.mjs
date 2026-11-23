@@ -63,25 +63,30 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(async()=>(await counts()).manual.GITLAB===2&&button.getAttribute('aria-busy')==='false','Fin du rafraîchissement réussi');
   check(!find('dialog[open]'),'Le succès a ouvert une fenêtre');
   const sync=find('button[aria-label="Synchroniser GitLab"]');
-  const push=find('button[aria-label="Envoyer vers GitLab"]');
   sync.click();
   let dialog=await wait(()=>find('dialog[open][aria-label="Synchroniser GitLab"]'),'Fenêtre de synchronisation');
+  (await wait(()=>control(dialog,'Git local → Forge distante'),'Choix du sens local vers distant')).click();
   (await wait(()=>control(dialog,'Vérifier l’envoi précédent'),'Action de vérification de la synchronisation')).click();
   await wait(()=>dialog.textContent.includes('Les tags distants diffèrent'),'Protection maintenue après écart de tags');
+  check(dialog.textContent.includes('Commit attendu')&&dialog.textContent.includes('Commit observé'),'Détail de la divergence');
   check(!control(dialog,'Synchroniser'),'Une divergence a permis la synchronisation');
-  control(dialog,'Fermer').click();
-  await wait(()=>!find('dialog[open]'),'Fermeture de la synchronisation');
-  push.click();
-  dialog=await wait(()=>find('dialog[open][aria-label="Envoyer vers GitLab"]'),'Fenêtre d’envoi');
-  (await wait(()=>control(dialog,'Vérifier l’envoi précédent'),'Action de vérification de l’envoi')).click();
-  await wait(()=>dialog.textContent.includes('L’état cible est confirmé'),'État cible confirmé');
-  check(!control(dialog,'Envoyer'),'La vérification a créé un aperçu');
-  check((await counts()).previews===2,'La vérification a relancé un aperçu');
-  control(dialog,'Fermer').click();
-  await wait(()=>!find('dialog[open]'),'Fermeture de l’envoi');
-  sync.click();
-  dialog=await wait(()=>find('dialog[open][aria-label="Synchroniser GitLab"]'),'Nouvelle fenêtre de synchronisation');
+  control(dialog,'Clore la tentative incertaine').click();
+  await wait(()=>dialog.textContent.includes('Son résultat reste incertain'),'Tentative close avec reçu préservé');
+  check((await counts()).previews===1,'La clôture a relancé un aperçu');
+  control(dialog,'Préparer un nouvel aperçu').click();
   await wait(()=>control(dialog,'Synchroniser'),'Nouvel aperçu après réconciliation');
+  check(dialog.textContent.includes('Destination GitLab'),'La forge est la destination');
+  control(dialog,'Annuler').click();
+  await wait(()=>!find('dialog[open]'),'Fermeture du nouvel aperçu');
+  for(const [forge,label] of ${JSON.stringify(labels)}){
+    find('button[aria-label="Synchroniser '+label+'"]').click();
+    dialog=await wait(()=>find('dialog[open][aria-label="Synchroniser '+label+'"]'),'Choix du sens '+label);
+    (await wait(()=>control(dialog,'Forge distante → Git local'),'Sens inverse '+label)).click();
+    await wait(()=>control(dialog,'Synchroniser'),'Aperçu inverse '+label);
+    check(dialog.textContent.includes('Destination Git local')&&dialog.textContent.includes('modifier-local'),'Le dépôt local est la destination '+label);
+    control(dialog,'Annuler').click();
+    await wait(()=>!find('dialog[open]'),'Fermeture du sens inverse '+label);
+  }
   await send({passed:true});
 })().catch(error=>send({error:error.message}));
 </script>`
@@ -112,10 +117,21 @@ try{
       if(route==='/verification')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
       if(route==='/api/v1/health')return json(response,{initialized:true,state:'READY',csrf_token:'fixture'})
       if(route==='/api/v1/projects')return json(response,{projects:[project]})
-      const gitAction=route.match(/^\/api\/v1\/projects\/fixture\/forges\/GITLAB\/(reconcile|sync-prepare|push-prepare|sync|push)$/)?.[1]
+      const gitRoute=route.match(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)\/(reconcile|sync-prepare|push-prepare|sync|push)$/)
+      const gitAction=gitRoute?.[2]
+      let body
+      if(gitAction){
+        let raw=''
+        for await(const chunk of request)raw+=chunk
+        body=JSON.parse(raw)
+      }
       if(gitAction==='reconcile'){
         counters.checks++
-        return counters.checks===1 ? json(response,{error:'forge-reconcile-tags-diverged'},409) : json(response,{reconciled:true,receipt_id:42})
+        if(body.confirmation==='fixture-observation')return json(response,{reconciled:true,closed_unconfirmed:true,receipt_id:42})
+        return json(response,{error:'forge-reconcile-tags-diverged',details:{
+          branch:'main',expected:'a'.repeat(40),observed:'b'.repeat(40),tag_count:1,
+          tags:[{ref:'refs/tags/ancien',before:'a'.repeat(40),after:''}],confirmation:'fixture-observation',
+        }},409)
       }
       if(gitAction==='sync'||gitAction==='push'){
         counters.writes++
@@ -124,7 +140,8 @@ try{
       if(gitAction){
         counters.previews++
         return counters.checks<2 ? json(response,{error:'forge-push-pending'},409)
-          : json(response,{nonce:'fixture',branch:'main',local_branch:'main',head:'a'.repeat(40),remote:'a'.repeat(40),dirty:false,changes:[]})
+          : json(response,{nonce:'fixture',branch:'main',local_branch:'travail',head:'a'.repeat(40),remote:'b'.repeat(40),dirty:false,
+            source:body.source,changes:body.source==='remote'?[{ref:'refs/tags/modifier-local',before:'a',after:'b',action:'modifier'}]:[]})
       }
       if(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)$/.test(route)){
         const forge=route.split('/').at(-1)
@@ -167,7 +184,7 @@ try{
     try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
-      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1},checks:2,previews:3,writes:0})
+      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1},checks:2,previews:5,writes:0})
       console.log(name+' — diagnostic et réconciliation vérifiés, aucun envoi ni rejeu.')
     }finally{
       clearTimeout(timer)

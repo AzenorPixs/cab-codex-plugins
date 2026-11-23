@@ -110,6 +110,11 @@ const messages:Record<string,string>={
   'forge-reconcile-branch-diverged':'La branche distante diffère de la cible du reçu. La protection reste active.',
   'forge-reconcile-tags-diverged':'Les tags distants diffèrent de la cible du reçu. La protection reste active.',
   'forge-reconcile-receipt-changed':'Le reçu a changé pendant la vérification. Cette lecture ne lève aucune protection.',
+  'forge-reconcile-observation-changed':'Les références ou le reçu ont changé. Vérifiez de nouveau avant de clore la tentative.',
+  'forge-sync-local-dirty':'Le dépôt local contient des modifications non commitées. Enregistrez-les avant de synchroniser depuis la forge.',
+  'forge-sync-local-operation-active':'Une opération Git locale est en cours. Terminez-la avant de synchroniser depuis la forge.',
+  'forge-sync-remote-branch-missing':'La branche distante configurée est absente.',
+  'forge-sync-local-unconfirmed':'La mise à jour du dépôt local n’a pas de résultat confirmé. Vérifiez les références avant toute reprise.',
   'forge-auth-diagnostic-failed':'La vérification d’authentification est temporairement indisponible.',
   'forge-file-changed':'La configuration a changé. Fermez et rouvrez la fenêtre avant de réessayer.',
   'forge-file-outcome-uncertain':'Résultat incertain. Vérifiez les fichiers avant toute nouvelle modification.',
@@ -139,7 +144,7 @@ const messages:Record<string,string>={
   'project-creation-needs-reconciliation':'Cette création nécessite une vérification avant d’être reprise. Aucun dossier ne sera recréé automatiquement.',
 }
 export class ApiError extends Error {
-  constructor(readonly code:string,message:string){super(message)}
+  constructor(readonly code:string,message:string,readonly details?:unknown){super(message)}
 }
 
 export async function api<T>(path:string,body?:unknown,headers:Record<string,string>={}):Promise<T>{
@@ -150,7 +155,7 @@ export async function api<T>(path:string,body?:unknown,headers:Record<string,str
   try{value=await response.json()}catch{throw new Error('Le serveur CAB est temporairement indisponible.')}
   if(!response.ok){
     const code=typeof value?.error==='string'?value.error:''
-    throw new ApiError(code,messages[code]||code||'Requête refusée ('+response.status+')')
+    throw new ApiError(code,messages[code]||code||'Requête refusée ('+response.status+')',value?.details)
   }
   if(typeof value.csrf_token==='string')csrf=value.csrf_token
   if(path==='login'||path==='logout')window.dispatchEvent(new Event('cab-auth-changed'))
