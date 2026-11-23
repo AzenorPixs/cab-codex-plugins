@@ -22732,6 +22732,106 @@ Provenance : change-periods:679626ee81dd76781949d2946a0fcb80cb8506afd87505a0f178
 <!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "0762b4f800c04dd88490fcefed88f10704bc9cf2ea1ca3273c151f90a5f13ee9", "generated_at": "2026-11-22T21:20:42.671481+00:00", "revision": "0762b4f800c04dd88490fcefed88f10704bc9cf2ea1ca3273c151f90a5f13ee9", "scope": "change"} -->
 
 
+## Change `correct-model-policy-provider-picker` — openspec/changes/archive/2026-11-23-correct-model-policy-provider-picker/STATISTICS.md
+
+
+# Statistiques du change — correct-model-policy-provider-picker
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `correct-model-policy-provider-picker` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | 253.677511 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 253.677511 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 8143476 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 8470 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 1397 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 8128256 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 8151946 | Périodes CAB : bornes et empreintes de l’export. |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
+
+
+Provenance : change-periods:2724278003dc564664e21379ab37652d70fec6863ad1580f0c9b3a029bb7339a
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 4 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6de905d62657ced2c17f43441f14807dce9d8ae6f908ec5ad94c3286692a5f4e", "generated_at": "2026-11-23T06:38:18.845306+00:00", "revision": "6de905d62657ced2c17f43441f14807dce9d8ae6f908ec5ad94c3286692a5f4e", "scope": "change"} -->
+
+
 ## Change `correct-plugin-layout-traceability` — openspec/changes/archive/2026-09-11-correct-plugin-layout-traceability/STATISTICS.md
 
 
@@ -77725,4 +77825,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "b98e36b8e43549c4396c967ad5b377072f6e2e1dcd8de7b29180b172b1bc6c4f", "generated_at": "2026-11-22T22:11:06.044818+00:00", "revision": "b98e36b8e43549c4396c967ad5b377072f6e2e1dcd8de7b29180b172b1bc6c4f", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4d594257db976e568fcd2c2c4e06be9d4bfb436101f4a1814d089eb33b13b058", "generated_at": "2026-11-23T06:38:20.244488+00:00", "revision": "4d594257db976e568fcd2c2c4e06be9d4bfb436101f4a1814d089eb33b13b058", "scope": "project"} -->
