@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.17.1
+
+- Sélecteur de fournisseurs cliquable dans un bloc distinct et catalogue complet lorsque le champ est vide.
+
 ## 3.17.0
 
 - Sélection multiple des fournisseurs enregistrée dans les politiques de modèles.

@@ -32,7 +32,10 @@ def policy_or_error(policy_id):
 
 
 def policy_list():
-    return list(AgentModelPolicy.objects.order_by('id').values(*POLICY_FIELDS))
+    policies = list(AgentModelPolicy.objects.order_by('id').values(*POLICY_FIELDS))
+    for policy in policies:
+        policy['provider_ids'] = policy['provider_ids'] or None
+    return policies
 
 
 def save_policy(policy_id, values):
@@ -55,7 +58,7 @@ def save_policy(policy_id, values):
                 provider_ids = sorted(set(selection))
                 require(AgentProvider.objects.filter(pk__in=provider_ids).count() == len(provider_ids),
                         'agent-model-policy-provider-invalid', 400)
-                values['provider_ids'] = provider_ids
+                values['provider_ids'] = provider_ids or None
             if policy_id is None:
                 policy = AgentModelPolicy.objects.create(**values)
             else:
@@ -68,7 +71,9 @@ def save_policy(policy_id, values):
         if getattr(getattr(error.__cause__, 'diag', None), 'constraint_name', None) != 'agent_model_policy_name':
             raise
         raise Refused('agent-model-policy-duplicate', 409) from None
-    return {field: getattr(policy, field) for field in POLICY_FIELDS}
+    result = {field: getattr(policy, field) for field in POLICY_FIELDS}
+    result['provider_ids'] = policy.provider_ids or None
+    return result
 
 
 def remove_policy(policy_id):

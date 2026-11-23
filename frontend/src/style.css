@@ -328,8 +328,12 @@ header .brand {
 .model-policy-overview .model-policy-pair+.model-policy-pair{margin-block-start:12px}
 .model-policy-overview .model-policy-label{display:grid;gap:6px;margin:0}
 .model-policy-label>:is(input,select){margin-block-start:0}
-.model-policy-types{display:flex;gap:18px;margin-block-end:10px}
-.model-policy-provider-list{display:grid;gap:6px;margin-block-start:6px;max-block-size:8rem;overflow-y:auto}
+.model-policy-types{display:flex;gap:18px}
+.model-policy-inclusions{display:grid;gap:12px}
+.model-policy-provider-picker summary{padding:8px;border:1px solid var(--border);border-radius:6px;cursor:pointer;overflow-wrap:anywhere}
+.model-policy-provider-list{display:grid;gap:4px;margin-block-start:6px;max-block-size:10rem;overflow-y:auto}
+.model-policy-provider-list button{text-align:start;background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.model-policy-provider-list button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .model-policy-sort{display:grid;gap:8px;border:1px solid var(--border)}
 @media(min-width:761px){.monitor-table .model-catalog-provider{min-inline-size:12ch}}
 @media(max-width:550px){.model-policy-pair{grid-template-columns:minmax(0,1fr)}}

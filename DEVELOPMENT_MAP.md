@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Sélecteur de fournisseurs des politiques
+
+[correct-model-policy-provider-picker](openspec/changes/archive/2026-11-23-correct-model-policy-provider-picker/),
+code non attribué. Champ ouvrant distinct et inclusion de tous les fournisseurs
+sans sélection. Vérifications du 23 novembre 2026 sur Chromium, Firefox et
+PostgreSQL isolé, reçus `STAGE-891-7-provider-picker-web` et
+`STAGE-891-7-provider-picker-data`.
+
 ## Filtre de fournisseurs des politiques de modèles
 
 [filter-model-policy-providers](openspec/changes/archive/2026-11-22-filter-model-policy-providers/),

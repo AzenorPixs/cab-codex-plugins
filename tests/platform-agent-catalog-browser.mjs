@@ -43,8 +43,10 @@ async function pagination(title,needle){
   await wait(()=>rows(title).length===10,'Retour première page '+title);
 }
 const confirm=()=>Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Supprimer').click();
-const providerBox=name=>Array.from(find('dialog[open] .model-policy-providers').querySelectorAll('label'))
-  .find(label=>label.textContent.trim()===name)?.querySelector('input[type=checkbox]');
+const providerField=()=>find('dialog[open] .model-policy-provider-picker summary');
+const providerOption=name=>Array.from(find('dialog[open] .model-policy-provider-list')?.querySelectorAll('button')??[])
+  .find(button=>button.textContent.trim()===name);
+const selectedProvider=name=>providerOption(name)?.getAttribute('aria-pressed')==='true';
 const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)});
 (async()=>{
   await wait(()=>find('[data-agent="codex"]'),'Carte Codex');
@@ -91,13 +93,19 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   check(checkboxLabels.length===2&&checkboxLabels[0].getBoundingClientRect().top===checkboxLabels[1].getBoundingClientRect().top
     &&checkboxLabels[0].getBoundingClientRect().left<checkboxLabels[1].getBoundingClientRect().left,'Free et Payant sur la même ligne');
   const providerFieldset=addForm.querySelector('.model-policy-providers');
-  check(providerFieldset.getBoundingClientRect().top>=checkboxLabels[0].getBoundingClientRect().bottom,'Fournisseurs sous les options de modèles');
+  check(providerFieldset.previousElementSibling.classList.contains('model-policy-switches')
+    &&providerFieldset.getBoundingClientRect().top>=checkboxLabels[0].getBoundingClientRect().bottom,'Fournisseurs dans un bloc séparé');
+  check(providerFieldset.querySelectorAll('input[type=checkbox]').length===0,'Le filtre n’a pas de cases à cocher');
   const dialogStyle=frame.contentWindow.getComputedStyle(addForm.closest('dialog'));
   check(parseFloat(dialogStyle.maxHeight)>frame.contentWindow.innerHeight*0.9,'Overview rehaussé');
   const labelGaps=['name','model_filter','sort_column'].map(name=>frame.contentWindow.getComputedStyle(addForm.elements.namedItem(name).closest('label')).rowGap);
   check(labelGaps.every(gap=>gap===labelGaps[0])&&Array.from(addForm.querySelectorAll('input[type=range]')).every(input=>frame.contentWindow.getComputedStyle(input.closest('label')).rowGap===labelGaps[0]),'Espacement des labels aligné');
-  await wait(()=>providerBox('Fournisseur témoin')?.checked,'Liste des fournisseurs du catalogue et sélection par défaut');
-  check(providerBox('Tous les fournisseurs').checked&&providerBox('Fournisseur 11').checked,'Tous sélectionnés par défaut');
+  check(providerField().textContent==='Tous les fournisseurs','Aucun choix signifie Tous');
+  check(!providerField().parentElement.open,'Liste fermée par défaut');
+  providerField().click();
+  await wait(()=>providerOption('Fournisseur témoin'),'Fournisseurs provenant de la table');
+  check(!selectedProvider('Fournisseur 11'),'Aucun fournisseur sélectionné par défaut');
+  providerField().click();
   const sortColumn=addForm.elements.namedItem('sort_column');
   const sortDirection=addForm.elements.namedItem('sort_direction');
   check(sortColumn.value==='input_cost'&&sortColumn.options.length===4&&sortDirection.value==='ascending','Valeurs par défaut du tri');
@@ -129,11 +137,11 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   const cacheRows=Array.from(policyForm.querySelectorAll('.model-policy-prices')).slice(-2)
     .map(row=>Array.from(row.querySelectorAll('input'),input=>input.name).join(','));
   check(cacheRows.join(';')==='cache_write_min,cache_write_max;cache_read_min,cache_read_max','Écriture puis lecture, minimum puis maximum');
-  check(providerBox('Tous les fournisseurs').checked,'Défaut persisté dans l’édition');
-  providerBox('Tous les fournisseurs').click();
-  check(!providerBox('Fournisseur 11').checked,'Désactiver Tous vide la sélection');
-  providerBox('Fournisseur 11').click();
-  providerBox('Fournisseur 12').click();
+  check(providerField().textContent==='Tous les fournisseurs','Défaut persisté dans l’édition');
+  providerField().click();
+  providerOption('Fournisseur 11').click();
+  providerOption('Fournisseur 12').click();
+  await wait(()=>providerField().textContent==='Fournisseur 11, Fournisseur 12','Le champ affiche les deux choix');
   fill('dialog[open] [name=name]','Rapides renommés');
   fill('dialog[open] [name=model_filter]','modèle 12; bêta');
   fill('dialog[open] [name=cache_write_max]','0.5');
@@ -142,12 +150,14 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
   await wait(()=>rows('Modèles').length===1&&readRows('Modèles')[0]?.startsWith('1Modèle 11'),'Filtrage par fournisseurs et nom, tri conservé');
   await click('button[aria-label="Éditer la politique de modèles"]');
-  check(!providerBox('Tous les fournisseurs').checked&&providerBox('Fournisseur 11').checked
-    &&providerBox('Fournisseur 12').checked&&!providerBox('Fournisseur 10').checked,'Sélection multiple persistée');
-  providerBox('Fournisseur 11').click();
-  providerBox('Fournisseur 12').click();
+  providerField().click();
+  check(selectedProvider('Fournisseur 11')&&selectedProvider('Fournisseur 12')
+    &&!selectedProvider('Fournisseur 10'),'Sélection multiple persistée');
+  providerOption('Fournisseur 11').click();
+  providerOption('Fournisseur 12').click();
+  await wait(()=>providerField().textContent==='Tous les fournisseurs','Retirer le dernier choix affiche Tous');
   find('dialog[open] form').requestSubmit();
-  await wait(()=>rows('Modèles').length===0&&!find('dialog[open]'),'Une sélection vide exclut tous les modèles');
+  await wait(()=>rows('Modèles').length===10&&!find('dialog[open]'),'Une sélection vide inclut tous les fournisseurs');
   await click('button[aria-label="Supprimer la politique de modèles"]');
   confirm();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
@@ -265,7 +275,7 @@ try{
         assert.equal(policy.cache_read_min,'0.1')
         assert.equal(policy.sort_column,'cache_read_cost')
         assert.equal(policy.sort_descending,true)
-        assert.deepEqual(policy.provider_ids,policies[0].provider_ids===null?[21,22]:[])
+        assert.deepEqual(policy.provider_ids,policies[0].provider_ids===null?[21,22]:null)
         assert.equal(policy.context_min,500000)
         policies=[policy]
         return json(response,policy)

@@ -54,30 +54,32 @@ function Limit({name,label,steps,initial}:{name:string;label:string;steps:number
 }
 
 function ProviderFilter({initial,options}:{initial:number[]|null;options:PolicyProviders}){
-  const [selection,setSelection]=useState(initial)
+  const [selection,setSelection]=useState(initial??[])
   const {providers,error}=options
-  const all=selection===null
-  const ids=providers?.map(row=>row.id)
-  const available=new Set(ids)
-  const availableSelection=selection===null||!ids?selection:selection.filter(id=>available.has(id))
-  const checkedIds=new Set(availableSelection??[])
-  function toggle(id:number,checked:boolean){
-    const current=availableSelection??ids??[]
-    setSelection(checked?[...current,id]:current.filter(item=>item!==id))
+  const activeIds=new Set(providers?.map(row=>row.id))
+  const current=providers?selection.filter(id=>activeIds.has(id)):selection
+  const selected=new Set(current)
+  const selectedNames=providers?.filter(row=>selected.has(row.id)).map(row=>row.name)??[]
+
+  function toggle(id:number){
+    setSelection(previous=>{
+      const choices=providers?previous.filter(value=>activeIds.has(value)):previous
+      return choices.includes(id)?choices.filter(value=>value!==id):[...choices,id]
+    })
   }
+
   return <fieldset className="model-policy-providers">
     <legend>Fournisseurs</legend>
-    <input type="hidden" name="provider_ids" value={JSON.stringify(availableSelection)}/>
-    <label><input type="checkbox" checked={all} disabled={all&&!ids}
-      onChange={event=>setSelection(event.target.checked?null:[])}/> Tous les fournisseurs</label>
-    {error?<p role="alert">{error.message}</p>:!providers?<p role="status">Chargement des fournisseurs…</p>:
-      !providers.length?<p className="field-help">Aucun fournisseur enregistré.</p>:
-      <div className="model-policy-provider-list">
-        {providers.map(provider=><label key={provider.id}>
-          <input type="checkbox" checked={all||checkedIds.has(provider.id)}
-            onChange={event=>toggle(provider.id,event.target.checked)}/> {provider.name}
-        </label>)}
-      </div>}
+    <input type="hidden" name="provider_ids" value={JSON.stringify(current.length?current:null)}/>
+    <details className="model-policy-provider-picker">
+      <summary>{selectedNames.length?selectedNames.join(', '):'Tous les fournisseurs'}</summary>
+      {error?<p role="alert">{error.message}</p>:!providers?<p role="status">Chargement des fournisseurs…</p>:
+        !providers.length?<p className="field-help">Aucun fournisseur enregistré.</p>:
+        <div className="model-policy-provider-list" role="group" aria-label="Fournisseurs disponibles">
+          {providers.map(provider=><button key={provider.id} type="button" aria-pressed={selected.has(provider.id)}
+            onClick={()=>toggle(provider.id)}>{provider.name}</button>)}
+        </div>}
+    </details>
   </fieldset>
 }
 
@@ -96,14 +98,16 @@ export function ModelPolicyFields({policy,providerOptions}:{policy?:Policy;provi
       <Limit name="output_min" label="Sortie maximale minimum" steps={outputSteps} initial={policy?.output_min??0}/>
     </div>
     <div className="model-policy-pair">
-      <fieldset className="model-policy-switches">
-        <legend>Modèles à inclure</legend>
-        <div className="model-policy-types">
-          <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
-          <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
-        </div>
+      <div className="model-policy-inclusions">
+        <fieldset className="model-policy-switches">
+          <legend>Modèles à inclure</legend>
+          <div className="model-policy-types">
+            <label><input name="include_free" type="checkbox" role="switch" defaultChecked={policy?.include_free??true}/> Free</label>
+            <label><input name="include_paid" type="checkbox" role="switch" defaultChecked={policy?.include_paid??true}/> Payant</label>
+          </div>
+        </fieldset>
         <ProviderFilter initial={policy?.provider_ids??null} options={providerOptions}/>
-      </fieldset>
+      </div>
       <fieldset className="model-policy-sort">
         <legend>Triage</legend>
         <label className="model-policy-label">Colonne de tri<select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>

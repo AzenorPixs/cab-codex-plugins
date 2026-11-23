@@ -269,7 +269,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_provider_selection_persists_and_all_includes_later_providers(self):
         from cab_platform import agent_catalog as catalog, model_policies as rules
-        from cab_platform.core.models import AgentModel
+        from cab_platform.core.models import AgentModel, AgentModelPolicy
 
         def provider_with_model(name):
             provider_id = catalog.add_provider(name, 'https://example.org', '')['id']
@@ -300,8 +300,13 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(catalog.Refused) as error:
             rules.save_policy(policy_id, {**values, 'provider_ids': [first]})
         self.assertEqual(error.exception.code, 'agent-model-policy-provider-invalid')
-        rules.save_policy(policy_id, {**values, 'provider_ids': []})
-        self.assertEqual(names(policy_id), [])
+        AgentModelPolicy.objects.filter(pk=policy_id).update(provider_ids=[])
+        self.assertEqual(names(policy_id), ['B', 'C'])
+        self.assertIsNone(rules.policy_list()[0]['provider_ids'])
+        self.assertIsNone(rules.save_policy(policy_id, values)['provider_ids'])
+        self.assertIsNone(rules.save_policy(policy_id, {**values, 'provider_ids': []})['provider_ids'])
+        self.assertIsNone(AgentModelPolicy.objects.get(pk=policy_id).provider_ids)
+        self.assertEqual(names(policy_id), ['B', 'C'])
         rules.save_policy(policy_id, {**values, 'provider_ids': None})
         self.assertEqual(names(policy_id), ['B', 'C'])
         self.assertNotIn(second, updated['provider_ids'])

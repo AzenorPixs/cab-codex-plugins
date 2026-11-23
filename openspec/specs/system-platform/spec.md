@@ -2943,13 +2943,13 @@ CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et suppr
 #### Scenario: Sélectionner les fournisseurs d’une politique
 
 - **WHEN** l’administrateur crée ou édite une politique
-- **THEN** CAB propose sous Free et Payant une sélection multiple alimentée par la table des fournisseurs
+- **THEN** CAB propose un champ ouvrant à choix multiples alimenté par la table des fournisseurs, dans un bloc distinct sous Modèles à inclure
 - **AND** par défaut tous les fournisseurs actuels et futurs sont inclus
 - **AND** une sélection personnalisée persiste et limite les modèles aux fournisseurs choisis
-- **AND** une sélection vide exclut tous les modèles de la politique
+- **AND** une sélection vide inclut tous les fournisseurs, même pour un tableau vide enregistré par une version antérieure
 
 #### Scenario: Disposer les contrôles d’inclusion
 
 - **WHEN** l’Overview de politique est ouvert
-- **THEN** Free et Payant apparaissent sur la même ligne et le filtre des fournisseurs est placé en dessous
+- **THEN** Free et Payant apparaissent sur la même ligne et le champ Fournisseurs est placé dans un bloc séparé en dessous
 - **AND** le dialogue exploite davantage de hauteur disponible et les espacements des labels du nom, du filtre et des seuils sont alignés sur le formulaire de tri
