@@ -1,6 +1,6 @@
 {
   "name": "CCAB",
-  "version": "3.18.2",
+  "version": "3.18.3",
   "description": "Déclarer et corriger les incidents CAB sous SCM/CICD, avec mandat porté par l’invocation CCAB.",
   "author": {
     "name": "CAB"

@@ -59,7 +59,7 @@ def forge_request(client, endpoint, headers, report, operation, **kwargs):
             report('Connexion TCP établie.\n')
         elif event == 'start_tls.started':
             phase = 'TLS'
-            report('Négociation TLS et vérification du certificat.\n')
+            report('Négociation TLS.\n')
         elif event == 'start_tls.complete':
             phase = 'HTTP'
             report('Connexion TLS établie.\n')
@@ -75,12 +75,20 @@ def forge_request(client, endpoint, headers, report, operation, **kwargs):
         raise
 
 
+def verify_tls_for(values, forge):
+    setting = values.get('REMOTE_GITLAB_SSL_VERIFY', '')
+    return not (forge == 'GITLAB' and isinstance(setting, str) and setting.lower() in ('0', 'false', 'no'))
+
+
 def inputs(project,values,forge):
     url=values.get('REMOTE_'+forge+'_BASE_URL','')
     owner=values.get('REMOTE_'+forge+'_OWNER','')
     encrypted=(project.configuration or {}).get('forge_tokens_tpm',{}).get(forge,'')
     repository=values.get('REMOTE_'+forge+'_REPOSITORY','')
-    signature=hashlib.sha256(json.dumps([url,owner,repository,encrypted],ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+    parameters = [url, owner, repository, encrypted]
+    if not verify_tls_for(values, forge):
+        parameters.append(False)
+    signature=hashlib.sha256(json.dumps(parameters,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
     return url,owner,encrypted,signature
 
 
@@ -153,7 +161,11 @@ def observe(project,forge,url,owner,encrypted,repository='',report=None):
         headers={'Accept':'application/json','User-Agent':'CAB-forge-auth'}
         if forge=='GITLAB':headers['PRIVATE-TOKEN']=token
         else:headers['Authorization']=('token ' if forge=='FORGEJO' else 'Bearer ')+token
-        with httpx.Client(timeout=6,follow_redirects=False,trust_env=False) as client:
+        verify_tls = verify_tls_for((project.public_metadata or {}).get('values', {}), forge)
+        if report:
+            report('Vérification du certificat TLS active.\n' if verify_tls
+                   else 'Vérification du certificat TLS désactivée pour cette forge GitLab.\n')
+        with httpx.Client(timeout=6,follow_redirects=False,trust_env=False,verify=verify_tls) as client:
             with forge_request(client, endpoint, headers, report, f'{forge} — consultation du profil par HTTPS') as response:
                 if report:report(f'Réponse de l’API utilisateur : HTTP {response.status_code}.\n')
                 if response.status_code==403 and forge=='FORGEJO':return repository_access(client,base,owner,repository,headers,report)

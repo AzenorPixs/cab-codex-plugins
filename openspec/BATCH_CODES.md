@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Politique TLS de l’authentification GitLab — 23 novembre 2026
+
+[honor-gitlab-auth-tls-policy](changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Diagnostic d’authentification des forges — 23 novembre 2026
 
 [diagnose-forge-auth-transport](changes/archive/2026-11-23-diagnose-forge-auth-transport/), code non attribué. Change archivé et diagnostic qualifié par les tests ciblés CAB. Attribution ultérieure par ACL.

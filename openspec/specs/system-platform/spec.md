@@ -2984,7 +2984,7 @@ CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et suppr
 
 ### Requirement: Diagnostic de transport de l’authentification des forges
 
-CAB MUST afficher les étapes observées et les causes identifiables des erreurs de transport dans les vérifications de profil et de dépôt de GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST conserver la vérification TLS et un résultat indéterminé sans preuve d’authentification ou de refus.
+CAB MUST afficher les étapes observées et les causes identifiables des erreurs de transport dans les vérifications de profil et de dépôt de GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST vérifier le certificat TLS par défaut et conserver un résultat indéterminé sans preuve d’authentification ou de refus.
 
 #### Scenario: Connexion interrompue avant TLS
 
@@ -3000,6 +3000,16 @@ CAB MUST afficher les étapes observées et les causes identifiables des erreurs
 
 - **WHEN** la forge répond à la consultation du profil ou du dépôt
 - **THEN** la console indique le statut HTTP et CAB applique les règles d’authentification existantes.
+
+#### Scenario: Vérification TLS GitLab explicitement désactivée
+
+- **WHEN** `REMOTE_GITLAB_SSL_VERIFY` vaut `0`, `false` ou `no`
+- **THEN** CAB accepte tout certificat sur les requêtes HTTPS d’authentification GitLab, y compris la vérification du dépôt, et la console signale que le certificat du serveur n’est pas vérifié.
+
+#### Scenario: Changement de la politique TLS GitLab
+
+- **WHEN** le réglage GitLab passe d’une vérification active à désactivée ou de désactivée à active
+- **THEN** CAB invalide l’état mémorisé et écarte les résultats encore en cours qui relèvent de l’ancienne politique.
 
 ### Requirement: Reprise du slot de réplication Electric pendant les mises à jour Debian
 

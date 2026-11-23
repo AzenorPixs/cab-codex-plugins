@@ -1,5 +1,18 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Politique TLS de l’authentification GitLab
+
+[honor-gitlab-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué.
+Le réglage existant s’applique au profil et au dépôt. Les tests locaux du
+23 novembre 2026 couvrent les modes TLS et l’invalidation du cache.
+
+```mermaid
+flowchart LR
+    gitlabTls["honor-gitlab-auth-tls-policy<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class gitlabTls provisional
+```
+
 ## Diagnostic d’authentification des forges
 
 [diagnose-forge-auth-transport](openspec/changes/archive/2026-11-23-diagnose-forge-auth-transport/),
