@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Afficher la dernière construction Debian ou Docker dans la Fabrique, y compris les réussites issues de CICD et CICDF, avec la provenance du reçu et un détail accessible.
+
 - Autoriser la republication d’un artefact sous un tag existant sur Forgejo, GitHub et GitLab. Après confirmation, conserver la dernière image Docker avec son alias `latest` et les sept dernières versions de chaque paquet Debian et architecture.
 
 - Stabiliser la taille de la fenêtre de notifications et ajouter **Effacer les messages** après la flèche suivante pour purger les messages de tous les projets et de CAB. Conserver les questions et les reçus.

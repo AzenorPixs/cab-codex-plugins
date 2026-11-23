@@ -10,6 +10,7 @@ type Artifact={key:string;kind:Kind;generated_at:string;size:number;filename?:st
 type ConfigurationIssue={key:string;line?:number;reason:string}
 type Build={
   state:string;request_id?:string;version?:string;created?:string;error?:string|null
+  source?:'factory'|'delivery';delivery_id?:number
   phase?:string;steps?:string[];process_started?:boolean;exit_code?:number
   configuration?:{state:string;issues:ConfigurationIssue[]}
   diagnostic?:{phase?:string;code:string;exit_code?:number;paths?:string[];typescript_codes?:string[]}
@@ -81,7 +82,9 @@ function BuildOverview({label,build,close}:{label:string;build:Build;close:()=>v
     <h2>Construction {label}</h2>
     <dl>
       <div><dt>État</dt><dd>{buildStatus[build.state]||build.state}</dd></div>
+      <div><dt>Origine</dt><dd>{build.source==='delivery'?'Livraison CI/CD':'Fabrique'}</dd></div>
       {build.request_id&&<div><dt>Demande</dt><dd>{build.request_id}</dd></div>}
+      {build.delivery_id!==undefined&&<div><dt>Livraison</dt><dd>{build.delivery_id}</dd></div>}
       {build.version&&<div><dt>Version</dt><dd>{build.version}</dd></div>}
       {build.created&&<div><dt>Date</dt><dd><time dateTime={build.created}>{new Date(build.created).toLocaleString('fr-FR')}</time></dd></div>}
       {build.phase&&<div><dt>Dernière étape</dt><dd>{buildPhases[build.phase]||build.phase}</dd></div>}
@@ -121,7 +124,7 @@ export function ProjectFactory({project}:{project:Project}){
     onError:(error,{kind,requestId})=>{
       const details=error instanceof ApiError?error.details as Partial<Build>|undefined:undefined
       const refusal:Build={
-        phase:'request',steps:['request'],...details,request_id:requestId,
+        phase:'request',steps:['request'],...details,request_id:requestId,created:new Date().toISOString(),
         state:error instanceof ApiError?'FAILED':'UNKNOWN',
         error:error instanceof ApiError?error.code:'artifact-build-unconfirmed',
       }
@@ -148,7 +151,8 @@ export function ProjectFactory({project}:{project:Project}){
         const rows=artifacts.filter(item=>item.kind===kind)
         const job=builds[kind]
         const running=activeBuild(job)||(build.isPending&&build.variables?.kind===kind)
-        const failure=rejected[kind]||(failedBuild(job)?job:undefined)
+        const refusal=rejected[kind]
+        const detail=refusal&&(!job?.created||Date.parse(refusal.created??'')>=Date.parse(job.created))?refusal:job
         return <article className="agent-card forge-card" key={kind}>
           <div className="forge-heading">
             <div className="forge-heading-main"><h2>Artefact {label}</h2></div>
@@ -164,7 +168,7 @@ export function ProjectFactory({project}:{project:Project}){
           </div>
           <div className="forge-card-content">
             {job&&<p role="status">{buildStatus[job.state]}{job.error&&buildErrors[job.error]&&` · ${buildErrors[job.error]}`}</p>}
-            {failure&&<button type="button" className="forge-link" onClick={()=>setOverview({kind,build:failure})}>
+            {detail&&<button type="button" className="forge-link" onClick={()=>setOverview({kind,build:detail})}>
               Détail de la construction {label}
             </button>}
             {rows.length?rows.map(artifact=><ArtifactInformation key={artifact.key} artifact={artifact}/>):<p>Aucun artefact observé.</p>}

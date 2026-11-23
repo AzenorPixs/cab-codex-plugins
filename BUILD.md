@@ -106,6 +106,11 @@ observées, les causes reconnues et le code de sortie lorsqu’il est disponible
 Les diagnostics de configuration indiquent les clés et lignes concernées
 sans afficher leurs valeurs.
 
+Pour Debian comme pour Docker, le détail de la Fabrique présente aussi les
+constructions réussies. Il combine les demandes manuelles avec les étapes
+de construction CICD et CICDF, indique la provenance du reçu et conserve
+la visibilité des demandes manuelles actives ou indéterminées.
+
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et

@@ -1,4 +1,4 @@
-"""Inventaire PostgreSQL des artefacts et suivi des générations manuelles."""
+"""Inventaire PostgreSQL et projection des constructions d’artefacts."""
 from datetime import datetime, timezone as utc
 import json
 import logging
@@ -17,7 +17,7 @@ from .artifact_builders import (
 )
 from .connector_process import alive, identity
 from .core.commands import Refused, identifier, require
-from .core.models import GitDelivery, Maintenance, Project, ProjectArtifact, ProjectArtifactBuild
+from .core.models import GitDelivery, GitDeliveryStep, Maintenance, Project, ProjectArtifact, ProjectArtifactBuild
 from .project_metadata import read_metadata
 
 FLAGS = {'debian': 'PROJECT_DEBIAN_PACKAGE', 'docker': 'PROJECT_DOCKERED'}
@@ -154,15 +154,38 @@ def sweep():
             logger.warning('Inventaire des artefacts indisponible', extra={'project_id': project.pk})
 
 
-def snapshot(project):
+def latest_builds(project):
     builds = {}
-    for row in ProjectArtifactBuild.objects.filter(project=project).order_by('kind', '-created').distinct('kind'):
-        public_fields = ('phase', 'steps', 'configuration', 'diagnostic', 'exit_code', 'process_started')
+    dates = {}
+    public_fields = ('phase', 'steps', 'configuration', 'diagnostic', 'exit_code', 'process_started')
+    for row in ProjectArtifactBuild.objects.filter(project=project).order_by('kind', '-created', '-pk').distinct('kind'):
+        dates[row.kind] = row.created
         builds[row.kind] = {
+            'source': 'factory',
             'request_id': row.pk, 'state': row.state, 'version': row.version,
             'created': row.created.isoformat(), 'error': row.receipt.get('error'),
             **{key: row.receipt[key] for key in public_fields if key in row.receipt},
         }
+    steps = GitDeliveryStep.objects.filter(
+        delivery__project=project,
+        key__in=[f'build:{kind}' for kind in FLAGS],
+        state__in=('RUNNING', 'COMPLETED', 'FAILED', 'UNKNOWN'),
+    ).select_related('delivery').order_by('key', '-updated', '-pk').distinct('key')
+    for step in steps:
+        kind = step.key.removeprefix('build:')
+        manual = builds.get(kind)
+        if manual and (manual['state'] in ACTIVE or dates[kind] >= step.updated):
+            continue
+        builds[kind] = {
+            'source': 'delivery', 'delivery_id': step.delivery_id,
+            'state': step.state, 'version': step.delivery.version, 'created': step.updated.isoformat(),
+            'error': step.receipt.get('error'),
+            **{key: step.receipt[key] for key in public_fields if key in step.receipt},
+        }
+    return builds
+
+
+def snapshot(project):
     values = project.public_metadata.get('values', {})
     return {
         'enabled': {kind: enabled(values, kind) for kind in FLAGS},
@@ -171,7 +194,7 @@ def snapshot(project):
              'generated_at': row.generated_at.isoformat(), **row.metadata}
             for row in ProjectArtifact.objects.filter(project=project).order_by('kind', '-generated_at', 'artifact_key')
         ],
-        'builds': builds,
+        'builds': latest_builds(project),
     }
 
 
