@@ -29,7 +29,7 @@ class ForgeAuthTests(unittest.TestCase):
         self.addCleanup(decrypt.stop)
 
     def observe(self, forge='GITLAB', report=True, tls_setting=''):
-        project = SimpleNamespace(public_metadata={'values': {'REMOTE_GITLAB_SSL_VERIFY': tls_setting}})
+        project = SimpleNamespace(public_metadata={'values': {f'REMOTE_{forge}_SSL_VERIFY': tls_setting}})
         return forge_auth.observe(
             project, forge, 'https://forge.example/interne', 'alice', 'chiffré', 'projet',
             self.messages.append if report else None,
@@ -89,7 +89,7 @@ class ForgeAuthTests(unittest.TestCase):
         self.assertIn('Attente de la réponse HTTP', log)
         self.assertIn('HTTP — délai d’attente dépassé', log)
 
-    def test_http_profile_success_keeps_tls_verification(self):
+    def test_http_profile_success_uses_forge_tls_policy(self):
         for forge, field in (('GITLAB', 'username'), ('GITHUB', 'login'), ('FORGEJO', 'login')):
             with self.subTest(forge=forge):
                 self.messages.clear()
@@ -101,29 +101,35 @@ class ForgeAuthTests(unittest.TestCase):
                 )
 
                 def wrap_socket(context, sock, *, server_hostname):
-                    self.assertTrue(context.check_hostname)
-                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+                    verify = forge != 'FORGEJO'
+                    self.assertEqual(context.check_hostname, verify)
+                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED if verify else ssl.CERT_NONE)
                     self.assertEqual(server_hostname, 'forge.example')
                     return tls_socket
 
                 with patch('socket.create_connection', return_value=Mock()), patch.object(
                     ssl.SSLContext, 'wrap_socket', autospec=True, side_effect=wrap_socket,
                 ):
-                    self.assertIs(self.observe(forge, tls_setting='' if forge == 'GITLAB' else '0'), True)
+                    self.assertIs(self.observe(forge, tls_setting='0' if forge == 'GITHUB' else ''), True)
                 log = self.journal()
                 self.assertIn('Connexion TLS établie', log)
                 self.assertIn('HTTP 200', log)
                 self.assertIn('Identité du compte vérifiée', log)
 
-    def test_gitlab_tolerates_unverified_certificate_only_when_configured(self):
-        for setting in ('', '1', 'malformé', '0', 'false', 'NO'):
-            allow_unverified = setting in ('0', 'false', 'NO')
-            with self.subTest(setting=setting):
+    def test_tls_accepts_unverified_certificate_according_to_forge(self):
+        cases = (
+            (forge, field, setting, forge == 'FORGEJO' or setting in ('0', 'false', 'NO'))
+            for forge, field in (('GITLAB', 'username'), ('FORGEJO', 'login'))
+            for setting in ('', '1', 'malformé', '0', 'false', 'NO')
+        )
+        for forge, field, setting, allow_unverified in cases:
+            with self.subTest(forge=forge, setting=setting):
                 self.messages.clear()
+                body = f'{{"{field}": "alice"}}'.encode()
                 tls_socket = Mock()
                 tls_socket.send.side_effect = len
                 tls_socket.recv.return_value = (
-                    b'HTTP/1.1 200 OK\r\nContent-Length: 20\r\nConnection: close\r\n\r\n{"username":"alice"}'
+                    f'HTTP/1.1 200 OK\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode() + body
                 )
 
                 def wrap_socket(context, sock, *, server_hostname):
@@ -138,7 +144,7 @@ class ForgeAuthTests(unittest.TestCase):
                 with patch('socket.create_connection', return_value=Mock()), patch.object(
                     ssl.SSLContext, 'wrap_socket', autospec=True, side_effect=wrap_socket,
                 ):
-                    self.assertIs(self.observe(tls_setting=setting), True if allow_unverified else None)
+                    self.assertIs(self.observe(forge, tls_setting=setting), True if allow_unverified else None)
                 log = self.journal()
                 if allow_unverified:
                     self.assertIn('Vérification du certificat TLS désactivée', log)
@@ -147,19 +153,20 @@ class ForgeAuthTests(unittest.TestCase):
                     self.assertIn('TLS — vérification du certificat échouée', log)
                     self.assertNotIn('Vérification du certificat TLS désactivée', log)
 
-    def test_gitlab_cache_signature_tracks_effective_policy(self):
+    def test_cache_signature_tracks_effective_policy_per_forge(self):
         project = SimpleNamespace(configuration={})
-        values = {'REMOTE_GITLAB_BASE_URL': 'https://forge.example', 'REMOTE_GITLAB_OWNER': 'alice'}
-        default = forge_auth.inputs(project, values, 'GITLAB')[3]
-        github = forge_auth.inputs(project, values, 'GITHUB')[3]
-        values['REMOTE_GITLAB_SSL_VERIFY'] = '0'
-        disabled = forge_auth.inputs(project, values, 'GITLAB')[3]
-        self.assertNotEqual(disabled, default)
-        self.assertEqual(forge_auth.inputs(project, values, 'GITHUB')[3], github)
-        values['REMOTE_GITLAB_SSL_VERIFY'] = 'false'
-        self.assertEqual(forge_auth.inputs(project, values, 'GITLAB')[3], disabled)
-        values['REMOTE_GITLAB_SSL_VERIFY'] = '1'
-        self.assertEqual(forge_auth.inputs(project, values, 'GITLAB')[3], default)
+        defaults = {forge: forge_auth.inputs(project, {}, forge)[3] for forge in forge_auth.FORGES}
+        key = 'REMOTE_GITLAB_SSL_VERIFY'
+        disabled = forge_auth.inputs(project, {key: '0'}, 'GITLAB')[3]
+        self.assertNotEqual(disabled, defaults['GITLAB'])
+        self.assertEqual(forge_auth.inputs(project, {key: 'false'}, 'GITLAB')[3], disabled)
+        self.assertEqual(forge_auth.inputs(project, {key: '1'}, 'GITLAB')[3], defaults['GITLAB'])
+        for forge in ('FORGEJO', 'GITHUB'):
+            self.assertEqual(forge_auth.inputs(project, {key: '0'}, forge)[3], defaults[forge])
+        for setting in ('0', '1', 'false', 'true'):
+            values = {'REMOTE_FORGEJO_SSL_VERIFY': setting}
+            for forge in defaults:
+                self.assertEqual(forge_auth.inputs(project, values, forge)[3], defaults[forge])
 
     def test_rejected_token_and_background_check(self):
         client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(401)))
@@ -173,8 +180,8 @@ class ForgeAuthTests(unittest.TestCase):
                 self.messages.clear()
                 client = httpx.Client(transport=httpx.MockTransport(self.repository_response))
                 with patch.object(forge_auth.httpx, 'Client', return_value=client) as connect:
-                    self.assertIs(self.observe(forge, tls_setting='0'), True)
-                self.assertIs(connect.call_args.kwargs['verify'], forge != 'GITLAB')
+                    self.assertIs(self.observe(forge, tls_setting='1' if forge == 'FORGEJO' else '0'), True)
+                self.assertIs(connect.call_args.kwargs['verify'], forge == 'GITHUB')
                 log = self.journal()
                 self.assertIn('HTTP 403', log)
                 self.assertIn('HTTP 200', log)

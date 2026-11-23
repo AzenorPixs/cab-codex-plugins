@@ -76,8 +76,12 @@ def forge_request(client, endpoint, headers, report, operation, **kwargs):
 
 
 def verify_tls_for(values, forge):
+    if forge == 'FORGEJO':
+        return False
+    if forge != 'GITLAB':
+        return True
     setting = values.get('REMOTE_GITLAB_SSL_VERIFY', '')
-    return not (forge == 'GITLAB' and isinstance(setting, str) and setting.lower() in ('0', 'false', 'no'))
+    return not (isinstance(setting, str) and setting.lower() in ('0', 'false', 'no'))
 
 
 def inputs(project,values,forge):
@@ -164,7 +168,7 @@ def observe(project,forge,url,owner,encrypted,repository='',report=None):
         verify_tls = verify_tls_for((project.public_metadata or {}).get('values', {}), forge)
         if report:
             report('Vérification du certificat TLS active.\n' if verify_tls
-                   else 'Vérification du certificat TLS désactivée pour cette forge GitLab.\n')
+                   else f'Vérification du certificat TLS désactivée pour cette forge {forge}.\n')
         with httpx.Client(timeout=6,follow_redirects=False,trust_env=False,verify=verify_tls) as client:
             with forge_request(client, endpoint, headers, report, f'{forge} — consultation du profil par HTTPS') as response:
                 if report:report(f'Réponse de l’API utilisateur : HTTP {response.status_code}.\n')

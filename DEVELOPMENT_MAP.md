@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Politique TLS de l’authentification Forgejo
+
+[honor-forgejo-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué.
+Le profil et la vérification du dépôt Forgejo acceptent tout certificat par
+HTTPS. Les tests ciblés du 23 novembre 2026 couvrent aussi les politiques
+GitLab et GitHub, la console et le résultat mémorisé.
+
+```mermaid
+flowchart LR
+    forgejoTls["honor-forgejo-auth-tls-policy<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgejoTls provisional
+```
+
 ## Politique TLS de l’authentification GitLab
 
 [honor-gitlab-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué.

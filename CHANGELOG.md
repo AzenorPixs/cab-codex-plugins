@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Accepter tout certificat TLS lors de l’authentification Forgejo et de la vérification du dépôt, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`. La console indique ce mode.
 - Appliquer `REMOTE_GITLAB_SSL_VERIFY` à l’authentification GitLab et à la vérification du dépôt. La console indique quand le certificat TLS n’est pas vérifié.
 - Reprendre le slot de réplication Electric après une mise à jour Debian sur un PostgreSQL localisé, en conservant le WAL et les abonnements.
 - Préciser les échecs DNS, TCP, TLS et HTTP dans la console d’authentification de GitLab, GitHub et Forgejo, y compris lors de la vérification des dépôts.

@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Politique TLS de l’authentification Forgejo — 23 novembre 2026
+
+[honor-forgejo-auth-tls-policy](changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Politique TLS de l’authentification GitLab — 23 novembre 2026
 
 [honor-gitlab-auth-tls-policy](changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.

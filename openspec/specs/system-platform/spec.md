@@ -2984,7 +2984,7 @@ CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et suppr
 
 ### Requirement: Diagnostic de transport de l’authentification des forges
 
-CAB MUST afficher les étapes observées et les causes identifiables des erreurs de transport dans les vérifications de profil et de dépôt de GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST vérifier le certificat TLS par défaut et conserver un résultat indéterminé sans preuve d’authentification ou de refus.
+CAB MUST afficher les étapes et les causes identifiables des erreurs de transport lors de l’authentification GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST vérifier le certificat TLS hors exceptions documentées et conserver un résultat indéterminé sans preuve d’authentification ou de refus.
 
 #### Scenario: Connexion interrompue avant TLS
 
@@ -3010,6 +3010,16 @@ CAB MUST afficher les étapes observées et les causes identifiables des erreurs
 
 - **WHEN** le réglage GitLab passe d’une vérification active à désactivée ou de désactivée à active
 - **THEN** CAB invalide l’état mémorisé et écarte les résultats encore en cours qui relèvent de l’ancienne politique.
+
+#### Scenario: Certificat TLS de la forge Forgejo
+
+- **WHEN** CAB authentifie le profil ou vérifie le dépôt Forgejo par HTTPS
+- **THEN** CAB accepte tout certificat, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`, et la console signale que le certificat du serveur n’est pas vérifié.
+
+#### Scenario: Résultat Forgejo associé à la politique TLS
+
+- **WHEN** CAB compare les paramètres à un résultat d’authentification Forgejo mémorisé
+- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat et conserve l’état si seule la valeur de `REMOTE_FORGEJO_SSL_VERIFY` a changé.
 
 ### Requirement: Reprise du slot de réplication Electric pendant les mises à jour Debian
 
