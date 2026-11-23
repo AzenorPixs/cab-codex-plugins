@@ -73409,14 +73409,14 @@ Change : `standardize-console-tables` · état local : `archived`. Les valeurs a
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | 602.374002 | Bornes serveur et union des périodes fermées. |
-| Durée hors pauses et attentes | 602.374002 | Bornes serveur et union des périodes fermées. |
-| Tokens d’entrée | 8179076 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de sortie | 22284 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de raisonnement | 4028 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de cache lus | 8098176 | Périodes CAB : bornes et empreintes de l’export. |
+| Durée globale | 843.459900 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 843.459900 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 11754316 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 26616 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 5129 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 11664128 | Périodes CAB : bornes et empreintes de l’export. |
 | Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
-| Total natif des tokens | 8201360 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 11780932 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -73430,7 +73430,7 @@ Change : `standardize-console-tables` · état local : `archived`. Les valeurs a
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:8cd939c25ac0f5a2fdc77ebcad52b2474a3c01aab0bab918b0eca689a3a1e90f
+Provenance : change-periods:df36f57af7ae1b010db440d9922e5ec441c5e773d7d59d007b8c3e804686c2b9
 
 ## 2. Messages et outils
 
@@ -73493,7 +73493,7 @@ Provenance : change-periods:8cd939c25ac0f5a2fdc77ebcad52b2474a3c01aab0bab918b0ec
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4fb0d4e54e08bd4d55b0084342a7e6dd13ffa35af76cb111d734d6314da427e3", "generated_at": "2026-11-23T16:49:52.591795+00:00", "revision": "4fb0d4e54e08bd4d55b0084342a7e6dd13ffa35af76cb111d734d6314da427e3", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "e1371c3a52cf2604ee5318688e72ccaa1ec0fbde000c8f60f5e299a1b9f10e62", "generated_at": "2026-11-23T16:59:53.946451+00:00", "revision": "e1371c3a52cf2604ee5318688e72ccaa1ec0fbde000c8f60f5e299a1b9f10e62", "scope": "change"} -->
 
 
 ## Change `start-monitor-with-cab` — openspec/changes/archive/2026-10-20-start-monitor-with-cab/STATISTICS.md
@@ -79325,4 +79325,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c404fce2ef2be9579a526632d8f7280dfc9f7d7fcf4fc2a08e0e75dc628bdae3", "generated_at": "2026-11-23T16:49:54.039074+00:00", "revision": "c404fce2ef2be9579a526632d8f7280dfc9f7d7fcf4fc2a08e0e75dc628bdae3", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "ebdad666e9a6d2a6bdab8bb5c92ab33970e620837a1713b4841345bcdf580e0f", "generated_at": "2026-11-23T16:59:55.453329+00:00", "revision": "ebdad666e9a6d2a6bdab8bb5c92ab33970e620837a1713b4841345bcdf580e0f", "scope": "project"} -->
