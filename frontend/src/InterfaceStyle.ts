@@ -19,7 +19,7 @@ export const profiles:{id:ProfileName;label:string;width:number}[]=[
 ]
 
 const groups:StyleGroup[]=['blocs','columns','menus','tables','titles','top_bar']
-const pageSizes={binaries:10,sessions:10,archives:10,incidents:25}
+const pageSizes={binaries:10,sessions:10,archives:10,incidents:10}
 export type TableName=keyof typeof pageSizes
 
 export function nearestProfile(width:number){
@@ -56,7 +56,7 @@ export function styleAtWidth(base:ComponentStyle,overrides:ProfileStyles,width:n
 
 export function tablePageSize(style:ComponentStyle,table:TableName){
   const size=style.tables?.[`page_${table}`]
-  return typeof size==='number'&&Number.isInteger(size)&&size>=5&&size<=100?size:pageSizes[table]
+  return typeof size==='number'&&Number.isInteger(size)&&size>=5?Math.min(size,10):pageSizes[table]
 }
 
 export function applyComponentStyle(root:HTMLElement,style:ComponentStyle,width:number){

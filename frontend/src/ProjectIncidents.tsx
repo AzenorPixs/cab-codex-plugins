@@ -1,3 +1,4 @@
+import {TableFiller,TableNavigation,useTableSearch} from './TableNavigation'
 import {useTablePageSize} from './Appearance'
 import {useEffect,useRef,useState} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
@@ -61,9 +62,12 @@ function IncidentPurge({incident,close}:{incident:Incident;close:()=>void}){
 }
 export function ProjectIncidents({project}:{project:Project}){
   const pageSize=useTablePageSize('incidents')
-  const [page,setPage]=useState(1);const [selected,setSelected]=useState<Incident|null>(null)
+  const navigation=useTableSearch()
+  const {page,setPage}=navigation
+  const search=navigation.query.trim()
+  const [selected,setSelected]=useState<Incident|null>(null)
   const [purgeTarget,setPurgeTarget]=useState<Incident|null>(null)
-  const query=useQuery({queryKey:['project-incidents',project.id,page,pageSize],queryFn:async()=>registry(await api<unknown>(`projects/${encodeURIComponent(project.id)}/incidents?`+new URLSearchParams({page:String(page),page_size:String(pageSize)}))),refetchInterval:15000})
+  const query=useQuery({queryKey:['project-incidents',project.id,page,pageSize,search],queryFn:async()=>registry(await api<unknown>(`projects/${encodeURIComponent(project.id)}/incidents?`+new URLSearchParams({page:String(page),page_size:String(pageSize),search}))),refetchInterval:15000})
   useEffect(()=>{setPage(1);setSelected(null);setPurgeTarget(null)},[project.id])
   useEffect(()=>{if(query.data&&query.data.page!==page)setPage(query.data.page)},[query.data,page])
   const shown=selected?(query.data?.incidents.find(row=>row.incident_id===selected.incident_id)||selected):null
@@ -89,10 +93,12 @@ export function ProjectIncidents({project}:{project:Project}){
             </button>}
           </td>
         </tr>)}
-        {query.data&&!query.data.incidents.length&&<tr><td colSpan={8}>Aucune déclaration d’incident pour ce projet.</td></tr>}
+        <TableFiller count={query.data?.incidents.length??0} columns={8}
+          empty={query.data?(search?'Aucun résultat.':'Aucune déclaration d’incident pour ce projet.'):undefined}/>
       </tbody>
     </table></div>
-    <nav className="ccab-pagination" aria-label="Pagination des incidents"><button type="button" disabled={query.isFetching||page<=1} onClick={()=>setPage(1)}>Premier</button><button type="button" disabled={query.isFetching||page<=1} onClick={()=>setPage(page-1)}>Précédent</button><span>Page {query.data?.page||page} / {query.data?pages:'…'}{query.data?` · ${query.data.total} incident${query.data.total>1?'s':''}`:''}</span><button type="button" disabled={query.isFetching||!query.data?.has_next} onClick={()=>setPage(page+1)}>Suivant</button><button type="button" disabled={query.isFetching||!query.data?.has_next} onClick={()=>setPage(pages)}>Dernier</button></nav>
+    <TableNavigation {...navigation} label="Pagination des incidents" searchLabel="Rechercher dans les incidents"
+      current={query.data?.page??page} pages={pages} total={query.data?.total} busy={query.isFetching||!query.data}/>
     {shown&&<IncidentOverview incident={shown} project={project} close={()=>setSelected(null)}/>}
     {purgeTarget&&<IncidentPurge incident={purgeTarget} close={()=>setPurgeTarget(null)}/>}
   </section>

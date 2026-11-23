@@ -23,7 +23,7 @@ try{
   for(const name of index.toString().match(/\/assets\/[\w-]+\.(?:css|js)/g)){
     assets.set(name,await readFile(web+name))
   }
-  const preferences={persistent:true,font_scale:100,theme:'light',component_style:{},profile_styles:{},responsive:{}}
+  const preferences={persistent:true,font_scale:100,theme:'light',component_style:{},profile_styles:{fullhd:{tables:{page_archives:25}}},responsive:{}}
   let revision=1
   const archivedSizes=new Set()
   let completed
@@ -135,16 +135,32 @@ try{
       doc.querySelector('#interface-tab-tables').click();
       const size=await wait(()=>field('tables','page_archives'),'Pagination Full HD');
       check(size.value==='10','Pagination de référence');
-      edit(size,'15');
+      check(size.max==='10','Plafond des réglages de pagination');
+      edit(size,'5');
       await wait(()=>!size.form.querySelector('[type="submit"]').disabled,'Édition de la pagination');
       size.form.requestSubmit();
       await wait(()=>size.form.querySelector('[role="status"]').textContent==='Réglages enregistrés.','Sauvegarde des tableaux');
       const pagination=()=>archive.contentDocument.querySelector('nav[aria-label="Pagination des archives"] span')?.textContent;
-      await wait(()=>pagination()?.includes('1 / 2'),'Pagination synchronisée');
+      await wait(()=>pagination()?.includes('1 / 6'),'Pagination synchronisée');
       size.form.querySelector('[type="button"]').click();
       await wait(()=>size.form.querySelector('[role="status"]').textContent==='Valeurs par défaut rétablies.','Réinitialisation des tableaux');
       await wait(()=>pagination()?.includes('1 / 3'),'Pagination réinitialisée');
       check(size.value==='10'&&referee.style.getPropertyValue('--ui-top-bar-height')==='94px','Réinitialisation indépendante');
+      const archiveDoc=archive.contentDocument;
+      const navigation=archiveDoc.querySelector('nav[aria-label="Pagination des archives"]');
+      const search=navigation.querySelector('input[type="search"]');
+      const archiveRows=()=>Array.from(archiveDoc.querySelectorAll('table tbody tr'));
+      check(search.previousElementSibling.textContent==='Dernier','Recherche à droite de Dernier');
+      check(search.offsetLeft>search.previousElementSibling.offsetLeft,'Position visuelle de la recherche');
+      await wait(()=>archiveRows().length===10,'Première page limitée à dix lignes');
+      navigation.querySelector('button:nth-of-type(3)').click();
+      await wait(()=>pagination()?.includes('2 / 3'),'Navigation vers la deuxième page');
+      edit(search,'RUN-30');
+      await wait(()=>pagination()?.includes('1 / 1')&&archiveRows()[0]?.textContent.includes('RUN-30'),'Recherche avant pagination');
+      check(archiveRows().length===3,'Un résultat complété par deux lignes');
+      edit(search,'introuvable');
+      await wait(()=>archiveRows()[0]?.textContent.includes('Aucun résultat'),'Recherche sans résultat');
+      check(archiveRows().length===3&&navigation.querySelectorAll('button:disabled').length===4,'Tableau vide avec trois lignes et navigation');
       await report({passed:true});
     })().catch(error=>report({error:error.message}));
     </script>`
@@ -192,9 +208,15 @@ try{
       if(path==='/api/v1/session-archives'){
         const pageSize=Number(url.searchParams.get('page_size'))
         archivedSizes.add(pageSize)
-        return json(response,{sessions:[{project_id:'fixture-cab',run_id:'old',session_id:'fixture',change:'shared-change',
-          state:'CANCELLED_BEFORE_START',replacement:{run_id:'replacement'},archived_at:'2026-11-21T08:00:00Z'}],
-          page:1,total_pages:Math.ceil(30/pageSize),total:30,has_next:true})
+        const search=url.searchParams.get('search')||''
+        const available=Array.from({length:30},(_,index)=>({
+          project_id:'fixture-cab',run_id:'RUN-'+(index+1),session_id:'fixture',change:'shared-change',
+          state:'CANCELLED_BEFORE_START',replacement:{run_id:'replacement'},archived_at:'2026-11-21T08:00:00Z',
+        })).filter(row=>row.run_id.includes(search))
+        const pages=Math.max(1,Math.ceil(available.length/pageSize))
+        const page=Math.min(Number(url.searchParams.get('page')),pages)
+        return json(response,{sessions:available.slice((page-1)*pageSize,page*pageSize),
+          page,total_pages:pages,total:available.length,has_next:page<pages})
       }
       if(path.startsWith('/api/v1/sync/'))return response.writeHead(403,{'Content-Type':'application/json'}).end('{}')
       if(path.startsWith('/api/v1/'))return json(response,{})
@@ -217,7 +239,7 @@ try{
   browser.kill()
   await closed
   assert.equal(result.passed,true,result.error||'Résultat Chromium absent')
-  assert.deepEqual(archivedSizes,new Set([10,15]),'Modification de la pagination sans rechargement')
+  assert.deepEqual(archivedSizes,new Set([10,5]),'Modification de la pagination sans rechargement')
   console.log('Chromium : huit onglets, six résolutions, navigation au clavier et persistance isolée Full HD/4K/mobile, avec projection Electric.')
 }finally{
   server?.closeAllConnections()

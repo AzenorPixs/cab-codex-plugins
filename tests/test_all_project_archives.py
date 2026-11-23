@@ -12,6 +12,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,os.environ.get('CAB_TEST_SOURCE',str(ROOT/'src')))
 from test_all_project_sessions import GlobalSessionScopeTests
 from test_host_completion import HostCompletionPolicyTests
+from django.db.models import Q
+
 from cab_platform import archive_listing as listing,web_views as views
 from cab_platform.core.commands import Refused
 
@@ -19,6 +21,16 @@ from cab_platform.core.commands import Refused
 class Rows(list):
     def count(self):return len(self)
     def select_related(self,*args):return self
+    def filter(self,search):
+        def matches(row,clause):
+            if isinstance(clause,Q):
+                return any(matches(row,child) for child in clause.children)
+            lookup,term=clause
+            value=row
+            for key in lookup.split('__')[:-1]:
+                value=getattr(value,key,None)
+            return term.lower() in str(value or '').lower()
+        return Rows(row for row in self if matches(row,search))
     def order_by(self,*args):return Rows(sorted(self,key=lambda row:(row.created,row.pk),reverse=True))
 
 class Membership:
@@ -59,6 +71,15 @@ class ArchiveListingTests(unittest.TestCase):
         self.assertEqual({row.run.project_id for row in rows},{'a'})
         rows,meta=listing.archive_page(self.admin,'b')
         self.assertEqual(len(rows),10);self.assertEqual({row.run.project_id for row in rows},{'b'})
+
+    def test_recherche_avant_pagination_et_apres_autorisation(self):
+        actor=types.SimpleNamespace(active=True,role='coder',projects=Membership(['a']))
+        rows,meta=listing.archive_page(actor,page=3,search='run- 12')
+        self.assertEqual([row.run.run_id for row in rows],['RUN-12'])
+        self.assertEqual((meta['page'],meta['total']), (1,1))
+        rows,meta=listing.archive_page(actor,search='RUN-60')
+        self.assertEqual(list(rows),[])
+        self.assertEqual(meta['total'],0)
 
     def test_aucun_projet_autorise_retourne_une_page_vide(self):
         actor=types.SimpleNamespace(active=True,role='coder',projects=Membership([]))

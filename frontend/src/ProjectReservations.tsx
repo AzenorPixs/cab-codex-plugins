@@ -1,3 +1,4 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {useEffect, useRef, useState, type FormEvent} from 'react'
 import {Shape, ShapeStream} from '@electric-sql/client'
 import {useQuery} from '@tanstack/react-query'
@@ -65,7 +66,7 @@ export function ProjectReservations({projects}:{projects:Project[]}) {
   const pageSize = useTablePageSize('sessions')
   const [rows, setRows] = useState<Reservation[]>([])
   const [status, setStatus] = useState('Chargement des réservations…')
-  const [page, setPage] = useState(1)
+  const navigation = useTableSearch()
   const [preview, setPreview] = useState<{id:string; path:string}>()
 
   useEffect(()=>{
@@ -87,10 +88,13 @@ export function ProjectReservations({projects}:{projects:Project[]}) {
     return ()=>{unsubscribe(); controller.abort()}
   }, [])
 
-  const total = Math.max(1, Math.ceil(rows.length / pageSize))
-  const current = Math.min(page, total)
   const projectById = new Map(projects.map(project=>[project.id, project]))
-  const displayed = rows.slice((current-1)*pageSize, current*pageSize)
+  const matching = filterTableRows(rows,navigation.query,row=>{
+    const project=projectById.get(row.project_id)
+    return [project?.name,project?.identifier,row.session_id,row.change,kinds[row.kind]||kinds.resource,
+      row.count,new Date(row.started).toLocaleString('fr-FR'),new Date(row.expires).toLocaleString('fr-FR'),row.description]
+  })
+  const {rows:displayed,current,pages}=tablePage(matching,navigation.page,pageSize)
   return <>
     <section className="project-home project-forges-page"><div className="section-heading">
       <div className="project-identity"><h1>Réservations</h1></div>
@@ -114,15 +118,14 @@ export function ProjectReservations({projects}:{projects:Project[]}) {
               ? <button type="button" className="text-button" onClick={()=>setPreview({id:row.id, path:row.description})}>{row.description}</button>
               : row.description}</td>
           </tr>
-        })}</tbody>
+        })}
+          <TableFiller count={displayed.length} columns={columns.length}
+            empty={!status?(navigation.query.trim()?'Aucun résultat.':'Aucune réservation active.'):undefined}/>
+        </tbody>
       </table>
-      {!status && rows.length===0 && <p className="empty">Aucune réservation active.</p>}
     </div>
-    {total>1 && <nav className="git-overview-controls" aria-label="Pagination des réservations">
-      <button type="button" disabled={current<=1} onClick={()=>setPage(current-1)}>Précédent</button>
-      <span>Page {current} / {total} · {rows.length} réservations</span>
-      <button type="button" disabled={current>=total} onClick={()=>setPage(current+1)}>Suivant</button>
-    </nav>}
+    <TableNavigation {...navigation} label="Pagination des réservations" searchLabel="Rechercher dans les réservations"
+      current={current} pages={pages} total={matching.length}/>
     {preview && <ReservationFile key={preview.id} {...preview} close={()=>setPreview(undefined)}/>}
   </>
 }

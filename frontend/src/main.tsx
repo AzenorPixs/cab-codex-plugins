@@ -1,3 +1,4 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {agentCatalogPages} from './AgentCatalog'
 import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -67,7 +68,8 @@ function SessionRows({project,rows,showProject}:{project:Project;rows:Session[];
 }
 function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]}){
   const pageSize=useTablePageSize('sessions')
-  const [rows,setRows]=useState<Session[]>([]),[status,setStatus]=useState(''),[page,setPage]=useState(1)
+  const [rows,setRows]=useState<Session[]>([]),[status,setStatus]=useState('')
+  const navigation=useTableSearch()
   useEffect(()=>{
     const controller=new AbortController();setRows([]);setStatus('')
     const stream=new ShapeStream({url:new URL(project?'/api/v1/sync/sessions':'/api/v1/sync/project-sessions',location.origin).href,params:project?{project_id:project.id}:undefined,signal:controller.signal,onError:()=>{setStatus('Suivi temporairement indisponible · reconnexion en cours');return {}}})
@@ -77,12 +79,21 @@ function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]
   },[project?.id])
   const available=project?[project]:projects
   const all=available.flatMap(value=>rows.filter(row=>!row.archived&&row.project_id===value.id).map(row=>({project:value,row})))
-  const pages=Math.max(1,Math.ceil(all.length/pageSize)),current=Math.min(page,pages)
-  const visible=all.slice((current-1)*pageSize,current*pageSize)
+  const matching=filterTableRows(all,navigation.query,({project:value,row})=>[
+    value.identifier,value.name,row.run_id,row.session_id,row.change,
+    row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe',
+    runStateLabel(row.state,row.suspension),runProtection(row.suspension),
+    stageLabel(row.stage,row.cycle_steps,undefined,row.cycle_profile),new Date(row.updated).toLocaleString('fr-FR'),
+    row.tasks_total!=null?`${row.tasks_done}/${row.tasks_total}`:'',
+  ])
+  const {rows:visible,current,pages}=tablePage(matching,navigation.page,pageSize)
   const groups=available.map(value=>({project:value,rows:visible.filter(item=>item.project.id===value.id).map(item=>item.row)})).filter(value=>value.rows.length)
-  useEffect(()=>setPage(1),[project?.id])
-  useEffect(()=>{if(page>pages)setPage(pages)},[page,pages])
-  return <><div className="section-heading"><div><p className="eyebrow">SESSIONS DE CODAGE EN COURS</p></div>{status&&<p role="status" className="live">{status}</p>}</div><div className="table-wrap"><table className="monitor-table"><thead><tr>{!project&&<th scope="col"><span>Projets</span></th>}<th scope="col"><span>RUN / Session</span></th><th scope="col"><span>Change</span></th><th scope="col"><span>Profil</span></th><th scope="col"><span>État</span></th><th scope="col"><span>Étape</span></th><th scope="col"><span>Tâches réalisées</span></th><th scope="col"><span>Actualisation</span></th><th scope="col"><span>Actions</span></th></tr></thead><tbody>{groups.map(group=><SessionRows key={group.project.id} project={group.project} rows={group.rows} showProject={!project}/>)}</tbody></table>{!groups.length&&<p className="empty">{project?'Aucune session pour ce projet.':'Aucune session pour les projets accessibles.'}</p>}</div><nav className="git-overview-controls" aria-label="Pagination des sessions"><button type="button" disabled={current<=1} onClick={()=>setPage(1)}>Premier</button><button type="button" disabled={current<=1} onClick={()=>setPage(current-1)}>Précédent</button><span>Page {current} / {pages} · {all.length} session{all.length>1?'s':''}</span><button type="button" disabled={current>=pages} onClick={()=>setPage(current+1)}>Suivant</button><button type="button" disabled={current>=pages} onClick={()=>setPage(pages)}>Dernier</button></nav></>
+  useEffect(()=>navigation.setPage(1),[project?.id])
+  return <><div className="section-heading"><div><p className="eyebrow">SESSIONS DE CODAGE EN COURS</p></div>{status&&<p role="status" className="live">{status}</p>}</div><div className="table-wrap"><table className="monitor-table"><thead><tr>{!project&&<th scope="col"><span>Projets</span></th>}<th scope="col"><span>RUN / Session</span></th><th scope="col"><span>Change</span></th><th scope="col"><span>Profil</span></th><th scope="col"><span>État</span></th><th scope="col"><span>Étape</span></th><th scope="col"><span>Tâches réalisées</span></th><th scope="col"><span>Actualisation</span></th><th scope="col"><span>Actions</span></th></tr></thead><tbody>{groups.map(group=><SessionRows key={group.project.id} project={group.project} rows={group.rows} showProject={!project}/>)}
+    <TableFiller count={visible.length} columns={project?8:9} empty={navigation.query.trim()?'Aucun résultat.':project?'Aucune session pour ce projet.':'Aucune session pour les projets accessibles.'}/>
+    </tbody></table></div>
+    <TableNavigation {...navigation} label="Pagination des sessions" searchLabel="Rechercher dans les sessions"
+      current={current} pages={pages} total={matching.length}/></>
 }
 function AllProjectSessions({projects,archives=false}:{projects:Project[];archives?:boolean}){
   return <div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{archives?'Archives':'Sessions'}</h1></div></div></section>{archives?<SessionArchives projects={projects}/>:<SessionList projects={projects}/>}</section></div>

@@ -29,7 +29,8 @@ function fill(selector,value){
   Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype,'value').set.call(input,value);
   input.dispatchEvent(new win.Event('input',{bubbles:true}));
 }
-const rows=title=>Array.from(find('table[aria-label="'+title+'"] tbody')?.rows??[]);
+const tableRows=title=>Array.from(find('table[aria-label="'+title+'"] tbody')?.rows??[]);
+const rows=title=>tableRows(title).filter(row=>!row.classList.contains('table-filler'));
 const search=title=>'input[aria-label="Rechercher dans '+title+'"]';
 const readRows=title=>rows(title).map(row=>row.textContent);
 async function pagination(title,needle){
@@ -41,8 +42,12 @@ async function pagination(title,needle){
   check(box.getBoundingClientRect().left>=last.getBoundingClientRect().right,'Recherche à droite de Dernier '+title);
   find(pag).querySelectorAll('button')[2].click();
   await wait(()=>rows(title).length===2,'Deux entrées en seconde page '+title);
+  check(tableRows(title).length===3,'Trois lignes visibles en dernière page '+title);
   fill(search(title),needle);
   await wait(()=>rows(title).length===1&&readRows(title)[0].includes(needle),'Recherche instantanée sur toutes les pages '+title);
+  check(tableRows(title).length===3,'Trois lignes visibles avec un seul résultat '+title);
+  fill(search(title),'sans-resultat-fixture');
+  await wait(()=>rows(title).length===0&&tableRows(title).length===3,'Trois lignes visibles sans résultat '+title);
   fill(search(title),'');
   await wait(()=>rows(title).length===10,'Retour première page '+title);
 }
@@ -208,7 +213,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   check(find('table[aria-label="Clés API"] tbody').textContent.includes('—'),'Quota inconnu');
   check(!find('table[aria-label="Clés API"]').textContent.includes('fixture-key'),'Clé absente de la liste');
   confirm();
-  await wait(()=>!find('table[aria-label="Clés API"] tbody tr')&&!find('dialog[open]'),'Suppression de la clé');
+  await wait(()=>rows('Clés API').length===0&&!find('dialog[open]'),'Suppression de la clé');
   await click('nav[aria-label="Agents"] a[href="/agents/providers"]');
   await wait(()=>rows('Fournisseurs').length===10,'Retour fournisseurs');
   fill(search('Fournisseurs'),'témoin');

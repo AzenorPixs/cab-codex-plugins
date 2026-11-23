@@ -54,7 +54,9 @@ function ComponentStyleControls({group,profile}:{group:StyleGroup;profile:Profil
     <div className="interface-component-fields">
       {fields.map(field=>{
         const reference=field.references?field.references[profile]:field.default
-        const current=values[field.key]??reference
+        const saved=values[field.key]
+        const current=field.kind==='number'&&group==='tables'&&field.key.startsWith('page_')&&typeof saved==='number'
+          ?Math.min(saved,field.max):saved??reference
         const baseline=String(current??'')
         const value=draft[field.key]??baseline
         const automatic=current===null&&draft[field.key]===undefined

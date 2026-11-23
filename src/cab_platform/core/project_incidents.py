@@ -1,5 +1,6 @@
 """Consultation et suppression manuelle des déclarations CCAB d’un projet."""
 from django.db import transaction
+from django.db.models import Q
 from .auth import principal
 from .commands import Refused, digest, require, scope
 from .models import Event, Incident, Project
@@ -9,12 +10,21 @@ def purge_revision(row: Incident) -> str:
     return digest([row.incident_id, row.project_id, row.created.isoformat(), row.state, row.resolution])
 
 
-def project_incidents(request, project_id: str, page: int = 1, page_size: int = 25):
+def project_incidents(request, project_id: str, page: int = 1, page_size: int = 25, search: str = ''):
     actor = principal(request)
     project = Project.objects.get(pk=project_id)
     scope(actor, project)
     require(page >= 1 and 1 <= page_size <= 100, 'incident-pagination-invalid', 400)
     rows = Incident.objects.filter(project=project).select_related('run').order_by('-created', 'incident_id')
+    state_labels = {'open': 'ouvert', 'claimed': 'pris en charge', 'resolved': 'résolu'}
+    for term in search.split():
+        states = [state.upper() for state, label in state_labels.items() if term.lower() in label]
+        rows = rows.filter(
+            Q(incident_id__icontains=term) | Q(run__run_id__icontains=term)
+            | Q(category__icontains=term) | Q(summary__icontains=term)
+            | Q(state__icontains=term) | Q(state__in=states)
+            | Q(claim__actor__icontains=term) | Q(resolution__actor__icontains=term)
+        )
     total = rows.count()
     page = min(page, max(1, (total + page_size - 1) // page_size))
     offset = (page - 1) * page_size

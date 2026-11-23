@@ -1,3 +1,4 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {useTablePageSize} from './Appearance'
 import {useEffect,useState,type ReactNode} from 'react'
 import {Shape,ShapeStream} from '@electric-sql/client'
@@ -57,16 +58,15 @@ function compare(a:Binary,b:Binary,{column,descending}:Sort){
 function BinaryTable({rows,active}:{rows:Binary[];active:boolean}){
   const pageSize=useTablePageSize('binaries')
   const [sort,setSort]=useState<Sort>({column:active?'pid':'stopped',descending:!active})
-  const [page,setPage]=useState(1)
-  const ordered=rows.filter(row=>row.active===active).sort((a,b)=>compare(a,b,sort))
-  const pages=Math.max(1,Math.ceil(ordered.length/pageSize))
-  const current=Math.min(page,pages)
-  useEffect(()=>{setPage(previous=>Math.min(previous,pages))},[pages])
-  const selected=ordered.slice((current-1)*pageSize,current*pageSize)
+  const navigation=useTableSearch()
+  const ordered=filterTableRows(rows.filter(row=>row.active===active),navigation.query,row=>[
+    row.pid,row.username,row.executable,row.role,date(row.first_seen),date(active?row.last_seen:row.stopped),
+  ]).sort((a,b)=>compare(a,b,sort))
+  const {rows:selected,current,pages}=tablePage(ordered,navigation.page,pageSize)
   const displayed:readonly (readonly [SortColumn,string])[]=[...columns,active?['last_seen','Dernière observation']:['stopped','Arrêt']]
   function selectSort(column:SortColumn){
     setSort(previous=>({column,descending:previous.column===column&&!previous.descending}))
-    setPage(1)
+    navigation.setPage(1)
   }
   return <>
     <div className="table-wrap"><table className="monitor-table" aria-label={active?'Binaires actifs':'Binaires inactifs'}>
@@ -82,15 +82,11 @@ function BinaryTable({rows,active}:{rows:Binary[];active:boolean}){
         <td data-label="Rôle">{row.role}</td><td data-label="Première observation">{date(row.first_seen)}</td>
         <td data-label={active?'Dernière observation':'Arrêt'}>{date(active?row.last_seen:row.stopped)}</td>
       </tr>)}
-      {!selected.length&&<tr><td colSpan={6}>{active?'Aucun binaire actif.':'Aucun binaire inactif.'}</td></tr>}</tbody>
+      <TableFiller count={selected.length} columns={displayed.length}
+        empty={navigation.query.trim()?'Aucun résultat.':active?'Aucun binaire actif.':'Aucun binaire inactif.'}/></tbody>
     </table></div>
-    <nav className="git-overview-controls" aria-label="Pagination des binaires">
-      <button type="button" disabled={current===1} onClick={()=>setPage(1)}>Premier</button>
-      <button type="button" disabled={current===1} onClick={()=>setPage(current-1)}>Précédent</button>
-      <span aria-live="polite">Page {current} / {pages} · {ordered.length} binaire{ordered.length===1?'':'s'}</span>
-      <button type="button" disabled={current===pages} onClick={()=>setPage(current+1)}>Suivant</button>
-      <button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
-    </nav>
+    <TableNavigation {...navigation} label="Pagination des binaires" searchLabel="Rechercher dans les binaires"
+      current={current} pages={pages} total={ordered.length}/>
   </>
 }
 

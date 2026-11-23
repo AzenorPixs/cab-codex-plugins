@@ -46,6 +46,7 @@
 .monitor-table thead th {
   background: var(--ui-monitor-header);
   color: var(--ui-monitor-header-text);
+  font-size: calc(var(--ui-tables-head-font, 20px) * var(--font-scale));
   font-weight: var(--ui-tables-head-weight, 700);
 }
 
@@ -108,4 +109,17 @@
 
 :root[data-compact-tables] .monitor-table tbody td:last-child {
   padding-block-end: 4px;
+}
+
+.monitor-table tbody .table-filler td {
+  height: 1lh;
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody .table-filler td {
+  height: auto;
+  padding-block: var(--ui-tables-cell-padding, 10px);
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody .table-filler td::before {
+  display: none;
 }

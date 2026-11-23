@@ -127,8 +127,13 @@ try{
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 4")'),'actions de l’étape');
     assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().left>=durations.getBoundingClientRect().right && tokens.innerText.includes('8,98\u202fM') && durations.innerText.includes('Attente')})()`),'cumuls dans le même bloc à droite, étape '+stage);
-    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers[5]==='TeCodeur' && headers[10]==='TcOrchestrateur' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
+    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers[5]==='TeCodeur' && headers[10]==='TcOrchestrateur' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
    }
+   assert(await ev(`Array.from(document.querySelectorAll('.stage-overview section table')).every(table=>{
+     const controls=table.parentElement.nextElementSibling;
+     return table.tBodies[0].rows.length>=3 &&
+       controls.querySelector('input[type="search"]').previousElementSibling.textContent==='Dernier';
+   })`),'trois lignes visibles et recherche après Dernier dans les tableaux des actions');
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
    assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().top>=durations.getBoundingClientRect().bottom})()`),'cumuls sous les durées dans le même encadré sur mobile');

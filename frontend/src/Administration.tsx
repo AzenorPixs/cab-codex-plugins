@@ -1,3 +1,4 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {CompletionCatalog} from './AgentCatalogLive'
 import {AgentCatalog,AgentNavigation,type CatalogPage} from './AgentCatalog'
 import {McpVersions} from './McpConnections'
@@ -56,24 +57,31 @@ function AgentReminders(){
   const settings=useQuery({queryKey:[path],queryFn:()=>api<ReminderSettings>(path)})
   const [draft,setDraft]=useState<ReminderSettings|null>(null)
   const values=draft??settings.data
+  const navigation=useTableSearch()
   const save=useMutation({
     mutationFn:(value:ReminderSettings)=>api<ReminderSettings>(path,value),
     onSuccess:value=>{client.setQueryData([path],value);setDraft(null)},
   })
   if(!values)return settings.error?<p role="alert">Réglages des rappels indisponibles.</p>:null
   const fields=[['seconds','Relances 1 à 3'],['second_seconds','Quatrième relance'],['last_seconds','Dernière relance']] as const
+  const matching=filterTableRows([...fields],navigation.query,([key,label])=>[label,values[key]])
+  const {rows,current,pages}=tablePage(matching,navigation.page)
   return <section className="agent-card">
     <h2>Rappels d’inactivité</h2>
     <p>Le délai court depuis la dernière activité ou le dernier rappel. Saisir 0 au premier délai désactive les rappels.</p>
     <form onSubmit={event=>{event.preventDefault();save.mutate(values)}}>
       <div className="table-wrap"><table className="monitor-table" aria-label="Rappels d’inactivité">
         <thead><tr><th scope="col">Relance</th><th scope="col">Délai (secondes)</th></tr></thead>
-        <tbody>{fields.map(([key,label])=><tr key={key}>
+        <tbody>{rows.map(([key,label])=><tr key={key}>
           <td data-label="Relance"><label htmlFor={'agent-reminder-'+key}>{label}</label></td>
           <td data-label="Délai (secondes)"><input id={'agent-reminder-'+key} type="number" required min={key==='seconds'?0:30} max={86400} step={1} value={values[key]}
             onChange={event=>setDraft({...values,[key]:event.target.valueAsNumber})}/></td>
-        </tr>)}</tbody>
+        </tr>)}
+          <TableFiller count={rows.length} columns={2} empty="Aucun résultat."/>
+        </tbody>
       </table></div>
+      <TableNavigation {...navigation} label="Pagination des rappels" searchLabel="Rechercher dans les rappels"
+        current={current} pages={pages} total={matching.length}/>
       <button type="submit" disabled={!draft||save.isPending}>Enregistrer les rappels</button>
       {save.isError&&<p role="alert">Saisir des délais croissants. Le premier délai est compris entre 30 secondes et un jour, ou vaut 0.</p>}
       {save.isSuccess&&!draft&&<p role="status">Délais enregistrés.</p>}

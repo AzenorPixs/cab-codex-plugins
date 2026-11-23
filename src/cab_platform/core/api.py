@@ -1207,9 +1207,9 @@ def closure_evaluations(request,project_id:str):
     return {'evaluations':[evaluate(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
 
 @api.get('/session-archives')
-def session_archives(request,project_id:str='',page:int=1,page_size:int=10):
+def session_archives(request,project_id:str='',page:int=1,page_size:int=10,search:str=''):
     from cab_platform.archive_listing import archive_page
-    rows,pagination=archive_page(principal(request),project_id,page,page_size)
+    rows,pagination=archive_page(principal(request),project_id,page,page_size,search)
     return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in rows],**pagination}
 
 @api.get('/run')
@@ -1276,9 +1276,9 @@ def metrics(request,project_id:str,run_id:str,after:int=0):
     return run_statistics(actor,r,after)
 
 @api.get('/projects/{project_id}/incidents')
-def project_incident_registry(request,project_id:str,page:int=1,page_size:int=25):
+def project_incident_registry(request,project_id:str,page:int=1,page_size:int=25,search:str=''):
     from .project_incidents import project_incidents
-    return project_incidents(request,project_id,page,page_size)
+    return project_incidents(request,project_id,page,page_size,search)
 
 class IncidentPurgeRequest(Schema):
     expected_revision:str

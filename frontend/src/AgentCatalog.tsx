@@ -1,3 +1,4 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,tablePageLimit,useTableSearch} from './TableNavigation'
 import {useEffect,useRef,useState,type FormEvent,type KeyboardEvent,type ReactNode} from 'react'
 import {Link} from '@tanstack/react-router'
 import {api} from './api'
@@ -30,29 +31,21 @@ export function AgentNavigation(){
 type CellValue=string|number|null
 type Column<Row>={label:string;className?:string;value?:(row:Row)=>CellValue;render?:(row:Row)=>ReactNode;search?:(row:Row)=>string}
 type TableSort={column:number;descending:boolean}
-const pageSize=10
 const collator=new Intl.Collator('fr',{numeric:true,sensitivity:'base'})
-const searchable=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase()
 
 function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey,defaultSort,numbered=false}:{
   title:string;columns:Column<Row>[];rows:Row[];actions?:ReactNode;toolbar?:ReactNode;paginationActions?:ReactNode;
   pending:boolean;error:Error|null;viewKey?:number|null;defaultSort?:TableSort;numbered?:boolean
 }){
-  const [query,setQuery]=useState('')
+  const navigation=useTableSearch()
   const [manualSort,setSort]=useState<TableSort|undefined>(defaultSort)
   const sort=numbered?undefined:manualSort
-  const [page,setPage]=useState(1)
   const [previousView,setPreviousView]=useState(viewKey)
-  if(previousView!==viewKey){setPreviousView(viewKey);setPage(1)}
-  const words=searchable(query.trim()).split(/\s+/).filter(Boolean)
-  const visible=words.length?rows.filter(row=>{
-    const content=columns.map(column=>{
-      const value=column.value?.(row)
-      return [column.search?.(row),value,typeof value==='number'?format.format(value):null].join(' ')
-    }).join(' ')
-    const haystack=searchable(content)
-    return words.every(word=>haystack.includes(word))
-  }):rows.slice()
+  if(previousView!==viewKey){setPreviousView(viewKey);navigation.setPage(1)}
+  const visible=filterTableRows(rows,navigation.query,row=>columns.flatMap(column=>{
+    const value=column.value?.(row)
+    return [column.search?.(row),value,typeof value==='number'?format.format(value):null]
+  })).slice()
   const value=sort?columns[sort.column].value:undefined
   if(value&&sort)visible.sort((left,right)=>{
     const a=value(left),b=value(right)
@@ -61,11 +54,10 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
     const order=typeof a==='number'&&typeof b==='number'?a-b:collator.compare(String(a),String(b))
     return sort.descending?-order:order
   })
-  const pages=Math.max(1,Math.ceil(visible.length/pageSize))
-  const current=Math.min(page,pages)
+  const {rows:displayed,current,pages}=tablePage(visible,navigation.page)
   function selectSort(column:number){
     setSort(previous=>({column,descending:previous?.column===column&&!previous.descending}))
-    setPage(1)
+    navigation.setPage(1)
   }
   return <>
     <section className="project-home project-forges-page">
@@ -84,25 +76,16 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
           {column.label}{sort?.column===index&&<span aria-hidden="true">{sort.descending?'↓':'↑'}</span>}
         </button>:<span>{column.label}</span>}
       </th>)}</tr></thead>
-      <tbody>{visible.slice((current-1)*pageSize,current*pageSize).map((row,index)=><tr key={row.id}>
-        {numbered&&<td data-label="N°">{(current-1)*pageSize+index+1}</td>}
-        {columns.map(column=><td key={column.label} data-label={column.label} className={column.className}>{column.render?column.render(row):column.value?.(row)??'—'}</td>)}</tr>)}</tbody>
-    </table>{!pending&&!error&&!visible.length&&<p className="empty">{words.length?'Aucun résultat.':'Aucune entrée.'}</p>}</div>
-    <nav className="git-overview-controls" aria-label={'Pagination '+title}>
-      <button type="button" disabled={current===1} onClick={()=>setPage(1)}>Premier</button>
-      <button type="button" disabled={current===1} onClick={()=>setPage(current-1)}>Précédent</button>
-      <span aria-live="polite">Page {current} / {pages} · {visible.length} résultat{visible.length===1?'':'s'}</span>
-      <button type="button" disabled={current===pages} onClick={()=>setPage(current+1)}>Suivant</button>
-      <div className="agent-catalog-pagination-tail">
-        <div className="agent-catalog-pagination-search">
-          <button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
-          <input className="agent-catalog-search" type="search" value={query} placeholder="Rechercher…"
-            aria-label={'Rechercher dans '+title}
-            onChange={event=>{setQuery(event.target.value);setPage(1)}}/>
-        </div>
-        {paginationActions&&<div className="model-policy-actions">{paginationActions}</div>}
-      </div>
-    </nav>
+      <tbody>{displayed.map((row,index)=><tr key={row.id}>
+        {numbered&&<td data-label="N°">{(current-1)*tablePageLimit+index+1}</td>}
+        {columns.map(column=><td key={column.label} data-label={column.label} className={column.className}>{column.render?column.render(row):column.value?.(row)??'—'}</td>)}</tr>)}
+      <TableFiller count={displayed.length} columns={columns.length+Number(numbered)}
+        empty={!pending&&!error?(navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'):undefined}/></tbody>
+    </table></div>
+    <TableNavigation {...navigation} label={'Pagination '+title} searchLabel={'Rechercher dans '+title}
+      current={current} pages={pages} total={visible.length}>
+      {paginationActions&&<div className="model-policy-actions">{paginationActions}</div>}
+    </TableNavigation>
   </>
 }
 

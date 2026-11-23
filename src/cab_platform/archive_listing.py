@@ -1,11 +1,13 @@
 """Pagination des archives selon le périmètre autorisé de l'acteur."""
+from django.db.models import Q
+
 from .core.commands import require,scope
 from .core.models import Project,SessionArchive
 
 ARCHIVE_PAGE_SIZE=10
 
 
-def archive_page(actor,project_id='',page=1,page_size=ARCHIVE_PAGE_SIZE):
+def archive_page(actor,project_id='',page=1,page_size=ARCHIVE_PAGE_SIZE,search=''):
     require(actor.active,'project-not-authorized',403)
     require(type(page) is int and 1<=page<=1000000,'session-archives-page-invalid',400)
     require(type(page_size) is int and 1<=page_size<=100,"session-archives-page-size-invalid",400)
@@ -14,6 +16,12 @@ def archive_page(actor,project_id='',page=1,page_size=ARCHIVE_PAGE_SIZE):
         rows=SessionArchive.objects.filter(run__project=project)
     elif actor.role=='admin':rows=SessionArchive.objects.all()
     else:rows=SessionArchive.objects.filter(run__project__in=actor.projects.all())
+    for term in search.split():
+        rows=rows.filter(
+            Q(run__run_id__icontains=term) | Q(run__session_id__icontains=term)
+            | Q(run__change__icontains=term) | Q(run__state__icontains=term)
+            | Q(run__project__identifier__icontains=term) | Q(run__project__name__icontains=term)
+        )
     total=rows.count();pages=max(1,(total+page_size-1)//page_size)
     current=min(page,pages);offset=(current-1)*page_size
     selected=rows.select_related('run','run__change_record').order_by('-created','-pk')[offset:offset+page_size]
