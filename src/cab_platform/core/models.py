@@ -31,6 +31,8 @@ class AgentCatalogFile(models.Model):
     adjusting = models.BooleanField(default=False)
     state = models.CharField(max_length=16, default='idle')
     error = models.CharField(max_length=80, blank=True, default='')
+    attempted_at = models.DateTimeField(null=True)
+    last_refresh_error = models.CharField(max_length=80, blank=True, default='')
     refreshed_at = models.DateTimeField(null=True)
     refresh_after = models.DateTimeField(null=True)
     generation = models.PositiveBigIntegerField(default=1)
@@ -53,6 +55,15 @@ class AgentApiKey(models.Model):
     id = models.UUIDField(primary_key=True, editable=False)
     provider = models.ForeignKey(AgentProvider, on_delete=models.PROTECT)
     ciphertext = models.TextField(editable=False)
+    valid = models.BooleanField(null=True, default=None)
+    checked_at = models.DateTimeField(null=True)
+    refreshed_at = models.DateTimeField(null=True)
+    refresh_after = models.DateTimeField(null=True, db_index=True)
+    refresh_requested = models.BooleanField(default=True)
+    checking_at = models.DateTimeField(null=True)
+    check_error = models.CharField(max_length=80, blank=True, default='')
+    metrics_error = models.CharField(max_length=80, blank=True, default='')
+    metrics = models.JSONField(default=dict)
 
     class Meta:
         db_table = 'agent_api_keys'

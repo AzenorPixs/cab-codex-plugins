@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Rendre les URL fournisseurs cliquables et ouvrir le dernier résultat de catalogue depuis son état. Vérifier les clés API sur demande et toutes les quatre heures à un créneau aléatoire, afficher la dernière réussite et les mesures disponibles, puis choisir aléatoirement parmi les clés valides pour les catalogues authentifiés.
+
 - Ajouter dans l’Overview Fournisseur la saisie d’une clé API associée avec bouton œil, et intégrer le catalogue OpenAI avec ses tarifs Standard sur un créneau aléatoire par journée UTC.
 
 - Afficher la dernière construction Debian ou Docker dans la Fabrique, y compris les réussites issues de CICD et CICDF, avec la provenance du reçu et un détail accessible.

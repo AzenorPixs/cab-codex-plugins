@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Actualisation des clés et des catalogues fournisseurs
+
+[refresh-provider-api-key-health](openspec/changes/archive/2026-11-23-refresh-provider-api-key-health/),
+code non attribué. Le 23 novembre 2026, les contrôles sur PostgreSQL isolé,
+Chromium et Firefox ont couvert les états, les actions et la projection
+Electric simulée. Sur l’hôte, la clé OpenAI a donné accès aux quotas de
+fine-tuning de huit modèles. L’archivage OpenSpec est effectué et les reçus
+CICD et CABU portent ensuite la publication et l’activation.
+
 ## Centre de notifications
 
 [uniform-notification-popup-and-clear-messages](openspec/changes/archive/2026-11-23-uniform-notification-popup-and-clear-messages/),

@@ -305,7 +305,7 @@ class AgentApiKeyInput(Schema):
     key: SecretStr
 
 
-class AgentApiKeyRemoval(Schema):
+class AgentApiKeyID(Schema):
     id: UUID
 
 
@@ -344,8 +344,15 @@ def save_agent_api_key(request, body: AgentApiKeyInput):
     return add_key(body.provider_id, body.key.get_secret_value())
 
 
+@api.post('/administration/agent-api-keys/refresh')
+def refresh_agent_key(request, body: AgentApiKeyID):
+    principal(request, admin=True)
+    from cab_platform.agent_key_health import request_refresh
+    return request_refresh(body.id)
+
+
 @api.post('/administration/agent-api-keys/remove')
-def delete_agent_api_key(request, body: AgentApiKeyRemoval):
+def delete_agent_api_key(request, body: AgentApiKeyID):
     principal(request, admin=True)
     from cab_platform.agent_catalog import remove_key
     return remove_key(body.id)

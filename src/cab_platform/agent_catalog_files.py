@@ -39,7 +39,8 @@ def configure_source(key, url, provider=None):
                           'refresh_after': timezone.now() if url else None})
     if not created and source.url != url:
         save_fields(source, url=url, generation=source.generation+1, valid=False, refreshed_at=None,
-                    error='', state='queued' if url else 'idle', refresh_after=timezone.now() if url else None)
+                    error='', attempted_at=None, last_refresh_error='', state='queued' if url else 'idle',
+                    refresh_after=timezone.now() if url else None)
     return source
 
 
@@ -165,9 +166,17 @@ def download_source(source):
     if not AgentCatalogFile.objects.filter(pk=source.pk, generation=source.generation).update(state='downloading', error=''):
         return None
     try:
-        payload = (catalog.openai_catalog(source.provider_id)
-                   if source.provider_id and source.url == catalog.OPENAI_MODELS_URL
-                   else catalog.download(source.url))
+        if source.provider_id and source.url == catalog.OPENAI_MODELS_URL:
+            provider = source.provider
+            require(catalog.parse_url(provider.api_url).hostname == 'api.openai.com',
+                    'agent-catalog-auth-url-invalid', 422)
+            payload = catalog.openai_catalog(source.provider_id)
+        elif source.provider_id:
+            provider = source.provider
+            require(provider.models_url == source.url, 'agent-catalog-url-diverged', 422)
+            payload = catalog.authenticated_catalog(provider)
+        else:
+            payload = catalog.download(source.url)
         require(len(payload) <= catalog.MAX_CATALOG_BYTES, 'agent-catalog-format-invalid', 422)
         validate_file(source, payload)
         with transaction.atomic():
@@ -178,8 +187,9 @@ def download_source(source):
             save_fields(current, state='applying', refresh_after=catalog.next_refresh())
         return source.generation, timezone.now()
     except (Refused, OSError) as error:
+        code = getattr(error, 'code', 'agent-catalog-file-unavailable')
         AgentCatalogFile.objects.filter(pk=source.pk, generation=source.generation).update(
-            state='error', error=getattr(error, 'code', 'agent-catalog-file-unavailable'),
+            state='error', error=code, last_refresh_error=code, attempted_at=timezone.now(),
             refresh_after=catalog.next_refresh())
     return None
 
@@ -229,6 +239,8 @@ def reconcile(observed, downloaded):
             values = {'valid': True, 'sha256': observation.digest}
             if key in changed or refreshed or source.state == 'applying':
                 values.update(state='idle', error='', refreshed_at=refreshed or timezone.now())
+                if refreshed or source.state == 'applying':
+                    values.update(attempted_at=values['refreshed_at'], last_refresh_error='')
             save_fields(source, **values)
         else:
             save_fields(source, valid=False, error=source.error or observation.error)

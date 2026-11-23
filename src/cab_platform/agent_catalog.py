@@ -5,7 +5,7 @@ from http import client
 from ipaddress import ip_address, ip_network
 import json
 from math import isfinite
-from random import randint
+from random import choice, randint
 import re
 import socket
 import ssl
@@ -56,13 +56,12 @@ def public_address(host):
     return str(addresses[0])
 
 
-def download(url, *, openai_key=None):
-    require(openai_key is None or url == OPENAI_MODELS_URL, 'agent-catalog-auth-url-invalid', 400)
+def fetch(url, *, secret=None, max_bytes=MAX_CATALOG_BYTES):
     parts = parse_url(url, public=True)
     target = (parts.path or '/') + ('?' + parts.query if parts.query else '')
     headers = {'Accept': 'text/markdown' if url == OPENAI_PRICING_URL else 'application/json'}
-    if openai_key is not None:
-        headers['Authorization'] = 'Bearer ' + openai_key
+    if secret is not None:
+        headers['Authorization'] = 'Bearer ' + secret
     deadline = monotonic() + 15
     connection = client.HTTPSConnection(parts.hostname, timeout=5)
     try:
@@ -72,18 +71,56 @@ def download(url, *, openai_key=None):
                 connection.sock = tls
                 connection.request('GET', target, headers=headers)
                 with connection.getresponse() as response:
+                    metadata = {name.lower(): value for name, value in response.getheaders()
+                                if name.lower().startswith('x-ratelimit-')}
                     if response.status != 200:
-                        raise ValueError
+                        return response.status, b'', metadata
                     payload = bytearray()
                     while chunk := response.read1(64 * 1024):
                         payload.extend(chunk)
-                        if len(payload) > MAX_CATALOG_BYTES or monotonic() > deadline:
+                        if len(payload) > max_bytes or monotonic() > deadline:
                             raise ValueError
-        return bytes(payload)
+        return response.status, bytes(payload), metadata
     except (OSError, ValueError, RecursionError, client.HTTPException):
         raise Refused('agent-catalog-unavailable', 422) from None
     finally:
         connection.close()
+
+
+def download(url, *, openai_key=None):
+    require(openai_key is None or url == OPENAI_MODELS_URL, 'agent-catalog-auth-url-invalid', 400)
+    status, payload, _ = fetch(url, secret=openai_key)
+    require(status == 200, 'agent-catalog-unavailable', 422)
+    return payload
+
+
+def key_secret(key):
+    try:
+        return crypt_credential('cab-agent-api-' + key.id.hex, key.ciphertext.encode(),
+                                decrypt=True, failure='agent-api-key-tpm-unavailable').decode('ascii')
+    except UnicodeError:
+        raise Refused('agent-api-key-invalid', 422) from None
+
+
+def select_key(provider_id):
+    keys = list(AgentApiKey.objects.filter(provider_id=provider_id, valid=True).order_by('id'))
+    if keys:
+        return choice(keys)
+    require(not AgentApiKey.objects.filter(provider_id=provider_id).exists(),
+            'agent-catalog-valid-key-unavailable', 422)
+    return None
+
+
+def authenticated_catalog(provider):
+    key = select_key(provider.pk)
+    if key is None:
+        return download(provider.models_url)
+    from .agent_key_health import catalog_auth_allowed
+
+    require(catalog_auth_allowed(provider), 'agent-catalog-auth-url-invalid', 422)
+    status, payload, _ = fetch(provider.models_url, secret=key_secret(key))
+    require(status == 200, 'agent-catalog-unavailable', 422)
+    return payload
 
 
 def parse_document(payload):
@@ -178,13 +215,9 @@ def openai_standard_prices(payload):
 
 
 def openai_catalog(provider_id):
-    key = AgentApiKey.objects.filter(provider_id=provider_id).order_by('id').first()
+    key = select_key(provider_id)
     require(key is not None, 'agent-catalog-key-required', 422)
-    try:
-        secret = crypt_credential('cab-agent-api-' + key.id.hex, key.ciphertext.encode(),
-                                  decrypt=True, failure='agent-api-key-tpm-unavailable').decode('ascii')
-    except UnicodeError:
-        raise Refused('agent-api-key-invalid', 422) from None
+    secret = key_secret(key)
     records = read_catalog(parse_document(download(OPENAI_MODELS_URL, openai_key=secret)))
     prices = openai_standard_prices(download(OPENAI_PRICING_URL))
     for identifier, record in records.items():
@@ -381,9 +414,19 @@ def save_provider(provider_id, name, api_url, models_url, key=None):
             else:
                 provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
                 require(provider is not None, 'agent-provider-not-found', 404)
-                for key, value in fields.items():
-                    setattr(provider, key, value)
+                old_authority = parse_url(provider.api_url)
+                new_authority = parse_url(api_url)
+                if (old_authority.hostname, old_authority.port or 443) != (new_authority.hostname, new_authority.port or 443):
+                    require(not AgentApiKey.objects.filter(provider=provider).exists(),
+                            'agent-provider-key-origin-change', 409)
+                changed_endpoint = (provider.api_url, provider.models_url) != (api_url, models_url)
+                for field, value in fields.items():
+                    setattr(provider, field, value)
                 provider.save(update_fields=fields.keys())
+                if changed_endpoint:
+                    AgentApiKey.objects.filter(provider=provider).update(
+                        valid=None, checked_at=None, refreshed_at=None, refresh_after=None,
+                        refresh_requested=True, checking_at=None, check_error='', metrics_error='', metrics={})
     except IntegrityError:
         raise Refused('agent-provider-duplicate', 409) from None
     configure_source('provider-'+str(provider.pk), models_url, provider)
@@ -408,8 +451,12 @@ def key_metadata(key_id, provider_name):
 
 
 def keys():
-    rows = AgentApiKey.objects.order_by('provider__name', 'id').values_list('id', 'provider__name')
-    return [key_metadata(key_id, provider_name) for key_id, provider_name in rows]
+    from .core.models import AgentCatalogProjection
+
+    rows = AgentCatalogProjection.objects.filter(kind='key').order_by('id').values_list('data', flat=True)
+    names = dict(AgentProvider.objects.values_list('id', 'name'))
+    return sorted(({**row, 'provider': names.get(row['provider_id'], '')} for row in rows),
+                  key=lambda row: (row['provider'], row['id']))
 
 
 def add_key(provider_id, secret):

@@ -2369,6 +2369,23 @@ La page /agents distingue les trois programmes et leurs transports MCP. Les
 projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
 
+## État des clés et des catalogues fournisseurs
+
+La migration 0063 enregistre dans `agent_api_keys` les résultats de contrôle,
+le dernier essai, la dernière réussite et la prochaine échéance. Le worker
+prend chaque clé en charge sous verrou PostgreSQL. Le contrôle manuel garde
+le créneau automatique prévu et un essai abandonné peut être repris après
+cinq minutes. Les mesures antérieures restent associées à leur dernière
+réussite lorsqu’une tentative échoue.
+
+Le tableau utilise un instantané de `agent_catalog_projection`, que les
+triggers PostgreSQL actualisent pour Electric. Le chiffrement TPM reste dans
+la table privée. Pour un catalogue authentifié, CAB choisit une clé valide
+du fournisseur et ouvre la connexion HTTPS vers son origine sans redirection.
+Une modification du domaine requiert le retrait préalable des clés liées.
+La dernière tentative de catalogue conserve un horodatage et un résultat
+distincts du fichier exploitable et de sa dernière réussite.
+
 ## Métadonnées publiques des projets
 
 `projects.public_metadata` mémorise les valeurs littérales validées de

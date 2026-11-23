@@ -1,12 +1,18 @@
-import {useEffect,useRef,useState} from 'react'
+import {useEffect,useRef,useState,type ReactNode} from 'react'
 import {useMutation,useQuery} from '@tanstack/react-query'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
 import type {Policy} from './ModelPolicy'
 
 export type Provider={id:number;name:string;api_url:string;models_url:string}
-export type CatalogFile={id:string;provider_id:number|null;url:string;valid:boolean;adjusting?:boolean;state:string;error:string;refreshed_at:string|null}
-export type ApiKey={id:string;provider_id:number;day:number|null;week:number|null;month:number|null;credits:number|null}
+export type CatalogFile={id:string;provider_id:number|null;url:string;valid:boolean;adjusting?:boolean;state:string;error:string;refreshed_at:string|null;attempted_at?:string|null;last_refresh_error?:string}
+export type ApiKey={id:string;provider_id:number;day:number|null;week:number|null;month:number|null;credits:number|null;
+  valid?:boolean|null;checked_at?:string|null;refreshed_at?:string|null;queued?:boolean;checking?:boolean;
+  check_error?:string;metrics_error?:string;metrics?:KeyMetrics}
+type FineTuningLimit={model:string;jobs_so_far_today:number|null;max_jobs_per_day:number|null;
+  curr_pending_jobs:number|null;max_pending_jobs:number|null}
+type KeyMetrics={kind?:'go'|'router';rolling?:number|null;key_budget?:number|null;
+  rate_limits?:Record<string,number>;fine_tuning?:FineTuningLimit[];fine_tuning_partial?:boolean}
 export type Model={id:number;provider_id:number;identifier:string;name:string|null;context:number|null;output:number|null;
   input_modalities:string[]|null;output_modalities:string[]|null;input_cost:string|number|null;output_cost:string|number|null;
   cache_read_cost:string|number|null;cache_write_cost:string|number|null;cache_write_duration:string|null;
@@ -73,18 +79,43 @@ export function CatalogDocument({path,title,label,className,accessibleLabel}:{pa
   </>
 }
 
-export function CatalogRefresh({source,path,providerId}:{source?:CatalogFile;path:string;providerId?:number}){
-  const refresh=useMutation({mutationFn:()=>api(path,providerId===undefined?{}:{id:providerId}),networkMode:'always'})
-  const busy=refresh.isPending||source?.adjusting||['queued','downloading','applying'].includes(source?.state??'')
+export function StateOverview({valid,title,label,children}:{
+  valid:boolean;title:string;label:string;children:ReactNode
+}){
+  const dialog=useRef<HTMLDialogElement>(null)
+  return <>
+    <button type="button" className={'text-button '+(valid?'catalog-valid':'catalog-invalid')}
+      aria-label={label} onClick={()=>dialog.current?.showModal()}>{valid?'✓':'✕'}</button>
+    <dialog className="lifecycle-dialog catalog-document" ref={dialog}>
+      <h2>{title}</h2>
+      {children}
+      <button type="button" onClick={()=>dialog.current?.close()}>Fermer</button>
+    </dialog>
+  </>
+}
+
+export function RefreshControl({path,body,busy=false,disabled=false,label}:{
+  path:string;body:object;busy?:boolean;disabled?:boolean;label:string
+}){
+  const refresh=useMutation({mutationFn:()=>api(path,body),networkMode:'always'})
+  busy=busy||refresh.isPending
   return <>
     <button className={'lifecycle-icon catalog-refresh'+(busy?' catalog-refreshing':'')} type="button"
-      aria-label={busy?'Actualisation en cours':'Actualiser le fichier'} title={busy?'Actualisation en cours':'Actualiser le fichier'}
-      disabled={!source?.url||busy} onClick={()=>refresh.mutate()}>
+      aria-label={busy?'Actualisation en cours':label} title={busy?'Actualisation en cours':label}
+      disabled={disabled||busy} onClick={()=>refresh.mutate()}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <path d="M20 10a8 8 0 1 0-2 7M20 4v6h-6"/>
       </svg>
     </button>
     {refresh.error&&<small role="alert">{refresh.error.message}</small>}
+  </>
+}
+
+export function CatalogRefresh({source,path,providerId}:{source?:CatalogFile;path:string;providerId?:number}){
+  const busy=source?.adjusting||['queued','downloading','applying'].includes(source?.state??'')
+  return <>
+    <RefreshControl path={path} body={providerId===undefined?{}:{id:providerId}} busy={busy}
+      disabled={!source?.url} label="Actualiser le fichier"/>
     {source?.state==='error'&&<small role="status">{source.error==='agent-catalog-key-required'
       ?'Ajoutez une clé API pour actualiser le catalogue.':'Dernière actualisation en échec'}</small>}
   </>

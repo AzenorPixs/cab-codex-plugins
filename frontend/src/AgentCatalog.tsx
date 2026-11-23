@@ -3,7 +3,8 @@ import {useEffect,useRef,useState,type FormEvent,type KeyboardEvent,type ReactNo
 import {Link} from '@tanstack/react-router'
 import {api} from './api'
 import {ModelPolicyFields,policyPath,policyPayload,selectPolicyModels,type Policy,type PolicyProviders} from './ModelPolicy'
-import {CatalogDocument,CatalogRefresh,CatalogValidity,catalogDate,useAgentCatalog,type ApiKey,type Model,type Provider} from './AgentCatalogLive'
+import {CatalogDocument,CatalogRefresh,RefreshControl,StateOverview,catalogDate,useAgentCatalog,
+  type ApiKey,type CatalogFile,type Model,type Provider} from './AgentCatalogLive'
 
 const providerPath='administration/agent-providers'
 const keyPath='administration/agent-api-keys'
@@ -165,7 +166,14 @@ function ProviderOverview({provider}:{provider?:Provider}){
   async function save(values:FormData){
     if(!values.get('key'))values.delete('key')
     const payload=Object.fromEntries(values)
-    await api(provider?providerPath+'/edit':providerPath,provider?{...payload,id:provider.id}:payload)
+    try{
+      await api(provider?providerPath+'/edit':providerPath,provider?{...payload,id:provider.id}:payload)
+    }catch(error){
+      if(error instanceof Error&&error.message.includes('agent-provider-key-origin-change')){
+        throw new Error('Retirez les clés associées avant de changer le domaine du fournisseur.')
+      }
+      throw error
+    }
   }
   return <AddOverview edit={!!provider} title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save} onClose={()=>setVisible(false)}>
     <label>Fournisseur<input name="name" required maxLength={160} defaultValue={provider?.name}/></label>
@@ -175,20 +183,55 @@ function ProviderOverview({provider}:{provider?:Provider}){
   </AddOverview>
 }
 
+function CatalogUrl({value}:{value:string}){
+  return /^https?:\/\//i.test(value)?<a href={value} target="_blank" rel="noopener noreferrer">{value}</a>:value||'—'
+}
+
+const catalogErrors:Record<string,string>={
+  'agent-catalog-key-required':'Aucune clé API associée',
+  'agent-catalog-valid-key-unavailable':'Aucune clé API valide disponible',
+  'agent-catalog-auth-url-invalid':'URL incompatible avec la clé du fournisseur',
+  'agent-catalog-format-invalid':'Format du catalogue invalide',
+  'agent-catalog-unavailable':'Catalogue indisponible',
+  'agent-catalog-file-unavailable':'Fichier du catalogue indisponible',
+}
+
+function providerStatus(source?:CatalogFile){
+  if(source?.last_refresh_error||source?.state==='error')return 'Échec'
+  if(source?.valid)return 'Valide'
+  return source?.url?'En attente':'Source absente'
+}
+
+function ProviderStatus({provider,source}:{provider:Provider;source?:CatalogFile}){
+  const status=providerStatus(source)
+  const error=source?.last_refresh_error||(source?.state==='error'?source.error:'')
+  const busy=['queued','downloading','applying'].includes(source?.state??'')||source?.adjusting
+  return <StateOverview valid={status==='Valide'} title={'Actualisation du catalogue de '+provider.name}
+    label={'État du catalogue de '+provider.name+' · '+status}>
+    <dl>
+      <dt>Dernier essai</dt><dd>{catalogDate(source?.attempted_at??(source?.state==='idle'?source?.refreshed_at:null))}</dd>
+      <dt>Résultat</dt><dd>{status}</dd>
+      {error&&<><dt>Détail</dt><dd>{catalogErrors[error]??'Actualisation impossible'}</dd></>}
+      {busy&&<><dt>Actualisation</dt><dd>En cours ou en attente</dd></>}
+      <dt>Dernière réussite</dt><dd>{catalogDate(source?.refreshed_at)}</dd>
+    </dl>
+  </StateOverview>
+}
+
 function ProviderCatalog({catalog}:{catalog:Catalog}){
   const sources=new Map(catalog.data.files.map(file=>[file.provider_id,file]))
   const columns:Column<Provider>[]=[
     {label:'Fournisseur',value:row=>row.name},
-    {label:'Liste des Modèles',value:row=>row.models_url||null},
-    {label:'Base URL API',value:row=>row.api_url},
+    {label:'Liste des Modèles',value:row=>row.models_url||null,render:row=><CatalogUrl value={row.models_url}/>},
+    {label:'Base URL API',value:row=>row.api_url,render:row=><CatalogUrl value={row.api_url}/>},
     {label:'Horodatage',value:row=>sources.get(row.id)?.refreshed_at??null,
       render:row=>{
         const source=sources.get(row.id)
         const stamp=catalogDate(source?.refreshed_at)
         return source?.valid?<CatalogDocument path={providerPath+'/file?id='+row.id} title={'Catalogue de '+row.name} label={stamp}/>:stamp
       }},
-    {label:'État',value:row=>sources.get(row.id)?.valid?'Valide':'Absent ou invalide',
-      render:row=><CatalogValidity source={sources.get(row.id)} title={'Catalogue de '+row.name}/>},
+    {label:'État',value:row=>providerStatus(sources.get(row.id)),
+      render:row=><ProviderStatus provider={row} source={sources.get(row.id)}/>},
     {label:'Actions',render:row=><div className="catalog-provider-actions">
       <CatalogRefresh source={sources.get(row.id)} path={providerPath+'/refresh'} providerId={row.id}/>
       <ProviderOverview provider={row}/>
@@ -201,6 +244,55 @@ function ProviderCatalog({catalog}:{catalog:Catalog}){
     rows={catalog.data.providers} actions={<ProviderOverview/>}/>
 }
 
+const keyErrors:Record<string,string>={
+  'agent-api-key-http-401':'Authentification refusée par le fournisseur (401)',
+  'agent-api-key-http-403':'Accès refusé par le fournisseur (403)',
+  'agent-api-key-endpoint-unavailable':'Aucun point d’accès authentifié pris en charge',
+  'agent-api-key-provider-unavailable':'Le fournisseur est indisponible',
+  'agent-api-key-tpm-unavailable':'La clé ne peut pas être lue par le TPM',
+  'agent-api-key-response-invalid':'Format de réponse invalide',
+  'agent-api-key-metrics-unavailable':'Aucune mesure n’est exposée',
+  ...catalogErrors,
+}
+const rateLabels:Record<string,string>={
+  'limit-requests':'Limite de requêtes','remaining-requests':'Requêtes restantes',
+  'limit-tokens':'Limite de jetons','remaining-tokens':'Jetons restants',
+  'limit-project-tokens':'Limite de jetons du projet','remaining-project-tokens':'Jetons restants du projet',
+}
+const keyStatus=(row:ApiKey)=>row.valid===true?'Valide':row.valid===false?'Accès refusé':row.checked_at?'Non vérifiée':'En attente'
+const metric=(value:number|null|undefined,unit='')=>value==null?'Indisponible':number(value)+unit
+
+function KeyStatus({row}:{row:KeyRow}){
+  const measures=row.metrics
+  const status=keyStatus(row)
+  return <StateOverview valid={row.valid===true} title={'Actualisation de la clé API · '+row.provider}
+    label={'État de la clé API de '+row.provider+' · '+status}>
+    <dl>
+      <dt>Dernier essai</dt><dd>{catalogDate(row.checked_at)}</dd>
+      <dt>Résultat</dt><dd>{status}</dd>
+      {row.check_error&&<><dt>Vérification</dt><dd>{keyErrors[row.check_error]??'Échec de la vérification'}</dd></>}
+      {row.metrics_error&&<><dt>Mesures</dt><dd>{keyErrors[row.metrics_error]??'Échec de la lecture des mesures'}</dd></>}
+      {(row.queued||row.checking)&&<><dt>Actualisation</dt><dd>En cours ou en attente</dd></>}
+      <dt>Dernière réussite</dt><dd>{catalogDate(row.refreshed_at)}</dd>
+      <dt>Crédit du compte</dt><dd>{metric(row.credits,' $')}</dd>
+      {measures?.kind==='router'&&<><dt>Budget restant de la clé</dt><dd>{metric(measures.key_budget,' $')}</dd></>}
+      {measures?.kind==='go'&&<><dt>Quota consommé sur cinq heures</dt><dd>{metric(measures.rolling,' %')}</dd></>}
+      {Object.entries(measures?.rate_limits??{}).map(([key,value])=>
+        <div key={key}><dt>{rateLabels[key]}</dt><dd>{metric(value)}</dd></div>)}
+    </dl>
+    {!!measures?.fine_tuning?.length&&<>
+      <h3>Quotas de fine-tuning par modèle</h3>
+      {measures.fine_tuning_partial&&<p>Liste partielle</p>}
+      <table aria-label="Quotas de fine-tuning">
+        <thead><tr><th>Modèle</th><th>Tâches du jour</th><th>Tâches en attente</th></tr></thead>
+        <tbody>{measures.fine_tuning.map(limit=><tr key={limit.model}><th scope="row">{limit.model}</th>
+          <td>{metric(limit.jobs_so_far_today)} / {metric(limit.max_jobs_per_day)}</td>
+          <td>{metric(limit.curr_pending_jobs)} / {metric(limit.max_pending_jobs)}</td></tr>)}</tbody>
+      </table>
+    </>}
+  </StateOverview>
+}
+
 function KeyCatalog({catalog}:{catalog:Catalog}){
   const [visible,setVisible]=useState(false)
   const providers=new Map(catalog.data.providers.map(row=>[row.id,row.name]))
@@ -209,9 +301,16 @@ function KeyCatalog({catalog}:{catalog:Catalog}){
   const quotaColumns=[['day','Quota Jour'],['week','Quota Semaine'],['month','Quota Mois'],['credits','Crédits']] as const
   const columns:Column<KeyRow>[]=[
     {label:'Fournisseurs',value:row=>row.provider},
-    ...quotaColumns.map(([field,label])=>({label,value:(row:KeyRow)=>row[field],render:(row:KeyRow)=>number(row[field])})),
-    {label:'Actions',render:row=><DeleteOverview trash label={'Supprimer une clé API de '+row.provider}
-      title="Supprimer la clé API" name={row.provider} remove={()=>api(keyPath+'/remove',{id:row.id})}/>},
+    ...quotaColumns.map(([field,label])=>({label,value:(row:KeyRow)=>row[field],render:(row:KeyRow)=>metric(row[field],row.metrics?.kind==='go'?' %':row.metrics?.kind==='router'?' $':'')})),
+    {label:'État',value:row=>keyStatus(row),render:row=><KeyStatus row={row}/>},
+    {label:'Dernière actualisation réussie',value:row=>row.refreshed_at??null,
+      render:row=>catalogDate(row.refreshed_at)},
+    {label:'Actions',render:row=><div className="catalog-provider-actions">
+      <RefreshControl path={keyPath+'/refresh'} body={{id:row.id}} busy={row.queued||row.checking}
+        label={'Actualiser la clé API de '+row.provider}/>
+      <DeleteOverview trash label={'Supprimer une clé API de '+row.provider}
+        title="Supprimer la clé API" name={row.provider} remove={()=>api(keyPath+'/remove',{id:row.id})}/>
+    </div>},
   ]
   return <CatalogTable title="Clés API" columns={columns} pending={catalog.pending} error={catalog.error} rows={rows}
       actions={<AddOverview title="Ajouter une clé API"

@@ -82,6 +82,16 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill(search('Clés API'),'témoin');
   await wait(()=>readRows('Clés API')[0]?.includes('Fournisseur témoin'),'Clé associée créée avec le fournisseur');
   check(!find('table[aria-label="Clés API"]').textContent.includes('fixture-provider-key'),'Secret exclu de la liste');
+  await click('button[aria-label="État de la clé API de Fournisseur témoin · En attente"]');
+  check(find('dialog[open]').textContent.includes('Indisponible'),'Mesures inconnues lisibles');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
+  await click('button[aria-label="Actualiser la clé API de Fournisseur témoin"]');
+  await wait(()=>find('button[aria-label="État de la clé API de Fournisseur témoin · Valide"]'),'État valide via Electric');
+  await click('button[aria-label="État de la clé API de Fournisseur témoin · Valide"]');
+  check(find('dialog[open]').textContent.includes('Quotas de fine-tuning par modèle')
+    &&find('dialog[open]').textContent.includes('model-fixture-fast'),'Détail des quotas via Electric');
+  check(find('td[data-label="Dernière actualisation réussie"]').textContent!=='—','Dernière réussite dans le tableau');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
   await click('button[aria-label="Supprimer une clé API de Fournisseur témoin"]');
   confirm();
   await wait(()=>!rows('Clés API').length&&!find('dialog[open]'),'Clé témoin retirée');
@@ -91,6 +101,11 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>rows('Fournisseurs').length===1&&readRows('Fournisseurs')[0].includes('Fournisseur témoin'),'Recherche sans accent');
   const providerTable=find('table[aria-label="Fournisseurs"]');
   check(Array.from(providerTable.tHead.rows[0].cells).map(cell=>cell.textContent).join(',').includes('Base URL API,Horodatage,État'),'Colonnes du fichier fournisseur');
+  check(find('td[data-label="Base URL API"] a')?.href==='https://example.org/v1','Lien de base API');
+  check(find('td[data-label="Liste des Modèles"] a')?.href==='https://example.org/models','Lien vers le modèle');
+  await click('button[aria-label="État du catalogue de Fournisseur témoin · Valide"]');
+  check(find('dialog[open]').textContent.includes('Dernier essai'),'Aperçu du rafraîchissement du catalogue');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
   find('td[data-label="Horodatage"] button').click();
   await wait(()=>find('dialog[open] pre')?.textContent.includes('catalogue-fournisseur'),'Aperçu du fichier fournisseur');
   Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
@@ -103,6 +118,10 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await click('button[aria-label="Actualiser le fichier"]');
   await wait(()=>find('.catalog-refreshing'),'Actualisation visible');
   await wait(()=>!find('.catalog-refreshing'),'Fin de l’actualisation');
+  await click('button[aria-label="État du catalogue de Fournisseur témoin · Échec"]');
+  check(find('dialog[open]').textContent.includes('Catalogue indisponible')
+    &&find('td[data-label="Horodatage"] button'),'Dernière réussite conservée après un échec');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
   await click('nav[aria-label="Agents"] a[href="/agents/models"]');
   await pagination('Modèles','fixture-12');
   check(find('[role=tab][aria-selected=true]').textContent==='Tous','Onglet initial Tous');
@@ -336,7 +355,12 @@ try{
         const source=files.find(file=>file.provider_id===id)
         source.state='downloading'
         publish()
-        setTimeout(()=>{source.state='idle';publish()},700)
+        setTimeout(()=>{
+          source.state='error'
+          source.attempted_at='2026-11-23T07:00:00Z'
+          source.last_refresh_error='agent-catalog-unavailable'
+          publish()
+        },700)
         return json(response,{queued:true})
       }
       if(route==='/api/v1/administration/agent-completion-catalog/file')return json(response,{data:['catalogue-completion']})
@@ -354,7 +378,8 @@ try{
         const provider={id:1,...values}
         providers.push(provider)
         keys.push({id:'provider-fixture-key',provider_id:1})
-        files.push({id:'provider-1',provider_id:1,url:provider.models_url,valid:true,state:'idle',error:'',refreshed_at:'2026-11-23T06:00:00Z'})
+        files.push({id:'provider-1',provider_id:1,url:provider.models_url,valid:true,state:'idle',error:'',
+          attempted_at:'2026-11-23T06:00:00Z',refreshed_at:'2026-11-23T06:00:00Z'})
         publish()
         return json(response,provider)
       }
@@ -412,6 +437,15 @@ try{
         publish()
         return json(response,key)
       }
+      if(route==='/api/v1/administration/agent-api-keys/refresh'){
+        const {id}=await body(request)
+        assert.equal(id,'provider-fixture-key')
+        const key=keys.find(candidate=>candidate.id===id)
+        Object.assign(key,{valid:true,checked_at:'2026-11-23T06:14:00Z',refreshed_at:'2026-11-23T06:14:00Z',
+          metrics:{fine_tuning:[{model:'model-fixture-fast',jobs_so_far_today:0,max_jobs_per_day:8}]}})
+        publish()
+        return json(response,{queued:true})
+      }
       if(route==='/api/v1/administration/agent-api-keys/remove'){
         const {id}=await body(request)
         assert(['provider-fixture-key','key-1'].includes(id))
@@ -453,7 +487,7 @@ try{
       assert.equal(result.passed,true,name+' : '+result.error+' (fournisseurs fixture : '+providers.length+')')
       assert.equal(reminders.seconds,420)
       assert.ok(scans>=3,'Les tableaux ont demandé une vérification en arrière-plan')
-      console.log(name+' : pagination, recherche, tri, suppressions et politiques de modèles vérifiés.')
+      console.log(name+' : liens, aperçus, actualisation Electric et parcours des catalogues vérifiés.')
     }finally{clearTimeout(timer);child.kill();await closed}
   }
 }finally{

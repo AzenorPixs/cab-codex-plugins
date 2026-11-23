@@ -217,6 +217,9 @@ def run(port=8790):
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
     from .agent_catalog_files import refresh as refresh_agent_catalog
+    from .agent_key_health import refresh as refresh_agent_keys
+    key_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-keys')
+    key_future=None;next_keys=0
     catalog_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-catalog')
     agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
     agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
@@ -247,6 +250,12 @@ def run(port=8790):
                 catalog_future=None
             if catalog_future is None and time.monotonic()>=next_catalog:
                 catalog_future=catalog_pool.submit(refresh_agent_catalog);next_catalog=time.monotonic()+5
+            if key_future is not None and key_future.done():
+                try:key_future.result()
+                except Exception as error:log.warning('agent key check unavailable',extra={'code':type(error).__name__})
+                key_future=None
+            if key_future is None and time.monotonic()>=next_keys:
+                key_future=key_pool.submit(refresh_agent_keys);next_keys=time.monotonic()+5
             if time.monotonic()>=next_daemon_report:
                 next_daemon_report=time.monotonic()+5
                 observe_daemon()
@@ -371,6 +380,7 @@ def run(port=8790):
         postgres_thread.join(timeout=10)
         forge_version_pool.shutdown(wait=True,cancel_futures=True)
         agent_config_pool.shutdown(wait=True,cancel_futures=True)
+        key_pool.shutdown(wait=True,cancel_futures=True)
         catalog_pool.shutdown(wait=True,cancel_futures=True)
         agents_pool.shutdown(wait=True,cancel_futures=True)
         native_pool.shutdown(wait=True,cancel_futures=True)

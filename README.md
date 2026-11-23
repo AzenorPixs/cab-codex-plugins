@@ -260,6 +260,14 @@ projets utilisent leur identifiant métier dans les URL, sans modifier leurs
 identités internes ; voir docs/platform-operations.md pour la compatibilité.
 
 
+Sous **Agents → Fournisseurs**, les URL ouvrent les sites et l’état ouvre le
+détail du dernier essai de catalogue. Sous **Agents → Clés API**, le bouton
+d’actualisation demande un contrôle immédiat. L’état ouvre le résultat et les
+mesures disponibles. La colonne **Dernière actualisation réussie** conserve
+l’horodatage du dernier contrôle réussi. Chaque clé est aussi contrôlée à un
+créneau aléatoire dans chaque fenêtre de quatre heures. L’aperçu OpenAI affiche
+les quotas de fine-tuning par modèle quand le fournisseur les retourne.
+
 L’accueil `/projects/<ID>` est la destination de la sélection d’un projet et
 de sa maison ; les sessions sont accessibles à `/projects/<ID>/sessions`.
 Les valeurs publiques de `project.env` sont mémorisées dans `projects` pour
