@@ -13,11 +13,11 @@ const project={
   id:'fixture',identifier:'fixture',name:'Projet de recette',root:'/projet',creation_state:'READY',
   public_metadata:{
     revision:1,state:'available',
-    values:Object.fromEntries(labels.flatMap(([forge])=>[
+    values:{PROJECT_DOCKERED:'Yes',...Object.fromEntries(labels.flatMap(([forge])=>[
       ['REMOTE_'+forge+'_BASE_URL','https://example.org'],
       ['REMOTE_'+forge+'_OWNER','groupe'],
       ['REMOTE_'+forge+'_REPOSITORY','projet'],
-    ])),
+    ]))},
     forge_repositories:Object.fromEntries(labels.map(([forge])=>[
       forge,{available:false,branch:'derniere-branche-valide',commit:'a'.repeat(40)},
     ])),
@@ -87,6 +87,18 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
     control(dialog,'Annuler').click();
     await wait(()=>!find('dialog[open]'),'Fermeture du sens inverse '+label);
   }
+  find('button[aria-label="Rafraîchir l’état Git"]').click();
+  dialog=await wait(()=>find('dialog[open][aria-label="Overview · Rafraîchissement de Git"]'),'Overview Git local');
+  check(dialog.textContent.includes('Le dépôt Git local est indisponible.'),'Motif Git local');
+  control(dialog,'Fermer').click();
+  await wait(()=>!find('dialog[open]'),'Fermeture du diagnostic Git local');
+  find('button[aria-label="Publier les artefacts vers GitLab"]').click();
+  dialog=await wait(()=>find('dialog[open][aria-label="Overview de publication GitLab"]'),'Overview de publication');
+  check(dialog.textContent.includes('fixture-publication')&&dialog.textContent.includes('pfd:1.0.2')&&dialog.textContent.includes('Inventaire local'),'Détail de la publication échouée');
+  control(dialog,'Fermer').click();
+  await wait(()=>!find('dialog[open]'),'Fermeture du diagnostic de publication');
+  Array.from(frame.contentDocument.querySelectorAll('.forge-card-gitlab button')).find(button=>button.textContent==='Publication refusée ou échouée').click();
+  await wait(()=>find('dialog[open][aria-label="Overview de publication GitLab"]'),'Réouverture du reçu');
   await send({passed:true});
 })().catch(error=>send({error:error.message}));
 </script>`
@@ -117,6 +129,17 @@ try{
       if(route==='/verification')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
       if(route==='/api/v1/health')return json(response,{initialized:true,state:'READY',csrf_token:'fixture'})
       if(route==='/api/v1/projects')return json(response,{projects:[project]})
+      if(route==='/api/v1/projects/fixture/git/status/refresh/manual')return json(response,{error:'project-git-unavailable'},409)
+      if(route==='/api/v1/projects/fixture/published-artifacts/GITLAB'){
+        counters.publications++
+        return json(response,{id:'fixture-publication',forge:'GITLAB',state:'PENDING'})
+      }
+      if(route==='/api/v1/projects/fixture/published-artifacts'){
+        return json(response,{rows:[],jobs:counters.publications?{GITLAB:{
+          id:'fixture-publication',forge:'GITLAB',state:'FAILED',error:'artifact-local-docker-version-missing',
+          details:{phase:'inventory',tag:'pfd:1.0.2'},
+        }}:{}})
+      }
       const gitRoute=route.match(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)\/(reconcile|sync-prepare|push-prepare|sync|push)$/)
       const gitAction=gitRoute?.[2]
       let body
@@ -176,7 +199,7 @@ try{
     ['Chromium','/usr/bin/chromium',['--headless','--no-sandbox','--disable-background-networking','--user-data-dir='+join(workspace,'chromium')]],
     ['Firefox','/usr/bin/firefox',['--headless','--no-remote','--profile',await mkdtemp(join(workspace,'firefox-'))]],
   ]){
-    counters={automatic:0,manual:{},checks:0,previews:0,writes:0}
+    counters={automatic:0,manual:{},checks:0,previews:0,writes:0,publications:0}
     const observation=new Promise(resolve=>{report=resolve})
     const child=spawn(binary,[...args,'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
     const closed=once(child,'close')
@@ -184,7 +207,7 @@ try{
     try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
-      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1},checks:2,previews:5,writes:0})
+      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1},checks:2,previews:5,writes:0,publications:1})
       console.log(name+' — diagnostic et réconciliation vérifiés, aucun envoi ni rejeu.')
     }finally{
       clearTimeout(timer)

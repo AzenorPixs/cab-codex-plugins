@@ -1,3 +1,4 @@
+import {actionMessage} from './ForgeActionOverview'
 import {GitCommitOverview} from './GitCommitOverview'
 import {useEffect,useRef,useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
@@ -14,7 +15,7 @@ export function GitHistoryOverview({projectId,count}:{projectId:string;count:num
     if(!open)return
     let active=true;setLoading(true);setError('')
     const query=new URLSearchParams({page:String(page)});if(head)query.set('head',head);if(search)query.set('search',search)
-    api<History>(`projects/${encodeURIComponent(projectId)}/git/history?${query}`).then(value=>{if(active)setHistory(value)}).catch(()=>{if(active){setHistory(null);setError('L’historique des commits est indisponible.')}}).finally(()=>{if(active)setLoading(false)})
+    api<History>(`projects/${encodeURIComponent(projectId)}/git/history?${query}`).then(value=>{if(active)setHistory(value)}).catch(reason=>{if(active){setHistory(null);setError(actionMessage(reason,'L’historique des commits est indisponible.'))}}).finally(()=>{if(active)setLoading(false)})
     return ()=>{active=false}
   },[open,page,head,search,projectId,revision])
   const navigate=(next:number)=>{if(!head&&history)setHead(history.head);setPage(next)}

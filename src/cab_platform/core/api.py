@@ -109,7 +109,11 @@ class AgentUserRemove(Schema):
     id:int
 
 @api.exception_handler(commands.Refused)
-def refused(request,error):return api.create_response(request,{'error':error.code},status=error.status)
+def refused(request,error):
+    body={'error':error.code}
+    if error.details is not None:
+        body['details']=error.details
+    return api.create_response(request,body,status=error.status)
 
 
 def csrf_check(request):

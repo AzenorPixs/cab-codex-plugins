@@ -5,7 +5,7 @@ import sys
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from django.conf import settings
@@ -19,10 +19,28 @@ import hashlib
 import httpx
 from cab_platform.forge_artifacts import observe, merge
 from cab_platform.forge_repository import get_json
+from cab_platform import forge_publish_artifacts
 from cab_platform.forge_publish_artifacts import release_debian, release_docker
 
 
 class ForgeArtifactsTests(unittest.TestCase):
+    def test_existing_latest_without_project_version_reports_missing_docker_tag(self):
+        project=SimpleNamespace(identifier='pfd',public_metadata={'values':{'PROJECT_DOCKERED':'Yes','PROJECT_VERSION':'1.0.2'}})
+        job=SimpleNamespace(project=project,forge='GITHUB',plan={'signature':'configuration'})
+        rows=Mock()
+        rows.select_related.return_value.get.return_value=job
+        with patch.object(forge_publish_artifacts.ProjectForgeArtifactPublication,'objects',rows), \
+                patch.object(forge_publish_artifacts,'identity',return_value='configuration'), \
+                patch.object(forge_publish_artifacts,'docker_inventory',
+                             side_effect=[{}, {'local':(None,{'tags':['pfd:latest']})}]), \
+                patch.dict(forge_publish_artifacts.PUBLISHERS,{'GITHUB':Mock()}) as publishers:
+            forge_publish_artifacts.worker('fixture')
+            publishers['GITHUB'].assert_not_called()
+        rows.filter.return_value.update.assert_called_once_with(state='FAILED',receipt={
+            'error':'artifact-local-docker-version-missing','issued':False,
+            'details':{'phase':'inventory','tag':'pfd:1.0.2'},
+        })
+
     def test_release_and_each_registry_are_independent(self):
         flags={'PROJECT_DEBIAN_PACKAGE':'Yes','PROJECT_DOCKERED':'Yes'}
         for forge, registry, body in [

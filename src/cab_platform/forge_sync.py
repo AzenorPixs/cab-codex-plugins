@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, digest, require
 from .core.models import Event, Project
-from .forge_push import OID, context, identity, local_git, remote_git, remote_head, require_no_pending_transfer, transfer_receipts
+from .forge_push import OID, context, identity, local_git, push_rejection, remote_git, remote_head, require_no_pending_transfer, transfer_receipts
 from .preexisting_git import git_guard
 
 
@@ -89,7 +89,8 @@ def reconcile(project_id, forge, actor, confirmation=None):
         return {'reconciled': False,
                 'error': 'forge-reconcile-branch-diverged' if observed != expected else 'forge-reconcile-tags-diverged',
                 'details': {'branch': observed_refs['branch'], 'expected': expected, 'observed': observed,
-                            'tag_count': len(changes), 'tags': changes[:20], 'confirmation': fingerprint}}
+                            'tag_count': len(changes), 'tags': changes[:1000], 'confirmation': fingerprint,
+                            'cause': receipt.get('diagnostic')}}
 
     with transaction.atomic():
         current = Project.objects.select_for_update().get(pk=project_id)
@@ -268,6 +269,8 @@ def execute(project_id, forge, actor, nonce):
         if ref not in source_tags:
             leases.append('--force-with-lease=' + ref + ':' + oid)
             updates.append(':' + ref)
+    diagnostic = None
+    rejected = False
     try:
         if reverse:
             with git_guard():
@@ -279,7 +282,16 @@ def execute(project_id, forge, actor, nonce):
             if success:
                 final_head, final_tags, _ = refs(project, forge, owner, group, options, env, url, branch)
                 success = final_head == head and final_tags == source_tags
-    except Exception:
+                if not success:
+                    diagnostic = 'forge-sync-refs-changed'
+            else:
+                diagnostic, complete = push_rejection(result, {branch_ref, *source_tags, *observed_tags})
+                if complete:
+                    final_head, final_tags, _ = refs(project, forge, owner, group, options, env, url, branch)
+                    rejected = final_head == observed_remote and final_tags == observed_tags
+    except Exception as error:
+        if isinstance(error, Refused) and not diagnostic:
+            diagnostic = error.code
         success = False
     with transaction.atomic():
         current = Project.objects.select_for_update().get(pk=project_id)
@@ -287,12 +299,17 @@ def execute(project_id, forge, actor, nonce):
         records = dict(config.get('forge_sync') or {})
         state = dict(records.get(forge) or {})
         if state.get('nonce') == nonce and state.get('state') == 'RUNNING':
-            state['state'] = 'COMPLETE' if success else 'UNKNOWN'
+            state['state'] = 'COMPLETE' if success else 'FAILED' if rejected else 'UNKNOWN'
+            if diagnostic:
+                state['diagnostic'] = diagnostic
             records[forge] = state
             config['forge_sync'] = records
             current.configuration = config
             current.save(update_fields=['configuration'])
-    require(success, 'forge-sync-local-unconfirmed' if reverse else 'forge-push-result-unknown', 409)
+    if not success:
+        code = 'forge-sync-local-unconfirmed' if reverse else 'forge-push-result-unknown'
+        raise Refused(diagnostic if rejected else code,
+                      details={'cause': diagnostic} if diagnostic and not rejected else None)
     def refresh():
         from .forge_repository import refresh_one
         if reverse:

@@ -1,3 +1,4 @@
+import {actionMessage} from './ForgeActionOverview'
 import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {createPortal} from 'react-dom'
@@ -19,7 +20,7 @@ export function GitCommitOverview({projectId,commit,forge,historyHead,onEdited,e
     if(editor)return
     let active=true;setContent('');setError('')
     const path=historyHead?`projects/${encodeURIComponent(projectId)}/git/history/commit/${encodeURIComponent(currentCommit)}?${new URLSearchParams({head:currentHead})}`:forge?`projects/${encodeURIComponent(projectId)}/forges/${encodeURIComponent(forge)}/commit/${encodeURIComponent(currentCommit)}`:`projects/${encodeURIComponent(projectId)}/git/commit/${encodeURIComponent(currentCommit)}`
-    api<{content:string}>(path).then(result=>{if(active)setContent(result.content)}).catch(()=>{if(active)setError('Le détail de ce commit est indisponible. Actualisez la page si le dépôt a changé.')})
+    api<{content:string}>(path).then(result=>{if(active)setContent(result.content)}).catch(reason=>{if(active)setError(actionMessage(reason,'Le détail de ce commit est indisponible. Actualisez la page si le dépôt a changé.'))})
     return ()=>{active=false}
   },[open,projectId,currentCommit,forge,currentHead,historyHead])
   function close(){if(busy)return;setOpen(false);setEditing(false);setDraft(null);setMetadata(null);if(changed){setChanged(false);onEdited?.()}}

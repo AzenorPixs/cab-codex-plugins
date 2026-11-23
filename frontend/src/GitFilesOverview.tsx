@@ -1,3 +1,4 @@
+import {actionMessage} from './ForgeActionOverview'
 import {useEffect,useMemo,useRef,useState} from 'react'
 import {api} from './api'
 
@@ -6,7 +7,7 @@ export function GitFilesOverview({projectId,kind,label,count}:{projectId:string;
   useEffect(()=>{
     if(!open){dialog.current?.close();return}
     dialog.current?.showModal();let active=true;setPage(0);setSearch('');setContent('');setError('')
-    api<{content:string}>(`projects/${encodeURIComponent(projectId)}/git/files/${encodeURIComponent(kind)}`).then(result=>{if(active)setContent(result.content)}).catch(()=>{if(active)setError('La liste des fichiers est temporairement indisponible.')})
+    api<{content:string}>(`projects/${encodeURIComponent(projectId)}/git/files/${encodeURIComponent(kind)}`).then(result=>{if(active)setContent(result.content)}).catch(reason=>{if(active)setError(actionMessage(reason,'La liste des fichiers est temporairement indisponible.'))})
     return ()=>{active=false}
   },[open,projectId,kind])
   const displayLabel=label==='Conflits'?'en conflit':label.toLowerCase()

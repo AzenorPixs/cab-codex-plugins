@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, require
 from .core.models import Project
-from .forge_repository import configured, identity
+from .forge_repository import identity, missing_configuration
 from .forge_settings import crypt
 from .forge_version import base_for
 from .project_git import probe
@@ -35,7 +35,8 @@ def context(project, forge):
     require(forge in FORGES and project.creation_state == 'READY', 'forge-push-unavailable', 409)
     require(probe(project) == 1, 'forge-push-git-unavailable', 409)
     values = (project.public_metadata or {}).get('values', {})
-    require(configured(project, values, forge), 'forge-push-configuration-missing', 409)
+    missing = missing_configuration(project, values, forge)
+    require(not missing, 'forge-push-configuration-missing', 409, details={'missing': missing})
     prefix = 'REMOTE_' + forge + '_'
     owner, repo, branch = (values.get(prefix + key, '') for key in ('OWNER', 'REPOSITORY', 'BRANCH'))
     base = base_for(values, forge)
@@ -95,9 +96,53 @@ def remote_git(project, forge, owner, group, options, env, *args, timeout=30):
     with git_credentials(project, forge, owner, group) as (fd, askpass):
         process_env = {**env, 'GIT_ASKPASS': askpass, 'CAB_FORGE_USER': owner, 'CAB_FORGE_TOKEN_FD': str(fd)}
         try:
-            return subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'credential.helper=', '-c', 'http.extraHeader=', '-c', 'http.proxy=', '-c', 'http.sslVerify=false', '-c', 'http.followRedirects=false', *args], cwd='/', env=process_env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, pass_fds=(fd,), **options)
+            return subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'credential.helper=', '-c', 'http.extraHeader=', '-c', 'http.proxy=', '-c', 'http.sslVerify=false', '-c', 'http.followRedirects=false', *args], cwd='/', env=process_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE if args[0]=='push' else subprocess.DEVNULL, timeout=timeout, pass_fds=(fd,), **options)
         except (OSError, subprocess.TimeoutExpired):
             raise Refused('forge-push-transport-unknown', 409) from None
+
+
+def push_rejection(result, refs):
+    """Return an allowlisted reason and whether Git reported a complete refusal."""
+    stdout = result.stdout or b''
+    stderr = (result.stderr or b'').lower()
+    if len(stdout) > 4194304:
+        return 'forge-push-transport-unknown', False
+    if b'fatal: the receiving end does not support --atomic push' in stderr.splitlines():
+        return 'forge-push-atomic-unsupported', not stdout
+    flags = {}
+    reasons = set()
+    for line in stdout.splitlines():
+        if line.startswith(b'To ') or line == b'Done':
+            continue
+        fields = line.split(b'\t')
+        if len(fields) != 3:
+            return 'forge-push-transport-unknown', False
+        flag, refspec, summary = fields
+        _, separator, ref = refspec.partition(b':')
+        if not separator or ref in flags or flag not in (b'!', b'='):
+            return 'forge-push-transport-unknown', False
+        if flag == b'!':
+            if summary.startswith(b'[remote rejected]'):
+                reasons.add('forge-push-remote-rejected')
+            elif summary == b'[rejected] (stale info)':
+                reasons.add('forge-sync-refs-changed')
+            elif summary == b'[rejected] (atomic push failed)':
+                pass
+            else:
+                return 'forge-push-transport-unknown', False
+        flags[ref] = flag
+    if b'protected branch' in stderr:
+        reason = 'forge-push-protected-branch'
+    elif b'protected tag' in stderr:
+        reason = 'forge-push-protected-tag'
+    elif 'forge-push-remote-rejected' in reasons:
+        reason = 'forge-push-remote-rejected'
+    elif 'forge-sync-refs-changed' in reasons:
+        reason = 'forge-sync-refs-changed'
+    else:
+        return 'forge-push-transport-unknown', False
+    complete = flags.keys() == {ref.encode('utf-8') for ref in refs} and b'!' in flags.values()
+    return reason, complete
 
 
 def remote_head(project, forge, owner, group, options, env, url, branch):
@@ -175,10 +220,17 @@ def execute(project_id, forge, actor, nonce):
         config['forge_push'] = records
         current.configuration = config
         current.save(update_fields=['configuration'])
+    diagnostic = None
+    rejected = False
     try:
         result = remote_git(project, forge, owner, group, options, env, 'push', '--porcelain', '--no-follow-tags', '--force-with-lease=refs/heads/' + branch + ':' + expected, url, head + ':refs/heads/' + branch, timeout=120)
         success = result.returncode == 0
-    except Exception:
+        if not success:
+            diagnostic, complete = push_rejection(result, {'refs/heads/' + branch})
+            rejected = complete and remote_head(project, forge, owner, group, options, env, url, branch) == expected
+    except Exception as error:
+        if isinstance(error, Refused) and not diagnostic:
+            diagnostic = error.code
         success = False
     with transaction.atomic():
         current = Project.objects.select_for_update().get(pk=project_id)
@@ -186,12 +238,16 @@ def execute(project_id, forge, actor, nonce):
         records = dict(config.get('forge_push') or {})
         current_record = dict(records.get(forge) or {})
         if current_record.get('nonce') == nonce and current_record.get('state') == 'RUNNING':
-            current_record['state'] = 'COMPLETE' if success else 'UNKNOWN'
+            current_record['state'] = 'COMPLETE' if success else 'FAILED' if rejected else 'UNKNOWN'
+            if diagnostic:
+                current_record['diagnostic'] = diagnostic
             records[forge] = current_record
             config['forge_push'] = records
             current.configuration = config
             current.save(update_fields=['configuration'])
-    require(success, 'forge-push-result-unknown', 409)
+    if not success:
+        raise Refused(diagnostic if rejected else 'forge-push-result-unknown',
+                      details={'cause': diagnostic} if diagnostic and not rejected else None)
     def refresh():
         from .forge_repository import refresh_one
         try:refresh_one(project_id, forge, wait=True, managed=False, automatic=False)

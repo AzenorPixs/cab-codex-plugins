@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Afficher les refus des actions de Git local et des forges dans leurs Overviews. Distinguer un refus de transfert Git confirmé et détailler les prérequis et reçus de publication Docker.
+
 - Préremplir « Initialisation du projet » pour le premier commit local et appliquer ce défaut si le message est vide.
 
 - Ouvrir l’éditeur Overview sans `project.env` et créer le fichier au premier enregistrement. Initialiser aussi le fichier avec les métadonnées disponibles lors de la création d’un projet.

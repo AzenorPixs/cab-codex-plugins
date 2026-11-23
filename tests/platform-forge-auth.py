@@ -1,6 +1,7 @@
 """Qualification des forges avec des réponses contrôlées et un serveur TLS local."""
 from contextlib import nullcontext
 from copy import deepcopy
+from datetime import timedelta
 import errno
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -19,6 +20,7 @@ from urllib.parse import unquote, urlsplit
 
 import django
 from django.conf import settings
+from django.utils import timezone
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
@@ -411,6 +413,19 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                 self.assertEqual(self.git(target, 'status', '--porcelain'), '')
                 self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
 
+                hook = self.workspace / (forge+'.git') / 'hooks' / 'pre-receive'
+                hook.write_text('#!/bin/sh\nprintf "%s\\n" "protected branch" >&2\nexit 1\n')
+                hook.chmod(0o700)
+                rejected = forge_push.remote_git(*context, 'push', '--atomic', '--porcelain', '--no-follow-tags',
+                    '--force-with-lease='+branch+':'+head, '--force-with-lease='+tag+':'+head, url,
+                    previous+':'+branch, ':'+tag)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(forge_push.push_rejection(rejected, {branch, tag}),
+                                 ('forge-push-protected-branch', True))
+                self.assertEqual(forge_push.push_rejection(rejected, {branch, tag, 'refs/tags/extra'}),
+                                 ('forge-push-protected-branch', False))
+                self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
+
 
 class ForgeReconciliationTests(unittest.TestCase):
     head = 'a' * 40
@@ -474,6 +489,30 @@ class ForgeReconciliationTests(unittest.TestCase):
         self.refs.assert_called_once()
         self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'], 'RECONCILED')
         self.assertEqual(self.event.call_args.kwargs['data']['observed']['tags'], self.tags)
+
+    def test_sync_rejection_requires_unchanged_references(self):
+        self.as_sync()
+        record = self.locked.configuration['forge_sync']['GITLAB']
+        record.update(state='READY', local_branch='main', remote_tags={}, source='local',
+                      expires=(timezone.now()+timedelta(minutes=5)).isoformat())
+        self.patch(forge_sync, 'local_position', return_value=('main', self.head))
+        self.patch(forge_sync, 'local_tags', return_value=self.tags)
+        status = (b'!\tabc:refs/heads/main\t[remote rejected] (hook declined)\n'
+                  b'!\tabc:refs/tags/1.0.0\t[remote rejected] (hook declined)\n')
+        self.patch(forge_sync, 'remote_git', return_value=SimpleNamespace(
+            returncode=1, stdout=status, stderr=b'protected branch'))
+        for observed,state,code in (
+            ((self.before, {}, {}), 'FAILED', 'forge-push-protected-branch'),
+            ((self.head, {}, {}), 'UNKNOWN', 'forge-push-result-unknown'),
+        ):
+            with self.subTest(state=state):
+                self.locked.configuration['forge_sync']['GITLAB'] = dict(record)
+                self.refs.side_effect = [(self.before, {}, {}), observed]
+                with self.assertRaises(forge_sync.Refused) as error:
+                    forge_sync.execute('projet', 'GITLAB', '7', record['nonce'])
+                self.assertEqual(error.exception.code, code)
+                self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'], state)
+                self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['diagnostic'], 'forge-push-protected-branch')
 
     def test_running_remains_protected_without_observation(self):
         self.receipt['state'] = 'RUNNING'

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react'
 import {api} from './api'
+import {ForgeActionError} from './ForgeActionOverview'
 import {canVerifyForgeOperation,VerifyForgeOperation} from './ForgePush'
 
 type Source='local'|'remote'
@@ -11,7 +12,7 @@ export function ForgeSync({projectId,forge,label}:{projectId:string;forge:string
   const [source,setSource]=useState<Source|null>(null)
   const [busy,setBusy]=useState(false)
   const [preview,setPreview]=useState<Preview|null>(null)
-  const [error,setError]=useState('')
+  const [error,setError]=useState<unknown>(null)
   const [finished,setFinished]=useState(false)
   const [canVerify,setCanVerify]=useState(false)
   const [attempt,setAttempt]=useState(0)
@@ -25,27 +26,27 @@ export function ForgeSync({projectId,forge,label}:{projectId:string;forge:string
   useEffect(()=>{
     if(!open||!source)return
     let active=true
-    setPreview(null);setError('');setFinished(false);setCanVerify(false);setBusy(true)
+    setPreview(null);setError(null);setFinished(false);setCanVerify(false);setBusy(true)
     api<Preview>(`${path}/sync-prepare`,{source}).then(result=>{if(active)setPreview(result)})
       .catch(reason=>{if(active){
         setCanVerify(canVerifyForgeOperation(reason))
-        setError(reason instanceof Error?reason.message:'Comparaison indisponible.')
+        setError(reason)
       }}).finally(()=>{if(active)setBusy(false)})
     return ()=>{active=false}
   },[open,path,source,attempt])
 
   const close=()=>{
-    setOpen(false);setSource(null);setPreview(null);setError('');setFinished(false);setCanVerify(false)
+    setOpen(false);setSource(null);setPreview(null);setError(null);setFinished(false);setCanVerify(false)
   }
   const synchronize=async()=>{
     if(!preview)return
-    setBusy(true);setError('')
+    setBusy(true);setError(null)
     try{
       await api(`${path}/sync`,{nonce:preview.nonce})
       setFinished(true);setPreview(null)
     }catch(reason){
       setCanVerify(canVerifyForgeOperation(reason))
-      setError(reason instanceof Error?reason.message:'Synchronisation non confirmée.')
+      setError(reason)
       setPreview(null)
     }finally{setBusy(false)}
   }
@@ -81,9 +82,9 @@ export function ForgeSync({projectId,forge,label}:{projectId:string;forge:string
         </ul></div>:<p>Aucun tag à modifier.</p>}
       </>}
       {finished&&<p role="status">{reverse?'Dépôt local aligné sur la forge.':'Forge alignée sur Git local.'}</p>}
-      {error&&<p role="alert">{error}</p>}
+      <ForgeActionError error={error} fallback="Synchronisation indisponible."/>
       <div className="form-actions">
-        {open&&canVerify&&<VerifyForgeOperation path={path} busy={busy} onBusy={setBusy} onVerified={()=>setError('')} onPrepare={()=>setAttempt(value=>value+1)}/>}
+        {open&&canVerify&&<VerifyForgeOperation path={path} busy={busy} onBusy={setBusy} onVerified={()=>setError(null)} onPrepare={()=>setAttempt(value=>value+1)}/>}
         {preview&&<button type="button" onClick={()=>void synchronize()} disabled={busy}>Synchroniser</button>}
         <button type="button" onClick={close} disabled={busy}>{preview?'Annuler':'Fermer'}</button>
       </div>

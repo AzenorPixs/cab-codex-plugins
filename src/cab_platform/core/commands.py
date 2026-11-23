@@ -19,10 +19,12 @@ PROTECTED={'.git','.ssh','.gnupg','.opencode','.codex','.venv','venv','node_modu
 SECRET=re.compile(r'(^|/)(project\.env|.*\.env(?:\..*)?|id_rsa|id_ed25519|credentials\.(?:json|yaml)|secrets\.(?:json|yaml))$|\.(?:pem|key|p12|pfx|crt|cer|der)$')
 
 class Refused(Exception):
-    def __init__(self,code,status=409):super().__init__(code);self.code=code;self.status=status
+    def __init__(self,code,status=409,*,details=None):
+        super().__init__(code)
+        self.code,self.status,self.details=code,status,details
 
-def require(value,code,status=409):
-    if not value:raise Refused(code,status)
+def require(value,code,status=409,*,details=None):
+    if not value:raise Refused(code,status,details=details)
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()

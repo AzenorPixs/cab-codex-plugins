@@ -1,3 +1,4 @@
+import {actionMessage} from './ForgeActionOverview'
 import {useEffect,useRef,useState} from 'react'
 import {api} from './api'
 
@@ -6,7 +7,7 @@ export function GitChangesOverview({projectId,count}:{projectId:string;count?:nu
   useEffect(()=>{
     if(!open){dialog.current?.close();return}
     dialog.current?.showModal();let active=true;setSearch('');setContent('');setError('')
-    api<{content:string}>(`projects/${encodeURIComponent(projectId)}/git/changes`).then(result=>{if(active)setContent(result.content)}).catch(()=>{if(active)setError('Les modifications Git sont temporairement indisponibles.')})
+    api<{content:string}>(`projects/${encodeURIComponent(projectId)}/git/changes`).then(result=>{if(active)setContent(result.content)}).catch(reason=>{if(active)setError(actionMessage(reason,'Les modifications Git sont temporairement indisponibles.'))})
     return ()=>{active=false}
   },[open,projectId])
   const query=search.trim().toLocaleLowerCase();const lines=content.split('\n').filter(line=>!query||line.toLocaleLowerCase().includes(query))

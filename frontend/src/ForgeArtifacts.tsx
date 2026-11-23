@@ -1,7 +1,8 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
-import {api} from './api'
+import {api,ApiError,apiErrorMessage} from './api'
+import {ForgeActionOverview} from './ForgeActionOverview'
 import {newRequestId} from './requestId'
 
 const formats=[['debian','PROJECT_DEBIAN_PACKAGE','Artefact Debian'],['docker','PROJECT_DOCKERED','Artefact Docker']] as const
@@ -9,8 +10,9 @@ type Format=typeof formats[number][0]
 type Artifact={name:string;tags:string[]}
 type Observation={available:boolean;items:Artifact[]}
 type Row={forge:string;source:string[];artifacts:Partial<Record<Format,Observation>>}
-type Job={id:string;forge:string;state:string;error?:string|null}
-type Snapshot={rows:Row[];local_kinds:Format[];jobs:Record<string,Job>}
+type Diagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number}
+type Job={id:string;forge:string;state:string;error?:string|null;details?:Diagnostic|null}
+type Snapshot={rows:Row[];jobs:Record<string,Job>}
 
 const busy=(job?:Job)=>job?.state==='PENDING'||job?.state==='RUNNING'
 const on=(value?:string)=>['yes','1'].includes((value||'').toLowerCase())
@@ -42,7 +44,7 @@ export function useForgeArtifacts(projectId:string){
     return ()=>{unsubscribe();controller.abort()}
   },[projectId])
   const rows=live?.projectId===projectId?live.rows:query.data?.rows||[]
-  return {rows,local:query.data?.local_kinds||[],jobs:query.data?.jobs||{},publish}
+  return {rows,jobs:query.data?.jobs||{},publish}
 }
 type State=ReturnType<typeof useForgeArtifacts>
 
@@ -59,7 +61,7 @@ export function PublishedArtifactRows({state,forge,values}:{state:State;forge:st
 }
 
 export function PublishForgeArtifacts({state,forge,values,label}:{state:State;forge:string;values:Record<string,string>;label:string}){
-  if(!formats.some(([kind,flag])=>state.local.includes(kind)&&on(values[flag])))return null
+  if(!formats.some(([,flag])=>on(values[flag])))return null
   const job=state.jobs[forge]
   const publishing=busy(job)||(state.publish.isPending&&state.publish.variables===forge)
   const disabled=state.publish.isPending||Object.values(state.jobs).some(job=>busy(job)||job.state==='UNKNOWN')
@@ -74,8 +76,40 @@ export function PublishForgeArtifacts({state,forge,values,label}:{state:State;fo
 
 const jobLabels:Record<string,string>={PENDING:'Publication en attente',RUNNING:'Publication en cours',
   COMPLETED:'Publication confirmée',FAILED:'Publication refusée ou échouée',UNKNOWN:'Résultat de publication à vérifier'}
-export function ForgeArtifactStatus({state,forge}:{state:State;forge:string}){
-  const job=state.jobs[forge]
-  return <>{job&&<p role="status">{jobLabels[job.state]}{job.error==='artifact-forge-tag-missing'?' · Tag de version absent sur la forge':''}</p>}
-    {state.publish.error&&state.publish.variables===forge&&<p role="alert">{state.publish.error.message}</p>}</>
+const phases:Record<string,string>={
+  configuration:'Configuration de la forge',inventory:'Inventaire local',repository:'Lecture du dépôt distant',
+  'remote-tag':'Vérification du tag Git distant','registry-configuration':'Configuration du registre Docker',
+  'registry-login':'Connexion au registre Docker','registry-inspect':'Vérification du tag Docker distant',
+  'local-tag':'Étiquetage de l’image locale','registry-push':'Envoi de l’image Docker','forge-api':'Appel de l’API de la forge',
+}
+export function ForgeArtifactStatus({state,forge,label}:{state:State;forge:string;label:string}){
+  const [open,setOpen]=useState(false)
+  const shown=useRef<string|Error|null>(null)
+  const submitted=state.publish.data?.forge===forge?state.publish.data:undefined
+  const observed=state.jobs[forge]
+  const job=submitted&&observed?.id!==submitted.id?submitted:observed
+  const failure=job?.state==='FAILED'||job?.state==='UNKNOWN'?job:undefined
+  const error=state.publish.variables===forge?state.publish.error:null
+  const trigger=error||(failure?.id===submitted?.id&&failure?failure.id:null)
+  useEffect(()=>{
+    if(trigger&&shown.current!==trigger){shown.current=trigger;setOpen(true)}
+  },[trigger])
+  const details=error instanceof ApiError?error.details as Diagnostic|undefined:failure?.details
+  return <>
+    {(error||failure)?<button type="button" className="agent-config-link" onClick={()=>setOpen(true)}>
+      {error?'Demande de publication refusée':jobLabels[failure!.state]}
+    </button>:job&&<p role="status">{jobLabels[job.state]}</p>}
+    {open&&(error||failure)&&<ForgeActionOverview title={`Overview de publication ${label}`} close={()=>setOpen(false)}>
+      <p role="alert">{error?.message||(failure?.error?apiErrorMessage(failure.error):'CAB ne dispose pas du détail de cette tentative.')}</p>
+      <dl>
+        <div><dt>État</dt><dd>{error?'Demande refusée':jobLabels[failure!.state]}</dd></div>
+        {!error&&failure&&<div><dt>Reçu</dt><dd><code>{failure.id}</code></dd></div>}
+        {details?.phase&&<div><dt>Étape</dt><dd>{phases[details.phase]||details.phase}</dd></div>}
+        {details?.tag&&<div><dt>Tag</dt><dd><code>{details.tag}</code></dd></div>}
+        {!!details?.missing?.length&&<div><dt>Éléments manquants</dt><dd>{details.missing.join(', ')}</dd></div>}
+        {details?.exit_code!==undefined&&<div><dt>Code de sortie</dt><dd>{details.exit_code}</dd></div>}
+        {details?.http_status!==undefined&&<div><dt>Statut HTTP</dt><dd>{details.http_status}</dd></div>}
+      </dl>
+    </ForgeActionOverview>}
+  </>
 }

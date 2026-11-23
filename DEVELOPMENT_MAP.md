@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Diagnostics des actions Git et de la publication Docker
+
+[diagnose-project-forge-actions](openspec/changes/archive/2026-11-23-diagnose-project-forge-actions/),
+code non attribué. Les Overviews détaillent les refus d’action Git et les
+échecs de publication. Le 23 novembre 2026, les tests Python ont exercé le
+refus atomique sur des dépôts temporaires. Chromium et Firefox ont vérifié
+l’affichage d’un échec de rafraîchissement local et d’un reçu de publication.
+
 ## Construction Docker locale et diagnostic Fabrique
 
 [decouple-docker-factory-and-diagnose-builds](openspec/changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/),

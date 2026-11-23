@@ -14,12 +14,12 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 import httpx
 from django.db import close_old_connections, connection, transaction
 
-from .artifact_builders import DOCKER, ENV, opened, regular
+from .artifact_builders import DOCKER, DOCKER_NAME, ENV, opened, regular
 from .connector_process import alive, identity as process_identity
 from .core.commands import Refused, identifier, require
 from .core.models import GitDelivery, Maintenance, Project, ProjectArtifactBuild, ProjectForgeArtifactPublication
 from .forge_artifacts import DEB, TAG
-from .forge_repository import FORGES, configured, get_json, identity, refresh_one
+from .forge_repository import FORGES, configured, get_json, identity, missing_configuration, refresh_one
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
 from .project_artifacts import debian_inventory, docker_inventory, enabled
@@ -32,7 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 def public(job):
-    return {'id':job.pk,'forge':job.forge,'state':job.state,'error':job.receipt.get('error')}
+    return {'id':job.pk,'forge':job.forge,'state':job.state,'error':job.receipt.get('error'),
+            'details':job.receipt.get('details')}
 
 
 def active(project):
@@ -182,35 +183,41 @@ def release_debian(project,client,base,root,forge,public_github,packages,mark):
 
 def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark):
     registry='ghcr.io' if forge=='GITHUB' else metadata.get('REMOTE_GITLAB_REGISTRY','') if forge=='GITLAB' else urlsplit(base).netloc
-    require(REGISTRY.fullmatch(registry) and (forge!='GITHUB' or github_public),'artifact-forge-registry-invalid',409)
+    require(REGISTRY.fullmatch(registry) and (forge!='GITHUB' or github_public),'artifact-forge-registry-invalid',409,
+            details={'phase':'registry-configuration'})
     tag=image['tag']
     require(TAG.fullmatch(tag) and re.fullmatch(r'sha256:[a-f0-9]{64}',image['image_id']),
             'artifact-local-changed',409)
     info=existing(client,root)
-    require(info is not None,'artifact-forge-unconfigured',409)
+    require(info is not None,'artifact-forge-unconfigured',409,details={'phase':'repository'})
     if tag!='latest':
         require(existing(client,root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')) is not None,
-                'artifact-forge-tag-missing',409)
+                'artifact-forge-tag-missing',409,details={'phase':'remote-tag','tag':tag})
     remote_name=registry+'/'+(owner+'/'+repo).lower()
     with tempfile.TemporaryDirectory(prefix='cab-registry-') as config:
         args=[*DOCKER,'--config',config]
         result=subprocess.run([*args,'login',registry,'--username',owner.rsplit('/',1)[-1],'--password-stdin'],
                               input=token.encode(),env=ENV,capture_output=True,timeout=30)
-        require(result.returncode==0,'artifact-forge-registry-auth-failed',409)
+        require(result.returncode==0,'artifact-forge-registry-auth-failed',409,
+                details={'phase':'registry-login','exit_code':result.returncode})
         if tag!='latest':
             checked=subprocess.run([*args,'manifest','inspect',remote_name+':'+tag],
                                    env=ENV,capture_output=True,timeout=30)
-            require(checked.returncode!=0,'artifact-forge-version-conflict',409)
+            require(checked.returncode!=0,'artifact-forge-version-conflict',409,
+                    details={'phase':'registry-inspect','tag':tag})
             require(b'no such manifest' in checked.stderr.lower() or b'manifest unknown' in checked.stderr.lower(),
-                    'artifact-forge-publication-unconfirmed',409)
+                    'artifact-forge-registry-inspect-failed',409,
+                    details={'phase':'registry-inspect','tag':tag,'exit_code':checked.returncode})
         for label in dict.fromkeys([tag,'latest']):
             target=remote_name+':'+label
             env={**ENV,'DOCKER_CONFIG':config}
             tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
-            require(tagged.returncode==0,'artifact-local-changed',409)
+            require(tagged.returncode==0,'artifact-local-changed',409,
+                    details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
             mark()
             pushed=subprocess.run([*args,'push','--quiet',target],env=env,capture_output=True,timeout=1800)
-            require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409)
+            require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409,
+                    details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
 
 
 def release_forgejo(project,values,plan,mark):
@@ -252,10 +259,12 @@ def request(project,forge,request_id):
             and not GitDelivery.objects.filter(project=project,state__in=(*ACTIVE,'PARTIAL')).exists(),
             'artifact-build-active',409)
     values=project.public_metadata.get('values',{})
-    require(configured(project,values,forge),'artifact-forge-unconfigured',409)
+    missing=missing_configuration(project,values,forge)
+    require(not missing,'artifact-forge-unconfigured',409,
+            details={'phase':'configuration','missing':missing})
     from .core.models import ProjectArtifact
     require(ProjectArtifact.objects.filter(project=project,kind__in=[k for k in ('debian','docker') if enabled(values,k)]).exists(),
-            'artifact-local-missing',409)
+            'artifact-local-missing',409,details={'phase':'inventory'})
     job=ProjectForgeArtifactPublication.objects.create(pk=request_id,project=project,forge=forge,
           plan={'signature':identity(project,values,forge),
                 **({'registry':values.get('REMOTE_GITLAB_REGISTRY','')} if forge=='GITLAB' else {})})
@@ -278,14 +287,24 @@ def worker(key):
                 and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
                 'artifact-forge-config-changed',409)
         plan=local_plan(project,values)
-        require(plan,'artifact-local-missing',409)
+        if not plan and enabled(values,'docker') and (tag:=values.get('PROJECT_VERSION')):
+            name=values.get('PROJECT_ID') or project.identifier or ''
+            observed=docker_inventory(project,values)
+            if observed and DOCKER_NAME.fullmatch(name) and TAG.fullmatch(tag):
+                raise Refused('artifact-local-docker-version-missing',
+                              details={'phase':'inventory','tag':name+':'+tag})
+        require(plan,'artifact-local-missing',409,details={'phase':'inventory'})
         if 'docker' in plan and job.forge=='GITLAB':
             require(REGISTRY.fullmatch(values.get('REMOTE_GITLAB_REGISTRY','')),
-                    'artifact-forge-registry-invalid',409)
+                    'artifact-forge-registry-invalid',409,details={'phase':'registry-configuration'})
         PUBLISHERS[job.forge](project,values,plan,mark)
     except (Refused,VersionError,httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
         state='UNKNOWN' if issued else 'FAILED'
         result={'error':getattr(error,'code','artifact-forge-publication-failed'),'issued':issued}
+        if isinstance(error,Refused) and error.details:
+            result['details']=error.details
+        if isinstance(error,httpx.HTTPStatusError):
+            result['details']={'phase':'forge-api','http_status':error.response.status_code}
     else:
         state,result='COMPLETED',{'issued':issued}
     ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(state=state,receipt=result)
