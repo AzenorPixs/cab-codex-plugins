@@ -12,7 +12,7 @@ from .core.models import Project,Run,Operation,Lease,StatisticsJob,VersionPolicy
 from .core.commands import TERMINAL
 from .paths import config
 from .forge_settings import file_operation
-from .project_metadata import ASSIGNMENT,public_value,synchronize
+from .project_metadata import ASSIGNMENT,initialize_version_policy,public_value,synchronize
 
 FIELDS=('PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
 
@@ -37,7 +37,8 @@ def edit(project_id,fields,digest,project_path=None):
             identifier=fields.get('PROJECT_ID',project.identifier)
             if identifier:
                 require(not Project.objects.exclude(pk=project.pk).filter(Q(identifier=identifier)|Q(pk=identifier)).exists(),'project-configuration-id-conflict',409)
-            current=file_operation(project,{'op':'env-read'});require(current['digest']==digest,'project-configuration-changed',409)
+            current=file_operation(project,{'op':'env-read','allow_missing':True})
+            require(current['digest']==digest,'project-configuration-changed',409)
             target=project.root
             if project_path is not None:
                 require(isinstance(project_path,str) and len(project_path)<=1500 and not any(c in project_path for c in '\r\n\0'),'project-path-invalid',400)
@@ -79,6 +80,7 @@ def edit(project_id,fields,digest,project_path=None):
                     if lines and not lines[-1].endswith(('\n','\r')):lines[-1]+='\n'
                     lines.append(key+'='+json.dumps(value,ensure_ascii=False)+'\n')
             content=''.join(lines).encode('utf-8')
+            if digest=='missing':content=initialize_version_policy(content)
             destination=SimpleNamespace(root=target,owner_uid=project.owner_uid)
             if content!=base64.b64decode(current['content'],validate=True):
                 try:file_operation(destination,{'op':'env-write','digest':digest,'content':base64.b64encode(content).decode()});written=True

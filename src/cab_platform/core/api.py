@@ -975,14 +975,18 @@ def project_configuration_read(request,project_id:str):
     from cab_platform.paths import secret
     import base64
     import hmac
-    project=Project.objects.get(pk=project_id);before=file_operation(project,{'op':'env-read'});snapshot=synchronize(project.pk);env=file_operation(project,{'op':'env-read'})
+    project=Project.objects.get(pk=project_id)
+    read={'op':'env-read','allow_missing':True}
+    before=file_operation(project,read);snapshot=synchronize(project.pk);env=file_operation(project,read)
     if before['digest']!=env['digest']:
+        commands.require('missing' not in (before['digest'],env['digest']),'project-configuration-changed',409)
         try:expected=initialize_version_policy(base64.b64decode(before['content'],validate=True))
         except ValueError:raise commands.Refused('project-configuration-changed',409) from None
         commands.require(hashlib.sha256(expected).hexdigest()==env['digest'],'project-configuration-changed',409)
     commands.require(Project.objects.filter(pk=project.pk,root=project.root).exists(),'project-configuration-changed',409)
     revision=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
-    response=JsonResponse({'fields':{key:snapshot.get('values',{}).get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')},'project_path':project.root,'revision':revision})
+    values={} if env['digest']=='missing' else snapshot.get('values',{})
+    response=JsonResponse({'fields':{key:values.get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')},'project_path':project.root,'revision':revision})
     response['Cache-Control']='no-store';return response
 
 @api.post('/projects/{project_id}/configuration')
@@ -992,7 +996,7 @@ def project_configuration_save(request,project_id:str,body:ProjectConfigurationE
     from cab_platform.project_configuration_edit import edit
     from cab_platform.paths import secret
     import hmac
-    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read'})
+    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read','allow_missing':True})
     expected=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
     commands.require(hmac.compare_digest(expected,body.revision),'project-configuration-changed',409)
     return edit(project.pk,body.fields,env['digest'],body.project_path)

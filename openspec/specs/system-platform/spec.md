@@ -127,7 +127,7 @@ Le catalogue MUST conserver les projets dans PostgreSQL et préserver leurs iden
 
 #### Scenario: Création d’un projet
 - **WHEN** un administrateur valide le nom et le dossier d’un nouveau projet
-- **THEN** le projet est conservé dans projects, son dossier utilise les UID/GID configurés et il apparaît sélectionné dans la liste de gauche
+- **THEN** le projet est conservé dans projects, son dossier utilise les UID/GID configurés et il apparaît sélectionné dans la liste de gauche. Avant de déclarer le projet prêt, CAB MUST créer `project.env` sous le compte propriétaire, avec le nom public, l’identifiant public lorsqu’il est disponible et la politique de version initiale. Le nom MUST respecter les règles du champ `PROJECT_NAME`. Aucun fichier existant ne peut être écrasé.
 
 #### Scenario: Chemin choisi et projet existant
 - **WHEN** un administrateur crée ou ajoute un projet et saisit ou sélectionne un chemin absolu
@@ -921,6 +921,11 @@ MUST disparaître de l'instantané.
 - **WHEN** un administrateur ouvre le stylo du bloc « Configuration »
 - **THEN** il peut modifier les six variables publiques du bloc dans `project.env` ; CAB vérifie la révision et l’unicité de l’identifiant avant d’enregistrer et synchronise PostgreSQL puis Electric.
 - **AND** un changement d’identifiant actualise l’adresse canonique sans modifier la clé interne du projet.
+
+#### Scenario: Premier enregistrement de la configuration
+- **WHEN** un administrateur ouvre l’éditeur du bloc « Configuration » d’un projet dont le fichier `project.env` est absent
+- **THEN** CAB MUST ouvrir l’éditeur sans créer le fichier et MUST créer le fichier lors de l’enregistrement explicite des valeurs validées, sous le compte propriétaire du projet.
+- **AND** la révision MUST distinguer le fichier absent d’un fichier vide ou apparu depuis l’ouverture. CAB MUST refuser une création concurrente sans écraser son contenu et MUST synchroniser les métadonnées après un enregistrement réussi.
 
 #### Scenario: Métadonnées et cartes
 - **WHEN** le fichier contient une seule forge puis la retire

@@ -61,10 +61,13 @@ def put(fd,name,data,old,info):
             try:os.unlink(tmp,dir_fd=fd)
             except FileNotFoundError:pass
 try:
-    op=p['op'];env,envinfo=read(rfd,'project.env')
-    if op=='env-read':result={'content':base64.b64encode(env).decode(),'digest':hashlib.sha256(env).hexdigest()}
+    op=p['op']
+    allow_missing=(op=='env-read' and p.get('allow_missing') is True) or (op=='env-write' and p['digest']=='missing')
+    env,envinfo=read(rfd,'project.env',allow_missing)
+    digest='missing' if env is None else hashlib.sha256(env).hexdigest()
+    if op=='env-read':result={'content':base64.b64encode(env or b'').decode(),'digest':digest}
     elif op=='env-write':
-        if hashlib.sha256(env).hexdigest()!=p['digest']:raise ValueError('file-changed')
+        if digest!=p['digest']:raise ValueError('file-changed')
         data=base64.b64decode(p['content'],validate=True)
         if data!=env:put(rfd,'project.env',data,env,envinfo)
         result={'saved':True}
