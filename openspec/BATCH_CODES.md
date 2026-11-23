@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Diagnostic d’authentification des forges — 23 novembre 2026
+
+[diagnose-forge-auth-transport](changes/archive/2026-11-23-diagnose-forge-auth-transport/), code non attribué. Change archivé et diagnostic qualifié par les tests ciblés CAB. Attribution ultérieure par ACL.
+
 ## Confirmation de déconnexion MCP — 16 novembre 2026
 
 `confirm-stopped-mcp-relay`, code non attribué : change archivé ; attribution ultérieure par ACL.

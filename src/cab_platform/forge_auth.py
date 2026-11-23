@@ -1,7 +1,11 @@
 """Vérification bornée des identités de forge ; aucun secret dans la projection."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import errno
 import hashlib
 import json
+import socket
+import ssl
 import threading
 from urllib.parse import quote,urlsplit
 import httpx
@@ -17,6 +21,60 @@ _running=set()
 _pending=set()
 
 
+def transport_failure(error, phase):
+    cause = error
+    while cause is not None:
+        if isinstance(cause, socket.gaierror):
+            return 'DNS — résolution du nom impossible'
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            return 'TLS — vérification du certificat échouée'
+        if isinstance(cause, ssl.SSLError):
+            return 'TLS — négociation échouée'
+        if isinstance(cause, ConnectionRefusedError):
+            return f'{phase} — connexion refusée'
+        if isinstance(cause, OSError) and cause.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH):
+            return f'{phase} — réseau ou hôte inaccessible'
+        cause = cause.__cause__ or cause.__context__
+    if isinstance(error, httpx.TimeoutException):
+        return f'{phase} — délai d’attente dépassé'
+    return f'{phase} — {type(error).__name__}'
+
+
+@contextmanager
+def forge_request(client, endpoint, headers, report, operation, **kwargs):
+    if report is None:
+        with client.stream('GET', endpoint, headers=headers, **kwargs) as response:
+            yield response
+        return
+
+    phase = 'HTTP'
+
+    def trace(event, _details):
+        nonlocal phase
+        event = event.partition('.')[2]
+        if event == 'connect_tcp.started':
+            phase = 'TCP'
+            report('Résolution du nom et ouverture de la connexion TCP.\n')
+        elif event == 'connect_tcp.complete':
+            report('Connexion TCP établie.\n')
+        elif event == 'start_tls.started':
+            phase = 'TLS'
+            report('Négociation TLS et vérification du certificat.\n')
+        elif event == 'start_tls.complete':
+            phase = 'HTTP'
+            report('Connexion TLS établie.\n')
+        elif event == 'receive_response_headers.started':
+            report('Attente de la réponse HTTP.\n')
+
+    report(f'{operation}.\n')
+    try:
+        with client.stream('GET', endpoint, headers=headers, extensions={'trace': trace}, **kwargs) as response:
+            yield response
+    except httpx.HTTPError as error:
+        report(f'Vérification impossible — {transport_failure(error, phase)}.\n')
+        raise
+
+
 def inputs(project,values,forge):
     url=values.get('REMOTE_'+forge+'_BASE_URL','')
     owner=values.get('REMOTE_'+forge+'_OWNER','')
@@ -30,7 +88,7 @@ def repository_access(client,base,owner,repository,headers,report=None):
     if report:report('Vérification des droits sur le dépôt Forgejo.\n')
     if not repository or any('/' in value or value in ('.','..') for value in (owner,repository)):return None
     endpoint=base+'/api/v1/repos/'+quote(owner,safe='')+'/'+quote(repository,safe='')
-    with client.stream('GET',endpoint,headers=headers) as response:
+    with forge_request(client, endpoint, headers, report, 'Requête au dépôt avec token') as response:
         if report:report(f'Accès au dépôt avec token : HTTP {response.status_code}.\n')
         if response.status_code==401:return False
         if response.status_code!=200:return None
@@ -39,7 +97,8 @@ def repository_access(client,base,owner,repository,headers,report=None):
             data+=chunk
             if len(data)>262144:return None
     authorized=json.loads(data)
-    with client.stream('GET',endpoint,headers={'Accept':'application/json','User-Agent':'CAB-forge-auth'}) as response:
+    anonymous_headers = {'Accept':'application/json','User-Agent':'CAB-forge-auth'}
+    with forge_request(client, endpoint, anonymous_headers, report, 'Requête au dépôt sans token') as response:
         if report:report(f'Accès au dépôt sans token : HTTP {response.status_code}.\n')
         if response.status_code in (401,403,404):return True
         if response.status_code!=200:return None
@@ -62,12 +121,12 @@ def git_repository_access(client,base,owner,repository,token,report=None):
     name=repository if repository.endswith('.git') else repository+'.git'
     endpoint=base+'/'+'/'.join(quote(part,safe='') for part in owner_parts)+'/'+quote(name,safe='')+'/info/refs?service=git-upload-pack'
     headers={'Accept':'application/x-git-upload-pack-advertisement','User-Agent':'CAB-forge-auth'}
-    with client.stream('GET',endpoint,headers=headers,auth=(owner,token)) as response:
+    with forge_request(client, endpoint, headers, report, 'Requête Git au dépôt avec identifiants', auth=(owner, token)) as response:
         if report:report(f'Accès Git avec identifiants : HTTP {response.status_code}.\n')
         if response.status_code==401:return False
         if response.status_code!=200:return None
         if not response.headers.get('content-type','').lower().startswith('application/x-git-upload-pack-advertisement'):return None
-    with client.stream('GET',endpoint,headers=headers) as response:
+    with forge_request(client, endpoint, headers, report, 'Requête Git au dépôt sans identifiants') as response:
         if report:report(f'Accès Git sans identifiants : HTTP {response.status_code}.\n')
         if response.status_code in (401,403,404):return True
         return None
@@ -91,12 +150,11 @@ def observe(project,forge,url,owner,encrypted,repository='',report=None):
         if not token or any(c in token for c in '\r\n\0'):
             if report:report('Le token est vide ou invalide.\n')
             return None
-        if report:report('Connexion à l’API de la forge.\n')
         headers={'Accept':'application/json','User-Agent':'CAB-forge-auth'}
         if forge=='GITLAB':headers['PRIVATE-TOKEN']=token
         else:headers['Authorization']=('token ' if forge=='FORGEJO' else 'Bearer ')+token
         with httpx.Client(timeout=6,follow_redirects=False,trust_env=False) as client:
-            with client.stream('GET',endpoint,headers=headers) as response:
+            with forge_request(client, endpoint, headers, report, f'{forge} — consultation du profil par HTTPS') as response:
                 if report:report(f'Réponse de l’API utilisateur : HTTP {response.status_code}.\n')
                 if response.status_code==403 and forge=='FORGEJO':return repository_access(client,base,owner,repository,headers,report)
                 if response.status_code in (401,403) and forge in ('GITHUB','GITLAB'):return git_repository_access(client,base,owner,repository,token,report)
@@ -117,7 +175,9 @@ def observe(project,forge,url,owner,encrypted,repository='',report=None):
             if report:report('Le compte API diffère du propriétaire configuré.\n')
             if forge in ('GITHUB','GITLAB'):return git_repository_access(client,base,owner,repository,token,report)
             return False
-    except (httpx.HTTPError,Refused,ValueError,UnicodeError,KeyError,TypeError,OSError) as error:
+    except httpx.HTTPError:
+        return None
+    except (httpx.InvalidURL,Refused,ValueError,UnicodeError,KeyError,TypeError,OSError) as error:
         if report:report(f'Vérification impossible : {type(error).__name__}.\n')
         return None
 

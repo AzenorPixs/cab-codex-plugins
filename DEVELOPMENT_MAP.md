@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Diagnostic d’authentification des forges
+
+[diagnose-forge-auth-transport](openspec/changes/archive/2026-11-23-diagnose-forge-auth-transport/),
+code non attribué. Diagnostic DNS, TCP, TLS et HTTP pour le profil et le dépôt
+de GitLab, GitHub et Forgejo. Six tests qualifiés le 23 novembre 2026 par CAB
+sur le reçu `STAGE-894-8-forge-auth`. La sonde GitLab expire avant TLS.
+
+```mermaid
+flowchart LR
+    forgeAuth["diagnose-forge-auth-transport<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeAuth provisional
+```
+
 ## Synchronisation des catalogues des agents
 
 [synchronize-agent-catalogs-live](openspec/changes/archive/2026-11-23-synchronize-agent-catalogs-live/),

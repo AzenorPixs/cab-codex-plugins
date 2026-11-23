@@ -1,5 +1,9 @@
 # Historique des versions
 
+## Non publié
+
+- Préciser les échecs DNS, TCP, TLS et HTTP dans la console d’authentification de GitLab, GitHub et Forgejo, y compris lors de la vérification des dépôts.
+
 ## 3.18.0
 
 - Catalogues des agents synchronisés par Electric et fichiers comparés par SHA-256 avant chaque réajustement.
