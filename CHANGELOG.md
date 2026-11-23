@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Permettre de vérifier un envoi ou une synchronisation de forge dont le résultat est incertain. CAB débloque l’aperçu si les références distantes correspondent exactement à la cible du reçu.
 - Unifier la politique TLS des connexions CAB à GitLab, GitHub et Forgejo, y compris les envois Git et les publications. Retirer le réglage `REMOTE_<FORGE>_SSL_VERIFY` de l’éditeur et de la projection.
 - Ouvrir le diagnostic de la tentative dans l’Overview lorsqu’un rafraîchissement manuel de forge échoue. Appliquer le réglage TLS GitLab à la lecture du dépôt.
 - Accepter tout certificat TLS lors de l’authentification Forgejo et de la vérification du dépôt, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`. La console indique ce mode.

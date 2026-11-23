@@ -102,6 +102,14 @@ const messages:Record<string,string>={
   'forge-push-head-changed':'Le commit local a changé. Fermez et préparez un nouvel envoi.',
   'forge-push-pending':'Un envoi précédent n’a pas de résultat confirmé. Vérifiez la forge avant toute reprise.',
   'forge-push-result-unknown':'Envoi non confirmé : vérifiez la branche distante avant toute reprise.',
+  'forge-reconcile-running':'Un envoi est encore en cours. La protection reste active.',
+  'forge-reconcile-not-pending':'Aucun résultat incertain à vérifier. Fermez la fenêtre pour ouvrir un nouvel aperçu.',
+  'forge-reconcile-ambiguous':'Plusieurs résultats sont incertains pour cette forge. La protection reste active.',
+  'forge-reconcile-receipt-invalid':'Le reçu précédent est incomplet. La protection reste active.',
+  'forge-reconcile-observation-unavailable':'Les références distantes sont indisponibles. La protection reste active.',
+  'forge-reconcile-branch-diverged':'La branche distante diffère de la cible du reçu. La protection reste active.',
+  'forge-reconcile-tags-diverged':'Les tags distants diffèrent de la cible du reçu. La protection reste active.',
+  'forge-reconcile-receipt-changed':'Le reçu a changé pendant la vérification. Cette lecture ne lève aucune protection.',
   'forge-auth-diagnostic-failed':'La vérification d’authentification est temporairement indisponible.',
   'forge-file-changed':'La configuration a changé. Fermez et rouvrez la fenêtre avant de réessayer.',
   'forge-file-outcome-uncertain':'Résultat incertain. Vérifiez les fichiers avant toute nouvelle modification.',
@@ -130,13 +138,20 @@ const messages:Record<string,string>={
   'project-directory-creation-failed':'Le dossier n’a pas pu être créé. Vérifiez le chemin et les droits configurés.',
   'project-creation-needs-reconciliation':'Cette création nécessite une vérification avant d’être reprise. Aucun dossier ne sera recréé automatiquement.',
 }
+export class ApiError extends Error {
+  constructor(readonly code:string,message:string){super(message)}
+}
+
 export async function api<T>(path:string,body?:unknown,headers:Record<string,string>={}):Promise<T>{
   // Une seule première requête établit le cookie avant les GET concurrents.
   if(!csrfCookie()&&!csrf){const initial=await bootstrapCSRF();if(path==='health'&&body===undefined)return initial as T}
   const response=await fetch('/api/v1/'+path,{credentials:'same-origin',method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrfCookie()||csrf,...headers},body:body===undefined?undefined:JSON.stringify(body)})
   let value
   try{value=await response.json()}catch{throw new Error('Le serveur CAB est temporairement indisponible.')}
-  if(!response.ok)throw new Error(messages[value.error]||value.error||'Requête refusée ('+response.status+')')
+  if(!response.ok){
+    const code=typeof value?.error==='string'?value.error:''
+    throw new ApiError(code,messages[code]||code||'Requête refusée ('+response.status+')')
+  }
   if(typeof value.csrf_token==='string')csrf=value.csrf_token
   if(path==='login'||path==='logout')window.dispatchEvent(new Event('cab-auth-changed'))
   return value as T

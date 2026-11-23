@@ -1,4 +1,6 @@
 """Qualification des forges avec des réponses contrôlées et un serveur TLS local."""
+from contextlib import nullcontext
+from copy import deepcopy
 import errno
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -368,6 +370,7 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                 self.git(self.workspace, 'init', '--bare', '--initial-branch=main', forge+'.git')
                 url = self.base + '/git/' + forge + '.git'
                 context = (project, forge, 'groupe', os.getgid(), {}, self.git_env)
+                self.assertEqual(forge_push.remote_head(*context, url, 'main'), '')
                 self.assertEqual(forge_sync.refs(*context, url, 'main'), ('', {}, {}))
                 push = forge_push.remote_git(*context, 'push','--no-follow-tags',
                     '--force-with-lease='+branch+':', url, previous+':'+branch)
@@ -377,7 +380,108 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                     '--force-with-lease='+branch+':'+previous,'--force-with-lease='+tag+':', url,
                     head+':'+branch, tag+':'+tag)
                 self.assertEqual(sync.returncode, 0)
+                self.assertEqual(forge_push.remote_head(*context, url, 'main'), head)
                 self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
+
+
+class ForgeReconciliationTests(unittest.TestCase):
+    head = 'a' * 40
+    before = 'b' * 40
+    tags = {'refs/tags/1.0.0': head}
+
+    def setUp(self):
+        self.values = {'REMOTE_GITLAB_BASE_URL': 'https://forge.example', 'REMOTE_GITLAB_BRANCH': 'main'}
+        self.project = SimpleNamespace(root='/fixture', configuration={}, public_metadata={'values': self.values})
+        self.receipt = {
+            'nonce': 'ancienne-operation', 'actor': '7', 'state': 'UNKNOWN', 'head': self.head, 'remote': self.before,
+            'branch': 'main', 'signature': forge_repository.identity(self.project, self.values, 'GITLAB'),
+        }
+        self.project.configuration['forge_push'] = {'GITLAB': self.receipt}
+        self.locked = SimpleNamespace(root=self.project.root, configuration=deepcopy(self.project.configuration),
+                                      public_metadata=deepcopy(self.project.public_metadata), save=Mock())
+        self.patch(forge_sync.Project.objects, 'get', return_value=self.project)
+        self.patch(forge_sync.Project.objects, 'select_for_update', return_value=SimpleNamespace(get=Mock(return_value=self.locked)))
+        self.patch(forge_sync.transaction, 'atomic', side_effect=nullcontext)
+        self.patch(forge_sync, 'context', return_value=(self.values, 'groupe', 'main', 'https://forge.example/depot.git', 1, {}, {}))
+        self.branch = self.patch(forge_sync, 'remote_head', return_value=self.head)
+        self.refs = self.patch(forge_sync, 'refs', return_value=(self.head, self.tags, {}))
+        self.event = self.patch(forge_sync.Event.objects, 'create', return_value=SimpleNamespace(pk=42))
+
+    def patch(self, obj, name, **kwargs):
+        patcher = patch.object(obj, name, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def as_sync(self):
+        self.receipt['source_tags'] = self.tags
+        self.project.configuration['forge_sync'] = self.project.configuration.pop('forge_push')
+        self.locked.configuration = deepcopy(self.project.configuration)
+
+    def reconcile(self):
+        return forge_sync.reconcile('projet', 'GITLAB', '8')
+
+    def refused(self, code):
+        with self.assertRaises(forge_sync.Refused) as failure:
+            self.reconcile()
+        self.assertEqual(failure.exception.code, code)
+        self.event.assert_not_called()
+        self.locked.save.assert_not_called()
+
+    def test_exact_branch_releases_protection_and_keeps_initial_receipt(self):
+        self.assertEqual(self.reconcile(), {'reconciled': True, 'receipt_id': 42})
+        self.branch.assert_called_once()
+        self.refs.assert_not_called()
+        saved = self.locked.configuration['forge_push']['GITLAB']
+        self.assertEqual((saved['state'],saved['reconciliation_id']), ('RECONCILED',42))
+        proof = self.event.call_args.kwargs['data']
+        self.assertEqual(proof['receipt']['state'], 'UNKNOWN')
+        self.assertEqual(proof['receipt']['remote'], self.before)
+        self.assertNotIn('nonce', proof['receipt'])
+        self.assertEqual(proof['observed'], {'branch':'main','head':self.head})
+
+    def test_exact_branch_and_all_tags_reconcile_sync(self):
+        self.as_sync()
+        self.assertTrue(self.reconcile()['reconciled'])
+        self.branch.assert_not_called()
+        self.refs.assert_called_once()
+        self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'], 'RECONCILED')
+        self.assertEqual(self.event.call_args.kwargs['data']['observed']['tags'], self.tags)
+
+    def test_running_remains_protected_without_observation(self):
+        self.receipt['state'] = 'RUNNING'
+        self.refused('forge-reconcile-running')
+        self.branch.assert_not_called()
+        self.refs.assert_not_called()
+
+    def test_previews_report_pending_before_contacting_forge(self):
+        with patch.object(forge_push, 'context') as push_context, patch.object(forge_sync, 'context') as sync_context:
+            for prepare in (forge_push.prepare, forge_sync.prepare):
+                with self.assertRaises(forge_sync.Refused) as failure:
+                    prepare('projet', 'GITLAB', '8')
+                self.assertEqual(failure.exception.code, 'forge-push-pending')
+            push_context.assert_not_called()
+            sync_context.assert_not_called()
+
+    def test_divergent_branch_stays_protected(self):
+        self.branch.return_value = self.before
+        self.refused('forge-reconcile-branch-diverged')
+
+    def test_additional_remote_tag_stays_protected(self):
+        self.as_sync()
+        self.refs.return_value = (self.head, {**self.tags, 'refs/tags/autre': self.before}, {})
+        self.refused('forge-reconcile-tags-diverged')
+
+    def test_unavailable_remote_stays_protected(self):
+        self.branch.side_effect = forge_sync.Refused('forge-push-preflight-unavailable', 409)
+        self.refused('forge-reconcile-observation-unavailable')
+
+    def test_changed_receipt_stays_protected(self):
+        self.locked.configuration['forge_push']['GITLAB']['nonce'] = 'autre-operation'
+        self.refused('forge-reconcile-receipt-changed')
+
+    def test_changed_configuration_stays_protected(self):
+        self.locked.public_metadata['values']['REMOTE_GITLAB_BASE_URL'] = 'https://autre.example'
+        self.refused('forge-push-configuration-changed')
 
 
 if __name__ == '__main__':

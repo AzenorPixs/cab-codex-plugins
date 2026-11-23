@@ -1,5 +1,6 @@
 """Synchronisation contrôlée d'une branche et de ses tags vers une forge."""
 from datetime import timedelta
+import hashlib
 import secrets
 import subprocess
 import threading
@@ -7,8 +8,8 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, require
-from .core.models import Project
-from .forge_push import OID, context, identity, local_git, remote_git
+from .core.models import Event, Project
+from .forge_push import OID, context, identity, local_git, remote_git, remote_head, require_no_pending_transfer, transfer_receipts
 
 
 def refs(project, forge, owner, group, options, env, url, branch):
@@ -30,6 +31,60 @@ def refs(project, forge, owner, group, options, env, url, branch):
     return remote, tags, peeled
 
 
+def reconcile(project_id, forge, actor):
+    project = Project.objects.get(pk=project_id)
+    receipts = transfer_receipts(project, forge)
+    require(all(receipt.get('state') != 'RUNNING' for receipt in receipts.values()), 'forge-reconcile-running', 409)
+    uncertain = [key for key, receipt in receipts.items() if receipt.get('state') == 'UNKNOWN']
+    require(bool(uncertain), 'forge-reconcile-not-pending', 409)
+    require(len(uncertain) == 1, 'forge-reconcile-ambiguous', 409)
+
+    kind = uncertain[0]
+    receipt = receipts[kind]
+    values, owner, branch, url, group, options, env = context(project, forge)
+    signature = identity(project, values, forge)
+    require(receipt.get('branch') == branch and receipt.get('signature') == signature, 'forge-push-configuration-changed', 409)
+    expected = receipt.get('head')
+    require(isinstance(expected, str) and OID.fullmatch(expected) is not None, 'forge-reconcile-receipt-invalid', 409)
+    if kind == 'forge_sync':
+        expected_tags = receipt.get('source_tags')
+        require(isinstance(expected_tags, dict), 'forge-reconcile-receipt-invalid', 409)
+
+    try:
+        if kind == 'forge_sync':
+            observed, tags, _ = refs(project, forge, owner, group, options, env, url, branch)
+        else:
+            observed = remote_head(project, forge, owner, group, options, env, url, branch)
+    except Refused:
+        raise Refused('forge-reconcile-observation-unavailable', 409) from None
+    require(observed == expected, 'forge-reconcile-branch-diverged', 409)
+    if kind == 'forge_sync':
+        require(tags == expected_tags, 'forge-reconcile-tags-diverged', 409)
+
+    with transaction.atomic():
+        current = Project.objects.select_for_update().get(pk=project_id)
+        current_values = (current.public_metadata or {}).get('values', {})
+        require(current.root == project.root and identity(current, current_values, forge) == signature, 'forge-push-configuration-changed', 409)
+        require(transfer_receipts(current, forge) == receipts, 'forge-reconcile-receipt-changed', 409)
+        original = dict(receipt)
+        nonce = original.pop('nonce', None)
+        if isinstance(nonce, str):
+            original['nonce_sha256'] = hashlib.sha256(nonce.encode()).hexdigest()
+        observed_refs = {'branch': branch, 'head': observed}
+        if kind == 'forge_sync':
+            observed_refs['tags'] = tags
+        proof = Event.objects.create(project=current, kind='forge-operation-reconciled', data={
+            'forge': forge, 'operation': kind, 'actor': str(actor), 'receipt': original, 'observed': observed_refs,
+        })
+        configuration = dict(current.configuration or {})
+        operation_records = dict(configuration.get(kind) or {})
+        operation_records[forge] = {**receipt, 'state': 'RECONCILED', 'reconciliation_id': proof.pk}
+        configuration[kind] = operation_records
+        current.configuration = configuration
+        current.save(update_fields=['configuration'])
+    return {'reconciled': True, 'receipt_id': proof.pk}
+
+
 def local_tags(project, options, env, head):
     raw = local_git(project, options, env, 'for-each-ref', '--format=%(refname)%00%(objectname)', 'refs/tags/')
     tags = {}
@@ -46,6 +101,7 @@ def local_tags(project, options, env, head):
 
 def prepare(project_id, forge, actor):
     project = Project.objects.get(pk=project_id)
+    require_no_pending_transfer(project, forge)
     values, owner, branch, url, group, options, env = context(project, forge)
     local_git(project, options, env, 'check-ref-format', '--branch', branch)
     head = local_git(project, options, env, 'rev-parse', '--verify', 'HEAD^{commit}').decode('ascii').strip()
@@ -70,8 +126,7 @@ def prepare(project_id, forge, actor):
         require(current.root == project.root and identity(current, (current.public_metadata or {}).get('values', {}), forge) == signature, 'forge-push-configuration-changed', 409)
         config = dict(current.configuration or {})
         records = dict(config.get('forge_sync') or {})
-        require((records.get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
-        require((config.get('forge_push', {}).get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
+        require_no_pending_transfer(current, forge)
         records[forge] = {'nonce': nonce, 'actor': str(actor), 'state': 'READY', 'head': head, 'remote': remote, 'branch': branch, 'signature': signature, 'changes': changes, 'source_tags': source_tags, 'remote_tags': remote_tags, 'expires': (timezone.now() + timedelta(minutes=5)).isoformat()}
         config['forge_sync'] = records
         current.configuration = config

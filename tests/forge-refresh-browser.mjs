@@ -37,6 +37,7 @@ const wait=async(read,label)=>{
   throw Error(label);
 };
 const check=(condition,label)=>{if(!condition)throw Error(label)};
+const control=(dialog,title)=>Array.from(dialog.querySelectorAll('button')).find(button=>button.textContent===title);
 const counts=()=>fetch('/counts').then(response=>response.json());
 const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)});
 (async()=>{
@@ -61,6 +62,26 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   button.click();
   await wait(async()=>(await counts()).manual.GITLAB===2&&button.getAttribute('aria-busy')==='false','Fin du rafraîchissement réussi');
   check(!find('dialog[open]'),'Le succès a ouvert une fenêtre');
+  const sync=find('button[aria-label="Synchroniser GitLab"]');
+  const push=find('button[aria-label="Envoyer vers GitLab"]');
+  sync.click();
+  let dialog=await wait(()=>find('dialog[open][aria-label="Synchroniser GitLab"]'),'Fenêtre de synchronisation');
+  (await wait(()=>control(dialog,'Vérifier l’envoi précédent'),'Action de vérification de la synchronisation')).click();
+  await wait(()=>dialog.textContent.includes('Les tags distants diffèrent'),'Protection maintenue après écart de tags');
+  check(!control(dialog,'Synchroniser'),'Une divergence a permis la synchronisation');
+  control(dialog,'Fermer').click();
+  await wait(()=>!find('dialog[open]'),'Fermeture de la synchronisation');
+  push.click();
+  dialog=await wait(()=>find('dialog[open][aria-label="Envoyer vers GitLab"]'),'Fenêtre d’envoi');
+  (await wait(()=>control(dialog,'Vérifier l’envoi précédent'),'Action de vérification de l’envoi')).click();
+  await wait(()=>dialog.textContent.includes('L’état cible est confirmé'),'État cible confirmé');
+  check(!control(dialog,'Envoyer'),'La vérification a créé un aperçu');
+  check((await counts()).previews===2,'La vérification a relancé un aperçu');
+  control(dialog,'Fermer').click();
+  await wait(()=>!find('dialog[open]'),'Fermeture de l’envoi');
+  sync.click();
+  dialog=await wait(()=>find('dialog[open][aria-label="Synchroniser GitLab"]'),'Nouvelle fenêtre de synchronisation');
+  await wait(()=>control(dialog,'Synchroniser'),'Nouvel aperçu après réconciliation');
   await send({passed:true});
 })().catch(error=>send({error:error.message}));
 </script>`
@@ -75,7 +96,7 @@ try{
   </script>`)
   const assets=new Map()
   for(const name of index.match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
-  const json=(response,value)=>response.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value))
+  const json=(response,value,status=200)=>response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value))
   let counters, report
   server=createServer(async(request,response)=>{
     const url=new URL(request.url,'http://localhost')
@@ -91,6 +112,20 @@ try{
       if(route==='/verification')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
       if(route==='/api/v1/health')return json(response,{initialized:true,state:'READY',csrf_token:'fixture'})
       if(route==='/api/v1/projects')return json(response,{projects:[project]})
+      const gitAction=route.match(/^\/api\/v1\/projects\/fixture\/forges\/GITLAB\/(reconcile|sync-prepare|push-prepare|sync|push)$/)?.[1]
+      if(gitAction==='reconcile'){
+        counters.checks++
+        return counters.checks===1 ? json(response,{error:'forge-reconcile-tags-diverged'},409) : json(response,{reconciled:true,receipt_id:42})
+      }
+      if(gitAction==='sync'||gitAction==='push'){
+        counters.writes++
+        return json(response,{error:'unexpected-write'},409)
+      }
+      if(gitAction){
+        counters.previews++
+        return counters.checks<2 ? json(response,{error:'forge-push-pending'},409)
+          : json(response,{nonce:'fixture',branch:'main',local_branch:'main',head:'a'.repeat(40),remote:'a'.repeat(40),dirty:false,changes:[]})
+      }
       if(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)$/.test(route)){
         const forge=route.split('/').at(-1)
         return json(response,{fields:{['REMOTE_'+forge+'_BASE_URL']:'https://example.org',['REMOTE_'+forge+'_SSL_VERIFY']:'1'},token:'',revision:'fixture'})
@@ -124,7 +159,7 @@ try{
     ['Chromium','/usr/bin/chromium',['--headless','--no-sandbox','--disable-background-networking','--user-data-dir='+join(workspace,'chromium')]],
     ['Firefox','/usr/bin/firefox',['--headless','--no-remote','--profile',await mkdtemp(join(workspace,'firefox-'))]],
   ]){
-    counters={automatic:0,manual:{}}
+    counters={automatic:0,manual:{},checks:0,previews:0,writes:0}
     const observation=new Promise(resolve=>{report=resolve})
     const child=spawn(binary,[...args,'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
     const closed=once(child,'close')
@@ -132,8 +167,8 @@ try{
     try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
-      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1}})
-      console.log(name+' — diagnostic, conservation des données et absence de rejeu vérifiés.')
+      assert.deepEqual(counters,{automatic:3,manual:{GITLAB:2,FORGEJO:1,GITHUB:1},checks:2,previews:3,writes:0})
+      console.log(name+' — diagnostic et réconciliation vérifiés, aucun envoi ni rejeu.')
     }finally{
       clearTimeout(timer)
       child.kill()

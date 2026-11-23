@@ -100,26 +100,44 @@ def remote_git(project, forge, owner, group, options, env, *args, timeout=30):
             raise Refused('forge-push-transport-unknown', 409) from None
 
 
+def remote_head(project, forge, owner, group, options, env, url, branch):
+    try:
+        response = remote_git(project, forge, owner, group, options, env, 'ls-remote', '--heads', url, 'refs/heads/' + branch)
+    except Refused:
+        raise Refused('forge-push-preflight-unavailable', 409) from None
+    require(response.returncode == 0 and len(response.stdout) <= 8192, 'forge-push-preflight-unavailable', 409)
+    try:
+        lines = response.stdout.decode('ascii', 'strict').splitlines()
+    except UnicodeDecodeError:
+        raise Refused('forge-push-preflight-unavailable', 409) from None
+    require(len(lines) <= 1, 'forge-push-preflight-unavailable', 409)
+    if lines:
+        fields = lines[0].split('\t')
+        require(len(fields) == 2 and OID.fullmatch(fields[0]) is not None and fields[1] == 'refs/heads/' + branch, 'forge-push-preflight-unavailable', 409)
+        return fields[0]
+    return ''
+
+
+def transfer_receipts(project, forge):
+    configuration = project.configuration or {}
+    return {key: dict((configuration.get(key) or {}).get(forge) or {}) for key in ('forge_push', 'forge_sync')}
+
+
+def require_no_pending_transfer(project, forge):
+    require(all(receipt.get('state') not in ('RUNNING', 'UNKNOWN') for receipt in transfer_receipts(project, forge).values()),
+            'forge-push-pending', 409)
+
+
 def prepare(project_id, forge, actor):
     project = Project.objects.get(pk=project_id)
+    require_no_pending_transfer(project, forge)
     values, owner, branch, url, group, options, env = context(project, forge)
     local_git(project, options, env, 'check-ref-format', '--branch', branch)
     head = local_git(project, options, env, 'rev-parse', '--verify', 'HEAD^{commit}').decode('ascii').strip()
     local_branch = local_git(project, options, env, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode('utf-8', 'replace').strip()
     require(bool(OID.fullmatch(head)) and bool(local_branch), 'forge-push-local-unavailable', 409)
     dirty = bool(local_git(project, options, env, 'status', '--porcelain=v1', '--untracked-files=normal', '--ignore-submodules=all'))
-    try:
-        response = remote_git(project, forge, owner, group, options, env, 'ls-remote', '--heads', url, 'refs/heads/' + branch)
-    except Refused:
-        raise Refused('forge-push-preflight-unavailable', 409) from None
-    require(response.returncode == 0 and len(response.stdout) <= 8192, 'forge-push-preflight-unavailable', 409)
-    lines = response.stdout.decode('ascii', 'strict').splitlines()
-    require(len(lines) <= 1, 'forge-push-preflight-unavailable', 409)
-    remote = ''
-    if lines:
-        fields = lines[0].split('\t')
-        require(len(fields) == 2 and OID.fullmatch(fields[0]) is not None and fields[1] == 'refs/heads/' + branch, 'forge-push-preflight-unavailable', 409)
-        remote = fields[0]
+    remote = remote_head(project, forge, owner, group, options, env, url, branch)
     signature = identity(project, values, forge)
     nonce = secrets.token_urlsafe(24)
     with transaction.atomic():
@@ -127,8 +145,7 @@ def prepare(project_id, forge, actor):
         require(current.root == project.root and identity(current, (current.public_metadata or {}).get('values', {}), forge) == signature, 'forge-push-configuration-changed', 409)
         config = dict(current.configuration or {})
         records = dict(config.get('forge_push') or {})
-        require((config.get('forge_sync', {}).get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
-        require((records.get(forge) or {}).get('state') not in ('RUNNING', 'UNKNOWN'), 'forge-push-pending', 409)
+        require_no_pending_transfer(current, forge)
         records[forge] = {'nonce': nonce, 'actor': str(actor), 'state': 'READY', 'head': head, 'remote': remote, 'branch': branch, 'signature': signature, 'expires': (timezone.now() + timedelta(minutes=5)).isoformat()}
         config['forge_push'] = records
         current.configuration = config

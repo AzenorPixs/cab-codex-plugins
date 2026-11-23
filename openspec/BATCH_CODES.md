@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Réconciliation des envois de forge — 23 novembre 2026
+
+[reconcile-uncertain-forge-operations](changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Politique TLS commune aux forges — 23 novembre 2026
 
 [unify-cab-project-forge-tls](changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Change archivé. Attribution ultérieure par ACL.

@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Réconciliation des envois de forge
+
+[reconcile-uncertain-forge-operations](openspec/changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. L’Overview
+propose une lecture de la branche et des tags attendus après une opération
+incertaine. Qualification locale Python, Chromium et Firefox le 23 novembre
+2026. La réconciliation préserve le reçu initial et n’effectue aucun envoi.
+
+```mermaid
+flowchart LR
+    forgeReconcile["reconcile-uncertain-forge-operations<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeReconcile provisional
+```
+
 ## Politique TLS commune aux forges
 
 [unify-cab-project-forge-tls](openspec/changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Les clients API et Git de CAB
