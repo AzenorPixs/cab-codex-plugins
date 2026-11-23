@@ -340,3 +340,19 @@ header .brand {
 .model-policy-overview .model-policy-sort .model-policy-label{grid-template-columns:minmax(6.5rem,40%) minmax(0,1fr);align-items:center}
 @media(min-width:761px){.monitor-table .model-catalog-provider{min-inline-size:12ch}}
 @media(max-width:550px){.model-policy-pair{grid-template-columns:minmax(0,1fr)}}
+
+
+.agent-mcp-line{flex:0 0 100%;min-inline-size:0}
+.agent-administration-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:var(--ui-blocs-gap,24px);align-items:start}
+.agent-administration-grid .agent-card{min-inline-size:0}
+.catalog-provider-actions,.catalog-completion-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.catalog-completion-controls label{flex:1;min-inline-size:12rem}
+.catalog-valid{color:#217647;font-weight:700}
+.catalog-invalid{color:#b33b38;font-weight:700}
+[data-theme="dark"] .catalog-valid{color:#65d997}
+[data-theme="dark"] .catalog-invalid{color:#ff8680}
+.catalog-refreshing svg{animation:catalog-refresh-spin 1s linear infinite}
+@keyframes catalog-refresh-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.catalog-refreshing svg{animation:none}}
+.lifecycle-dialog.catalog-document{width:min(58rem,90vw)}
+.catalog-document pre{overflow:auto;max-block-size:60dvh;white-space:pre-wrap;overflow-wrap:anywhere}

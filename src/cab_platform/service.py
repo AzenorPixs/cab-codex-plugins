@@ -216,7 +216,7 @@ def run(port=8790):
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
-    from .agent_catalog import refresh as refresh_agent_catalog
+    from .agent_catalog_files import refresh as refresh_agent_catalog
     catalog_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-catalog')
     agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
     agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
@@ -246,7 +246,7 @@ def run(port=8790):
                 except Exception as error:log.warning('agent catalog unavailable',extra={'code':type(error).__name__})
                 catalog_future=None
             if catalog_future is None and time.monotonic()>=next_catalog:
-                catalog_future=catalog_pool.submit(refresh_agent_catalog);next_catalog=time.monotonic()+15
+                catalog_future=catalog_pool.submit(refresh_agent_catalog);next_catalog=time.monotonic()+5
             if time.monotonic()>=next_daemon_report:
                 next_daemon_report=time.monotonic()+5
                 observe_daemon()

@@ -17,6 +17,8 @@ const messages:Record<string,string>={
   'agent-model-policy-duplicate':'Une politique porte déjà ce nom.',
   'agent-model-policy-slider-invalid':'Choisir un cran valide pour les seuils de tokens.',
   'agent-model-policy-bounds-invalid':'Un minimum de tarif doit être inférieur ou égal au maximum actif.',
+  'agent-catalog-file-invalid':'Le fichier de catalogue est absent ou invalide.',
+  'agent-catalog-source-unavailable':'Aucune URL de catalogue n’est configurée.',
   'agent-catalog-url-invalid':'Saisir une URL valide. La liste de modèles requiert une URL HTTPS publique.',
   'agent-catalog-format-invalid':'Le catalogue ne contient pas de liste de modèles valide.',
   'agent-catalog-unavailable':'La liste des modèles est indisponible.',

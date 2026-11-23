@@ -1,4 +1,5 @@
 import {useState} from 'react'
+import type {Model} from './AgentCatalogLive'
 
 export const policyPath='administration/agent-model-policies'
 const contextSteps=[0,262144,500000,1000000,1048576]
@@ -26,6 +27,39 @@ export type PolicyProviders={providers?:PolicyProvider[];error?:Error|null}
 export type Policy={id:number;name:string;model_filter:string;provider_ids:number[]|null;include_free:boolean;include_paid:boolean;context_min:number;output_min:number;
   sort_column:typeof sortColumns[number][0];sort_descending:boolean}
   & Record<typeof priceFields[number][0],string|number>
+
+const policyBounds=[
+  ['context','context_min',null],['output','output_min',null],
+  ['input_cost','input_price_min','input_price_max'],['output_cost','output_price_min','output_price_max'],
+  ['cache_read_cost','cache_read_min','cache_read_max'],['cache_write_cost','cache_write_min','cache_write_max'],
+] as const
+const freeWord=/(?<![\p{L}\p{N}])free(?![\p{L}\p{N}])/iu
+const fold=(value:string)=>value.toLowerCase().replaceAll('ß','ss').normalize('NFD').replace(/\p{M}/gu,'')
+const numeric=(value:string|number|null|undefined)=>value==null||value===''||!Number.isFinite(Number(value))||Number(value)<0?null:Number(value)
+
+export function selectPolicyModels<Row extends Model>(policy:Policy,models:Row[]){
+  const exclusions=policy.model_filter.split(';').map(term=>fold(term.trim())).filter(Boolean)
+  const providers=new Set(policy.provider_ids??[])
+  return models.filter(model=>{
+    if(providers.size&&!providers.has(model.provider_id))return false
+    if(exclusions.length&&exclusions.some(term=>fold(model.name||model.identifier).includes(term)))return false
+    const free=freeWord.test(model.name??'')||freeWord.test(model.identifier)||
+      numeric(model.input_cost)===0&&numeric(model.output_cost)===0
+    if(!(free?policy.include_free:policy.include_paid))return false
+    return policyBounds.every(([field,minimum,maximum])=>{
+      const min=minimum?Number(policy[minimum]):0
+      const max=maximum?Number(policy[maximum]):0
+      if(!min&&!max)return true
+      const value=numeric(model[field])
+      return value!==null&&(!min||value>=min)&&(!max||value<=max)
+    })
+  }).sort((left,right)=>{
+    const a=numeric(left[policy.sort_column]),b=numeric(right[policy.sort_column])
+    if(a===null)return b===null?0:1
+    if(b===null)return -1
+    return policy.sort_descending?b-a:a-b
+  })
+}
 
 export function policyPayload(values:FormData){
   return {

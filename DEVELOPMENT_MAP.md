@@ -1,5 +1,15 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Synchronisation des catalogues des agents
+
+[synchronize-agent-catalogs-live](openspec/changes/archive/2026-11-23-synchronize-agent-catalogs-live/),
+code non attribué. Projection Electric, vérification SHA-256 avant recalcul,
+fichiers consultables et administration de la complétion. Vérifications du
+23 novembre 2026 sur Chromium, Firefox et PostgreSQL isolé, reçus
+`STAGE-893-7-agent-live-web` et `STAGE-893-7-agent-live-data`. Le serveur
+Electric isolé a reçu l’instantané PostgreSQL puis une modification WAL sur le
+même flux.
+
 ## Alignement des contrôles du catalogue
 
 [align-model-policy-editor-fields](openspec/changes/archive/2026-11-23-align-model-policy-editor-fields/),

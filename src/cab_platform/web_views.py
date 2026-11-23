@@ -35,6 +35,8 @@ def sync_connectors(request):return sync_projection(request,'mcp_connector_proje
 
 def sync_agents(request):return sync_projection(request,'agents')
 
+def sync_agent_catalog(request):return sync_projection(request,'agent_catalog_projection')
+
 def sync_agent_users(request):return sync_projection(request,'agent_users')
 
 def sync_cab_version(request):return sync_projection(request,'cab_version_projection')
@@ -100,7 +102,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
             if table not in ('cab_core_sessionprojection', 'resource_reservations'):raise Refused('session-projection-invalid',403)
             project=None
         elif table in ('cab_version_projection','interface_preferences_projection'):project=None
-        elif table in ('agents','agent_users','cab_notifications','cab_binary_counts','cab_observed_binaries'):
+        elif table in ('agents','agent_users','agent_catalog_projection','cab_notifications','cab_binary_counts','cab_observed_binaries'):
             if actor.role!='admin':raise Refused('administrator-required',403)
             if table=='agent_users' and request.GET.get('agent') not in ('codex_desktop','codex','opencode'):raise Refused('agent-not-found',404)
             project=None
@@ -113,7 +115,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
     if table=='resource_reservations':where=all_sessions_where(actor,predicate='true')
     elif all_projects:where=all_sessions_where(actor,archived=archived)
     elif table in ('cab_version_projection','interface_preferences_projection','cab_binary_counts'):where='id = 1'
-    elif table in ('agents','cab_notifications','cab_observed_binaries'):where='true'
+    elif table in ('agents','agent_catalog_projection','cab_notifications','cab_observed_binaries'):where='true'
     elif table=='agent_users':where="agent_id = '"+request.GET['agent']+"'"
     elif table=='mcp_connector_projection':where='true' if actor.role=='admin' else 'uid = '+str(actor.uid)
     else:
@@ -127,6 +129,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
     if table=='cab_notifications':params['columns']='id,project_id,sender,title,body,kind,choices,read_at,created,updated'
     if table=='cab_binary_counts':params['columns']='id,inactive,active'
     if table=='cab_observed_binaries':params['columns']='id,pid,username,executable,role,active,first_seen,last_seen,stopped'
+    if table=='agent_catalog_projection':params['columns']='id,kind,data'
     if table=='agents':params['columns']='id,label,position,installed,running,local_version,mcp_connected,mcp_versions'
     if table=='agent_users':params['columns']='id,agent_id,username,home,config_present,config_path,mcp_declared,config_error,reconcile_state'
     if table=='cab_version_projection':params['columns']='id,version,git_version'

@@ -69,6 +69,19 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>!find('dialog[open]'),'Fournisseur enregistré');
   fill(search('Fournisseurs'),'fournisseur temoin');
   await wait(()=>rows('Fournisseurs').length===1&&readRows('Fournisseurs')[0].includes('Fournisseur témoin'),'Recherche sans accent');
+  const providerTable=find('table[aria-label="Fournisseurs"]');
+  check(Array.from(providerTable.tHead.rows[0].cells).map(cell=>cell.textContent).join(',').includes('Base URL API,Horodatage,État'),'Colonnes du fichier fournisseur');
+  find('td[data-label="Horodatage"] button').click();
+  await wait(()=>find('dialog[open] pre')?.textContent.includes('catalogue-fournisseur'),'Aperçu du fichier fournisseur');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
+  await click('button[aria-label="Éditer le fournisseur"]');
+  check(find('dialog[open] [name=api_url]').closest('label').textContent==='Base URL API','Base URL API dans l’éditeur');
+  fill('dialog[open] [name=api_url]','https://example.org/v2');
+  find('dialog[open] form').requestSubmit();
+  await wait(()=>readRows('Fournisseurs')[0]?.includes('/v2')&&!find('dialog[open]'),'Édition propagée par Electric');
+  await click('button[aria-label="Actualiser le fichier"]');
+  await wait(()=>find('.catalog-refreshing'),'Actualisation visible');
+  await wait(()=>!find('.catalog-refreshing'),'Fin de l’actualisation');
   await click('nav[aria-label="Agents"] a[href="/agents/models"]');
   await pagination('Modèles','fixture-12');
   check(find('[role=tab][aria-selected=true]').textContent==='Tous','Onglet initial Tous');
@@ -162,9 +175,9 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Rapides renommés'&&!find('dialog[open]'),'Politique éditée');
   await wait(()=>rows('Modèles').length===1&&readRows('Modèles')[0]?.startsWith('1Modèle 11'),'Filtrage par fournisseurs et nom, tri conservé');
   await click('button[aria-label="Éditer la politique de modèles"]');
-  providerField().click();
-  check(selectedProvider('Fournisseur 11')&&selectedProvider('Fournisseur 12')
+  await wait(()=>selectedProvider('Fournisseur 11')&&selectedProvider('Fournisseur 12')
     &&!selectedProvider('Fournisseur 10'),'Sélection multiple persistée');
+  providerField().click();
   providerOption('Fournisseur 11').click();
   providerOption('Fournisseur 12').click();
   await wait(()=>providerField().textContent==='Tous les fournisseurs','Retirer le dernier choix affiche Tous');
@@ -174,11 +187,11 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   confirm();
   await wait(()=>find('[role=tab][aria-selected=true]')?.textContent==='Tous'&&current().querySelectorAll('[role=tab]').length===1,'Politique supprimée');
   await click('nav[aria-label="Agents"] a[href="/agents/api-keys"]');
-  await pagination('Clés API','Clé 12');
+  await pagination('Clés API','Fournisseur 12');
   const keySort='table[aria-label="Clés API"] th:nth-child(2) button';
   await click(keySort);
   await click(keySort);
-  check(readRows('Clés API')[0].includes('Clé 12'),'Tri numérique des quotas');
+  check(readRows('Clés API')[0].includes('Fournisseur 12'),'Tri numérique des quotas');
   await click('button[aria-label="Ajouter une clé API"]');
   const provider=await wait(()=>find('dialog[open] [name=provider_id] option[value="1"]')?.parentElement,'Fournisseur de la clé');
   provider.value='1';
@@ -205,10 +218,20 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>rows('Fournisseurs').length===0&&!find('dialog[open]'),'Fournisseur supprimé');
   await click('nav[aria-label="Agents"] a[aria-label="Accueil des agents"]');
   await wait(()=>frame.contentWindow.location.pathname==='/agents','Retour sur Agents');
+  frame.width='1420';
   frame.src='/administration/agents';
   const reminders=await wait(()=>find('table[aria-label="Rappels d’inactivité"]'),'Rappels en administration');
   check(reminders.rows.length===4&&reminders.classList.contains('monitor-table'),'Trois lignes au style Binaires');
   check(find('.agents-grid').compareDocumentPosition(reminders)&4,'Rappels sous les cartes');
+  check(find('[data-agent="codex"] .agent-mcp-line')&&!find('[data-agent="codex"] .agent-title-separator'),'MCP sous le titre');
+  const completion=await wait(()=>find('.catalog-completion-controls input')?.value==='https://models.dev/api.json'&&find('.catalog-completion-controls input').closest('section'),'Bloc de complétion initialisé depuis PostgreSQL');
+  check(reminders.closest('section').getBoundingClientRect().width<=completion.parentElement.getBoundingClientRect().width/2,'Rappels limités à la moitié de la grille');
+  completion.querySelector('button.catalog-valid').click();
+  await wait(()=>find('dialog[open] pre')?.textContent.includes('catalogue-completion'),'Aperçu du catalogue de complétion');
+  Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
+  fill('.catalog-completion-controls input','https://example.org/completion');
+  completion.querySelector('form').requestSubmit();
+  await wait(()=>find('.catalog-completion-controls input').value==='https://example.org/completion'&&completion.querySelector('button[type=submit]').disabled,'URL enregistrée par Electric');
   fill('#agent-reminder-seconds','420');
   const form=reminders.closest('form');
   form.requestSubmit();
@@ -228,8 +251,19 @@ try{
   const assets=new Map()
   for(const name of index.match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
   let report
-  let providers, keys, reminders, policies
+  let providers, keys, reminders, policies, files, scans
+  let revision, projections
+  const snapshots=new Map()
   const fixtureRows=Array.from({length:12},(_,index)=>index+1)
+  const modelData=()=>fixtureRows.map(id=>({
+    id,identifier:'fixture-'+id,name:'Modèle '+id,provider_id:id+10,context:500000+1000*id,output:64000,
+    input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
+  }))
+  function publish(){
+    projections=new Map(Object.entries({provider:providers,key:keys,policy:policies,file:files,model:modelData()})
+      .flatMap(([kind,items])=>items.map(data=>[kind+':'+data.id,{id:kind+':'+data.id,kind,data:JSON.stringify(data)}])))
+    snapshots.set(++revision,projections)
+  }
   const json=(response,value,status=200)=>response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value))
   const body=async request=>{let data='';for await(const part of request)data+=part;return JSON.parse(data)}
   server=createServer(async(request,response)=>{
@@ -248,17 +282,62 @@ try{
         if(post)reminders=await body(request)
         return json(response,reminders)
       }
+      if(route==='/api/v1/administration/agent-catalog-display')return json(response,{rows:Array.from(projections.values())})
+      if(route==='/api/v1/administration/agent-catalog-scan'){scans++;return json(response,{queued:true})}
+      if(route==='/api/v1/sync/agent-catalog'){
+        const offset=Number((url.searchParams.get('offset')??'-1').split('_')[0])
+        if(offset===revision)await new Promise(resolve=>setTimeout(resolve,80))
+        if(response.destroyed)return
+        const past=snapshots.get(offset)??new Map()
+        const messages=[]
+        for(const [key,value] of projections){
+          if(!past.has(key))messages.push({key,headers:{operation:'insert'},value})
+          else if(past.get(key).data!==value.data)messages.push({key,headers:{operation:'update'},value})
+        }
+        for(const [key,value] of past)if(!projections.has(key))messages.push({key,headers:{operation:'delete'},value})
+        return response.writeHead(200,{'Content-Type':'application/json','electric-offset':revision+'_0',
+          'electric-handle':'catalog-fixture','electric-cursor':String(revision),
+          'electric-schema':JSON.stringify({id:{type:'text'},kind:{type:'text'},data:{type:'jsonb'}})})
+          .end(JSON.stringify([...messages,{headers:{control:'up-to-date'}}]))
+      }
+      if(route==='/api/v1/administration/agent-providers/file')return json(response,{data:['catalogue-fournisseur']})
+      if(route==='/api/v1/administration/agent-providers/edit'){
+        const edited=await body(request)
+        assert.equal(edited.api_url,'https://example.org/v2')
+        providers=providers.map(provider=>provider.id===edited.id?edited:provider)
+        publish()
+        return json(response,edited)
+      }
+      if(route==='/api/v1/administration/agent-providers/refresh'){
+        const {id}=await body(request)
+        const source=files.find(file=>file.provider_id===id)
+        source.state='downloading'
+        publish()
+        setTimeout(()=>{source.state='idle';publish()},700)
+        return json(response,{queued:true})
+      }
+      if(route==='/api/v1/administration/agent-completion-catalog/file')return json(response,{data:['catalogue-completion']})
+      if(route==='/api/v1/administration/agent-completion-catalog'){
+        const {url}=await body(request)
+        files.find(file=>file.id==='completion').url=url
+        publish()
+        return json(response,{queued:true})
+      }
       if(route==='/api/v1/administration/agent-providers'){
         if(!post)return json(response,{providers})
         const values=await body(request)
         assert.deepEqual(values,{name:'Fournisseur témoin',models_url:'https://example.org/models',api_url:'https://example.org/v1'})
         const provider={id:1,...values}
         providers.push(provider)
+        files.push({id:'provider-1',provider_id:1,url:provider.models_url,valid:true,state:'idle',error:'',refreshed_at:'2026-11-23T06:00:00Z'})
+        publish()
         return json(response,provider)
       }
       if(route==='/api/v1/administration/agent-providers/remove'){
         assert.deepEqual(await body(request),{id:1})
         providers=providers.filter(provider=>provider.id!==1)
+        files=files.filter(file=>file.provider_id!==1)
+        publish()
         return json(response,{removed:true})
       }
       if(route==='/api/v1/administration/agent-model-policies'){
@@ -276,6 +355,7 @@ try{
         assert.equal(values.provider_ids,null)
         const policy={id:21,...values}
         policies=[policy]
+        publish()
         return json(response,policy)
       }
       if(route==='/api/v1/administration/agent-model-policies/edit'){
@@ -290,34 +370,27 @@ try{
         assert.deepEqual(policy.provider_ids,policies[0].provider_ids===null?[21,22]:null)
         assert.equal(policy.context_min,500000)
         policies=[policy]
+        publish()
         return json(response,policy)
       }
       if(route==='/api/v1/administration/agent-model-policies/remove'){
         assert.deepEqual(await body(request),{id:21})
         policies=[]
+        publish()
         return json(response,{removed:true})
-      }
-      if(route==='/api/v1/administration/agent-models'){
-        const models=fixtureRows.map(id=>({
-          id,identifier:'fixture-'+id,name:'Modèle '+id,provider:'Fournisseur '+id,context:500000+1000*id,output:64000,
-          input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
-        }))
-        if(!url.searchParams.has('policy_id'))return json(response,{models})
-        const policy=policies[0]
-        const results=models.filter(model=>(!policy?.model_filter||model.id!==12)
-          &&(policy?.provider_ids==null||policy.provider_ids.includes(model.id+10)))
-        return json(response,{models:results.reverse()})
       }
       if(route==='/api/v1/administration/agent-api-keys'){
         if(!post)return json(response,{keys})
         assert.deepEqual(await body(request),{provider_id:1,key:'fixture-key'})
-        const key={id:'key-1',provider:providers.find(provider=>provider.id===1).name,day:null,week:null,month:null,credits:null}
+        const key={id:'key-1',provider_id:1,day:null,week:null,month:null,credits:null}
         keys.push(key)
+        publish()
         return json(response,key)
       }
       if(route==='/api/v1/administration/agent-api-keys/remove'){
         assert.deepEqual(await body(request),{id:'key-1'})
         keys=keys.filter(key=>key.id!=='key-1')
+        publish()
         return json(response,{removed:true})
       }
       if(route.startsWith('/api/v1/sync/')){
@@ -340,8 +413,10 @@ try{
     ['Firefox','/usr/bin/firefox',['--headless','--no-remote','--profile',await mkdtemp(join(workspace,'firefox-'))]],
   ]){
     providers=fixtureRows.map(id=>({id:id+10,name:'Fournisseur '+id,models_url:'',api_url:'https://example.org/'+id}))
-    keys=fixtureRows.map(id=>({id:'fixture-'+id,provider:'Clé '+id,day:id,week:null,month:null,credits:null}))
+    keys=fixtureRows.map(id=>({id:'fixture-'+id,provider_id:id+10,day:id,week:null,month:null,credits:null}))
     policies=[]
+    files=[{id:'completion',provider_id:null,url:'https://models.dev/api.json',valid:true,state:'idle',error:'',refreshed_at:'2026-11-23T05:00:00Z'}]
+    revision=0;scans=0;snapshots.clear();publish()
     reminders={seconds:300,second_seconds:1800,last_seconds:14400}
     const observation=new Promise(resolve=>{report=resolve})
     const child=spawn(binary,[...args,'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
@@ -351,6 +426,7 @@ try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' : '+result.error+' (fournisseurs fixture : '+providers.length+')')
       assert.equal(reminders.seconds,420)
+      assert.ok(scans>=3,'Les tableaux ont demandé une vérification en arrière-plan')
       console.log(name+' : pagination, recherche, tri, suppressions et politiques de modèles vérifiés.')
     }finally{clearTimeout(timer);child.kill();await closed}
   }

@@ -4,7 +4,6 @@ from decimal import Decimal, InvalidOperation
 from http import client
 from ipaddress import ip_address, ip_network
 import json
-import logging
 from math import isfinite
 from random import randint
 import re
@@ -16,7 +15,7 @@ from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from django.db import IntegrityError, close_old_connections, transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Case, F, JSONField, Value, When
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
@@ -29,9 +28,6 @@ MODELS_DEV_URL = 'https://models.dev/api.json'
 MAX_CATALOG_BYTES = 16 * 1024 * 1024
 MAX_MODELS = 10_000
 RETRY_DELAY = timedelta(minutes=30)
-LOG = logging.getLogger(__name__)
-_reference = None
-_reference_due = None
 _TRANSITION = tuple(map(ip_network, ('2002::/16', '64:ff9b::/96', '64:ff9b:1::/48', '2001::/32')))
 
 
@@ -59,7 +55,7 @@ def public_address(host):
     return str(addresses[0])
 
 
-def fetch(url):
+def download(url):
     parts = parse_url(url, public=True)
     target = (parts.path or '/') + ('?' + parts.query if parts.query else '')
     deadline = monotonic() + 15
@@ -78,13 +74,20 @@ def fetch(url):
                         payload.extend(chunk)
                         if len(payload) > MAX_CATALOG_BYTES or monotonic() > deadline:
                             raise ValueError
-        document = json.loads(payload, parse_constant=_invalid_constant)
-        validate_strings(document)
-        return document
+        return bytes(payload)
     except (OSError, ValueError, RecursionError, client.HTTPException):
         raise Refused('agent-catalog-unavailable', 422) from None
     finally:
         connection.close()
+
+
+def parse_document(payload):
+    try:
+        document = json.loads(payload, parse_constant=_invalid_constant)
+        validate_strings(document)
+        return document
+    except (ValueError, RecursionError):
+        raise Refused('agent-catalog-format-invalid', 422) from None
 
 
 def _invalid_constant(_):
@@ -266,9 +269,6 @@ def save_catalog(provider, records, reference):
     ], batch_size=250, update_conflicts=True, unique_fields=['provider', 'identifier'],
        update_fields=['source', 'details'])
     provider.catalog.exclude(identifier__in=records).delete()
-    provider.refreshed_at = timezone.now()
-    provider.refresh_after = next_refresh()
-    provider.save(update_fields=['refreshed_at', 'refresh_after'])
 
 
 def providers():
@@ -276,23 +276,35 @@ def providers():
 
 
 def add_provider(name, api_url, models_url):
+    return save_provider(None, name, api_url, models_url)
+
+
+@transaction.atomic
+def save_provider(provider_id, name, api_url, models_url):
+    from .agent_catalog_files import configure_source
+
     name, api_url, models_url = name.strip(), api_url.strip(), models_url.strip()
     require(0 < len(name) <= 160 and not any(ord(char) < 32 for char in name),
             'agent-provider-name-invalid', 400)
     require(0 < len(api_url) <= 2048 and len(models_url) <= 2048, 'agent-catalog-url-invalid', 400)
     parse_url(api_url)
-    require(not AgentProvider.objects.filter(name=name).exists(), 'agent-provider-duplicate', 409)
-    records = read_catalog(fetch(models_url)) if models_url else None
-    with transaction.atomic():
-        try:
-            with transaction.atomic():
-                provider = AgentProvider.objects.create(name=name, api_url=api_url, models_url=models_url)
-        except IntegrityError:
-            raise Refused('agent-provider-duplicate', 409) from None
-        if records is not None:
-            save_catalog(provider, records, None)
-    return {'id': provider.pk, 'name': provider.name, 'api_url': provider.api_url, 'models_url': provider.models_url}
-
+    if models_url:
+        parse_url(models_url, public=True)
+    fields = {'name': name, 'api_url': api_url, 'models_url': models_url}
+    try:
+        with transaction.atomic():
+            if provider_id is None:
+                provider = AgentProvider.objects.create(**fields)
+            else:
+                provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
+                require(provider is not None, 'agent-provider-not-found', 404)
+                for key, value in fields.items():
+                    setattr(provider, key, value)
+                provider.save(update_fields=fields.keys())
+    except IntegrityError:
+        raise Refused('agent-provider-duplicate', 409) from None
+    configure_source('provider-'+str(provider.pk), models_url, provider)
+    return {'id': provider.pk, **fields}
 
 @transaction.atomic
 def remove_provider(provider_id):
@@ -367,47 +379,3 @@ def models(policy_id=None):
     if policy is not None:
         sort_models(policy, result)
     return result
-
-
-def refresh_reference():
-    global _reference, _reference_due
-    now = timezone.now()
-    if _reference_due is not None and now < _reference_due:
-        return
-    try:
-        reference = fetch(MODELS_DEV_URL)
-        require(isinstance(reference, dict) and any(obj(item).get('models') for item in reference.values()),
-                'agent-catalog-format-invalid', 422)
-        for provider_id in AgentProvider.objects.values_list('id', flat=True).iterator():
-            with transaction.atomic():
-                provider = AgentProvider.objects.select_for_update().filter(pk=provider_id).first()
-                if provider is None:
-                    continue
-                matches = reference_for(provider, reference)
-                rows = list(provider.catalog.all())
-                for row in rows:
-                    row.details = model_details(row.identifier, row.source, matches)
-                AgentModel.objects.bulk_update(rows, ['details'], batch_size=250)
-        _reference, _reference_due = reference, next_refresh()
-    except Refused:
-        _reference_due = now + RETRY_DELAY
-        LOG.warning('Catalogue models.dev indisponible')
-
-
-def refresh():
-    try:
-        refresh_reference()
-        provider = AgentProvider.objects.filter(refresh_after__lte=timezone.now()).order_by('refresh_after').first()
-        if provider is None:
-            return
-        try:
-            records = read_catalog(fetch(provider.models_url))
-            with transaction.atomic():
-                current = AgentProvider.objects.select_for_update().filter(pk=provider.pk).first()
-                if current is not None:
-                    save_catalog(current, records, _reference)
-        except Refused:
-            AgentProvider.objects.filter(pk=provider.pk).update(refresh_after=timezone.now() + RETRY_DELAY)
-            LOG.warning('Catalogue fournisseur indisponible', extra={'provider_id': provider.pk})
-    finally:
-        close_old_connections()

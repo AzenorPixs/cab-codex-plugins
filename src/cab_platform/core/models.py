@@ -22,6 +22,33 @@ class AgentProvider(models.Model):
         db_table = 'agent_providers'
 
 
+class AgentCatalogFile(models.Model):
+    id = models.CharField(max_length=40, primary_key=True)
+    provider = models.OneToOneField(AgentProvider, null=True, on_delete=models.CASCADE)
+    url = models.URLField(max_length=2048, blank=True)
+    sha256 = models.CharField(max_length=64, blank=True, default='')
+    valid = models.BooleanField(default=False)
+    adjusting = models.BooleanField(default=False)
+    state = models.CharField(max_length=16, default='idle')
+    error = models.CharField(max_length=80, blank=True, default='')
+    refreshed_at = models.DateTimeField(null=True)
+    refresh_after = models.DateTimeField(null=True)
+    generation = models.PositiveBigIntegerField(default=1)
+    scan_requested = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'agent_catalog_files'
+
+
+class AgentCatalogProjection(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    kind = models.CharField(max_length=16, db_index=True)
+    data = models.JSONField()
+
+    class Meta:
+        db_table = 'agent_catalog_projection'
+
+
 class AgentApiKey(models.Model):
     id = models.UUIDField(primary_key=True, editable=False)
     provider = models.ForeignKey(AgentProvider, on_delete=models.PROTECT)

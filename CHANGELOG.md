@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 3.18.0
+
+- Catalogues des agents synchronisés par Electric et fichiers comparés par SHA-256 avant chaque réajustement.
+- Rafraîchissement, consultation des fichiers, édition des fournisseurs et administration de la complétion.
+
 ## 3.17.2
 
 - Recherche à droite de Dernier dans les tableaux des agents et réglages de Triage alignés dans l’Overview.

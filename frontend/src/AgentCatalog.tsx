@@ -1,18 +1,17 @@
-import {useRef,useState,type FormEvent,type KeyboardEvent,type ReactNode} from 'react'
-import {useQuery,useQueryClient} from '@tanstack/react-query'
+import {useEffect,useRef,useState,type FormEvent,type KeyboardEvent,type ReactNode} from 'react'
 import {Link} from '@tanstack/react-router'
 import {api} from './api'
-import {ModelPolicyFields,policyPath,policyPayload,type Policy,type PolicyProviders} from './ModelPolicy'
+import {ModelPolicyFields,policyPath,policyPayload,selectPolicyModels,type Policy,type PolicyProviders} from './ModelPolicy'
+import {CatalogDocument,CatalogRefresh,CatalogValidity,catalogDate,useAgentCatalog,type ApiKey,type Model,type Provider} from './AgentCatalogLive'
 
 const providerPath='administration/agent-providers'
 const keyPath='administration/agent-api-keys'
-const modelPath='administration/agent-models'
 export const agentCatalogPages=[['api-keys','Clés API'],['providers','Fournisseurs'],['models','Modèles']] as const
 export type CatalogPage=typeof agentCatalogPages[number][0]
 
-type Provider={id:number;name:string;models_url:string;api_url:string}
-type ApiKey={id:string;provider:string;day:number|null;week:number|null;month:number|null;credits:number|null}
-type Model={id:number;identifier:string;name:string|null;provider:string;context:number|null;output:number|null;input_modalities:string[]|null;output_modalities:string[]|null;input_cost:string|number|null;output_cost:string|number|null;cache_read_cost:string|number|null;cache_write_cost:string|number|null;cache_write_duration:string|null}
+type Catalog=ReturnType<typeof useAgentCatalog>
+type KeyRow=ApiKey&{provider:string}
+type ModelRow=Model&{provider:string}
 const format=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:12})
 const number=(value:number|null)=>typeof value==='number'&&Number.isFinite(value)?format.format(value):'—'
 const priceValue=(value:Model['input_cost'])=>value==null||value===''||!Number.isFinite(Number(value))?null:Number(value)
@@ -107,7 +106,7 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
   </>
 }
 
-function AddOverview({title,children,submit,onClose,edit=false,wide=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;edit?:boolean;wide?:boolean}){
+function AddOverview({title,children,submit,onClose,onOpen,edit=false,wide=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;onOpen?:()=>void;edit?:boolean;wide?:boolean}){
   const dialog=useRef<HTMLDialogElement>(null)
   const form=useRef<HTMLFormElement>(null)
   const [pending,setPending]=useState(false)
@@ -124,7 +123,7 @@ function AddOverview({title,children,submit,onClose,edit=false,wide=false}:{titl
     }finally{setPending(false)}
   }
   return <>
-    <button className={edit?"secondary-button":"add-project"} type="button" aria-label={title} title={title} onClick={()=>dialog.current?.showModal()}>{edit?"Éditer":"+"}</button>
+    <button className={edit?"secondary-button":"add-project"} type="button" aria-label={title} title={title} onClick={()=>{onOpen?.();dialog.current?.showModal()}}>{edit?"Éditer":"+"}</button>
     <dialog ref={dialog} className={wide?"lifecycle-dialog model-policy-overview":"lifecycle-dialog"} onCancel={event=>{if(pending)event.preventDefault()}}
       onClose={()=>{form.current?.reset();setError('');onClose?.()}}>
       <h2>{title}</h2>
@@ -169,70 +168,65 @@ function DeleteOverview({label,title,name,detail,remove,trash=false}:{label:stri
   </>
 }
 
-const loadProviders=()=>api<{providers:Provider[]}>(providerPath)
-
-function ProviderCatalog(){
-  const query=useQuery({queryKey:[providerPath],queryFn:loadProviders,networkMode:'always'})
-  const client=useQueryClient()
-  const rows=query.data?.providers??[]
-  async function remove(id:number){
-    await api(providerPath+'/remove',{id})
-    client.setQueryData<{providers:Provider[]}>([providerPath],state=>({providers:(state?.providers??[]).filter(row=>row.id!==id)}))
-    await client.invalidateQueries({queryKey:[modelPath]})
+function ProviderOverview({provider}:{provider?:Provider}){
+  async function save(values:FormData){
+    const payload=Object.fromEntries(values)
+    await api(provider?providerPath+'/edit':providerPath,provider?{...payload,id:provider.id}:payload)
   }
+  return <AddOverview edit={!!provider} title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save}>
+    <label>Fournisseur<input name="name" required maxLength={160} defaultValue={provider?.name}/></label>
+    <label>Liste des Modèles (facultatif)<input name="models_url" type="url" maxLength={2048} defaultValue={provider?.models_url}/></label>
+    <label>Base URL API<input name="api_url" type="url" maxLength={2048} required defaultValue={provider?.api_url}/></label>
+  </AddOverview>
+}
+
+function ProviderCatalog({catalog}:{catalog:Catalog}){
+  const sources=new Map(catalog.data.files.map(file=>[file.provider_id,file]))
   const columns:Column<Provider>[]=[
     {label:'Fournisseur',value:row=>row.name},
     {label:'Liste des Modèles',value:row=>row.models_url||null},
-    {label:'URL API',value:row=>row.api_url},
-    {label:'Actions',render:row=><DeleteOverview trash label={'Supprimer le fournisseur '+row.name}
-      title="Supprimer le fournisseur" name={row.name} detail="Les modèles de ce fournisseur seront retirés du catalogue. Supprimez d’abord les clés API liées." remove={()=>remove(row.id)}/>},
+    {label:'Base URL API',value:row=>row.api_url},
+    {label:'Horodatage',value:row=>sources.get(row.id)?.refreshed_at??null,
+      render:row=>{
+        const source=sources.get(row.id)
+        const stamp=catalogDate(source?.refreshed_at)
+        return source?.valid?<CatalogDocument path={providerPath+'/file?id='+row.id} title={'Catalogue de '+row.name} label={stamp}/>:stamp
+      }},
+    {label:'État',value:row=>sources.get(row.id)?.valid?'Valide':'Absent ou invalide',
+      render:row=><CatalogValidity source={sources.get(row.id)} title={'Catalogue de '+row.name}/>},
+    {label:'Actions',render:row=><div className="catalog-provider-actions">
+      <CatalogRefresh source={sources.get(row.id)} path={providerPath+'/refresh'} providerId={row.id}/>
+      <ProviderOverview provider={row}/>
+      <DeleteOverview trash label={'Supprimer le fournisseur '+row.name} title="Supprimer le fournisseur" name={row.name}
+        detail="Les modèles de ce fournisseur seront retirés du catalogue. Supprimez d’abord les clés API liées."
+        remove={()=>api(providerPath+'/remove',{id:row.id})}/>
+    </div>},
   ]
-  async function add(values:FormData){
-    const provider=await api<Provider>(providerPath,Object.fromEntries(values))
-    client.setQueryData<{providers:Provider[]}>([providerPath],state=>({
-      providers:[...(state?.providers??[]).filter(row=>row.id!==provider.id),provider].sort((left,right)=>left.name.localeCompare(right.name,'fr')),
-    }))
-    await client.invalidateQueries({queryKey:[modelPath]})
-  }
-  return <CatalogTable title="Fournisseurs" columns={columns} pending={query.isPending} error={query.error} rows={rows}
-    actions={<AddOverview title="Ajouter un fournisseur" submit={add}>
-      <label>Fournisseur<input name="name" required maxLength={160}/></label>
-      <label>Liste des Modèles (facultatif)<input name="models_url" type="url" maxLength={2048}/></label>
-      <label>URL API<input name="api_url" type="url" maxLength={2048} required/></label>
-    </AddOverview>}/>
+  return <CatalogTable title="Fournisseurs" columns={columns} pending={catalog.pending} error={catalog.error}
+    rows={catalog.data.providers} actions={<ProviderOverview/>}/>
 }
 
-function KeyCatalog(){
-  const query=useQuery({queryKey:[keyPath],queryFn:()=>api<{keys:ApiKey[]}>(keyPath),networkMode:'always'})
-  const providers=useQuery({queryKey:[providerPath],queryFn:loadProviders,networkMode:'always'})
+function KeyCatalog({catalog}:{catalog:Catalog}){
   const [visible,setVisible]=useState(false)
-  const client=useQueryClient()
-  const rows=query.data?.keys??[]
-  async function remove(id:string){
-    await api(keyPath+'/remove',{id})
-    client.setQueryData<{keys:ApiKey[]}>([keyPath],state=>({keys:(state?.keys??[]).filter(row=>row.id!==id)}))
-  }
+  const providers=new Map(catalog.data.providers.map(row=>[row.id,row.name]))
+  const rows=catalog.data.keys.map(row=>({...row,provider:providers.get(row.provider_id)??''}))
+    .sort((left,right)=>collator.compare(left.provider,right.provider)||left.id.localeCompare(right.id))
   const quotaColumns=[['day','Quota Jour'],['week','Quota Semaine'],['month','Quota Mois'],['credits','Crédits']] as const
-  const columns:Column<ApiKey>[]=[
+  const columns:Column<KeyRow>[]=[
     {label:'Fournisseurs',value:row=>row.provider},
-    ...quotaColumns.map(([field,label])=>({label,value:(row:ApiKey)=>row[field],render:(row:ApiKey)=>number(row[field])})),
+    ...quotaColumns.map(([field,label])=>({label,value:(row:KeyRow)=>row[field],render:(row:KeyRow)=>number(row[field])})),
     {label:'Actions',render:row=><DeleteOverview trash label={'Supprimer une clé API de '+row.provider}
-      title="Supprimer la clé API" name={row.provider} remove={()=>remove(row.id)}/>},
+      title="Supprimer la clé API" name={row.provider} remove={()=>api(keyPath+'/remove',{id:row.id})}/>},
   ]
-  async function add(values:FormData){
-    const key=await api<ApiKey>(keyPath,{provider_id:Number(values.get('provider_id')),key:values.get('key')})
-    client.setQueryData<{keys:ApiKey[]}>([keyPath],state=>({
-      keys:[...(state?.keys??[]).filter(row=>row.id!==key.id),key].sort((left,right)=>left.provider.localeCompare(right.provider,'fr')),
-    }))
-  }
-  return <CatalogTable title="Clés API" columns={columns} pending={query.isPending} error={query.error} rows={rows}
-      actions={<AddOverview title="Ajouter une clé API" submit={add} onClose={()=>setVisible(false)}>
+  return <CatalogTable title="Clés API" columns={columns} pending={catalog.pending} error={catalog.error} rows={rows}
+      actions={<AddOverview title="Ajouter une clé API"
+        submit={values=>api(keyPath,{provider_id:Number(values.get('provider_id')),key:values.get('key')})} onClose={()=>setVisible(false)}>
         <label>Fournisseur<select name="provider_id" defaultValue="" required>
-          <option value="" disabled>{providers.isPending?'Chargement…':'Choisir un fournisseur'}</option>
-          {providers.data?.providers.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}
+          <option value="" disabled>{catalog.pending?'Chargement…':'Choisir un fournisseur'}</option>
+          {catalog.data.providers.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}
         </select></label>
-        {providers.error&&<p role="alert">{providers.error.message}</p>}
-        {providers.data?.providers.length===0&&<p><Link to="/agents/providers">Ajouter d’abord un fournisseur</Link></p>}
+        {catalog.error&&<p role="alert">{catalog.error.message}</p>}
+        {!catalog.pending&&!catalog.error&&!catalog.data.providers.length&&<p><Link to="/agents/providers">Ajouter d’abord un fournisseur</Link></p>}
         <label>Clé API<input name="key" type={visible?'text':'password'} autoComplete="off" spellCheck={false} maxLength={16384} required/></label>
         <button className="lifecycle-icon" type="button" aria-label={visible?'Masquer la clé API':'Afficher la clé API'} aria-pressed={visible} onClick={()=>setVisible(!visible)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>{visible&&<path d="m3 3 18 18"/>}</svg>
@@ -240,21 +234,21 @@ function KeyCatalog(){
       </AddOverview>}/>
 }
 
-function PolicyOverview({policy,providerOptions,onSaved}:{policy?:Policy;providerOptions:PolicyProviders;onSaved:(policy:Policy)=>Promise<void>}){
+function PolicyOverview({policy,providerOptions,onSaved}:{policy?:Policy;providerOptions:PolicyProviders;onSaved:(policy:Policy)=>void}){
   const [formVersion,setFormVersion]=useState(0)
   async function save(values:FormData){
     const payload=policyPayload(values)
     const saved=await api<Policy>(policy?policyPath+'/edit':policyPath,policy?{id:policy.id,...payload}:payload)
-    await onSaved(saved)
+    onSaved(saved)
   }
   return <AddOverview wide edit={!!policy} title={policy?'Éditer la politique de modèles':'Ajouter une politique de modèles'}
-    submit={save} onClose={()=>setFormVersion(version=>version+1)}>
+    submit={save} onOpen={()=>setFormVersion(version=>version+1)}>
     <ModelPolicyFields key={formVersion} policy={policy} providerOptions={providerOptions}/>
   </AddOverview>
 }
 
 const inputPriceLabel='Coût entrée / M'
-const columns:Column<Model>[]=[
+const columns:Column<ModelRow>[]=[
   {label:'Modèles',value:row=>row.name||row.identifier,search:row=>row.identifier,
     render:row=><>{row.name||row.identifier}{row.name&&row.name!==row.identifier&&<small>{row.identifier}</small>}</>},
   {label:'Fournisseurs',className:'model-catalog-provider',value:row=>row.provider},
@@ -271,29 +265,19 @@ const columns:Column<Model>[]=[
 
 const initialModelSort={column:columns.findIndex(column=>column.label===inputPriceLabel),descending:false}
 
-function ModelCatalog(){
-  const client=useQueryClient()
-  const providers=useQuery({queryKey:[providerPath],queryFn:loadProviders,networkMode:'always'})
-  const providerOptions={providers:providers.data?.providers,error:providers.error}
-  const policies=useQuery({queryKey:[policyPath],queryFn:()=>api<{policies:Policy[]}>(policyPath),networkMode:'always'})
+function ModelCatalog({catalog}:{catalog:Catalog}){
+  const providerOptions={providers:catalog.pending?undefined:catalog.data.providers,error:catalog.error}
   const [tab,setTab]=useState<number|null>(null)
-  const entries=policies.data?.policies??[]
+  const entries=catalog.data.policies
   const selected=entries.find(policy=>policy.id===tab)
   const selectedId=selected?.id??null
-  const url=selectedId===null?modelPath:modelPath+'?policy_id='+selectedId
-  const query=useQuery({queryKey:[modelPath,selectedId],queryFn:()=>api<{models:Model[]}>(url),refetchInterval:60_000,networkMode:'always'})
-  async function save(saved:Policy){
-    client.setQueryData<{policies:Policy[]}>([policyPath],state=>({
-      policies:[...(state?.policies??[]).filter(policy=>policy.id!==saved.id),saved].sort((a,b)=>a.id-b.id),
-    }))
-    setTab(saved.id)
-    await client.invalidateQueries({queryKey:[modelPath,saved.id]})
-  }
+  const providers=new Map(catalog.data.providers.map(row=>[row.id,row.name]))
+  const models=catalog.data.models.map(model=>({...model,provider:providers.get(model.provider_id)??''}))
+    .sort((a,b)=>collator.compare(a.provider,b.provider)||collator.compare(a.identifier,b.identifier))
+  const rows=selected?selectPolicyModels(selected,models):models
   async function remove(id:number){
     await api(policyPath+'/remove',{id})
     setTab(null)
-    client.setQueryData<{policies:Policy[]}>([policyPath],state=>({policies:(state?.policies??[]).filter(policy=>policy.id!==id)}))
-    client.removeQueries({queryKey:[modelPath,id]})
   }
   const tabs=[{id:null,name:'Tous'},...entries]
   function navigate(event:KeyboardEvent<HTMLButtonElement>,index:number){
@@ -313,19 +297,28 @@ function ModelCatalog(){
         aria-selected={selectedId===id} tabIndex={selectedId===id?0:-1} aria-controls="model-catalog-panel"
         onKeyDown={event=>navigate(event,index)} onClick={()=>setTab(id)}>{name}</button>)}
     </div>
-    {policies.error&&<p role="alert">{policies.error.message}</p>}
   </div>
   const policyActions=selected&&<>
-    <PolicyOverview key={selected.id} policy={selected} providerOptions={providerOptions} onSaved={save}/>
+    <PolicyOverview key={selected.id} policy={selected} providerOptions={providerOptions} onSaved={saved=>setTab(saved.id)}/>
     <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
       name={selected.name} remove={()=>remove(selected.id)}/>
   </>
   return <CatalogTable viewKey={selectedId} numbered={selectedId!==null} defaultSort={initialModelSort} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
-    actions={<PolicyOverview providerOptions={providerOptions} onSaved={save}/>} rows={query.data?.models??[]} pending={query.isPending} error={query.error}/>
+    actions={<PolicyOverview providerOptions={providerOptions} onSaved={saved=>setTab(saved.id)}/>} rows={rows} pending={catalog.pending} error={catalog.error}/>
 }
 
 export function AgentCatalog({page}:{page:CatalogPage}){
-  if(page==='api-keys')return <KeyCatalog/>
-  if(page==='providers')return <ProviderCatalog/>
-  return <ModelCatalog/>
+  const catalog=useAgentCatalog()
+  const [scanError,setScanError]=useState('')
+  useEffect(()=>{
+    let mounted=true
+    setScanError('')
+    api('administration/agent-catalog-scan',{}).catch(error=>{
+      if(mounted)setScanError(error instanceof Error?error.message:'Vérification indisponible.')
+    })
+    return ()=>{mounted=false}
+  },[page])
+  return <>{scanError&&<p role="status">{scanError}</p>}
+    {page==='api-keys'?<KeyCatalog catalog={catalog}/>:page==='providers'?<ProviderCatalog catalog={catalog}/>:<ModelCatalog catalog={catalog}/>}
+  </>
 }

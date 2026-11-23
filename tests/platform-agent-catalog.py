@@ -1,4 +1,5 @@
 """Qualification du catalogue avec migration et persistance PostgreSQL isolées."""
+import json
 import os
 from pathlib import Path
 from subprocess import DEVNULL, run
@@ -8,6 +9,8 @@ import unittest
 from unittest.mock import patch
 from datetime import timedelta
 from decimal import Decimal
+from hashlib import sha256
+from uuid import uuid4
 
 if sys.executable != '/usr/bin/python3.13':
     os.execv('/usr/bin/python3.13', ['/usr/bin/python3.13', __file__])
@@ -30,32 +33,39 @@ REFERENCE = {'opencode-go': {'models': {'sample': {'id': 'sample', 'name': 'Othe
 
 class CatalogTests(unittest.TestCase):
     def setUp(self):
-        from cab_platform.core.models import AgentApiKey, AgentModel, AgentModelPolicy, AgentProvider
+        from cab_platform import agent_catalog_files as files
+        from cab_platform.core.models import AgentApiKey, AgentCatalogFile, AgentModel, AgentModelPolicy, AgentProvider
         AgentModelPolicy.objects.all().delete()
         AgentApiKey.objects.all().delete()
         AgentModel.objects.all().delete()
+        AgentCatalogFile.objects.all().delete()
         AgentProvider.objects.all().delete()
+        directory = TemporaryDirectory(prefix='cab-catalog-json-')
+        self.addCleanup(directory.cleanup)
+        state = patch.object(files, 'ROOT', Path(directory.name) / 'catalogs')
+        state.start()
+        self.addCleanup(state.stop)
+        files.configure_completion('')
 
     def test_catalog_import_and_enrichment(self):
-        from cab_platform import agent_catalog as catalog
-        from cab_platform.core.models import AgentModel, AgentProvider
-        with patch.object(catalog, 'fetch', side_effect=[OPEN_CODE, OPEN_ROUTER]):
-            go = catalog.add_provider('Go', 'https://opencode.ai/zen/go/v1', 'https://opencode.ai/zen/go/v1/models')
-            router = catalog.add_provider('Router', 'https://openrouter.ai/api/v1', 'https://openrouter.ai/api/v1/models')
+        from cab_platform import agent_catalog as catalog, agent_catalog_files as files
+        from cab_platform.core.models import AgentCatalogFile, AgentModel
+        go = catalog.add_provider('Go', 'https://opencode.ai/zen/go/v1', 'https://opencode.ai/zen/go/v1/models')
+        router = catalog.add_provider('Router', 'https://openrouter.ai/api/v1', 'https://openrouter.ai/api/v1/models')
+        self.assertFalse(AgentModel.objects.exists())
+        contents = {
+            go['models_url']: OPEN_CODE, router['models_url']: OPEN_ROUTER,
+            catalog.MODELS_DEV_URL: REFERENCE,
+        }
+        files.configure_completion(catalog.MODELS_DEV_URL)
+        with patch.object(catalog, 'download', side_effect=lambda url: json.dumps(contents[url]).encode()):
+            files.refresh()
         row = AgentModel.objects.get(provider_id=go['id'])
         self.assertEqual(row.source, OPEN_CODE['data'][0])
+        source = AgentCatalogFile.objects.get(provider_id=go['id'])
+        self.assertLessEqual(source.refresh_after - source.refreshed_at, timedelta(hours=24))
+        self.assertGreaterEqual(source.refresh_after - source.refreshed_at, timedelta(hours=18, seconds=-1))
         self.assertEqual(row.details['summary']['input_cost'], 0.15)
-        provider = AgentProvider.objects.get(pk=go['id'])
-        self.assertLessEqual(provider.refresh_after - provider.refreshed_at, timedelta(hours=24, seconds=1))
-        self.assertGreaterEqual(provider.refresh_after - provider.refreshed_at, timedelta(hours=18))
-        now = timezone.now()
-        with patch.object(catalog, '_reference_due', None), patch.object(catalog, '_reference', None):
-            with patch.object(catalog, 'fetch', return_value=REFERENCE) as fetch:
-                catalog.refresh_reference()
-                catalog.refresh_reference()
-                fetch.assert_called_once_with(catalog.MODELS_DEV_URL)
-            self.assertLessEqual(catalog._reference_due-now, timedelta(hours=24, seconds=1))
-        row.refresh_from_db()
         self.assertEqual(row.details['summary']['context'], 1_000_000)
         self.assertEqual(row.details['summary']['output'], 10)
         self.assertEqual(row.details['summary']['name'], 'Go model')
@@ -65,18 +75,81 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(router_model.details['summary']['input_cost'], '1.25000000')
         self.assertEqual(router_model.details['summary']['output'], 25)
         self.assertEqual(len(catalog.models()), 2)
+        self.assertEqual(json.loads(files.preview(source.pk)), OPEN_CODE)
 
     def test_failed_refresh_keeps_last_valid_catalog(self):
-        from cab_platform import agent_catalog as catalog
-        from cab_platform.core.models import AgentModel, AgentProvider
-        with patch.object(catalog, 'fetch', return_value=OPEN_CODE):
-            provider = catalog.add_provider('Demo', 'https://example.org', 'https://example.org/models')
-        AgentProvider.objects.filter(pk=provider['id']).update(refresh_after=timezone.now())
-        with patch.object(catalog, 'refresh_reference'), patch.object(catalog, 'fetch', return_value={'data': []}):
-            catalog.refresh()
+        from cab_platform import agent_catalog as catalog, agent_catalog_files as files
+        from cab_platform.core.models import AgentCatalogFile, AgentModel
+        provider = catalog.add_provider('Demo', 'https://example.org', 'https://example.org/models')
+        source = AgentCatalogFile.objects.get(provider_id=provider['id'])
+        with patch.object(catalog, 'download', return_value=json.dumps(OPEN_CODE).encode()):
+            files.refresh()
+        files.request_download(source.pk)
+        with patch.object(catalog, 'download', return_value=b'{"data":[]}'):
+            files.refresh()
         self.assertEqual(AgentModel.objects.get(provider_id=provider['id']).identifier, 'sample')
-        self.assertGreater(AgentProvider.objects.get(pk=provider['id']).refresh_after, timezone.now())
+        source.refresh_from_db()
+        self.assertGreater(source.refresh_after, timezone.now())
+        self.assertEqual(source.state, 'error')
+        self.assertTrue(source.valid)
+        self.assertEqual(json.loads(files.preview(source.pk)), OPEN_CODE)
 
+    def test_checks_all_hashes_and_only_recalculates_changed_content(self):
+        from cab_platform import agent_catalog as catalog, agent_catalog_files as files
+        from cab_platform.core.models import AgentCatalogFile, AgentModel
+        first = catalog.add_provider('Go', 'https://opencode.ai/zen/go/v1', 'https://opencode.ai/zen/go/v1/models')
+        second = catalog.add_provider('Router', 'https://openrouter.ai/api/v1', 'https://openrouter.ai/api/v1/models')
+        files.configure_completion(catalog.MODELS_DEV_URL)
+        payloads = {first['models_url']:json.dumps(OPEN_CODE).encode(), second['models_url']:json.dumps(OPEN_ROUTER).encode(),
+                    catalog.MODELS_DEV_URL:json.dumps(REFERENCE).encode()}
+        with patch.object(catalog, 'download', side_effect=payloads.__getitem__) as download:
+            files.refresh()
+            source = AgentCatalogFile.objects.get(provider_id=first['id'])
+            completion = AgentCatalogFile.objects.get(pk=files.COMPLETION)
+            router = AgentCatalogFile.objects.get(provider_id=second['id'])
+            self.assertTrue(all(item.valid and item.sha256 for item in (source, completion, router)))
+            old_timestamp = source.refreshed_at
+            files.request_scan()
+            files.request_download(source.pk)
+            with patch.object(catalog, 'save_catalog', wraps=catalog.save_catalog) as recalculate:
+                with patch.object(files, 'update_models', wraps=files.update_models) as enrich:
+                    files.refresh()
+                    recalculate.assert_not_called()
+                    enrich.assert_not_called()
+            source.refresh_from_db()
+            self.assertGreater(source.refreshed_at, old_timestamp)
+            files.source_path(completion).unlink()
+            with patch.object(files, 'update_models', wraps=files.update_models) as enrich:
+                files.refresh()
+                enrich.assert_not_called()
+            self.assertTrue(files.source_path(completion).is_file())
+            self.assertEqual(download.call_count, 5)
+
+        revised = json.loads(payloads[catalog.MODELS_DEV_URL])
+        revised['opencode-go']['models']['sample']['limit']['output'] = 15
+        files.save_file(files.source_path(completion), json.dumps(revised).encode())
+        order = []
+        read = files.read_file
+        enrich = files.update_models
+        with patch.object(files, 'read_file', side_effect=lambda path:(order.append(path),read(path))[1]):
+            with patch.object(files, 'update_models', side_effect=lambda provider,reference:(order.append('apply'),enrich(provider,reference))[1]):
+                files.refresh()
+        self.assertTrue({files.source_path(source),files.source_path(completion),files.source_path(router)}
+                        .issubset(order[:order.index('apply')]))
+        self.assertEqual(AgentModel.objects.get(provider_id=first['id']).details['summary']['output'], 15)
+        edited = json.loads(payloads[first['models_url']])
+        edited['data'][0]['name'] = 'Modèle révisé'
+        raw = json.dumps(edited).encode()
+        files.save_file(files.source_path(source), raw)
+        with patch.object(catalog, 'save_catalog', wraps=catalog.save_catalog) as save:
+            files.refresh()
+            self.assertEqual(save.call_args.args[0].pk, first['id'])
+            save.assert_called_once()
+        source.refresh_from_db()
+        router.refresh_from_db()
+        self.assertEqual(source.sha256, sha256(raw).hexdigest())
+        self.assertEqual(router.sha256, sha256(payloads[second['models_url']]).hexdigest())
+        self.assertEqual(AgentModel.objects.get(provider_id=first['id']).details['summary']['name'], 'Modèle révisé')
     def test_api_key_fail_closed_and_metadata_only(self):
         from cab_platform import agent_catalog as catalog
         from cab_platform.core.models import AgentApiKey
@@ -90,6 +163,10 @@ class CatalogTests(unittest.TestCase):
         encrypt.assert_called_once_with('cab-agent-api-' + key_id.hex, b'fixture-key',
                                         failure='agent-api-key-tpm-unavailable')
         self.assertEqual(AgentApiKey.objects.get(pk=key_id).ciphertext, 'fixture-ciphertext')
+        from cab_platform.core.models import AgentCatalogProjection
+        projected = AgentCatalogProjection.objects.get(pk='key:'+str(key_id)).data
+        self.assertEqual(set(projected), {'id', 'provider_id', 'day', 'week', 'month', 'credits'})
+        self.assertNotIn('fixture-ciphertext', str(projected))
         self.assertEqual(catalog.keys(), [{'id': key_id, 'provider': 'Demo',
                                          'day': None, 'week': None, 'month': None, 'credits': None}])
         self.assertEqual(catalog.remove_key(key_id), {'removed': True})
@@ -101,25 +178,26 @@ class CatalogTests(unittest.TestCase):
                           return_value=[(0, 0, 0, '', ('127.0.0.1', 443))]):
             with patch.object(catalog.socket, 'create_connection') as connect:
                 with self.assertRaises(catalog.Refused):
-                    catalog.fetch('https://example.org/models')
+                    catalog.download('https://example.org/models')
                 connect.assert_not_called()
         with self.assertRaises(catalog.Refused):
-            catalog.fetch('https://secret@example.org/models')
+            catalog.download('https://secret@example.org/models')
         with patch.object(catalog, 'public_address', return_value='93.184.216.34'):
             with patch.object(catalog.socket, 'create_connection'), patch.object(catalog.ssl, 'create_default_context'):
                 with patch.object(catalog.client, 'HTTPSConnection') as connection_class:
                     response = connection_class.return_value.getresponse.return_value.__enter__.return_value
                     response.status = 302
                     with self.assertRaises(catalog.Refused):
-                        catalog.fetch('https://example.org/models')
+                        catalog.download('https://example.org/models')
                     connection_class.assert_called_once()
                     response.read1.assert_not_called()
 
     def test_provider_removal_protects_keys_and_survives_refresh(self):
-        from cab_platform import agent_catalog as catalog
+        from cab_platform import agent_catalog as catalog, agent_catalog_files as files
         from cab_platform.core.models import AgentApiKey, AgentModel, AgentProvider
-        with patch.object(catalog, 'fetch', return_value=OPEN_CODE):
-            provider = catalog.add_provider('Demo', 'https://example.org', 'https://example.org/models')
+        provider = catalog.add_provider('Demo', 'https://example.org', 'https://example.org/models')
+        with patch.object(catalog, 'download', return_value=json.dumps(OPEN_CODE).encode()):
+            files.refresh()
         identifier = provider['id']
         with patch.object(catalog, 'crypt_credential', return_value=b'fixture-ciphertext'):
             key = catalog.add_key(identifier, 'fixture-key')
@@ -129,12 +207,12 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(AgentApiKey.objects.filter(pk=key['id']).exists())
         self.assertTrue(AgentModel.objects.filter(provider_id=identifier).exists())
         catalog.remove_key(key['id'])
-        AgentProvider.objects.filter(pk=identifier).update(refresh_after=timezone.now())
+        files.request_download('provider-'+str(identifier))
         def remove_during_fetch(_):
             self.assertEqual(catalog.remove_provider(identifier), {'removed': True})
-            return OPEN_CODE
-        with patch.object(catalog, 'refresh_reference'), patch.object(catalog, 'fetch', side_effect=remove_during_fetch):
-            catalog.refresh()
+            return json.dumps(OPEN_CODE).encode()
+        with patch.object(catalog, 'download', side_effect=remove_during_fetch):
+            files.refresh()
         self.assertFalse(AgentProvider.objects.filter(pk=identifier).exists())
         self.assertFalse(AgentModel.objects.filter(provider_id=identifier).exists())
 
@@ -347,8 +425,25 @@ if __name__ == '__main__':
                 sort_state = sort_migration.apply(controls_state.clone(), schema_editor)
             provider_migration = loader.get_migration('cab_core', '0059_model_policy_providers')
             with connection.schema_editor() as schema_editor:
-                provider_migration.apply(sort_state.clone(), schema_editor)
-            from cab_platform.core.models import AgentModelPolicy
+                live_previous = provider_migration.apply(sort_state.clone(), schema_editor)
+            old_provider = live_previous.apps.get_model('cab_core', 'AgentProvider').objects.create(
+                name='Existant', api_url='https://example.org', models_url='https://example.org/models')
+            old_key_id = uuid4()
+            live_previous.apps.get_model('cab_core', 'AgentApiKey').objects.create(
+                id=old_key_id, provider_id=old_provider.pk, ciphertext='fixture-encrypted-key')
+            live_previous.apps.get_model('cab_core', 'AgentModel').objects.create(
+                provider_id=old_provider.pk, identifier='existing-model',
+                source={'remote': 'fixture-source-only'},
+                details={'summary': {'name': 'Existant'}, 'metadata': {'fixture-private': True}})
+            live_migration = loader.get_migration('cab_core', '0060_agent_catalog_live')
+            with connection.schema_editor() as schema_editor:
+                live_migration.apply(live_previous.clone(), schema_editor)
+            from cab_platform.core.models import AgentCatalogFile, AgentCatalogProjection, AgentModelPolicy
+            assert AgentCatalogFile.objects.get(provider_id=old_provider.pk).state == 'queued'
+            assert AgentCatalogProjection.objects.get(pk='key:'+str(old_key_id)).data['provider_id'] == old_provider.pk
+            assert 'ciphertext' not in AgentCatalogProjection.objects.get(pk='key:'+str(old_key_id)).data
+            assert AgentCatalogProjection.objects.get(kind='model').data['name'] == 'Existant'
+            assert 'source' not in AgentCatalogProjection.objects.get(kind='model').data
             upgraded = AgentModelPolicy.objects.get(pk=legacy.pk)
             assert (upgraded.cache_read_max, upgraded.cache_write_min) == (Decimal('.2'), Decimal('.3'))
             assert (upgraded.model_filter, upgraded.cache_read_min, upgraded.cache_write_max) == ('', 0, 0)
@@ -356,6 +451,7 @@ if __name__ == '__main__':
             assert upgraded.provider_ids is None
             result = unittest.main(exit=False).result
             with connection.schema_editor() as schema_editor:
+                live_migration.unapply(live_previous, schema_editor)
                 provider_migration.unapply(sort_state, schema_editor)
                 sort_migration.unapply(controls_state, schema_editor)
                 controls_migration.unapply(policy_state, schema_editor)

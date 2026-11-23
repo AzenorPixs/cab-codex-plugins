@@ -375,6 +375,77 @@ class ModelPolicyEdit(ModelPolicyInput):
     id: CatalogID
 
 
+class AgentProviderEdit(AgentProviderInput):
+    id: CatalogID
+
+
+class CatalogSourceURL(Schema):
+    url: str
+
+
+def catalog_document(key):
+    from cab_platform.agent_catalog_files import preview
+    response = HttpResponse(preview(key), content_type='application/json')
+    response['Cache-Control'] = 'private, no-store'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+@api.get('/administration/agent-catalog-display')
+def agent_catalog_display(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import display
+    return agent_catalog_response('rows', display())
+
+
+@api.post('/administration/agent-catalog-scan')
+def scan_agent_catalog(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import request_scan
+    return request_scan()
+
+
+@api.post('/administration/agent-providers/edit')
+def edit_agent_provider(request, body: AgentProviderEdit):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import save_provider
+    return save_provider(body.id, **body.model_dump(exclude={'id'}))
+
+
+@api.post('/administration/agent-providers/refresh')
+def refresh_agent_provider(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import request_download
+    return request_download('provider-'+str(body.id))
+
+
+@api.get('/administration/agent-providers/file')
+def agent_provider_file(request, id: CatalogID):
+    principal(request, admin=True)
+    return catalog_document('provider-'+str(id))
+
+
+@api.post('/administration/agent-completion-catalog')
+def save_agent_completion_catalog(request, body: CatalogSourceURL):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import configure_completion
+    return configure_completion(body.url)
+
+
+@api.post('/administration/agent-completion-catalog/refresh')
+def refresh_agent_completion_catalog(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import COMPLETION, request_download
+    return request_download(COMPLETION)
+
+
+@api.get('/administration/agent-completion-catalog/file')
+def agent_completion_catalog_file(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import COMPLETION
+    return catalog_document(COMPLETION)
+
+
 @api.post('/administration/agent-providers/remove')
 def delete_agent_provider(request, body: CatalogRemoval):
     principal(request, admin=True)
