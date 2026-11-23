@@ -366,3 +366,206 @@ SGS MUST fournir une lecture locale bornée aux identités et bornes des session
 #### Scenario: Télémétrie volumineuse
 - **WHEN** la télémétrie est volumineuse
 - **THEN** la liste des RUN directs ne recalcule pas les événements statistiques
+
+### Requirement: Remédiation d’une perte de connecteur MCP
+
+CAB MUST surveiller les transitions actif vers inactif indépendamment de l’interface. CAB MUST vérifier l’identité de l’agent toujours actif avant d’agir et protéger les effets incertains. Le résultat horodaté d’une remédiation MUST figurer dans les notifications. Le succès MUST exiger un heartbeat frais, un moteur et un catalogue concordants.
+
+#### Scenario: L’agent reste actif
+
+- **WHEN** CAB détecte une perte persistante et confirme l’identité noyau de l’agent
+- **THEN** CAB tente un contrôle natif ou une récupération bornée du moteur par son relais et publie le résultat sur preuve
+
+#### Scenario: Une liaison saine prend déjà le relais
+
+- **WHEN** CAB observe un seul remplaçant vivant pour le même acteur, la même instance et le même emplacement, avec un heartbeat frais, un relais, un moteur et un catalogue à la version déployée
+- **THEN** CAB n’émet aucun nouveau contrôle pour l’ancienne liaison et clôt son observation comme devenue sans objet sans notification de remédiation
+- **AND THEN** CAB préserve les résultats et protections des contrôles déjà engagés
+
+#### Scenario: Effet protégé ou catalogue manquant
+
+- **WHEN** la récupération est incertaine ou que le catalogue n’est pas observé
+- **THEN** CAB conserve les protections et aucun succès n’est publié
+
+### Requirement: Registre des binaires observés par CAB
+
+CAB MUST stocker le PID, le compte, le chemin et l’état des binaires suivis. Un arrêt MUST conserver la ligne jusqu’au prochain démarrage normal. CAB MUST conserver les lignes pendant un démarrage corrélé à une mise à jour du paquet en cours.
+
+#### Scenario: Démarrage normal et mise à jour
+
+- **WHEN** CAB démarre sans reçu de mise à jour applicable à sa version
+- **THEN** il vide le registre avant la première observation
+- **AND THEN** il préserve les lignes si le démarrage correspond à une transaction de mise à jour vérifiée
+
+### Requirement: Catalogue confirmé avant la projection active
+La projection MCP MUST publier Actif avec un heartbeat frais, un moteur vivant et un catalogue correspondant à ce moteur. Une attente de lecture de catalogue sur un moteur vivant MUST NOT déclencher une deuxième relance.
+
+#### Scenario: Moteur relancé et catalogue manquant
+
+- **WHEN** le moteur répond mais que le client n’a pas encore lu le catalogue
+- **THEN** la projection conserve le connecteur inactif jusqu’à une preuve concordante
+
+### Requirement: Surveillance du cluster PostgreSQL CAB
+
+CAB MUST inscrire le processus principal du cluster local configuré dans son registre. Si CAB tourne et que ce cluster est confirmé arrêté, il MUST essayer de démarrer uniquement cette unité, une seule fois par panne. Un arrêt manuel du cluster déclenche la même surveillance. Le succès MUST être confirmé par une requête SQL.
+
+#### Scenario: Arrêt puis disponibilité
+
+- **WHEN** le cluster CAB précédemment prêt est confirmé arrêté
+- **THEN** CAB consigne son intention et essaie une fois de démarrer son unité
+- **AND THEN** CAB enregistre un résultat horodaté et le publie dans les notifications dès que la base est disponible
+
+### Requirement: Reprise des veilles inotify internes
+
+CAB MUST essayer une seule reconstruction d’une veille inotify Git ou statistiques dont le descripteur est devenu indisponible. Le résultat MUST être horodaté et notifié. Un échec MUST NOT déclencher une boucle.
+
+#### Scenario: Veille noyau perdue
+
+- **WHEN** une lecture ou une inscription des veilles révèle un échec inotify
+- **THEN** CAB reconstruit une fois les descripteurs et vérifie leur lecture avant d’annoncer le succès
+
+### Requirement: Compteurs de binaires dans Administration
+La page d’accueil Administration MUST afficher un bloc Binaires à deux colonnes. Le total des binaires actifs MUST se trouver à gauche et celui des binaires inactifs à droite, avec des couleurs distinctes. Les deux totaux MUST être mis à jour via Electric à partir du registre. La projection MUST être limitée aux totaux et accessible aux administrateurs.
+
+#### Scenario: Un binaire devient inactif
+- **WHEN** le registre passe un binaire d’actif à inactif
+- **THEN** les deux compteurs sont actualisés dans la page ouverte
+
+### Requirement: Consultation des binaires actifs et inactifs
+Chaque compteur MUST ouvrir l’onglet correspondant sur /administration/binaries. Le titre MUST ouvrir la page Binaires. Les tableaux MUST se mettre à jour via Electric et rester accessibles aux seuls administrateurs.
+
+#### Scenario: Consultation des processus arrêtés
+- **WHEN** un administrateur sélectionne le compteur Inactifs
+- **THEN** le tableau de l’onglet Inactifs affiche les processus arrêtés du registre
+
+### Requirement: Pagination et tri des binaires
+Les onglets Actifs et Inactifs MUST afficher au plus dix binaires par page et proposer une navigation. Chaque en-tête MUST permettre un tri réversible. Les dates MUST être triées chronologiquement et les PID numériquement.
+
+#### Scenario: Tri d’une liste paginée
+- **WHEN** l’administrateur clique deux fois sur un même en-tête
+- **THEN** le tri global de l’onglet inverse son ordre et le tableau affiche la première page des résultats
+
+### Requirement: Reprise bornée des composants CAB
+
+CAB MUST superviser la sortie de son API et d’Electric. Un mécanisme indépendant MUST surveiller l’échec du démon CAB. La reprise MUST être limitée à une tentative par panne, donner lieu à une notification horodatée et exiger une preuve de disponibilité avant succès.
+
+#### Scenario: Sortie d’un enfant
+
+- **WHEN** l’API CAB ou Electric s’arrête hors maintenance
+- **THEN** CAB démarre une seule fois le remplaçant et vérifie sa réponse avant de le déclarer disponible
+
+#### Scenario: Démon CAB en échec
+
+- **WHEN** systemd constate un échec du démon
+- **THEN** une unité indépendante peut le démarrer une fois et vérifier la réponse de son API
+- **AND THEN** un arrêt volontaire ne déclenche pas cette reprise
+
+### Requirement: Convergence continue des connecteurs MCP
+CAB MUST compter les liaisons actives par type d’agent, tous comptes confondus, avec un maximum de une. CAB MUST vérifier que le relais, le moteur et le catalogue correspondent à la version déployée. La remédiation MUST reprendre les mécanismes admissibles avec un délai et préserver les opérations protégées et les effets incertains.
+
+#### Scenario: Détection et résolution d’un écart
+- **WHEN** un agent présente au moins deux liaisons actives ou une version non attestée
+- **THEN** CAB notifie le début de la remédiation et maintient la surveillance
+- **AND THEN** CAB notifie le retour après observation d’une seule liaison active et de la concordance des trois versions
+
+#### Scenario: Reprise d’un bureau au profil de partage compatible
+- **WHEN** CAB observe l’identité de l’instance graphique, un profil compatible et une installation locale vérifiée
+- **THEN** CAB peut reprendre cette instance sur frontière sûre au moyen du parcours CABU, sans réinstallation
+- **AND THEN** le reçu n’atteste la reprise des anciennes liaisons qu’après observation de leur arrêt et de la liaison de remplacement unique à la version cible
+
+### Requirement: Rattachement des RUN sur le canal MCP partagé
+CAB MUST associer chaque appel lié à un RUN à la session native vérifiée transportée par le client sur la liaison partagée. Les rattachements MUST rester distincts pour chaque session native. CAB MUST refuser tout contexte absent, inconnu ou divergent dans le transport partagé.
+
+#### Scenario: Deux RUN partagent un même canal
+- **WHEN** deux sessions Codex utilisent une liaison commune
+- **THEN** chaque appel lié à un RUN utilise le rattachement vérifié de sa session native
+- **AND THEN** un appel sans contexte vérifié ne sélectionne aucun autre RUN
+
+### Requirement: Disponibilité de l’API avant rechargement de sa journalisation
+Le démon CAB MUST attendre une réponse de son processus API avant de lui transmettre un signal de rechargement. L’API MUST charger sa configuration de journalisation pendant son démarrage.
+
+#### Scenario: Démarrage avec processus API encore en initialisation
+- **WHEN** le démon démarre et que l’API n’a pas encore répondu
+- **THEN** le démon laisse l’API finir son initialisation sans lui transmettre de signal de rechargement
+
+#### Scenario: Demande explicite après disponibilité
+- **WHEN** le démon reçoit une demande de rechargement et que son processus API a confirmé sa disponibilité
+- **THEN** le démon recharge sa propre journalisation et transmet la demande à l’API
+
+### Requirement: Découverte locale de l’écoute IPv4 d’OpenCode
+
+CAB MUST prendre en compte les sockets serveur IPv4 appartenant à l’instance OpenCode vérifiée qui acceptent une connexion sur 127.0.0.1. La sonde MUST utiliser l’adresse locale et confirmer l’identité du processus répondant avant une action de remédiation.
+
+#### Scenario: OpenCode écoute sur toutes les interfaces IPv4
+
+- **WHEN** l’instance OpenCode vérifiée détient une écoute sur 0.0.0.0
+- **THEN** la surveillance inclut ce port pour sa sonde sur 127.0.0.1 et vérifie le PID de la réponse native
+- **AND THEN** l’état MCP connecté dans CAB reste fondé sur un heartbeat CAB authentifié
+
+### Requirement: Fabrique des artefacts de projet
+Le détail d’un projet MUST exposer le lien Fabrique et sa page `/projects/<ID>/factory`. Elle MUST reprendre le menu, le titre avec séparateur et les cartes responsives des Forges. Chaque carte MUST être activée par l’indicateur Debian ou Docker du projet.
+
+#### Scenario: Artefacts déjà générés
+- **WHEN** le projet active la construction Debian ou Docker
+- **THEN** CAB affiche les derniers paquets par nom et architecture ou la dernière image locale observée
+- **AND THEN** les métadonnées de tous les projets sont conservées dans `project_artifacts` en PostgreSQL et réobservées en arrière-plan
+
+#### Scenario: Génération manuelle
+- **WHEN** un administrateur demande une construction pour un format activé
+- **THEN** CAB met en file la fonction native correspondant au bouton et affiche son état
+- **AND THEN** Debian utilise la recette déclarative et Docker le contexte et les arguments publics compatibles avec DIU
+- **AND THEN** une construction manuelle ne remplace pas un artefact existant de même version dont le contenu ou la configuration diffère
+
+#### Scenario: Construction Docker indépendante des forges
+- **WHEN** une configuration locale Docker valide est lue à la mise en file, au lancement ou à l’observation
+- **THEN** un réglage de forge absent, invalide ou modifié ne bloque pas ces opérations
+- **AND THEN** une construction réussie pose `latest` et la version du projet sans préfixe `v` sur la même image locale
+- **AND THEN** la publication versionnée reprend l’identifiant de cette image locale, sans relancer le build, et contrôle le registre de la destination choisie
+
+#### Scenario: Nouvelle observation après succès
+- **WHEN** une construction locale réussit
+- **THEN** CAB observe le résultat et le rend disponible dans la Fabrique sans relancer la construction
+
+#### Scenario: Diagnostic d’une demande ou d’une construction en échec
+- **WHEN** la demande manuelle de construction est refusée ou que la tentative lancée par l’utilisateur échoue
+- **THEN** la Fabrique ouvre automatiquement l’Overview du format concerné et le détail reste réouvrable depuis sa carte
+- **AND THEN** l’Overview indique l’état, l’étape atteinte, les contrôles et causes disponibles et, si observé, le code de sortie
+- **AND THEN** les motifs concernant la configuration publique peuvent identifier la clé et sa ligne sans publier sa valeur, une sortie brute ou des données privées
+
+### Requirement: Artefacts attestés dans les blocs des forges distantes
+CAB MUST afficher les artefacts Debian et Docker observés dans les blocs Forgejo, GitHub et GitLab seulement pour les types activés. CAB MUST conserver ces observations dans `project_forge_artifacts`, distincte de l’inventaire local, et permettre leur lecture initiale puis leur synchronisation par Electric.
+
+#### Scenario: Rafraîchissement d’une forge
+- **WHEN** CAB rafraîchit une forge
+- **THEN** il lit les fichiers Debian attachés aux releases et les tags Docker attestés par le registre
+- **AND THEN** la projection conserve la dernière observation si une lecture échoue et indique son indisponibilité
+- **AND THEN** une modification de la projection est transmise aux clients autorisés
+
+#### Scenario: Publication native d’artefacts locaux
+- **WHEN** l’administrateur actionne le bouton d’une forge qui dispose d’artefacts locaux activés
+- **THEN** CAB utilise la fonction native correspondant à la forge et le tag de version déjà confirmé à distance
+- **AND THEN** CAB relit l’état distant et préserve les résultats indéterminés sans rejeu automatique
+
+#### Scenario: Tags locaux Docker
+- **WHEN** CAB fabrique une image Docker pour un projet avec une version déclarée
+- **THEN** CAB pose sur cette même image le tag du projet `:latest` et le tag du projet suivi de sa version
+
+### Requirement: Overview des échecs des actions du projet
+
+L'écran Forges MUST présenter le motif des échecs des actions Git locales et distantes dans leur Overview. L'Overview d'une publication MUST présenter le reçu et l'étape de l'échec quand ils existent. Les diagnostics MUST exclure les secrets et les sorties brutes non filtrées.
+
+#### Scenario: Échec d'une action Git
+
+- **WHEN** l'utilisateur rencontre un refus ou un échec lors d'une action Git locale ou distante
+- **THEN** CAB affiche le motif dans l'Overview de cette action
+
+#### Scenario: Image locale sans le tag de la version du projet
+
+- **WHEN** le plan ne trouve aucune image portant la version du projet alors qu'une image locale est présente
+- **THEN** CAB affiche le tag requis dans l'Overview de publication
+
+#### Scenario: Échec asynchrone d'une publication
+
+- **WHEN** CAB observe l'échec ou le résultat incertain de la publication demandée depuis une carte de forge
+- **THEN** l'Overview affiche le reçu et la cause disponible
+- **AND THEN** le détail reste accessible après fermeture de l'Overview

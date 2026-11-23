@@ -17,6 +17,7 @@ from .agent_users import local_account
 from .core.commands import Refused,require
 from .core.models import Actor,AgentUser,Maintenance
 from .paths import STATE,private_dir
+from .client import ClientError
 from .jsonc import normalize as normalize_jsonc
 
 
@@ -24,6 +25,12 @@ class Uncertain(Exception):pass
 
 
 def codex_config(original,connector):
+    from .mcp_epoch import codex_epoch
+    from . import __version__
+    try:return codex_epoch(_codex_config(original,connector),__version__)
+    except ClientError as error:raise Refused(str(error),409) from error
+
+def _codex_config(original,connector):
     try:
         text=original.decode('utf-8')
         document=tomllib.loads(text)

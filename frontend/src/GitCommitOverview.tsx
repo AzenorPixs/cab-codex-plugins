@@ -1,13 +1,48 @@
-import {useEffect,useRef,useState} from 'react'
+import {actionMessage} from './ForgeActionOverview'
+import {useEffect,useRef,useState,type FormEvent} from 'react'
+import {useQueryClient} from '@tanstack/react-query'
+import {createPortal} from 'react-dom'
 import {api} from './api'
+import {newRequestId} from './requestId'
 
-export function GitCommitOverview({projectId,commit}:{projectId:string;commit:string}){
-  const [open,setOpen]=useState(false);const [content,setContent]=useState('');const [error,setError]=useState('');const dialog=useRef<HTMLDialogElement>(null)
+type Metadata={head:string;branch:string;commit:string;refs_digest:string;author:string;email:string;date:string;message:string;tags:{name:string;description:string}[]}
+export type Draft={author:string;email:string;date:string;message:string;tag_name:string;new_tag:string;tag_description:string}
+export function GitMetadataFields({value,tags,disabled,onChange,onTagChange,messageLimit=65536}:{value:Draft;tags:Metadata['tags'];disabled:boolean;onChange:(key:keyof Draft,value:string)=>void;onTagChange:(name:string)=>void;messageLimit?:number}){
+  return <><label>Message du commit<textarea style={{display:'block',width:'100%'}} rows={4} maxLength={messageLimit} value={value.message} disabled={disabled} onChange={e=>onChange('message',e.target.value)}/></label><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(18rem,100%),1fr))',gap:'1rem'}}><label>Auteur<input maxLength={300} value={value.author} required disabled={disabled} onChange={e=>onChange('author',e.target.value)}/></label><label>Courriel<input type="email" maxLength={300} value={value.email} required disabled={disabled} onChange={e=>onChange('email',e.target.value)}/></label></div><label>Date du commit avec fuseau<input value={value.date} placeholder="2026-11-18T17:00:00+01:00" required disabled={disabled} onChange={e=>onChange('date',e.target.value)}/></label><label>Tag à éditer<select value={value.tag_name} disabled={disabled} onChange={e=>onTagChange(e.target.value)}><option value="">Créer un nouveau tag</option>{tags.map(tag=><option key={tag.name} value={tag.name}>{tag.name}</option>)}</select></label><label>Tag<input maxLength={200} value={value.new_tag} disabled={disabled} onChange={e=>onChange('new_tag',e.target.value)}/></label><label>Description du tag<textarea style={{display:'block',width:'100%'}} rows={3} maxLength={16000} value={value.tag_description} disabled={disabled} onChange={e=>onChange('tag_description',e.target.value)}/></label></>
+}
+
+export function GitCommitOverview({projectId,commit,forge,historyHead,onEdited,editor}:{projectId:string;commit:string;forge?:string;historyHead?:string;onEdited?:(result?:{head:string;commit:string})=>void;editor?:{tag?:string;defaultTag?:string;label:string;ariaLabel?:string;buttonClassName?:string}}){
+  const [open,setOpen]=useState(false),[content,setContent]=useState(''),[error,setError]=useState(''),[editing,setEditing]=useState(false),[metadata,setMetadata]=useState<Metadata|null>(null),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[currentCommit,setCurrentCommit]=useState(commit),[currentHead,setCurrentHead]=useState(historyHead||''),[changed,setChanged]=useState(false),[uncertain,setUncertain]=useState(false)
+  const dialog=useRef<HTMLDialogElement>(null),request=useRef(''),client=useQueryClient()
   useEffect(()=>{
     if(!open){dialog.current?.close();return}
-    dialog.current?.showModal();let active=true;setContent('');setError('')
-    api<{content:string}>(`projects/${encodeURIComponent(projectId)}/git/commit/${encodeURIComponent(commit)}`).then(result=>{if(active)setContent(result.content)}).catch(()=>{if(active)setError('Le détail de ce commit est indisponible. Actualisez la page si le dépôt a changé.')})
+    if(!dialog.current?.open)dialog.current?.showModal()
+    if(editor)return
+    let active=true;setContent('');setError('')
+    const path=historyHead?`projects/${encodeURIComponent(projectId)}/git/history/commit/${encodeURIComponent(currentCommit)}?${new URLSearchParams({head:currentHead})}`:forge?`projects/${encodeURIComponent(projectId)}/forges/${encodeURIComponent(forge)}/commit/${encodeURIComponent(currentCommit)}`:`projects/${encodeURIComponent(projectId)}/git/commit/${encodeURIComponent(currentCommit)}`
+    api<{content:string}>(path).then(result=>{if(active)setContent(result.content)}).catch(reason=>{if(active)setError(actionMessage(reason,'Le détail de ce commit est indisponible. Actualisez la page si le dépôt a changé.'))})
     return ()=>{active=false}
-  },[open,projectId,commit])
-  return <><button type="button" className="agent-config-link" onClick={()=>setOpen(true)} aria-label={`Afficher le dernier commit ${commit.slice(0,12)}`}>{commit.slice(0,12)}</button><dialog ref={dialog} className="lifecycle-dialog agent-config-dialog" aria-label="Dernier commit" onCancel={()=>setOpen(false)} onClose={()=>setOpen(false)}><h2>Dernier commit</h2>{!content&&!error&&<p role="status">Chargement…</p>}{error&&<p role="alert">{error}</p>}{content&&<pre className="agent-config-content git-commit-content">{content}</pre>}<div className="form-actions"><button type="button" onClick={()=>setOpen(false)}>Fermer</button></div></dialog></>
+  },[open,projectId,currentCommit,forge,currentHead,historyHead])
+  function close(){if(busy)return;setOpen(false);setEditing(false);setDraft(null);setMetadata(null);if(changed){setChanged(false);onEdited?.()}}
+  async function edit(target=currentCommit,head=currentHead){
+    setEditing(true);setLoading(true);setError('');setUncertain(false);request.current=''
+    try{if(!target&&editor?.tag){const tag=await api<{commit:string}>(`projects/${encodeURIComponent(projectId)}/git/tag?name=${encodeURIComponent(editor.tag)}`);target=tag.commit}
+      if(!target)throw new Error('Le commit local est indisponible. Actualisez la page.')
+      const value=await api<Metadata>(`projects/${encodeURIComponent(projectId)}/git/history/commit/${encodeURIComponent(target)}/metadata?${new URLSearchParams({head:head||((editor&&editor.tag==='')?target:'')})}`)
+      setMetadata(value);const tag=editor&&editor.tag!==undefined?value.tags.find(tag=>tag.name===editor.tag):value.tags[0];if(editor?.tag&&!tag)throw new Error('Le tag a changé. Fermez puis rouvrez l’éditeur.');setDraft({author:value.author,email:value.email,date:value.date,message:value.message,tag_name:tag?.name||'',new_tag:tag?.name||editor?.defaultTag||'',tag_description:tag?.description||''})
+    }catch(reason){setError(reason instanceof Error?reason.message:'Lecture des métadonnées indisponible.')}
+    finally{setLoading(false)}
+  }
+  function field(key:keyof Draft,value:string){request.current='';setDraft(old=>old?{...old,[key]:value}:old)}
+  async function save(event:FormEvent){
+    event.preventDefault();if(!metadata||!draft||busy||uncertain)return
+    if(!draft.new_tag&&draft.tag_description){setError('Renseignez un tag pour pouvoir ajouter sa description.');return}
+    if(!request.current)request.current=newRequestId()
+    setBusy(true);setError('')
+    try{const result=await api<{head:string;commit:string}>(`projects/${encodeURIComponent(projectId)}/git/history/commit-metadata`,{request_id:request.current,commit:metadata.commit,expected_head:metadata.head,expected_branch:metadata.branch,refs_digest:metadata.refs_digest,...draft})
+      setCurrentCommit(result.commit);setCurrentHead(result.head);setChanged(true);await client.invalidateQueries({queryKey:['projects']});setEditing(false);setDraft(null);if(editor){setChanged(false);setOpen(false);onEdited?.(result)}
+    }catch(reason){const text=reason instanceof Error?reason.message:'Modification indisponible.';setError(text);if(text.includes('incertain'))setUncertain(true)}
+    finally{setBusy(false)}
+  }
+  return <><button type="button" className={editor?.buttonClassName??'agent-config-link'} onClick={()=>{setCurrentCommit(commit);setCurrentHead(historyHead||'');setOpen(true);if(editor)void edit(commit,historyHead||'');else setEditing(false)}} aria-label={editor?(editor.ariaLabel||(editor.tag?`Modifier le tag ${editor.tag}`:'Ajouter un tag')):`Afficher ${historyHead?'le commit':'le dernier commit'} ${commit.slice(0,historyHead?8:12)}`}>{editor?editor.label:commit.slice(0,historyHead?8:12)}</button>{createPortal(<dialog ref={dialog} className={`lifecycle-dialog ${editing?'forge-editor':'agent-config-dialog'}`} style={{whiteSpace:'normal',fontFamily:'Inter,system-ui,sans-serif',...(editing?{width:'min(60rem,95vw)',maxHeight:'90dvh',overflowY:'auto' as const}:{})}} aria-label={editing?'Éditer les métadonnées du commit':historyHead?'Détail du commit':'Dernier commit'} onCancel={event=>{event.stopPropagation();event.preventDefault();close()}} onClose={event=>{event.stopPropagation();if(event.target===event.currentTarget&&!dialog.current?.open)close()}}><h2>{editing?'Éditer les métadonnées du commit':historyHead?'Détail du commit':'Dernier commit'}</h2>{editing?<form onSubmit={event=>void save(event)}>{loading&&<p role="status">Chargement des métadonnées…</p>}{draft&&!loading&&<><GitMetadataFields value={draft} tags={metadata?.tags||[]} disabled={busy||uncertain} onChange={field} onTagChange={name=>{const tag=metadata?.tags.find(t=>t.name===name);request.current='';setDraft({...draft,tag_name:tag?.name||'',new_tag:tag?.name||'',tag_description:tag?.description||''})}}/><p><strong>Modifier seulement le nom ou la description d’un tag ne change pas les identifiants des commits.</strong></p><p>Cette édition réécrit le commit et ses descendants sur la branche locale : leurs identifiants changent. Les tags locaux concernés suivent les nouveaux commits. Les fichiers du projet, l’index et les dépôts distants restent inchangés.</p>{draft.tag_name&&!draft.new_tag&&<p>Le tag sélectionné sera supprimé. Effacez aussi sa description pour confirmer cette suppression.</p>}</>}{error&&<p role="alert">{error}</p>}<div className="form-actions"><button type="submit" disabled={busy||loading||!draft||uncertain}>{busy?'Enregistrement…':'Enregistrer'}</button><button type="button" disabled={busy} onClick={()=>{if(editor)close();else{setEditing(false);setError('');setDraft(null)}}}>Annuler</button></div></form>:<>{!content&&!error&&<p role="status">Chargement…</p>}{error&&<p role="alert">{error}</p>}{content&&<pre className="agent-config-content git-commit-content">{content}</pre>}<div className="form-actions">{historyHead&&!forge&&content&&<button type="button" onClick={()=>void edit()}>Éditer</button>}{!historyHead&&!forge&&content&&<GitCommitOverview projectId={projectId} commit={currentCommit} historyHead={currentCommit} editor={{label:'Éditer',ariaLabel:'Éditer les métadonnées du dernier commit',buttonClassName:''}} onEdited={result=>{if(result){setCurrentCommit(result.commit);setCurrentHead(result.head);setChanged(true)}}}/>}<button type="button" disabled={busy} onClick={close}>Fermer</button></div></>}</dialog>,document.body)}</>
 }

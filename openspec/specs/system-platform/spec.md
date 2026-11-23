@@ -127,7 +127,7 @@ Le catalogue MUST conserver les projets dans PostgreSQL et préserver leurs iden
 
 #### Scenario: Création d’un projet
 - **WHEN** un administrateur valide le nom et le dossier d’un nouveau projet
-- **THEN** le projet est conservé dans projects, son dossier utilise les UID/GID configurés et il apparaît sélectionné dans la liste de gauche
+- **THEN** le projet est conservé dans projects, son dossier utilise les UID/GID configurés et il apparaît sélectionné dans la liste de gauche. Avant de déclarer le projet prêt, CAB MUST créer `project.env` sous le compte propriétaire, avec le nom public, l’identifiant public lorsqu’il est disponible et la politique de version initiale. Le nom MUST respecter les règles du champ `PROJECT_NAME`. Aucun fichier existant ne peut être écrasé.
 
 #### Scenario: Chemin choisi et projet existant
 - **WHEN** un administrateur crée ou ajoute un projet et saisit ou sélectionne un chemin absolu
@@ -163,11 +163,7 @@ La validation du cookie, du jeton CSRF et des origines MUST rester active.
 - **THEN** CAB refuse la requête sans authentifier le compte
 
 ### Requirement: Administration par sections et menus latéraux
-Les espaces Administration et Projets MUST disposer d’un menu latéral directement
-au bord gauche de l’écran, sans marge extérieure. L’administration MUST proposer
-les routes /administration/agents, /administration/database,
-/administration/interface, /administration/projects et /administration/web-server.
-/administration MUST ouvrir la section Agents. La version suit la livraison du paquet CAB.
+Administration et Projets MUST disposer d’un menu latéral au bord gauche, sans marge extérieure. L’administration MUST proposer les routes /administration/agents, /administration/database, /administration/interface, /administration/projects et /administration/web-server. /administration MUST afficher le titre Administration sans contenu de section. /administration/database MUST afficher les paramètres de base de données.
 
 #### Scenario: Navigation entre paramètres
 - **WHEN** l’administrateur sélectionne une section dans la barre gauche
@@ -356,26 +352,29 @@ session connue et son change, sans inventer d’identité native absente.
 - **THEN** les relations session/change sont reprises sans changer les identités ou les protections des RUN
 
 ### Requirement: Étapes et tâches du tableau des sessions
-Le tableau MUST afficher Étape et Tâches réalisées. Le cycle MUST conserver les
-onze étapes Initialisation, Prévol, Analyse, Cadrage, Spécification, Implémentation,
-Vérifications, Revue, Archivage, Statistiques, Clôture. Une déclaration propriétaire
-MUST pouvoir revenir en arrière ; une étape absente MUST rester non renseignée.
-Les compteurs MUST provenir du tasks.md canonique du change actif ou archivé.
+
+Le tableau MUST afficher étape et tâches réalisées. Les nouveaux RUN MUST
+employer douze étapes dans cet ordre : Initialisation, Prévol, Analyse, Cadrage,
+Spécification, Lecture du skill Version, Implémentation, Vérifications, Revue,
+Archivage, Statistiques et Clôture. Les RUN historiques MUST conserver le sens
+de leurs onze étapes. Le propriétaire MUST pouvoir reculer. Une étape absente
+MUST rester non renseignée. Les compteurs MUST venir du tasks.md canonique.
 
 #### Scenario: Position et avancement distincts
-- **WHEN** une étape est déclarée ou les cases de tasks.md changent
-- **THEN** la projection temps réel reflète ces données sans valider les autres étapes ni le gate terminal
+- **WHEN** la position déclarée ou les cases du tasks.md changent
+- **THEN** la projection reflète ces données et elles ne valident ni l’accusé du skill ni le gate terminal.
 
 ### Requirement: Détail du RUN lié au change
+
 Un clic sur le RUN MUST ouvrir /projects/<project_id>/runs/<run_id>. La page MUST
-afficher identité, état, change, SID, étape, phase, activité observée, mandat,
-gate, demandes indécises, jalon prouvé, attente, blocages et les onze étapes.
-Elle MUST montrer les tâches du change et leur provenance ; les données absentes
-MUST rester Non observé ou Non renseigné, sans inférence de réussite.
+afficher identité, état, change, SID, étape, phase, activité observée, mandat, gate,
+demandes indécises, jalon prouvé, attente, blocages et les étapes du cycle propre
+au RUN. Elle MUST montrer les tâches du change et leur provenance. Une donnée
+absente MUST rester Non observé ou Non renseigné.
 
 #### Scenario: Change archivé ou indisponible
-- **WHEN** la page individuelle est consultée
-- **THEN** les tâches sont lues du change unique actif ou archivé, ou signalées indisponibles sans lecture hors projet
+- **WHEN** la page du RUN est consultée
+- **THEN** les tâches proviennent du change unique actif ou archivé ou sont signalées indisponibles sans lecture hors projet.
 
 ### Requirement: Tâches mémorisées par change
 La table change_tasks MUST conserver chaque tâche avec son change, identité de
@@ -642,46 +641,164 @@ rester refusé ; les contrôles de propriété et d’identité du journal sont 
 - **THEN** CAB peut rattacher le journal à ce projet sans changer son identité
 
 ### Requirement: Bloc Git du projet
-L’accueil du projet MUST afficher un bloc Git entre Configuration et les cartes
+La page Forges du projet MUST afficher le bloc Git en premier, avant les cartes
 de forges. Son titre MUST présenter le logo Git, le nom Git et un séparateur
-vertical. La version Git locale MUST être mutualisée en base et synchronisée
-via Electric, puis affichée à côté du titre en plus petit. Les versions des
-instances Forgejo et GitLab et la dernière version disponible de l’API GitHub
-MUST être mutualisées par instance, stockées en base et affichées dans leur
-titre via Electric ; la version Forgejo affichée MUST omettre le signe + et son
-suffixe. Dans les titres de forge, le résultat d’authentification MUST porter
-le libellé « API ». Chaque version MUST être vérifiée au maximum une fois par
-24 heures avec un décalage aléatoire, mémorisé lors des redémarrages.
-Le bloc MUST afficher sur deux colonnes les valeurs présentes de
-GIT_USER_NAME, GIT_USER_EMAIL et LOCAL_DEFAULT_BRANCH avec des libellés lisibles.
-Ces valeurs MUST suivre la projection PostgreSQL et la synchronisation Electric
-des métadonnées de project.env. Un bouton d’édition MUST permettre de modifier
-ces trois valeurs dans project.env avec le contrôle de révision existant, sans
-modifier les autres variables. L’état d’initialisation Git MUST être conservé
-dans les données du projet et projeté vers Electric : 1 si le dépôt est
-initialisé, 0 s’il est absent. La présence de .git MUST être réconciliée en
-arrière-plan ; un bouton MUST permettre son initialisation uniquement lorsque
-l’état conservé est 0. En cas d’état réel illisible, la dernière valeur connue
-MUST être conservée.
+vertical.
+
+Le bloc Git MUST afficher après le courriel le nombre de commits accessibles depuis le commit courant. Ce nombre MUST être conservé dans PostgreSQL, recalculé en arrière-plan et diffusé via Electric lorsqu’il change. Un dépôt sans commit affiche zéro.
+
+#### Scenario: Affichage du nombre de commits
+- **WHEN** CAB mesure l’état Git d’un projet
+- **THEN** le nombre de commits accessibles depuis le commit courant est enregistré et affiché dans le bloc Git.
 
 #### Scenario: Affichage du bloc Git
-- **WHEN** un utilisateur ouvre l’accueil d’un projet
-- **THEN** il voit le bloc Git après Configuration et avant les cartes de forges
+- **WHEN** un utilisateur ouvre la page Forges d’un projet
+- **THEN** il voit le bloc Git en premier, suivi des cartes des forges.
+
+### Requirement: Version Git locale mutualisée
+La version Git locale MUST être mutualisée en base et synchronisée via Electric,
+puis affichée à côté du titre en plus petit. Elle MUST être vérifiée au maximum
+une fois par 24 heures avec un décalage aléatoire mémorisé lors des redémarrages.
+
+#### Scenario: Affichage de la version Git
+- **WHEN** la version Git locale est connue
+- **THEN** elle est affichée à côté du titre Git depuis la valeur mutualisée
+
+### Requirement: Versions des forges mutualisées
+Les versions Forgejo et GitLab et la dernière version disponible de l’API GitHub
+MUST être mutualisées par instance et stockées en base. Les versions des forges
+distantes MUST NOT être affichées dans les titres des blocs. Le résultat
+d’authentification MUST porter le libellé « API ». Chaque version MUST être
+vérifiée au maximum une fois par 24 heures avec un décalage aléatoire mémorisé.
+
+#### Scenario: Version de forge connue
+- **WHEN** une version de forge distante est connue
+- **THEN** sa valeur reste conservée en base sans être affichée dans le titre
+
+### Requirement: Configuration Git du projet
+Le bloc Git MUST afficher sur deux colonnes les valeurs présentes de
+GIT_USER_NAME, GIT_USER_EMAIL et LOCAL_DEFAULT_BRANCH avec des libellés lisibles.
+Ces valeurs MUST suivre la projection PostgreSQL et Electric depuis project.env.
+Un bouton MUST permettre de modifier ces trois valeurs dans project.env avec le
+contrôle de révision existant, sans modifier les autres variables.
+
+#### Scenario: Modification de la configuration Git
+- **WHEN** un administrateur édite les valeurs Git du projet
+- **THEN** seules les trois variables demandées peuvent être modifiées
+
+### Requirement: Initialisation Git du projet
+L’état Git MUST être conservé dans les données du projet et projeté via Electric :
+1 si le dépôt est initialisé, 0 s’il est absent. La présence de .git MUST être
+réconciliée en arrière-plan ; un bouton MUST permettre son initialisation uniquement
+lorsque l’état conservé est 0. En cas d’état réel illisible, la dernière valeur
+connue MUST être conservée.
+
+#### Scenario: Dépôt non initialisé
+- **WHEN** l’état conservé vaut 0
+- **THEN** le bouton d’initialisation du dépôt Git est affiché
 
 ### Requirement: État Git local du projet
-À l’ouverture d’un projet, CAB MUST mesurer en arrière-plan son état Git local
-et en conserver une seule image par projet dans la table git_projects. La page
-MUST afficher l’image enregistrée immédiatement puis recevoir les changements
-via Electric. Le bloc Git MUST présenter le dernier commit et son horodatage
-local au format jj.mm.AA hh.mm, les tags associés à ce commit sous « Version »,
-
-l’état et les nombres de fichiers suivis, modifiés, indexés, ignorés, non suivis
-et en conflit. Une mesure indisponible MUST conserver la dernière image et
-signaler son indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
+À l’ouverture d’un projet, CAB MUST mesurer son état Git local en arrière-plan
+et conserver une seule image par projet dans git_projects. La page MUST afficher
+l’image enregistrée immédiatement puis recevoir les changements via Electric.
+Une mesure indisponible MUST conserver la dernière image et signaler son
+indisponibilité. Aucune analyse distante ni fetch ne sont réalisés.
 
 #### Scenario: Mise à jour de l’état Git
-- **WHEN** un projet est ouvert ou que le bouton de rafraîchissement Git est sélectionné, et que la mesure locale diffère de l’image enregistrée
-- **THEN** CAB met à jour la même ligne du projet et la page affiche la nouvelle image ; le bouton de rafraîchissement est animé pendant la mesure, à l’ouverture comme après un clic
+- **WHEN** un projet est ouvert ou que le bouton de rafraîchissement Git est sélectionné et que l’état local diffère
+- **THEN** CAB met à jour la même ligne et la page affiche la nouvelle image
+
+### Requirement: Présentation de l’état Git local
+Le bloc Git MUST présenter le dernier commit, son horodatage local au format
+jj.mm.AA hh.mm, ses tags sous « Tag », l’état et les nombres de fichiers
+suivis, modifiés, indexés, ignorés, non suivis et en conflit. Le bouton de
+rafraîchissement MUST être animé pendant la mesure, à l’ouverture comme après
+un clic.
+
+#### Scenario: Affichage de l’état Git
+- **WHEN** l’état Git est disponible
+- **THEN** ses indicateurs sont affichés dans le bloc Git du projet
+
+### Requirement: Stockage des objets Git
+Le bloc Git MUST afficher les nombres et tailles des objets libres et compactés, le nombre de packs, les objets libres déjà compactés et les fichiers inutiles. CAB MUST mesurer ces indicateurs avec l’état Git, les conserver en PostgreSQL et diffuser leurs changements par Electric.
+
+#### Scenario: Réconciliation des objets Git
+- **WHEN** la page Forges est chargée ou que l’état Git est rafraîchi automatiquement ou manuellement
+- **THEN** CAB actualise les indicateurs et les diffuse si leurs valeurs changent.
+
+### Requirement: Indexation des fichiers suivis modifiés
+Le bloc Git MUST proposer sur la ligne « Modifiés » une action visible uniquement lorsque le compteur est supérieur à zéro. CAB MUST afficher avant confirmation la liste des fichiers suivis concernés, y compris les suppressions suivies, sans inclure les fichiers non suivis. Après confirmation, CAB MUST vérifier que l’état observé n’a pas changé, indexer uniquement les fichiers listés et actualiser l’état Git diffusé via PostgreSQL et Electric. Tout résultat incertain MUST être signalé sans rejouer automatiquement l’opération.
+
+#### Scenario: Examiner et indexer les fichiers modifiés
+- **WHEN** l’utilisateur sélectionne l’action d’indexation des fichiers modifiés
+- **THEN** CAB affiche la liste et attend une validation avant toute modification de l’index.
+
+### Requirement: Commit local depuis le bloc Git
+Un administrateur MUST pouvoir ouvrir une fenêtre de commit avec tag et description facultatifs. Le champ du tag MUST être vide par défaut et rester facultatif. CAB MUST indexer les modifications et créer le commit avec l’identité du projet et la description ou un message automatique. Il MUST créer le tag uniquement s’il est renseigné et diffuser l’état Git via PostgreSQL et Electric. Il MUST NOT lancer de push ou CI/CD.
+
+#### Scenario: Suivi du commit
+- **WHEN** un administrateur lance le commit depuis la fenêtre
+- **THEN** la fenêtre se transforme en console et présente les étapes, les sorties réelles des commandes et le résultat en direct. Les étapes sont diffusées via PostgreSQL et Electric ; les sorties de console sont transmises à la session sans être stockées en base.
+
+#### Scenario: Modifications disponibles
+- **WHEN** un administrateur lance le commit et que des modifications sont indexées
+- **THEN** CAB crée un commit local et réconcilie l’état Git.
+
+#### Scenario: Tag existant
+- **WHEN** le tag demandé existe déjà
+- **THEN** CAB demande si le tag local doit être déplacé avant toute indexation.
+- **AND** si le déplacement est confirmé, CAB protège la valeur observée du tag contre une modification concurrente et le déplace vers le nouveau commit.
+- **AND** si le déplacement est refusé, CAB ne modifie pas le dépôt.
+
+#### Scenario: Aucune modification
+- **WHEN** aucune modification n’est à enregistrer
+- **THEN** CAB ne crée pas de commit vide et réconcilie l’état Git.
+
+### Requirement: Retrait du dernier commit local
+Le bloc Git MUST proposer une corbeille pour le dernier commit. La fenêtre MUST permettre de retirer ce commit en conservant les modifications ou de revenir aux fichiers du premier parent. CAB MUST vérifier la référence observée avant de la déplacer et actualiser PostgreSQL et Electric. Les tags existants et les forges distantes MUST rester inchangés.
+
+#### Scenario: Conserver les modifications
+- **WHEN** l’administrateur choisit de conserver les modifications
+- **THEN** CAB replace la branche sur le premier parent et conserve les fichiers et l’index.
+
+#### Scenario: Revenir à l’état précédent
+- **WHEN** l’administrateur choisit de supprimer les modifications du commit
+- **THEN** CAB affiche une seconde fenêtre détaillant les fichiers à restaurer ou supprimer avant validation, y compris les fichiers présents dans les dossiers non suivis.
+- **AND** après validation, CAB vérifie que la liste et la référence n’ont pas changé, replace la branche et les fichiers sur le premier parent, et supprime les modifications locales et les fichiers non suivis non ignorés.
+
+#### Scenario: Référence modifiée ou résultat partiel
+- **WHEN** le commit a changé depuis l’ouverture ou que la restauration des fichiers échoue après déplacement
+- **THEN** CAB signale le résultat sans rejouer automatiquement l’opération.
+
+### Requirement: Édition du tag Git local
+Dans le bloc Git, chaque tag du dernier commit MUST ouvrir une fenêtre permettant de modifier son nom et sa description. CAB MUST vérifier que le tag et le commit observés n’ont pas changé, refuser un nom déjà utilisé et appliquer les changements localement sans publier vers les forges. Les changements MUST actualiser l’état PostgreSQL et Electric.
+
+#### Scenario: Renommage ou description du tag
+- **WHEN** un administrateur enregistre un tag valide dont la référence observée est inchangée
+- **THEN** CAB conserve le commit ciblé et actualise le nom et la description du tag local.
+
+#### Scenario: Nom du tag effacé
+- **WHEN** un administrateur enregistre la fenêtre avec le champ Tag vide
+- **THEN** CAB supprime uniquement le tag local, conserve le commit et actualise l’état Git.
+
+#### Scenario: Ajout d’un tag absent
+- **WHEN** le commit courant n’a pas de tag et qu’un administrateur sélectionne sa ligne Tag
+- **THEN** CAB ouvre une fenêtre pour créer un tag local avec un nom et une description facultative, sans changer le commit.
+
+#### Scenario: Corbeille du tag
+- **WHEN** un administrateur sélectionne la corbeille associée à un tag local
+- **THEN** CAB supprime ce tag sans confirmation supplémentaire, conserve le commit et actualise l’état Git.
+
+#### Scenario: Modification concurrente
+- **WHEN** le tag ou le commit a changé depuis l’ouverture de la fenêtre
+- **THEN** CAB refuse la modification sans écraser la nouvelle référence.
+
+### Requirement: Nettoyage des objets Git déjà compactés
+Le bloc Git MUST proposer une action de nettoyage sur la ligne des objets à nettoyer uniquement lorsque leur nombre est supérieur à zéro. Cette action MUST supprimer seulement les objets libres déjà présents dans les packs, puis relire l’état Git et actualiser la projection PostgreSQL diffusée par Electric.
+
+#### Scenario: Nettoyage demandé
+- **WHEN** un administrateur sélectionne le nettoyage des objets déjà compactés
+- **THEN** CAB exécute le nettoyage local et réconcilie l’état Git, ou signale son échec.
 
 ### Requirement: Consultation des modifications non indexées
 Lorsque l’état Git affiche « Modifications », il MUST permettre d’ouvrir une
@@ -695,16 +812,58 @@ la fenêtre MUST le signaler.
 
 ### Requirement: Consultation des compteurs Git
 Les compteurs Suivis, Modifiés, Indexés, Ignorés, Non suivis et Conflits MUST
-ouvrir une fenêtre en lecture seule listant les fichiers correspondants du
-projet autorisé. Les listes volumineuses MUST être paginées et signaler toute
-troncature. Modifiés réutilise la fenêtre des modifications non indexées. Indexés
-MUST afficher le résumé des changements indexés avant la liste des fichiers. Chaque fenêtre de compteur
-MUST proposer une recherche filtrant immédiatement les lignes affichées ; elle
-MUST se placer au-dessus de Fermer, à droite de la pagination si présente.
+ouvrir une fenêtre en lecture seule listant les fichiers correspondants du projet
+autorisé. Les listes volumineuses MUST être paginées et signaler toute troncature.
 
 #### Scenario: Consultation d’un compteur
 - **WHEN** un utilisateur sélectionne un compteur Git
 - **THEN** CAB affiche les fichiers correspondants ou indique qu’il n’y en a aucun
+
+### Requirement: Détail des changements indexés
+Modifiés MUST réutiliser la fenêtre des modifications non indexées. Indexés MUST
+afficher le résumé des changements indexés avant la liste des fichiers.
+
+#### Scenario: Consultation des fichiers indexés
+- **WHEN** un utilisateur sélectionne le compteur Indexés
+- **THEN** le résumé des changements précède la liste des fichiers
+
+### Requirement: Recherche dans les compteurs Git
+Chaque fenêtre de compteur MUST proposer une recherche filtrant immédiatement
+les lignes affichées. Le champ MUST se placer au-dessus de Fermer, à droite de
+la pagination si présente.
+
+#### Scenario: Filtrage des fichiers
+- **WHEN** un utilisateur saisit une recherche dans une fenêtre de compteur
+- **THEN** seules les lignes correspondantes restent affichées
+
+### Requirement: Consultation des branches Git
+La valeur de branche dans le bloc Git MUST ouvrir une fenêtre en lecture seule
+présentant les branches locales et les références distantes connues localement,
+leur synchronisation et les dépôts distants configurés. La consultation MUST
+fonctionner sans connexion réseau et masquer les identifiants sensibles dans
+les adresses.
+
+#### Scenario: Consultation des branches
+- **WHEN** un utilisateur sélectionne la valeur de branche du projet
+- **THEN** CAB affiche les branches et les informations locales des dépôts
+
+### Requirement: Consultation de l’historique des commits locaux
+Le nombre de commits du bloc Git MUST ouvrir une fenêtre de consultation de l’historique du projet autorisé, avec au plus 25 commits par page. Chaque commit MUST apparaître sur une seule ligne avec son identifiant court, sa date, son auteur, ses références et son message. La pagination MUST afficher la page courante et le nombre total de pages, permettre de parcourir l’historique jusqu’au dernier commit et conserver le point de départ de la consultation. Un filtre de recherche MUST affiner à la saisie l’ensemble de l’historique selon les informations affichées, et adapter la pagination aux résultats. Chaque identifiant MUST ouvrir une fenêtre de détail par-dessus l’historique, limitée aux commits accessibles depuis la branche affichée et au projet autorisé.
+
+#### Scenario: Ouvrir et parcourir l’historique
+- **WHEN** un utilisateur sélectionne le nombre de commits dans le bloc Git
+- **THEN** CAB affiche la première page et permet de naviguer entre les pages disponibles.
+
+### Requirement: Retrait de commits sélectionnés dans l’historique
+L’historique Git MUST permettre de sélectionner un ou plusieurs commits, à l’exception du commit HEAD, et de demander leur retrait de la branche locale. Une case « Tout cocher » MUST sélectionner ou désélectionner les commits de la page affichée, sauf HEAD, sans modifier les sélections des autres pages. CAB MUST conserver l’arbre et les modifications locales, vérifier que HEAD n’a pas changé et ne pas déplacer les tags ni les autres branches. Les commits descendants réécrits changent d’identifiant ; CAB MUST en avertir l’utilisateur. CAB MUST refuser la réécriture de commits signés qu’il ne peut préserver.
+
+#### Scenario: Demander la suppression sans sélection
+- **WHEN** l’utilisateur demande la suppression sans commit coché
+- **THEN** CAB l’invite à sélectionner au moins un commit.
+
+#### Scenario: Confirmer la suppression de commits
+- **WHEN** l’utilisateur demande la suppression avec des commits cochés
+- **THEN** CAB présente une fenêtre de confirmation indiquant que les fichiers et modifications restent conservés et précisant l’effet sur les identifiants et les tags.
 
 ### Requirement: Consultation du dernier commit
 L’identifiant du dernier commit dans le bloc Git MUST ouvrir une fenêtre de
@@ -715,6 +874,13 @@ Le détail MUST être limité au dernier commit connu et aux projets autorisés.
 #### Scenario: Ouverture du détail
 - **WHEN** un utilisateur sélectionne l’identifiant du dernier commit
 - **THEN** la fenêtre affiche ses informations et le résumé de ses fichiers
+
+### Requirement: Consultation du dernier commit distant
+Le dernier commit affiché par chaque forge MUST ouvrir une fenêtre en lecture seule présentant les informations disponibles auprès de la forge, notamment son identifiant, son auteur, sa date, son message et, lorsque disponible, le résumé des fichiers modifiés. CAB MUST limiter la consultation au dernier commit observé et au projet autorisé, sans exposer le token.
+
+#### Scenario: Ouverture du détail distant
+- **WHEN** un utilisateur sélectionne le dernier commit d’une forge
+- **THEN** CAB lit les informations de ce commit auprès de la forge et les affiche dans une fenêtre de consultation.
 
 ### Requirement: Métadonnées publiques du fichier projet
 project.env à la racine canonique MUST être la source de vérité des métadonnées
@@ -728,18 +894,21 @@ présenté dans le bloc Configuration dans l’ordre de déclaration.
 
 ### Requirement: Cartes et suppression des métadonnées
 Les cartes Forgejo, GitHub et GitLab MUST afficher les variables publiques
-présentes de leur famille REMOTE respective, sauf les valeurs SSL_VERIFY,
-qui restent conservées dans la projection sans être affichées. Un fichier absent, ambigu ou
+présentes de leur famille REMOTE respective. Un fichier absent, ambigu ou
 inaccessible MUST être signalé sans contenu brut. Les variables retirées
 MUST disparaître de l'instantané.
 
-#### Scenario: Affichage masqué du token
+#### Scenario: Accès au dépôt distant
+- **WHEN** l’URL, l’utilisateur et le dépôt d’une forge sont configurés
+- **THEN** le nom de la forge ouvre le dépôt à l’adresse construite à partir de ces trois valeurs.
+
+#### Scenario: Token dans la configuration de forge
 - **WHEN** une carte Forgejo, GitHub ou GitLab est affichée
-- **THEN** une ligne Token présente toujours 22 astérisques, indépendamment de la présence d’un token, sans lecture ni exposition de sa valeur.
+- **THEN** aucune ligne Token n’est affichée dans la carte et le token reste disponible dans la configuration de la forge.
 
 #### Scenario: Bloc de configuration du projet
 - **WHEN** la fiche d’un projet est affichée
-- **THEN** un bloc « Configuration » avec son icône précède les cartes des forges et affiche ID, nom, langages, publication et version depuis PostgreSQL, puis Electric.
+- **THEN** le bloc « Configuration » de l’accueil affiche ID, nom, langages, publication et version depuis PostgreSQL, puis Electric.
 - **AND** les langages reconnus sont représentés dans l’ordre de `PROJECT_TYPE` par des logos liés à leur site officiel ; les valeurs non reconnues restent lisibles.
 - **AND** les logos Debian et Docker sont affichés lorsque leur variable vaut « Yes » et renvoient vers leurs sites officiels.
 
@@ -753,12 +922,99 @@ MUST disparaître de l'instantané.
 - **THEN** il peut modifier les six variables publiques du bloc dans `project.env` ; CAB vérifie la révision et l’unicité de l’identifiant avant d’enregistrer et synchronise PostgreSQL puis Electric.
 - **AND** un changement d’identifiant actualise l’adresse canonique sans modifier la clé interne du projet.
 
+#### Scenario: Premier enregistrement de la configuration
+- **WHEN** un administrateur ouvre l’éditeur du bloc « Configuration » d’un projet dont le fichier `project.env` est absent
+- **THEN** CAB MUST ouvrir l’éditeur sans créer le fichier et MUST créer le fichier lors de l’enregistrement explicite des valeurs validées, sous le compte propriétaire du projet.
+- **AND** la révision MUST distinguer le fichier absent d’un fichier vide ou apparu depuis l’ouverture. CAB MUST refuser une création concurrente sans écraser son contenu et MUST synchroniser les métadonnées après un enregistrement réussi.
+
 #### Scenario: Métadonnées et cartes
 - **WHEN** le fichier contient une seule forge puis la retire
 - **THEN** seule sa carte est affichée puis elle disparaît
 
+### Requirement: État des dépôts distants
+Les blocs Forgejo, GitHub et GitLab MUST afficher le dernier commit de la branche distante, son horodatage, ses versions, le nombre de commits et la taille du dépôt lorsque la forge fournit ces informations. CAB MUST conserver la dernière observation en PostgreSQL et diffuser ses changements par Electric, sans exposer les tokens.
+
+#### Scenario: Réconciliation des dépôts distants
+- **WHEN** un utilisateur ouvre la page Forges d’un projet
+- **THEN** CAB affiche les données enregistrées puis vérifie les dépôts en arrière-plan si le délai minimal automatique est écoulé.
+
+#### Scenario: Vérification quotidienne
+- **WHEN** l’horaire quotidien aléatoire mémorisé pour une forge et un projet est atteint
+- **THEN** CAB vérifie le dépôt en arrière-plan et programme la prochaine vérification 24 heures après, même si aucune page n’est ouverte.
+
+#### Scenario: Mesure indisponible
+- **WHEN** une forge ou une information est indisponible
+- **THEN** CAB conserve les dernières données valides du même dépôt, signale l’indisponibilité et ne présente pas une valeur inconnue comme zéro.
+
+### Requirement: Rafraîchissement manuel des forges
+
+Chaque bloc de forge MUST proposer un bouton de rafraîchissement manuel. Son icône MUST être animée pendant la vérification de cette forge, y compris lors de l’ouverture de la page et des vérifications automatiques. L’état de vérification MUST être diffusé aux pages ouvertes via PostgreSQL et Electric.
+
+#### Scenario: Rafraîchissement demandé
+
+- **WHEN** un utilisateur sélectionne le rafraîchissement d’une forge configurée
+- **THEN** CAB vérifie son dépôt et son authentification en arrière-plan, actualise les données et arrête l’animation à la fin.
+
+#### Scenario: Rafraîchissement GitLab et politique TLS
+
+- **WHEN** CAB consulte le dépôt GitLab
+- **THEN** CAB applique la politique TLS commune des connexions aux forges configurées.
+
+#### Scenario: Échec d’un rafraîchissement manuel
+
+- **WHEN** une tentative manuelle sur GitLab, GitHub ou Forgejo échoue
+- **THEN** l’Overview ouvre une fenêtre avec les étapes et erreurs expurgées de cette tentative, sans nouvelle requête de rafraîchissement.
+- **AND** les dernières données valides restent affichées et le diagnostic exclut les jetons, en-têtes, réponses et exceptions brutes.
+
+#### Scenario: Rafraîchissement réussi ou automatique
+
+- **WHEN** une tentative manuelle réussit ou que la vérification est automatique
+- **THEN** l’Overview ne déclenche pas de fenêtre de diagnostic.
+
+### Requirement: Intervalle automatique des forges
+CAB MUST limiter les vérifications automatiques de chaque forge et projet à une par intervalle minimal, réglable dans Administration / Git en minutes et conservé en PostgreSQL. Le défaut MUST être 60 minutes. Une vérification manuelle MUST rester possible sans attendre cet intervalle. La vérification quotidienne existante demeure active sous cette limite.
+
+#### Scenario: Page ouverte plusieurs fois
+- **WHEN** la page Forges est rouverte avant l’expiration de l’intervalle configuré
+- **THEN** CAB affiche les valeurs mémorisées sans relancer la vérification automatique.
+
+### Requirement: Synchronisation de branche et des tags vers une forge
+Chaque bloc de forge distante MUST proposer une action « Synchroniser » après « Envoyer ». CAB MUST présenter un aperçu de la branche cible, des commits et des tags à créer, modifier ou supprimer avant confirmation. La branche distante configurée MUST être alignée sur HEAD local et les tags distants sur tous les tags locaux ; les tags distants absents localement MUST être supprimés, sans déplacer d’autres branches. Un renommage de tag se traduit par la suppression de son ancien nom et la création du nouveau.
+
+CAB MUST utiliser les identifiants de forge qu’il gère, vérifier les références et tags locaux et distants observés, protéger chaque mise à jour par une lease explicite et demander une transaction Git atomique. CAB MUST vérifier l’état distant après l’envoi et signaler un résultat incertain sans rejeu automatique si la confirmation échoue. Les modifications non commitées MUST rester locales.
+
+#### Scenario: Examiner la synchronisation
+- **WHEN** l’administrateur ouvre la synchronisation d’une forge
+- **THEN** CAB affiche les différences de branche et de tags sans modifier la forge.
+
+#### Scenario: Confirmer la synchronisation
+- **WHEN** l’administrateur confirme un aperçu encore valide
+- **THEN** CAB synchronise la branche et les tags dans une transaction atomique et vérifie le résultat distant.
+
+### Requirement: Envoi manuel de branche vers les forges
+Chaque bloc de forge MUST proposer un bouton « Envoyer » après le rafraîchissement. CAB MUST utiliser les identifiants de forge chiffrés qu’il gère, présenter la branche cible et le commit local avant confirmation, puis envoyer uniquement ce commit sur la branche distante avec un force-with-lease explicite sur la valeur observée. CAB MUST NOT créer, comparer ou publier de tag pour cette action.
+
+#### Scenario: Confirmation de l’envoi
+- **WHEN** l’administrateur confirme l’envoi préparé et que les références n’ont pas changé
+- **THEN** CAB envoie la branche avec protection de la valeur distante, sans envoyer de tag, puis actualise l’état de la forge.
+
+#### Scenario: Résultat incertain
+- **WHEN** l’envoi est interrompu ou son résultat n’est pas confirmé
+- **THEN** CAB signale un résultat incertain et interdit le rejeu automatique.
+
+### Requirement: Comparaison des forges avec Git local
+Chaque bloc de forge MUST afficher après la branche un état comparant son commit observé au commit local courant. La comparaison MUST distinguer les commits d’avance et de retard de la forge, être mémorisée en PostgreSQL et diffusée via Electric, puis recalculée à chaque actualisation locale ou distante. CAB MUST afficher une indisponibilité si les commits nécessaires ne sont pas connus localement et MUST NOT effectuer de fetch implicite.
+
+#### Scenario: Détail de la comparaison
+- **WHEN** l’utilisateur sélectionne l’état d’une forge
+- **THEN** CAB affiche les commits comparés, les nombres d’avance et de retard et les commits distincts disponibles localement.
+
 ### Requirement: Authentification des forges
-À l’ouverture d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+À l’ouverture de la page Forges d’un projet, CAB MUST afficher l’état d’authentification mémorisé pour chaque forge puis, lorsque l’intervalle automatique est écoulé, vérifier en arrière-plan l’identité avec ses données stockées. Le résultat MUST être conservé dans PostgreSQL et transmis par Electric. Les secrets MUST rester absents de la projection publique.
+
+#### Scenario: Diagnostic interactif
+- **WHEN** un utilisateur sélectionne l’authentification d’une forge
+- **THEN** CAB ouvre une console, lance la vérification et affiche ses étapes et son résultat en direct, avec possibilité de la relancer, sans exposer le token.
 
 #### Scenario: Modification des identifiants
 - **WHEN** le compte ou le token d’une forge change
@@ -803,7 +1059,7 @@ CAB MUST NOT exécuter project.env. Seule une édition administrateur explicite 
 - **THEN** elle est refusée et aucun effet n'est exécuté
 
 ### Requirement: Liste publique fermée
-Seuls PROJECT_ID, PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE, PROJECT_DOCKERED, PROJECT_DEBIAN_PACKAGE et les REMOTE_(FORGEJO|GITHUB|GITLAB) aux suffixes BASE_URL, OWNER, REPOSITORY, NAME, BRANCH, SSL_VERIFY MAY être publiés après validation. Les URL avec identifiants, requête ou fragment et les valeurs incertaines MUST être exclues. Electric et la projection publique MUST NOT contenir de secrets en clair. Seul un administrateur MAY consulter les tokens sans cache.
+Seuls PROJECT_ID, PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE, PROJECT_DOCKERED, PROJECT_DEBIAN_PACKAGE et les REMOTE_(FORGEJO|GITHUB|GITLAB) aux suffixes BASE_URL, OWNER, REPOSITORY, NAME, BRANCH MAY être publiés après validation. Les URL avec identifiants, requête ou fragment et les valeurs incertaines MUST être exclues. Electric et la projection publique MUST NOT contenir de secrets en clair. Seul un administrateur MAY consulter les tokens sans cache.
 
 #### Scenario: Secrets
 - **WHEN** le fichier contient un jeton ou une URL authentifiée
@@ -1018,14 +1274,22 @@ séparer installation vérifiée et reconnexion effective des connecteurs actifs
 - **THEN** le relais recharge son moteur sans réadmettre le job ni perdre sa réponse
 
 ### Requirement: Compatibilité et protections des anciens connecteurs
-CAB MUST détecter les anciens connecteurs connus par métadonnées bornées et
-signaler RELOAD_REQUIRED si aucune reprise native sûre n'est disponible.
-Il MUST NOT tuer un client ou injecter des requêtes dans son canal privé.
-SID/RUN, générations de codage, secrets et reçus MUST rester conservés.
+CAB MUST détecter les anciens connecteurs et signaler RELOAD_REQUIRED si aucune reprise sûre n'est disponible. Une reprise contrôlée du client MAY utiliser l’autorité bornée de sa demande CABU vérifiée, sans confirmation supplémentaire, avec identité kernel, quiescence, PIDFD et reçu durable. CAB MUST NOT arrêter arbitrairement un client ni injecter des requêtes dans son canal privé. SID/RUN, générations, secrets et reçus MUST rester conservés.
 
 #### Scenario: Ancien connecteur sans interface de rechargement
 - **WHEN** un processus déjà chargé n'a ni relais ni interface native accessible
-- **THEN** CAB conserve sa session et indique la reprise native requise sans faux succès
+- **THEN** CAB expose la reprise contrôlée nécessaire et son autorité, sans prétendre que son exécution ou sa reconnexion sont prouvées
+
+#### Scenario: Dernier compteur d’un relais dont la sortie est prouvée
+- **WHEN** les PIDFD confirment l’arrêt du relais et du moteur de l’instance visée et que le dernier heartbeat est au-delà du délai de récupération
+- **AND WHEN** aucun effet non résolu, bail ni signalement explicite d’incertitude ne protège l’instance
+- **THEN** CAB peut poursuivre la reprise en conservant au reçu le compteur, les identités et l’absence de résultat confirmé
+- **AND THEN** CAB ne réémet pas l’appel et confirme la reconnexion uniquement sur un nouveau heartbeat et le catalogue attendu
+
+#### Scenario: Le backend du relais descend d’un sous-processus de Codex
+- **WHEN** le backend de remplacement est rattaché à un sous-processus direct de l’instance graphique vérifiée
+- **THEN** CAB peut confirmer cette filiation si le sous-processus est du même UID, utilise le même exécutable de confiance et conserve la même identité noyau
+- **AND THEN** CAB attend le heartbeat et le catalogue du relais avant de confirmer la reprise
 
 ### Requirement: Actualisation native du catalogue Codex
 L'intégration CAB MAY activer mcp_tool_list_changed via la CLI native si elle
@@ -1495,11 +1759,15 @@ CAB MUST permettre à un administrateur de confirmer explicitement la déconnexi
 - **THEN** CAB refuse la confirmation et conserve la protection de la mise à jour.
 
 ### Requirement: Surveillance récursive et limitation des analyses Git
-CAB MUST surveiller récursivement les dossiers des projets enregistrés, adapter la surveillance aux ajouts, suppressions, renommages et déplacements de projet et regrouper les événements dans une file en mémoire par projet. Il MUST limiter à une analyse Git simultanée pour CAB et respecter les délais configurés entre les analyses automatiques et explicites. Une perte d’événements MUST déclencher une reconstruction de la surveillance et une réconciliation.
+CAB MUST surveiller récursivement les dossiers des projets enregistrés, adapter la surveillance aux ajouts, suppressions, renommages et déplacements de projet et regrouper les événements dans une file en mémoire par projet. Il MUST limiter à une analyse Git simultanée pour CAB et appliquer les délais configurés uniquement aux analyses automatiques. Un clic manuel MUST les ignorer. Une perte d’événements MUST déclencher une reconstruction de la surveillance et une réconciliation.
 
 #### Scenario: Activité continue
 - **WHEN** des fichiers changent sans interruption
 - **THEN** CAB regroupe les événements et lance une analyse au plus tard après le délai maximal, sous réserve de l’intervalle minimal et de la disponibilité du worker
+
+#### Scenario: Relance manuelle
+- **WHEN** un utilisateur demande une relance manuelle
+- **THEN** CAB ignore les délais automatiques tout en conservant une seule analyse simultanée
 
 ### Requirement: Réglages Git en base
 Administration / Git MUST permettre de modifier les délais en secondes conservés dans PostgreSQL : calme, intervalle minimal et attente maximale. Les valeurs initiales MUST être 7, 30 et 70 et s’appliquer sans redémarrage.
@@ -1507,3 +1775,1468 @@ Administration / Git MUST permettre de modifier les délais en secondes conserv�
 #### Scenario: Modification des délais
 - **WHEN** un administrateur enregistre des délais valides
 - **THEN** CAB les conserve en base et les applique aux prochaines analyses
+
+### Requirement: Navigation Forges d’un projet
+Le menu des projets MUST présenter les entrées Archives, Forges, Incidents et Sessions par ordre alphabétique. La page `/projects/<identifiant>/forges` MUST afficher le nom et la version du projet à partir de ses métadonnées, avec actualisation via Electric.
+
+#### Scenario: Ouverture de la page Forges
+- **WHEN** un utilisateur ouvre Forges depuis un projet accessible
+- **THEN** CAB affiche la page propre à ce projet avec son nom, sa version, le sous-titre « DEPÔTS DU PROJET », puis les blocs Git et forges.
+- **AND** les lectures Git et les vérifications de forges déclenchées à l’ouverture sont effectuées depuis cette page plutôt que depuis l’accueil.
+
+#### Scenario: Présentation commune des pages du projet
+- **WHEN** un utilisateur ouvre Archives, Incidents ou Sessions
+- **THEN** CAB présente le nom et la version du projet suivis du nom de la page, avec la même typographie et le même menu que Forges.
+
+### Requirement: Instantané Git du change
+CAB MUST enregistrer en PostgreSQL, avant le travail de codage d'un change, un instantané Git lié au projet et au change, comprenant HEAD, branche et états de l'arbre et de l'index sans contenu de fichier ni secret.
+
+#### Scenario: Démarrage et reprise
+- **WHEN** le change démarre puis qu'une session le reprend
+- **THEN** CAB conserve l'instantané initial et rattache les observations de session sans le remplacer.
+
+### Requirement: Index Git isolé par session
+CAB MUST lier chaque connexion MCP à son RUN natif vérifié et refuser toute opération Git demandée pour un autre RUN. Les sessions MUST réserver les fichiers auprès de CAB avant modification ; CAB MUST refuser les réservations concurrentes sur un même chemin. CAB MUST gérer un index isolé par session et refuser l'indexation d'un fichier dont l'attribution ou l'état est incertain.
+
+#### Scenario: Deux sessions et fichier partagé
+- **WHEN** deux sessions préparent des fichiers distincts ou revendiquent un même fichier
+- **THEN** leurs index restent distincts et CAB refuse une attribution concurrente ambiguë.
+- **AND** cette protection coopérative ne bloque pas un éditeur extérieur au protocole.
+
+#### Scenario: Archivage du change
+- **WHEN** le change est archivé avant la fin de sa livraison
+- **THEN** CAB conserve les index encore nécessaires et leurs preuves jusqu'au résultat confirmé.
+
+#### Scenario: Préservation des objets de session
+- **WHEN** une étape validée est indexée
+- **THEN** CAB protège l'arbre Git et son commit de base par des références internes non publiées, jusqu'à confirmation de la livraison et retrait contrôlé de l'index.
+
+### Requirement: Livraison Git et CI/CD par CAB
+Lorsque la CI/CD est autorisée, CAB MUST recevoir la version, mettre à jour `PROJECT_VERSION`, créer le commit et un tag égal à la version, puis envoyer la branche et ce tag aux forges configurées avec protection concurrente. Les opérations Git des sessions MUST passer par CAB.
+
+#### Scenario: Livrer la version demandée
+- **WHEN** une session autorisée demande CICD sur une version valide
+- **THEN** CAB livre les fichiers préparés dans l’index du change et préserve les autres chemins
+
+#### Scenario: Global CAB confirmé dans le commit
+- **WHEN** le rapport global indexé correspond à une écriture CAB confirmée
+- **THEN** CAB peut l’inclure après vérification de son entrée d’index
+
+#### Scenario: CICDF sur le projet entier
+- **WHEN** une session autorisée demande explicitement CICDF
+- **THEN** CAB fige et livre les fichiers admissibles modifiés ou indexés du projet, y compris hors du change courant
+- **AND THEN** CAB préserve les index isolés des autres sessions et refuse les conflits ou effets incertains
+- **AND THEN** le reçu conserve le périmètre choisi sur cette version
+
+### Requirement: Autorisation interprojets générique
+CAB MUST vérifier une autorisation explicite liée à la session native, au projet cible et aux chemins concernés avant d'accepter un rattachement interprojets. Cette autorisation MUST être persistée et révocable, sans nom ou chemin de projet particulier codé dans CAB.
+
+#### Scenario: Session autorisée pour un autre projet
+- **WHEN** une session native vérifiée intervient sur un projet cible explicitement autorisé
+- **THEN** CAB accepte uniquement les chemins autorisés et conserve l'identité native réelle.
+- **AND** il refuse une autre cible ou un chemin hors autorisation.
+
+### Requirement: Entrée CICD distribuée
+CAB MUST distribuer les plugins CICD et CICDF, leurs skills et leurs commandes. CICD MUST transmettre la version avec le périmètre du change. CICDF MUST transmettre la version avec le périmètre complet sur mandat explicite. Les deux parcours MUST consulter le même reçu sans relancer un effet incertain.
+
+#### Scenario: Parcours disponible ou connecteur ancien
+- **WHEN** un connecteur propose le point d’entrée demandé
+- **THEN** le skill utilise cet outil et consulte le reçu
+- **AND THEN** si l’outil manque, le skill indique que le connecteur doit être rechargé
+
+### Requirement: Indexation immédiate du rapport statistique global
+Après chaque écriture du STATISTICS.md à la racine d'un projet Git, CAB MUST indexer uniquement ce fichier dans l'index Git ordinaire du projet et vérifier le contenu indexé avant de libérer la réservation de l'écrivain statistique. Cette opération partagée appartient à CAB et ne doit pas indexer les fichiers d'une session. Les rapports de change ne sont pas inclus dans cette exception.
+
+#### Scenario: Écriture du global confirmée
+- **WHEN** CAB modifie le rapport statistique global d'un projet Git réservé
+- **THEN** CAB indexe immédiatement ce fichier sous le verrou Git et vérifie son contenu avant de terminer et libérer la réservation statistique.
+- **AND** les autres entrées de l'index restent préservées.
+
+#### Scenario: Indexation incertaine
+- **WHEN** l'indexation n'est pas confirmée ou l'écrivain s'interrompt
+- **THEN** CAB conserve la protection et son intention durable ; une reprise vérifie le fichier et l'index sans rejouer l'écriture.
+
+#### Scenario: Projet sans dépôt Git
+- **WHEN** le projet ne possède pas de dépôt Git
+- **THEN** CAB enregistre l'indexation comme non applicable sans créer de dépôt.
+
+### Requirement: Adoption explicite des RUN antérieurs
+CAB MUST refuser toute capture historique inventée. Un administrateur explicitement autorisé MAY adopter les fichiers d'un RUN direct antérieur à la migration, après vérification de sa source native et de l'état Git. La capture MUST porter legacy-adoption et sa date réelle.
+
+#### Scenario: Migration d'une session en cours
+- **WHEN** un administrateur adopte les fichiers autorisés d'un ancien RUN vérifié
+- **THEN** CAB les réserve et les prépare dans son index isolé sans prétendre avoir observé l'état initial historique.
+- **AND** les nouveaux RUN et les fichiers réservés par une autre session ne peuvent pas contourner le protocole par cette entrée.
+- **AND** la liste exacte, la révision et le statut Git attendus sont vérifiés avant adoption.
+- **AND** les entrées déjà indexées ne sont absorbées que si leur empreinte approuvée reste identique ; les autres entrées sont préservées.
+
+### Requirement: Preuve de livraison produite par CAB
+CAB MUST produire la preuve de publication Git depuis les étapes confirmées, le tag réellement envoyé et son empreinte, au moyen d'un producteur interne ou explicitement délégué par l'administrateur pour ce RUN et cette version. Le modèle MUST NOT fabriquer cette preuve. Une release différée MUST NOT être attestée comme exécutée.
+
+#### Scenario: Livraison Git vérifiée
+- **WHEN** les envois et vérifications distantes sont confirmés et l'index est retiré de façon contrôlée
+- **THEN** CAB atteste l'artefact Git avec le producteur de la politique de finalisation, en conservant les releases différées comme non exécutées.
+
+### Requirement: Versions et tags de version sans préfixe
+CAB MUST produire et persister les versions du projet et de release, ainsi que les nouveaux tags de version Git et de release, sans préfixe v. Une version transmise par la session MUST déterminer le tag ; à défaut, le tag par défaut MUST être égal à la version du projet.
+
+#### Scenario: Version transmise ou défaut
+- **WHEN** une session transmet une nouvelle version ou qu'un tag de version est demandé sans version fournie
+- **THEN** CAB utilise respectivement la version transmise ou PROJECT_VERSION, sans ajouter de v.
+- **AND** une saisie préfixée est refusée avant mutation et les lecteurs historiques restent compatibles sans renommer les anciens tags.
+
+### Requirement: Indexation immédiate des documents de clôture
+CAB MUST indexer chaque rapport statistique après son écriture, avant libération de sa réservation. Il MUST indexer immédiatement le BLOCKERS.md attribuable au RUN après sa création ou son amendement, sans absorber une réservation étrangère.
+
+#### Scenario: Rapports et dépendance non satisfaite
+- **WHEN** CAB produit les statistiques du change puis le global, ou observe un BLOCKERS.md attribuable au RUN
+- **THEN** les seuls documents concernés sont indexés et leurs empreintes sont conservées.
+
+### Requirement: Dernier commit confirmé avant clôture
+Lorsqu'une livraison Git est requise, CAB MUST publier un dernier commit limité
+aux rapports du change, au global et au BLOCKERS.md éventuel avant clôture. Les
+reçus MUST lier documents et destinations au RUN et protéger les effets incertains.
+Un développement explicitement autorisé en clôture hôte sans livraison MUST
+conserver archive, preuves et rapports sans commit ni envoi.
+
+#### Scenario: Clôture achevée
+- **WHEN** les critères et la livraison Git applicables sont confirmés
+- **THEN** CAB termine les statistiques, vérifie le dernier commit local et ses envois distants, puis seulement rend CLOSED.
+
+#### Scenario: Clôture bloquée
+- **WHEN** une session avec livraison Git s'arrête pour une dépendance non satisfaite avec BLOCKERS.md
+- **THEN** CAB publie les mêmes documents finaux et le fichier de blocage avant de rendre BLOCKED, en conservant le change ouvert et le code non livré.
+
+#### Scenario: Échec ou réponse perdue
+- **WHEN** un commit ou un envoi ne peut pas être confirmé
+- **THEN** CAB expose l'étape et son reçu, ne déclare pas la clôture réussie et ne répète pas un effet confirmé ou incertain.
+
+#### Scenario: Clôture hôte sans livraison
+- **WHEN** ce mode de développement direct est autorisé explicitement avec index libéré et aucune obligation de publication
+- **THEN** CAB vérifie archive et preuves courantes, indexe les rapports et rend CLOSED sans commit ni envoi
+- **AND** le reçu distingue l'absence de livraison d'une publication réussie
+
+### Requirement: Mesures terminales non récursives
+CAB MUST générer les rapports finaux à partir des snapshots de fin des périodes closes. Le commit et les envois des métadonnées MUST NOT provoquer une boucle de régénération et de commits du même bilan.
+
+#### Scenario: Publication du bilan figé
+- **WHEN** la période de codage est terminée et le bilan terminal est publié
+- **THEN** les observations postérieures ne modifient pas rétroactivement cette période et une reprise conserve le même reçu.
+
+### Requirement: Tag de version déplacé par le moteur à la clôture
+Lorsqu'un commit terminal est requis, CAB MUST déplacer automatiquement le tag
+de version sur ce commit sans changer la version ni ajouter de v. Branche et tag
+MUST être modifiés atomiquement avec valeurs attendues et vérification distante.
+La clôture hôte explicitement sans livraison MUST NOT déplacer un tag.
+
+#### Scenario: Commit terminal et tag concordants
+- **WHEN** le dernier commit des statistiques et du BLOCKERS.md éventuel est créé
+- **THEN** CAB déplace le tag de la version transmise, ou de PROJECT_VERSION à défaut, vers ce commit.
+- **AND** l'envoi de la branche et du tag est atomique et le reçu confirme leur commit cible identique.
+
+#### Scenario: Référence concurrente ou résultat indécis
+- **WHEN** la branche ou le tag a changé depuis l'observation ou que l'envoi n'est pas confirmé
+- **THEN** CAB préserve l'incertitude et ne déclare pas de clôture réussie ni ne force un déplacement non vérifié.
+
+### Requirement: Centre de notifications global persistant
+CAB MUST afficher une cloche permanente près du contrôle du thème, animée tant
+que des notifications non lues existent. Les notifications MUST être stockées
+dans `cab_notifications` et synchronisées via Electric pour les administrateurs.
+L'expéditeur MUST être le nom du projet associé, ou CAB pour un message global.
+
+#### Scenario: Lecture et navigation
+- **WHEN** le développeur ouvre la cloche et parcourt les notifications
+- **THEN** l'overview présente leur expéditeur et contenu avec flèches précédente/suivante
+- **AND** chaque message affiché est supprimé de la base à sa première lecture
+- **AND** les messages consultés restent parcourables dans cet overview jusqu'à sa fermeture
+- **AND** fermer vide cet aperçu sans supprimer les messages jamais affichés
+
+#### Scenario: Centre vide
+- **WHEN** aucune notification n'existe
+- **THEN** la cloche reste visible et ouvre une fenêtre indiquant l'absence de message
+
+### Requirement: Questions interactives durables
+CAB MUST pouvoir émettre une question avec plusieurs choix. Une question non
+répondue MUST rester disponible après fermeture de l'overview. La réponse MUST
+être validée, enregistrée une seule fois avec un reçu corrélé puis retirer la
+question du centre. Une réponse MUST NOT exécuter une commande arbitraire.
+
+#### Scenario: Réponse après réouverture
+- **WHEN** une question lue est fermée puis rouverte sans réponse
+- **THEN** ses choix restent proposés
+- **AND** une réponse valide crée un reçu durable et retire la question
+- **AND** une tentative concurrente contradictoire est refusée
+
+### Requirement: Livraisons dans les notifications
+CAB MUST supprimer l’affichage du journal CI/CD dans le bloc Git. CAB MUST présenter les étapes publiques et le résultat terminal de la livraison dans une notification attribuée au projet concerné. Il MUST NOT créer de notification ni de reçu de lecture pour un état en attente ou en cours.
+
+#### Scenario: Résultat de livraison après lecture de son avancement
+- **WHEN** un administrateur a consulté l’avancement dans le suivi de la livraison et celle-ci atteint un résultat terminal
+- **THEN** seul le résultat terminal est publié dans le centre, avec les étapes et son horodatage
+- **AND THEN** les détails de livraison ne sont plus affichés dans le bloc Git
+
+#### Scenario: Mise à niveau avec anciennes notifications d’avancement
+- **WHEN** une ancienne notification d’avancement ou son reçu reste en base
+- **THEN** CAB retire ces seuls enregistrements et conserve les bilans terminaux
+
+### Requirement: Nom du change dans le commit final
+Le moteur CAB MUST utiliser l'identifiant du change comme message du commit
+final de clôture, à la place du libellé générique des statistiques. Il MUST
+conserver les garanties de commit unique et le déplacement du tag sans v.
+
+#### Scenario: Clôture achevée ou bloquée
+- **WHEN** CAB crée le commit final des statistiques et des dépendances éventuelles
+- **THEN** le message du commit est l'identifiant du change concerné
+- **AND** les commits historiques déjà publiés restent inchangés
+
+### Requirement: Autorité de sélection de version
+
+Le codeur MUST choisir la composante de version correspondant à la spécification
+et à la politique. En direct le codeur déclare le numéro. En piloté l’orchestrateur
+MUST déclarer le numéro choisi par le codeur. CAB MUST refuser un numéro différent
+du numéro déclaré en piloté. Une version imposée par le développeur MUST primer,
+sous réserve de sa validité et de l’autorité de déclaration applicable.
+
+#### Scenario: Livraison directe sans numéro fourni
+- **WHEN** le codeur a accusé réception du skill et déclare une version admissible
+- **THEN** CAB enregistre le numéro, le choix du codeur et l’identité du déclarant.
+
+#### Scenario: Livraison pilotée
+- **WHEN** l’orchestrateur a accusé réception du skill et déclare le numéro choisi par le codeur
+- **THEN** CAB enregistre les deux identités et la livraison exige le numéro déclaré.
+
+### Requirement: Libération après travail hôte sans livraison
+CAB MUST permettre au codeur de libérer les réservations de son RUN après
+validation et indexation des fichiers, sans commit ni push. Le service MUST
+vérifier leur concordance avec l'index isolé, conserver cet index et ses objets,
+et refuser une libération si une livraison ou un effet incertain existe.
+
+#### Scenario: Commit manuel après validation hôte
+- **WHEN** le codeur libère ses fichiers validés et indexés sans CI/CD
+- **THEN** CAB retire uniquement ses réservations actives et conserve un reçu idempotent
+- **AND** le commit manuel ne reste plus bloqué par ces réservations
+- **AND** les réservations des autres sessions restent protégées
+
+#### Scenario: Modifications pas encore indexées
+- **WHEN** un fichier réservé diffère de l'index de session ou n'y figure pas
+- **THEN** CAB refuse de libérer les réservations
+
+### Requirement: Édition des métadonnées depuis le détail d'un commit
+CAB MUST proposer Éditer à côté de Fermer dans le détail d'un commit local.
+L'overview MUST permettre de modifier message, auteur, courriel, date avec
+fuseau, tag et description du tag. Message et description du tag MUST être
+distincts. L'historique parent MUST rester ouvert et être actualisé après édition.
+
+#### Scenario: Édition d'un commit de l'historique
+- **WHEN** le développeur valide le formulaire d'édition
+- **THEN** CAB réécrit le commit choisi et ses descendants sur la branche locale
+- **AND** les arbres des commits, l'index et les fichiers de travail restent identiques
+- **AND** les autres branches et dépôts distants restent inchangés
+- **AND** les tags locaux concernés suivent les nouveaux commits
+
+#### Scenario: Édition ou création d'un tag
+- **WHEN** un nom et une description de tag sont fournis
+- **THEN** CAB crée ou modifie le tag choisi avec cette description
+- **AND** un nom vide supprime le tag choisi et une description sans nom est refusée
+
+#### Scenario: Éditeur commun depuis la ligne Tag
+- **WHEN** le développeur clique sur un tag du bloc Git ou sur l'ajout d'un tag
+- **THEN** CAB ouvre le même overview complet de métadonnées que depuis l'historique
+- **AND** le tag cliqué est présélectionné ou le nom proposé suit le défaut du projet
+- **AND** la corbeille conserve son parcours de suppression directe du tag
+- **AND** le sélecteur Tag à éditer reste visible sans tag existant avec le choix Créer un nouveau tag
+
+#### Scenario: Édition depuis le dernier commit
+- **WHEN** le développeur clique sur Éditer dans l'overview Dernier commit
+- **THEN** CAB ouvre l'éditeur commun dans un second overview
+- **AND** fermer ou annuler ce second overview conserve le détail du commit ouvert
+- **AND** après enregistrement le détail du commit est actualisé
+
+#### Scenario: Métadonnées du futur commit
+- **WHEN** le développeur ouvre Nouveau commit depuis le titre du bloc Git
+- **THEN** CAB propose message, auteur, courriel, date, tag et description du tag
+- **AND** l'auteur et le courriel proviennent du projet et la date est préremplie
+- **AND** les valeurs saisies s'appliquent au commit créé et à son tag
+- **AND** message du commit et description du tag restent indépendants
+- **AND** le suivi console et la confirmation de déplacement d'un tag existant sont conservés
+
+#### Scenario: Concurrence ou signature protégée
+- **WHEN** HEAD, branche ou tags ont changé depuis la lecture, ou une signature serait invalidée
+- **THEN** CAB refuse l'édition avant de déplacer une référence
+- **AND** un reçu incertain n'est pas rejoué automatiquement
+
+### Requirement: Navigation de l'accueil Projets
+La page /projects MUST remplacer son titre central Projets par une maison
+cliquable vers cette même page, dans une barre de navigation utilisant la même
+présentation et le même séparateur horizontal que les pages d'un projet.
+
+#### Scenario: Accueil de la zone
+- **WHEN** le développeur ouvre /projects sans projet sélectionné
+- **THEN** la maison remplace le titre central et renvoie vers /projects
+- **AND** le séparateur horizontal reprend la présentation des menus d'un projet
+
+### Requirement: Retour depuis le titre latéral Projets
+Le libellé Projets du menu latéral MUST être un lien vers /projects sur toutes
+les pages qui utilisent cette barre latérale.
+
+#### Scenario: Retour à la liste
+- **WHEN** le développeur clique sur Projets dans la colonne gauche d'un projet ou d'une sous-page
+- **THEN** CAB revient à /projects sans modifier le projet
+
+### Requirement: Tableau global des sessions de projets
+CAB MUST proposer Sessions dans le menu de /projects et exposer la page
+/projects/sessions. Cette page MUST reprendre le tableau des sessions par projet
+avec une colonne Projets contenant son identifiant cliquable vers son accueil.
+
+#### Scenario: Sessions de plusieurs projets
+- **WHEN** le développeur ouvre /projects/sessions
+- **THEN** les sessions non archivées des projets accessibles apparaissent dans le tableau
+- **AND** la colonne Projets mène à l'accueil de chaque projet
+- **AND** les liens RUN et actions restent rattachés au bon projet
+- **AND** les pages de sessions par projet conservent leur présentation
+
+### Requirement: Portée et actualisation des sessions globales
+Le flux Electric global MUST être authentifié et calculer sa portée côté
+serveur. Les acteurs non administrateurs MUST recevoir uniquement les projets
+autorisés. Les sessions MUST être actualisées sans rechargement de la page.
+
+#### Scenario: Acteur limité
+- **WHEN** un acteur demande le flux global avec des paramètres de table ou de filtre arbitraires
+- **THEN** CAB conserve la projection et le filtre de projets autorisés calculés côté serveur
+- **AND** aucun projet autorisé implique un résultat vide
+- **AND** une demande non authentifiée ne transmet aucune requête à Electric
+
+#### Scenario: Changement d'étape
+- **WHEN** une session visible change d'étape en base
+- **THEN** la ligne correspondante est actualisée par Electric sans rechargement
+
+### Requirement: Nouvelle réservation d'un snapshot libéré
+CAB MUST pouvoir réserver un fichier déjà libéré par le même acteur et la même
+session native si son index protégé, son empreinte et le contenu du fichier
+correspondent toujours au reçu de libération. Les modifications nouvelles et
+les réservations étrangères MUST rester protégées.
+
+#### Scenario: Évolution hôte successive
+- **WHEN** une nouvelle évolution réserve un fichier modifié mais déjà validé et libéré dans cette session
+- **THEN** CAB autorise la reprise seulement après vérification de son snapshot conservé
+- **AND** un contenu changé depuis sa libération est refusé
+
+### Requirement: Archives globales des projets
+CAB MUST proposer /projects/archives dans le menu commun et reprendre le tableau
+des archives avec une colonne Projets affichant l'identifiant cliquable vers son
+accueil. Liens RUN et actions MUST rester rattachés au bon projet.
+
+#### Scenario: Archives de plusieurs projets
+- **WHEN** le développeur ouvre Archives dans le menu Projets
+- **THEN** les archives de ses projets accessibles sont affichées
+- **AND** Projets mène à l'accueil correspondant et les pages par projet restent disponibles
+
+### Requirement: Pagination à dix lignes
+Les listes Sessions et Archives, globales et par projet, MUST afficher au plus
+dix lignes par défaut, ou la limite réglée dans Interface. Elles MUST proposer
+Premier, Précédent, Page X / Y, Suivant et Dernier. Les archives MUST être
+paginées côté serveur après filtrage des autorisations.
+
+#### Scenario: Parcours complet
+- **WHEN** le nombre d’éléments dépasse la taille de page choisie
+- **THEN** les pages permettent de parcourir tous les éléments autorisés sans omission
+- **AND** les commandes indisponibles sont désactivées et une page devenue inexistante est ramenée à la dernière.
+
+### Requirement: Portée des archives et actualisation
+CAB MUST filtrer les archives et leur flux Electric selon les projets autorisés
+de l'acteur actif. Le client MUST NOT pouvoir remplacer le filtre serveur.
+
+#### Scenario: Consultation et changements
+- **WHEN** une archive est ajoutée ou retirée dans le périmètre autorisé
+- **THEN** le tableau est actualisé via Electric avec le rafraîchissement de secours existant
+- **AND** les acteurs inactifs, non authentifiés ou sans projet n'obtiennent aucune archive
+
+### Requirement: Clôture hôte validée sans livraison
+Sur autorisation administrative explicite, un RUN direct de développement sans
+obligation de publication ou installation MUST pouvoir être déclaré sans
+livraison après libération de son index. Archive, preuves courantes et rapports
+MUST rester obligatoires. Le reçu CLOSED MUST déclarer delivered=false.
+
+#### Scenario: Travail hôte achevé
+- **WHEN** l'autorité déclare ce mode sur un index libéré sans effet protégé ni livraison commencée
+- **THEN** le processeur normal clôture seulement après vérification des preuves et de l'archive
+- **AND** les rapports sont indexés, l'index est conservé et aucun commit, tag ou push n'est effectué
+
+#### Scenario: Réservation pendant la préparation d'archive
+- **WHEN** des fichiers restent réservés par le RUN
+- **THEN** la clôture attend leur indexation puis leur libération
+- **AND** une reprise explicite d'un index libéré n'est admise que si son snapshot conservé est inchangé
+
+### Requirement: Révision des critères avant qualification
+Une autorité administrative MUST pouvoir réviser les critères avant toute
+opération ou preuve avec empreintes attendues et motif explicite. L'ancien
+contrat MUST être conservé ; commandes, producteurs et revue MUST rester inchangés.
+
+#### Scenario: Précision de la demande avant contrôle
+- **WHEN** le développeur précise dix lignes au lieu de vingt-cinq avant toute qualification
+- **THEN** CAB conserve le contrat précédent et exige une nouvelle preuve du contrat révisé
+- **AND** opération, preuve, gel, import, revue ou effet protégé interdisent cette révision
+- **AND** un doublon identique conserve le reçu tandis qu'un contenu contradictoire est refusé
+
+### Requirement: Annulation prouvée d'une initialisation d'index non publiée
+Un administrateur MUST pouvoir régulariser un essai d'indexation UNKNOWN limité
+à la préparation si l'index est identique à sa base et aucune référence de
+snapshot n'existe. Le reçu original MUST rester intact et l'index de base MUST
+être conservé en sauvegarde. Ce parcours MUST NOT rejouer l'essai original.
+
+#### Scenario: Aucun fichier n'a été indexé
+- **WHEN** l'administrateur cible l'effet avec empreinte attendue et autorisation explicite
+- **THEN** CAB vérifie absence de verrou, de snapshot et d'autres effets protégés
+- **AND** il conserve le reçu original, annule cet essai et permet un nouvel essai distinct
+- **AND** toute donnée indexée ou référence existante interdit cette annulation
+
+### Requirement: Liaison native et connecteur distingués
+CAB MUST retourner séparément la liaison du journal natif et celle du connecteur authentifié. Il MUST NOT présenter une liaison de journal seule comme une autorisation Git. Une réparation MUST préserver les identités et les effets indécis, sans rejouer de requête métier.
+
+#### Scenario: Journal lié sans worker reconnu
+- **WHEN** le journal est vérifié mais le worker appelant ne correspond à aucun connecteur vivant authentifié
+- **THEN** `native.bind` indique `connector_bound=false` et les opérations Git restent refusées.
+
+#### Scenario: Worker réel reconnu
+- **WHEN** le worker appelant appartient au relais authentifié enregistré et la liaison de RUN est admissible
+- **THEN** `native.bind` indique `connector_bound=true` et le contexte Git identifie ce seul RUN.
+
+#### Scenario: Récupération du couple réel sans heartbeat observé
+- **WHEN** le worker authentifié et son parent CAB sont vérifiés par UID, agent, PPID, PID/start/boot, sans registre concurrent ni liaison de RUN incompatible
+- **THEN** CAB peut créer une observation conservatrice `OBSERVED` permettant le rattachement du RUN vérifié ; versions et catalogue restent inconnus, incertitude vraie, sans prétendre à un heartbeat ou une disponibilité CABU.
+
+#### Scenario: Heartbeat réel après récupération
+- **WHEN** le parent authentifié fournit ensuite son vrai heartbeat pour le même couple kernel
+- **THEN** CAB adopte atomiquement la liaison dans le registre du heartbeat, conserve l'ancienne observation `SUPERSEDED` et garantit un seul connecteur sélectionnable.
+
+### Requirement: Contestation administrative d'un contrôle non probant
+CAB MUST permettre à un administrateur authentifié de contester une preuve CAB de contrôle courant en désignant RUN, check, opération, preuve et leurs empreintes exactes. Il MUST conserver les originaux, l'autorité, la raison et l'autorisation dans un événement durable, exclure cette preuve et incrémenter la révision du seul contrôle après correction de son argv. Critères, producteurs et revue MUST rester inchangés. La contestation MUST NOT exécuter de commande ni lever une protection.
+
+#### Scenario: Contrôle réussi sans test découvert
+- **WHEN** l'administrateur démontre que la réussite courante ne mesure pas le critère et transmet un argv corrigé
+- **THEN** CAB conserve le reçu initial intact, exclut la preuve contestée et exige une nouvelle exécution à la nouvelle révision ; la seule preuve contestée ne permet aucune clôture.
+
+#### Scenario: Répétition et concurrence
+- **WHEN** une demande identique est répétée ou une demande concurrente porte une empreinte périmée
+- **THEN** CAB retourne le même reçu dans le premier cas et refuse le second ; aucun autre contrôle n'est modifié.
+
+#### Scenario: Frontière protégée
+- **WHEN** un effet est indécis, un bail détenu, le RUN gelé, importé, revu ou clôturé
+- **THEN** CAB refuse la contestation et conserve toutes les protections et preuves.
+
+### Requirement: Récupération autonome bornée du parcours de livraison
+CAB MUST permettre une correction administrative de préqualification `development` vers `delivery` uniquement avant toute opération ou preuve et si une publication est déjà cadrée. Les critères, checks, producteurs et revue MUST rester inchangés ; empreintes, historique et protections MUST être conservés. CAB MUST inclure les rapports CAB vérifiés des archives validées appartenant explicitement au lot de la même session, sans réservation ou édition des statistiques par le LLM.
+
+#### Scenario: Admission de livraison corrigée avant qualification
+- **WHEN** l'administrateur transmet les empreintes exactes, l'autorisation et `nature=delivery` avant opération, preuve, effet, bail, revue, gel ou import, avec publication déjà cadrée
+- **THEN** CAB conserve le contrat initial, corrige seulement la nature, exige les nouvelles preuves et refuse toute autre transition.
+
+#### Scenario: Rapports générés des archives du lot
+- **WHEN** des archives de RUN CLOSED prouvés du même projet, acteur et SID ont proposal.md et tasks.md réservés dans l'index courant
+- **THEN** CAB inclut leurs rapports générés prêts, sans override, dont le SHA entier correspond au fichier vérifié ; une réservation contradictoire ou un contenu modifié empêche son adoption et aucun rapport étranger n'est absorbé.
+
+#### Scenario: Réservation après archivage vérifié
+- **WHEN** la réconciliation officielle du même RUN constate une archive unique réelle et l'absence de la source, avec les anciens chemins réservés dans le même index, acteur et session
+- **THEN** CAB reconnaît automatiquement les mêmes fichiers relatifs sous leur chemin d'archive, conserve la provenance dans le reçu de réservation et refuse toute cible non régulière, étrangère ou concurrente ; les captures initiales restent intactes.
+
+### Requirement: Récupération statistique sur état initial prouvé
+CAB MUST réconcilier uniquement une publication arrêtée dont l'état avant des fichiers et de l'index est vérifié sous verrous. Le propriétaire MUST être arrêté ou localement inactif avec identité exacte. CAB MUST conserver UNKNOWN et son empreinte dans un événement, classer FAILED_NO_CHANGE sans succès ni rejeu et poursuivre la finalisation normale. Toute ambiguïté MUST rester protégée.
+
+#### Scenario: Écriture non retenue
+- **WHEN** propriétaire et écrivain sont arrêtés et fichier/index correspondent à leurs états avant vérifiés sans activité concurrente
+- **THEN** CAB enregistre FAILED_NO_CHANGE, conserve le constat UNKNOWN et ne rejoue aucune écriture.
+
+#### Scenario: Propriétaire local après sortie de son exécution
+- **WHEN** l'identité du processus propriétaire est celle du processus courant, le job n'est plus ACTIVE sous les verrous et tous les autres constats d'état avant sont prouvés
+- **THEN** CAB peut réconcilier sans redémarrage du processus, en distinguant l'arrêt de l'exécution de celui du processus ; un job ACTIVE ou un propriétaire extérieur vivant reste refusé.
+
+### Requirement: Paquets publics utilisables indépendamment de l’umask du service
+CAB MUST borner l’umask au seul subprocess de build et conserver celle du service. Avant APT, CABU MUST refuser un paquet dont les fichiers et répertoires publics attendus ne disposent pas des droits de lecture/exécution requis. Les chemins privés MUST rester hors correction.
+
+#### Scenario: Service sous umask restrictive
+- **WHEN** le service construit un paquet sous umask077
+- **THEN** les données publiques du paquet restent0644 et les répertoires0755, sans changement de l’umask du parent.
+
+#### Scenario: Paquet privatisé
+- **WHEN** un paquet présente un fichier public0600 ou un répertoire0700
+- **THEN** CABU refuse avant toute invocation APT et conserve le motif vérifiable.
+
+### Requirement: Acquittement de négociation observé par le relais
+Après une réponse initialize réussie observée, CAB MUST reconnaître un premier appel du client comme acquittement suffisant pour superviser son worker possédé, même sans notification initialized. Le relais MUST conserver les identités, les résultats indécis et l’interdiction de rejeu métier.
+
+#### Scenario: Client sans notification initialized
+- **WHEN** le client négocie avec succès puis envoie tools/list sans notification initialized
+- **THEN** le relais reste capable de recharger son worker arrêté à frontière sûre sans rejouer une requête métier.
+
+### Requirement: Autorisation de reprise nécessaire à CABU
+Une demande CABU authentifiée MUST autoriser les reprises nécessaires de son instance observée, pour son UID et sa version, sans confirmation supplémentaire. Le service MUST conserver ce périmètre et sa provenance dans le reçu. Une autorisation révoquée, une instance divergente ou un effet incertain MUST bloquer la reprise sans rejeu. L’autorisation MUST NOT prouver la disponibilité technique ni la reconnexion.
+
+#### Scenario: Reprise dans la mise à jour autorisée
+- **WHEN** le paquet est vérifié et la même instance atteint une frontière sûre
+- **THEN** CAB admet sa reprise nécessaire sans nouvelle confirmation et conserve un reçu corrélé
+
+#### Scenario: Révocation avant dispatch
+- **WHEN** le demandeur révoque cabu_recovery_authorized avant une reprise en attente
+- **THEN** CAB bloque son dispatch sans changer la génération fournisseur ni rejouer un effet
+
+#### Scenario: Ancien reçu ou instance étrangère
+- **WHEN** le reçu ne porte pas d’instance observée ou la cible diffère
+- **THEN** CAB expose le motif technique sans inventer d’autorisation ni demander une confirmation répétitive
+
+### Requirement: Admission explicite d'un fichier préexistant
+CAB MUST permettre une admission ciblée des fichiers réguliers préexistants explicitement autorisés dans un RUN natif. Le propriétaire décide en direct et l’orchestrateur désigné décide en piloté. Un CAS et un reçu idempotent MUST lier contexte et empreintes observés. Baseline, fichiers, index et preuves MUST rester inchangés. La réservation native MUST revérifier le contexte du chemin et tracer l'autorisation.
+
+#### Scenario: Inspection administrative sans contenu
+- **WHEN** l’autorité du RUN inspecte des chemins littéraux cadrés
+- **THEN** CAB restitue identité du RUN/SID, cadrage, révision, baseline, HEAD, index, statuts et empreintes des fichiers, sans leur contenu ni modification
+
+#### Scenario: DEVOPS.md préexistant explicitement autorisé
+- **WHEN** l’autorité du RUN autorise l'état exact de DEVOPS.md dans le mandat après inspection
+- **THEN** le codeur peut le réserver dans le même RUN/SID et la baseline initiale reste inchangée
+
+#### Scenario: Source ou contexte modifiés
+- **WHEN** le fichier, HEAD, l'index, le cadrage ou la baseline ne correspond plus à l'état autorisé
+- **THEN** la prise en charge est refusée, sans adoption implicite ou restauration d'une ancienne autorisation
+
+#### Scenario: Frontière protégée ou donnée étrangère
+- **WHEN** un effet est indécis, un bail détenu, un fichier réservé, un gel/import/revue/clôture applicable, un lien ou un contenu déjà modifié dans l'index partagé
+- **THEN** l'admission est refusée et les états et données restent protégés
+
+#### Scenario: Répétition administrative
+- **WHEN** une demande identique est répétée ou une autre entrée réutilise son request_id
+- **THEN** CAB retourne le même reçu dans le premier cas et refuse le conflit dans le second
+
+#### Scenario: Autorité d'écriture en session pilotée
+- **WHEN** le codeur piloté veut inclure un fichier préexistant
+- **THEN** l’orchestrateur désigné doit approuver son état exact avant réservation
+
+### Requirement: Baseline historique et propreté actuelle distinguées
+Un statut dirty historique MUST NOT empêcher une réservation lorsque le chemin actuellement propre correspond aux octets du HEAD observé et au mode exécutable si Git le suit. CAB MUST respecter core.filemode=false sans changer les permissions ni la configuration. CAB MUST journaliser ce constat sans modifier la baseline ni reconstruire le contenu historique.
+
+#### Scenario: Modifications précédentes publiées
+- **WHEN** un chemin dirty à la capture initiale est désormais propre et identique à HEAD selon les règles de suivi Git
+- **THEN** CAB autorise sa réservation actuelle et conserve le constat historique
+
+#### Scenario: Mode exécutable ignoré par Git
+- **WHEN** core.filemode=false, les octets correspondent à HEAD et seul le bit exécutable diffère
+- **THEN** CAB autorise la réservation sans chmod, changement de configuration ou de baseline
+
+#### Scenario: Statut clean sans concordance de contenu
+- **WHEN** le statut masque des octets différents de HEAD, même avec core.filemode=false
+- **THEN** CAB refuse la prise en charge automatique
+
+#### Scenario: Mode suivi ou configuration instable
+- **WHEN** Git suit un mode divergent ou la configuration est invalide ou change pendant la comparaison
+- **THEN** CAB refuse la prise en charge automatique
+
+### Requirement: Rapport réel d’une session canonique
+Un RUN de livraison sans dossier de change MUST produire son rapport sous statistics/runs/<identité>/STATISTICS.md s’il cadre une spécification canonique réelle. Le chemin MUST dériver du projet, RUN, SID et génération. CAB MUST projeter le maître local en PG, borner ses mesures au RUN et conserver N/A. Un ChangeSource disparu MUST NOT devenir un repli canonique.
+
+#### Scenario: Livraison canonique prouvée
+- **WHEN** les preuves courantes sont acquises sans dossier de change et la spécification canonique cadrée existe
+- **THEN** CAB produit un rapport réel sans créer ChangeSource, tâches ou archive artificiels
+
+#### Scenario: Rapport de session et global
+- **WHEN** CAB publie le rapport canonique puis le global
+- **THEN** il indexe les seuls documents concernés, conserve leurs empreintes et inclut le maître une seule fois sans compter les autres RUN
+
+#### Scenario: Source disparue ou document étranger
+- **WHEN** un ancien ChangeSource a disparu ou la cible appartient à un autre RUN ou à une réservation étrangère
+- **THEN** CAB conserve le blocage et ne remplace aucun document ou contexte
+
+### Requirement: Clôture canonique confirmée par le moteur
+CAB MUST utiliser son moteur de commit terminal pour publier le rapport canonique et le global avant CLOSED. Il MUST vérifier le namespace exact du RUN et conserver les protections des états inconnus. La reprise MUST NOT réexécuter la livraison ni retirer l’exigence de publication terminale.
+
+#### Scenario: Rapport prêt après livraison
+- **WHEN** le rapport canonique réel est publié et indexé après une livraison confirmée
+- **THEN** CAB effectue le seul commit terminal et vérifie ses destinations avant clôture
+
+#### Scenario: Commit terminal indécis
+- **WHEN** le commit terminal ou son envoi est UNKNOWN
+- **THEN** CAB conserve le reçu et expose le blocage sans créer une nouvelle livraison ou un autre commit
+
+### Requirement: Visibilité des blocages postérieurs au dossier
+La consultation de finalisation MUST exposer les manques persistés après le dossier de preuves, avec la phase réelle et les actions correspondantes. Elle MUST NOT annoncer READY tant qu’un rapport ou commit terminal requis reste bloqué. Seule une progression réelle MAY retirer cette attente.
+
+#### Scenario: Rapport manquant malgré preuves valides
+- **WHEN** le dossier est valide et la phase FINALIZING attend un rapport ou un commit
+- **THEN** le statut et la réévaluation affichent cette attente au lieu d’un faux READY
+
+### Requirement: Registre PostgreSQL des incidents CCAB
+Les déclarations d’incident CCAB MUST être stockées dans la table PostgreSQL ccab avec identifiant, catégorie, résumé, preuves, état, claim, résolution, date et relations projet/RUN. La migration de la table existante MUST préserver toutes les données. Les commandes CCAB et leur contrat de consultation historique MUST rester compatibles.
+
+#### Scenario: Conservation du registre
+- **WHEN** la migration vers ccab est appliquée
+- **THEN** les déclarations existantes conservent leurs identifiants, preuves, claims et résolutions
+
+### Requirement: Tableau des incidents du projet
+La page Incidents d’un projet MUST présenter un tableau paginé et responsive contenant les informations principales de ses déclarations. La consultation MUST être limitée aux projets autorisés et inclure tous les états d’incident.
+
+#### Scenario: Consultation d’un projet
+- **WHEN** un utilisateur ouvre la page Incidents d’un projet autorisé
+- **THEN** il voit ses déclarations avec identifiant, catégorie, résumé, état, date, responsable et nombre de preuves
+
+### Requirement: Détail d’une déclaration CCAB
+L’identifiant d’une déclaration MUST ouvrir une fenêtre en lecture seule contenant son résumé, ses preuves, son claim et sa résolution. La déclaration complète MUST être consultable sans modifier son état.
+
+#### Scenario: Ouverture du détail
+- **WHEN** un utilisateur sélectionne une déclaration dans le tableau
+- **THEN** CAB affiche son détail complet sans prendre ni résoudre l’incident
+
+### Requirement: Reprise bornée du commit non émis
+CAB MUST inspecter et reprendre administrativement le même reçu PARTIAL dont le commit a échoué avant les références. Le CAS MUST lier RUN/SID/génération/acteur, état autorisé, projet, source, politique, HEAD/index/réservations et version. L’échec et son reçu MUST rester conservés ; seule une nouvelle tentative corrélée du commit MAY être admise. Version et projection MUST NOT être rejouées.
+
+#### Scenario: Même livraison après conflit de version
+- **WHEN** le commit est FAILED avant références et toutes les étapes aval restent non émises
+- **THEN** CAB admet une nouvelle tentative corrélée après inspection et CAS exacts sans recréer une livraison
+
+#### Scenario: État fermé, incertain ou protégé
+- **WHEN** le RUN est CLOSED, BLOCKED ou FINALIZING, ou un effet est UNKNOWN, un bail ou une opération reste actif
+- **THEN** CAB refuse la reprise et conserve tous les reçus et protections
+
+#### Scenario: Réponse perdue ou appels concurrents
+- **WHEN** la même demande est répétée après perte de réponse ou présentée simultanément
+- **THEN** CAB retourne le même reçu sans déclencher une seconde tentative et refuse toute entrée différente sous le même identifiant
+
+### Requirement: Résolution explicite et limitée des conflits
+CAB MAY résoudre automatiquement un scalaire de version déclaré égal à la cible si tout autre contenu et le mode sont identiques à HEAD. Un conflit de code MUST rester refusé sauf résolution manuelle portant chemin réservé, OID/modes et diff exacts approuvés par propriétaire et responsable. Le CAS MUST lier les références de revue ; CAB MUST NOT effectuer un choix ours implicite.
+
+#### Scenario: Métadonnée de version seule
+- **WHEN** seul le scalaire de version change vers la version déjà admise
+- **THEN** CAB applique ce scalaire au seul candidat en conservant tout le reste de HEAD
+
+#### Scenario: Résolution manuelle revue
+- **WHEN** les références et empreintes exactes des blobs et du diff ont été approuvées
+- **THEN** CAB applique uniquement ces résolutions nommées dans l’index candidat et refuse tout chemin ou blob divergent
+
+### Requirement: Contexte revérifié avant l’effet de reprise
+Le worker MUST reprendre le même verrou Git, réobserver le CAS admis et normaliser seulement ses propres transitions corrélées avant prepare ou commit. Une divergence de HEAD, source, version ou périmètre MUST refuser l’effet. La continuation MUST exécuter seulement les étapes aval jamais émises et conserver le parcours normal sans double dispatch.
+
+#### Scenario: Contexte changé après admission
+- **WHEN** HEAD, source ou version locale change entre admission et worker
+- **THEN** aucun commit, mutation de version ou projection n’est exécuté et CAB expose le refus
+
+#### Scenario: Continuation et parcours normal
+- **WHEN** le commit unique est confirmé
+- **THEN** forges, build, vérification et clôture sont poursuivis une seule fois dans le même reçu
+
+### Requirement: Suppression manuelle d’une déclaration CCAB résolue
+
+Un administrateur MUST pouvoir supprimer une seule déclaration résolue depuis le tableau Incidents du projet après confirmation nominative. Le serveur MUST vérifier le projet, l’état et la révision sous verrou. Il MUST conserver une trace de l’action.
+
+#### Scenario: Déclaration résolue et confirmée
+- **WHEN** l’administrateur confirme une déclaration résolue dont la révision est inchangée
+- **THEN** CAB retire cette seule déclaration et actualise le tableau
+
+#### Scenario: Déclaration ouverte, différente ou modifiée
+- **WHEN** l’utilisateur cible une déclaration non résolue, rattachée à un autre projet ou modifiée depuis la confirmation
+- **THEN** CAB refuse la suppression
+
+### Requirement: Clôture d’un RUN avec un change OpenSpec
+
+Un RUN de codage MUST NOT passer à CLOSED tant que son change OpenSpec est actif ou que son archive ne prouve pas la résolution de toutes ses tâches. Les preuves de livraison MUST NOT remplacer l’archive. Une clôture historique incohérente MUST garder son reçu et signaler l’écart.
+
+#### Scenario: Livraison terminée et change actif
+- **WHEN** les vérifications et la livraison ont réussi mais le change OpenSpec existe encore
+- **THEN** CAB conserve le RUN ouvert et signale l’archive attendue
+
+#### Scenario: Dépendance non satisfaisante
+- **WHEN** le responsable arrête le RUN et identifie ses dépendances non satisfaites
+- **THEN** CAB produit BLOCKERS.md pour le change actif et enregistre BLOCKED avec le chemin et l’empreinte du rapport
+
+### Requirement: Version du worker observée au démarrage
+Le relais MUST publier la version attestée par son worker courant. Il MUST obtenir un catalogue réel avant l’état READY.
+
+#### Scenario: Moteur lancé avant catalogue
+- **WHEN** le worker courant fournit sa version avant la fin de la lecture du catalogue
+- **THEN** le heartbeat publie cette version et le statut CATALOG_PENDING
+
+#### Scenario: Mise à jour suivante après relance confirmée
+- **WHEN** le même frontend relancé demande une version plus récente vérifiée et l’ancien reçu attend les connexions
+- **THEN** CAB conserve le reçu antérieur et admet la nouvelle demande sans rejouer l’ancien effet
+
+### Requirement: Reprise d’une instance dont l’exécutable a été remplacé
+CABU MUST conserver l’identité noyau de l’instance ciblée et vérifier le chemin de son binaire installé avant relance. Il MUST préserver les effets incertains et les anciens reçus.
+
+#### Scenario: Ancien exécutable marqué supprimé par Linux
+- **WHEN** le processus graphique conserve l’ancien inode et que le binaire de remplacement est installé à un chemin système protégé
+- **THEN** CAB conserve l’identité du processus à arrêter et utilise le binaire de remplacement pour sa relance
+
+#### Scenario: Nouveau paquet après une reprise non commencée
+- **WHEN** le même demandeur demande la reprise d’une version plus récente déjà installée et vérifiée
+- **THEN** CAB peut libérer le créneau du reçu antérieur bloqué si aucun redémarrage n’a été engagé, et conserve le reçu initial
+
+### Requirement: Génération de paquet dans la définition MCP
+CAB MUST conserver CAB_MCP_PACKAGE_VERSION dans l’environnement de sa déclaration MCP gérée. La valeur MUST être stable à version inchangée et suivre la version du paquet. Les autres données et secrets MUST rester préservés. Le marqueur MUST NOT valoir preuve de reconnexion ; une session d’origine MUST fournir une nouvelle négociation et un catalogue réellement observés avant READY.
+
+#### Scenario: Nouvelle version
+- **WHEN** CAB active une nouvelle version du paquet
+- **THEN** sa définition MCP porte la nouvelle génération et le client peut renouveler la connexion à sa frontière native sûre
+
+#### Scenario: Réconciliation idempotente
+- **WHEN** la même version est réconciliée à nouveau
+- **THEN** la définition effective reste identique, sans nonce aléatoire ni boucle de reconnexion
+
+#### Scenario: Donnée étrangère ou format ambigu
+- **WHEN** la déclaration appartient à une autre commande ou son format ne peut être modifié sans ambiguïté
+- **THEN** CAB refuse l’écriture et préserve toutes les données antérieures
+
+#### Scenario: Rafraîchissement non observé
+- **WHEN** le marqueur est écrit mais aucun nouveau moteur/catalogue n’est observé
+- **THEN** CAB conserve l’attente de reconnexion sans fabriquer de version ni de succès
+
+### Requirement: Reprise graphique autonome après mise à jour CABU
+CABU MUST essayer le parcours natif en priorité. Quand un relais de l’instance graphique authentifiée qui a demandé la mise à jour reste en RELOAD_REQUIRED, le superviseur MAY arrêter cette instance, son moteur et les relais identifiés sous le même compte après vérification du mandat et des protections actives. CAB MUST confier la relance au gestionnaire de services du compte d’origine.
+
+#### Scenario: Arrêt d’un processus ciblé
+- **WHEN** la mise à jour est vérifiée et le redémarrage de l’instance identifiée est admis
+- **THEN** CAB écrit son reçu avant l’effet, envoie SIGTERM via PIDFD, puis SIGKILL sur le même PIDFD uniquement si la sortie n’est pas observée avant le délai
+
+#### Scenario: Résultat d’arrêt ou de reprise incertain
+- **WHEN** la sortie ou la relance reste incertaine
+- **THEN** CAB conserve le reçu et ne rejoue pas l’effet
+
+#### Scenario: Nouveau frontend actif
+- **WHEN** l’ancienne instance a quitté et le compte d’origine a relancé le frontend
+- **THEN** CAB attend les heartbeats de relais rattachés au nouveau frontend attestant le moteur et le catalogue de la version cible
+
+### Requirement: Construction et publication natives des artefacts de livraison
+CAB MUST construire et publier les artefacts activés dans les parcours CICD et CICDF à l’aide de ses fonctions natives. Il MUST conserver un reçu par format et par forge, et protéger les résultats indéterminés contre le rejeu.
+
+#### Scenario: Construction des formats activés
+- **WHEN** le projet active des artefacts Debian ou Docker
+- **THEN** CAB construit ces artefacts avec la recette locale et actualise leur inventaire
+- **AND THEN** une image Docker reçoit les tags `<ID>:latest` et `<ID>:<VERSION>`
+
+#### Scenario: Publication de la version livrée
+- **WHEN** les envois Git et les constructions sont confirmés
+- **THEN** CAB appelle la fonction de chaque forge présente dans la livraison pour les seuls formats construits et la version livrée
+- **AND THEN** le moteur conserve les réponses incertaines et relit les artefacts confirmés
+
+#### Scenario: Report explicite de publication
+- **WHEN** le développeur diffère les publications d’un RUN et d’une version
+- **THEN** CAB conserve la décision sur ce seul reçu, avec les étapes de publication comme non exécutées
+
+### Requirement: Présentation par onglets de l’interface
+
+Interface MUST afficher Blocs, Colonnes, Général, Menus, Résolutions,
+Tableaux, Titres et Top barre. Général MUST ouvrir par défaut. Chaque onglet
+MUST proposer Mobile, Tablette, HD, Full HD, QHD et 4K au clavier et sur mobile.
+
+#### Scenario: Accès aux réglages historiques
+- **WHEN** l’administrateur choisit Full HD
+- **THEN** Général présente sa taille de texte et Résolutions ses facteurs Interface et Police
+- **AND** le choix est conservé lors d’un changement d’onglet principal.
+
+### Requirement: Réglages de disposition et de navigation
+
+Blocs MUST régler largeur minimale, espacement, nombre maximal par ligne et
+empilement. Colonnes MUST régler largeur et espacement latéraux, marges et
+empilement. Titres MUST régler taille, graisse, couleur et espacements.
+Top barre et Menus MUST régler dimensions, typographie, espacements, couleurs
+et indicateurs visuels. Le bandeau MUST proposer un mode de défilement
+et les menus MUST distinguer navigation latérale et onglets horizontaux.
+
+#### Scenario: Application d’un réglage de disposition
+- **WHEN** l’administrateur règle la largeur latérale ou l’espace d’un titre
+- **THEN** les composants concernés appliquent la valeur avec l’échelle responsive de la page.
+
+### Requirement: Présentation des tableaux administratifs et projets
+
+Les tableaux de la console CAB MUST reprendre la typographie de Binaires
+et partager ses réglages de typographie, hauteurs, marges, séparateurs et
+couleurs par thème. Les vues adaptatives MUST conserver leurs réglages
+d’empilement. Chaque tableau MUST afficher au moins trois lignes dans son
+corps de tableau et dix résultats au plus par page.
+
+#### Scenario: Afficher un résultat court ou vide
+
+- **WHEN** la page contient moins de trois résultats
+- **THEN** CAB complète le corps de tableau jusqu’à trois lignes visibles
+- **AND** les lignes de complément ne sont pas comptées comme des résultats
+
+#### Scenario: Rechercher et naviguer
+
+- **WHEN** l’utilisateur consulte un tableau
+- **THEN** Premier, Précédent, Suivant et Dernier s’affichent sous le tableau
+- **AND** le champ de recherche est placé à droite de Dernier
+- **AND** une nouvelle recherche filtre les données accessibles avant pagination et revient à la première page
+
+#### Scenario: Retour à la présentation de référence
+
+- **WHEN** aucune personnalisation des tableaux n’est enregistrée
+- **THEN** la taille de page est de dix résultats
+- **AND** une préférence de taille antérieure supérieure à dix est plafonnée à dix dans la console
+
+### Requirement: Persistance synchronisée des styles de composants
+
+Les réglages MUST être validés côté serveur, conservés par profil dans
+PostgreSQL et diffusés par Electric. La réinitialisation MUST viser le
+seul groupe du profil affiché. Les valeurs historiques MUST rester héritées.
+
+#### Scenario: Enregistrement synchronisé
+- **WHEN** l’administrateur modifie une valeur en Full HD
+- **THEN** les valeurs enregistrées pour les autres profils sont conservées
+- **AND** les fenêtres ouvertes recalculent leur rendu selon leur largeur.
+
+#### Scenario: Écran entre deux profils
+- **WHEN** la largeur se situe entre deux références
+- **THEN** CAB interpole les dimensions définies aux deux bornes et la taille de police de Général
+- **AND** les couleurs, seuils, graisses et compteurs utilisent le profil le plus proche.
+
+#### Scenario: Réinitialisation isolée
+- **WHEN** l’administrateur réinitialise un onglet pour la 4K
+- **THEN** CAB rétablit ses valeurs héritées en 4K et conserve les autres groupes et profils.
+
+### Requirement: Régénération du paquet Debian CAB
+
+La fabrication native d’une recette installant le manifeste du runtime CAB
+MUST reconstruire le frontend et générer le code Python et le manifeste dans
+un espace neuf, à partir de sources alignées sur la version demandée. La
+préparation MUST s’exécuter avec l’identité non privilégiée du projet.
+
+#### Scenario: Ancien répertoire de préparation
+- **WHEN** le projet contient un ancien frontend ou runtime préparé
+- **THEN** la fabrication régénère ces éléments et écarte leur copie antérieure.
+
+### Requirement: Contrôle Debian CAB avant publication
+
+CAB MUST vérifier la version Debian, la version Python, la version du
+manifeste et les empreintes Python, Web et des archives de dépendances dans
+le paquet assemblé. La publication MUST vérifier l’artefact transmis avant
+toute création de release ou d’asset.
+
+#### Scenario: Paquet avec contenu périmé
+- **WHEN** un paquet annonce la version demandée mais contient un manifeste ou un runtime plus ancien
+- **THEN** CAB refuse le paquet et la publication de son artefact.
+
+### Requirement: Affichage des références effectives par résolution
+
+Les réglages d’interface MUST présenter les valeurs de référence du profil
+sélectionné et indiquer celles calculées automatiquement. Le rendu 4K MUST
+rester la référence. Les réglages enregistrés MUST garder leur priorité.
+
+#### Scenario: Valeur de référence responsive
+- **WHEN** un administrateur consulte une résolution sans personnalisation
+- **THEN** le formulaire affiche la valeur fixe appliquée ou indique un calcul automatique
+- **AND** le navigateur conserve le rendu existant sans persister une valeur du catalogue.
+
+### Requirement: Annulation vérifiée d’un RUN direct remplacé
+
+CAB MUST refuser un deuxième RUN direct actif pour le même acteur, SID,
+projet et change. Une admission de remplacement MUST annuler le premier
+dans la même transaction si son absence d’exécution est prouvée. CAB MUST
+conserver un reçu lié au successeur et archiver le cadrage annulé.
+
+#### Scenario: Remplacement d’un cadrage sans exécution
+- **WHEN** un nouveau cadrage autorisé désigne son prédécesseur sans activité
+- **THEN** CAB archive son annulation et admet le successeur en une transaction.
+
+#### Scenario: Historique du successeur livré
+- **WHEN** une régularisation autorisée désigne le successeur clôturé et livré
+- **THEN** CAB vérifie son archive et relie l’annulation du premier cadrage au successeur.
+
+### Requirement: Routage des RUN directs concurrents du même SID
+
+Un connecteur Codex MUST accueillir plusieurs RUN directs identifiés par
+le même journal natif vérifié. Le routage Git et livraison MUST valider le
+couple projet/RUN à l’admission et refuser une cible implicite ambiguë.
+
+#### Scenario: Travaux concurrents
+- **WHEN** deux RUN directs distincts sont rattachés au même journal
+- **THEN** leurs opérations et reçus restent corrélés à la cible vérifiée
+- **AND** la liaison du premier reste utilisable pendant le travail du second.
+
+### Requirement: États de session anglais et concis
+
+Les états et protections visibles dans Sessions, Archives et le détail RUN
+MUST employer des libellés anglais courts. L’annulation avant exécution MUST
+afficher le lien vers le RUN de remplacement.
+
+#### Scenario: Cadrage annulé
+- **WHEN** l’utilisateur consulte un cadrage annulé dans les archives
+- **THEN** CAB présente Cancelled before start et le lien du successeur.
+
+### Requirement: Index de session dans un répertoire de groupe projet
+
+CAB MUST reconnaître le répertoire d’index partagé avec le groupe du projet
+lorsque le propriétaire concorde, que le groupe correspond aussi à celui du
+répertoire Git et que les autres comptes n’ont aucun droit. CAB MUST préserver
+les modes existants et les vérifications de l’index, de sa référence et du reçu.
+
+#### Scenario: Répertoire d’index partagé par le groupe déclaré
+- **WHEN** un projet utilise un répertoire d’index en mode 2770 pour son groupe
+- **THEN** CAB accepte le répertoire sans modifier son mode.
+
+#### Scenario: Groupe étranger ou accès aux autres comptes
+- **WHEN** le répertoire autorise les autres comptes ou donne accès à un groupe étranger
+- **THEN** CAB conserve son refus.
+
+### Requirement: Extension autorisée du cadrage direct
+
+Le propriétaire d’un RUN direct MUST pouvoir consigner l’autorisation explicite
+du développeur pour ajouter des fichiers exacts via une exception de cadrage et
+le connecteur rattaché. CAB MUST journaliser la décision et préserver les contrôles
+de chemin, les réservations et les effets en cours. En piloté, le codeur MUST
+passer par l’orchestrateur désigné.
+
+#### Scenario: Autorisation donnée dans une session directe en cours
+- **WHEN** le propriétaire rattaché enregistre une autorisation pour des fichiers du projet sur une exception ouverte
+- **THEN** CAB étend le cadrage du même RUN sans modifier les fichiers ni leur réservation.
+
+#### Scenario: Demande d’un autre acteur ou d’un codeur piloté
+- **WHEN** l’auteur de l’appel direct ne possède pas le RUN direct rattaché
+- **THEN** CAB refuse l’extension.
+
+### Requirement: Politique de version de projet
+
+CAB MUST définir `PROJECT_VERSION_POLICY` de 1 à 7 dans `project.env`, source
+de vérité, et projeter cette valeur dans PostgreSQL. Pour un champ absent,
+CAB MUST déduire le nombre de composantes de la version valide ou utiliser 3
+lorsqu’aucune version n’existe. Une incohérence MUST être visible. CAB MUST
+calculer la candidate en ajoutant une unité à la position choisie et en
+remettant à zéro sa seule voisine immédiate de droite si elle existe.
+
+#### Scenario: Projet existant
+- **WHEN** CAB observe une version 3.8.4.2 avec une politique absente
+- **THEN** CAB écrit la politique 4 et la projette dans PostgreSQL.
+
+#### Scenario: Incrément suivi d’une composante
+- **WHEN** la deuxième composante de 2.9.4.7 est sélectionnée
+- **THEN** CAB propose 2.10.0.7 sans mutation du projet.
+
+#### Scenario: Choix de la composante
+- **WHEN** le codeur consulte la politique avant de sélectionner une composante
+- **THEN** CAB expose les composantes suivantes dans cet ordre :
+
+| Politique | Composantes dans l’ordre |
+| --- | --- |
+| 1 | Version du projet, modifications comprises |
+| 2 | Version du projet, modification de toute nature |
+| 3 | Version du projet, ajout ou modification de fonctionnalité, correctif |
+| 4 | Version du projet, ajout de fonctionnalité, modification de fonctionnalité, correctif |
+| 5 | Majeure, mineure, ajout de fonctionnalité, modification de fonctionnalité, correctif |
+| 6 | Majeure, mineure, ajout de fonctionnalité, modification majeure de fonctionnalité, modification mineure de fonctionnalité, correctif |
+| 7 | Majeure, mineure, ajout de fonctionnalité, modification majeure de fonctionnalité, modification mineure de fonctionnalité, correctif majeur, correctif mineur |
+
+### Requirement: Ordre des versions numériques
+
+CAB MUST comparer d’abord le nombre de composantes des versions numériques.
+À nombre égal, CAB MUST comparer leurs composantes numériquement de gauche à
+droite. La conversion de format confirmée est une opération distincte de
+l’admission d’une nouvelle version de livraison.
+
+#### Scenario: Passage de trois à quatre composantes
+- **WHEN** CAB compare 0.3.8.0 et 4.0.0
+- **THEN** CAB classe 0.3.8.0 au-dessus de 4.0.0.
+
+### Requirement: Changement de format dans Overview
+
+CAB MUST prévisualiser dans Overview la conversion de la version courante et de
+tous les tags locaux au format d’origine, en ajoutant les zéros ou en retirant
+les composantes du côté choisi. Après confirmation, CAB MUST conserver les
+objets référencés et les tags hors conversion. Une collision ou un aperçu
+périmé MUST empêcher l’application. Un reçu MUST permettre la réconciliation
+sans rejeu. L’opération MUST NOT publier de références distantes.
+
+#### Scenario: Collision après réduction
+- **WHEN** deux tags atteignent le même nom cible
+- **THEN** CAB signale la collision sans mutation.
+
+#### Scenario: Conversion des références locales
+- **WHEN** un aperçu valide est confirmé pour un dépôt local
+- **THEN** CAB convertit les références concernées dans une transaction Git en conservant leur objet exact, y compris l’objet d’un tag annoté
+- **AND** CAB vérifie la concordance entre les références, le fichier et sa projection avant de conclure le reçu.
+
+#### Scenario: Interruption après la transaction Git
+- **WHEN** CAB retrouve le Git cible et le fichier initial exact sur le reçu de conversion
+- **THEN** CAB peut terminer le fichier et sa projection sans réémettre la transaction Git.
+
+### Requirement: Accusé de lecture du skill Version
+
+CAB MUST imposer la lecture du skill Version au codeur en direct et à
+l’orchestrateur en piloté après création ou rattachement de la spécification.
+L’accusé MUST être authentifié, associé au RUN et identifier la spécification
+et la révision du skill. CAB MUST refuser la proposition de version avant
+l’accusé admissible.
+
+#### Scenario: Spécification absente puis créée
+- **WHEN** la spécification devient disponible pour le RUN
+- **THEN** CAB demande l’accusé au rôle applicable avant toute proposition.
+
+### Requirement: Itérations et durées par change
+
+CAB MUST conserver les étapes sous le change et conserver chaque itération
+lors d’une reprise. Il MUST calculer automatiquement les bornes, durées,
+compteurs et cumuls à partir de ses propres observations. Une donnée non
+mesurée MUST rester indisponible. Une description fournie par un agent MUST
+rester distincte des mesures et preuves CAB. Overview MUST exposer les
+itérations, le cumul par étape et celui du change.
+
+#### Scenario: Change repris sur un autre RUN
+- **WHEN** CAB observe un nouveau passage d’une étape déjà parcourue
+- **THEN** CAB conserve le premier passage, ajoute une itération et augmente le cumul des durées mesurées.
+
+#### Scenario: Déclaration répétée
+- **WHEN** CAB reçoit deux fois la même transition
+- **THEN** l’itération et la durée ne sont comptées qu’une fois.
+
+### Requirement: Reprise CICDF après évolution des statistiques dans l’index partagé
+
+CAB MUST permettre la reprise administrative du même CICDF lorsque le commit
+a échoué avant les références par conflit d’index partagé. CAB MUST préserver
+l’arbre de code et le plan d’origine. La reprise MUST comparer les entrées
+modifiées de l’index partagé aux preuves CAB et refuser toute divergence de code.
+
+#### Scenario: Rapports de statistiques indexés par CAB
+- **WHEN** seules des entrées de rapports gérés par CAB ont changé, leur empreinte est attestée et le code de l’arbre figé concorde
+- **THEN** CAB revérifie la comparaison sous verrou, poursuit le commit de la même livraison et conserve l’effet original
+- **AND** CAB ne rejoue ni la version ni sa projection.
+
+#### Scenario: Écart de code, preuve de statistiques absente ou effet incertain
+- **WHEN** du code diffère, une preuve de rapport est absente ou une opération reste indécise
+- **THEN** CAB refuse la reprise sans modifier les références ou les preuves historiques.
+
+### Requirement: Libération administrative d'une réservation Git précise
+
+CAB MUST permettre à son administrateur système local de libérer une réservation Git active unique, sur autorisation explicite du développeur. L’opération MUST vérifier le projet, le RUN, le SID, la génération, l’index, l’identifiant de réservation, le chemin et la concordance des octets du fichier avec sa version indexée. CAB MUST refuser les effets incertains et vérifier l’empreinte de l’index ainsi que sa référence de conservation sous le verrou Git.
+
+#### Scenario: Libération d'un chemin parmi douze
+
+- **WHEN** l’administrateur soumet la réservation exacte et que l’inspection est toujours valable
+- **THEN** CAB libère seulement ce chemin, conserve les onze autres réservations, le fichier et l’index, et enregistre un reçu durable
+
+#### Scenario: Divergence ou effet incertain
+
+- **WHEN** l’identité, l’index ou le fichier diverge, ou qu’un effet est incertain
+- **THEN** CAB refuse la libération sans changer les réservations
+
+#### Scenario: Réponse interrompue
+
+- **WHEN** l’administrateur relit l’identifiant d’une libération enregistrée
+- **THEN** CAB retourne le même reçu sans nouvelle mutation
+
+### Requirement: Réconciliation du périphérique du journal natif
+CAB MUST permettre la réconciliation du numéro de périphérique dans le RUN actif existant en conservant le SID, la génération, l’ancienne identité du journal et les preuves. CAB MUST vérifier le chemin, le propriétaire, l’inode, l’en-tête et l’index natif. CAB MUST NOT résoudre une opération incertaine par ce parcours.
+
+#### Scenario: Journal du même RUN après redémarrage
+- **WHEN** l’administrateur réconcilie le périphérique du journal indexé d’un RUN en finalisation
+- **THEN** CAB enregistre l’identité actuelle et conserve l’état et les preuves du RUN
+
+#### Scenario: Journal différent
+- **WHEN** le chemin, le propriétaire ou l’inode diffère
+- **THEN** CAB refuse la réconciliation de périphérique
+
+### Requirement: Réservation directe d’un fichier préexistant cadré
+Le propriétaire d’un RUN direct MUST pouvoir réserver un fichier modifié du périmètre déclaré sans accord administratif ni reçu d’admission séparé. CAB MUST tracer la réservation et respecter les réservations actives des autres sessions. En piloté, l’orchestrateur conserve son autorité.
+
+#### Scenario: Fichier modifié déjà dans le cadre
+- **WHEN** le propriétaire d’un RUN direct réserve un fichier préexistant cadré sans réservation étrangère
+- **THEN** CAB admet le fichier et conserve la baseline
+
+#### Scenario: Fichier détenu par une autre session
+- **WHEN** une autre session détient déjà une réservation sur le chemin
+- **THEN** CAB refuse la réservation concurrente
+
+### Requirement: Réconciliation d'un contrôle OpenSpec hôte arrêté
+
+CAB MUST permettre à l’administrateur autorisé de réconcilier un contrôle OpenSpec hôte sans résultat après vérification de son reçu, de son autorisation et de l’arrêt de son groupe de processus.
+
+#### Scenario: Arrêt prouvé et résultat absent
+
+- **WHEN** l’administrateur présente le reçu exact et que le contrôle hôte est arrêté
+- **THEN** CAB conserve le reçu et libère uniquement ses baux, sans reconstruire un résultat ni relancer le contrôle
+
+#### Scenario: Producteur encore actif
+
+- **WHEN** le processus ou son groupe est actif ou que les preuves divergent
+- **THEN** CAB refuse la réconciliation
+
+### Requirement: Retrait d'une livraison avant effet Git
+
+CAB MUST permettre une clôture SCM locale lorsqu’un développeur retire son autorisation de publication avant tout effet Git de livraison. CAB MUST conserver les contrôles, les preuves et l’historique de la politique.
+
+#### Scenario: Retrait d'un mandat de publication
+
+- **WHEN** le développeur autorise la clôture locale d’un RUN direct dont l’index est libéré sans livraison engagée
+- **THEN** CAB remplace le mandat de publication par un mandat local et vérifie les autres critères
+
+#### Scenario: Clôture locale suspendue avant l'indexation
+
+- **WHEN** la clôture d’un RUN direct a été suspendue faute d’accès au producteur de statistiques avant tout effet Git terminal
+- **THEN** CAB peut revenir à la préparation de l’index et attend sa libération avant la clôture locale
+
+### Requirement: Confirmation de suppression sans preuve de clôture
+CAB MUST proposer une troisième confirmation décochée par défaut si seule
+la preuve de clôture manque pour une session de codage directe ou pilotée.
+Cette confirmation MUST lever le seul contrôle de clôture. CAB MUST vérifier
+de nouveau l’aperçu sous verrou et inscrire la dérogation dans le reçu.
+
+#### Scenario: Suppression sans preuve de clôture
+- **WHEN** seule la preuve de clôture manque et que l’utilisateur confirme la suppression sans preuve, l’irréversibilité et les éventuels liens partagés sur un aperçu courant
+- **THEN** CAB supprime les données propres du RUN et indique dans le reçu que la preuve de clôture a été écartée
+
+#### Scenario: Protection en cours de suppression
+- **WHEN** un effet, bail, reçu, incident ou lien partagé protège le RUN, ou que l’aperçu a changé
+- **THEN** CAB refuse la suppression, y compris avec la confirmation sans preuve de clôture
+
+### Requirement: Suppression des itérations propres à une session
+CAB MUST supprimer les cycles, passages d’étape et mesures de tokens propres
+au RUN dans la même transaction et recalculer les agrégats des passages
+conservés. La source d’import utilisée pour dédupliquer les importations
+MUST être conservée.
+
+#### Scenario: Nettoyage des données propres
+- **WHEN** CAB supprime un RUN dont les passages et cycles lui sont propres
+- **THEN** ses passages, cycles et mesures de tokens disparaissent, et les agrégats ne comptent plus que les passages conservés
+
+#### Scenario: Mesure ou passage encore référencé
+- **WHEN** un passage ou une mesure d’un autre RUN référence un passage ou un cycle de la session à supprimer
+- **THEN** CAB refuse la suppression et restitue le motif à l’utilisateur
+
+### Requirement: Administration des agents et des clés API
+
+CAB SHALL proposer les rappels existants sous les blocs d’agents de /administration/agents et conserver leur configuration. La navigation Agents SHALL donner accès à l’accueil, aux clés API, aux fournisseurs et aux modèles.
+
+#### Scenario: Ajouter et retirer une clé
+
+- **WHEN** un administrateur sélectionne un fournisseur enregistré et valide une clé saisie dans le panneau d’ajout
+- **THEN** CAB persiste la clé avec le même chiffrement TPM que les jetons de forge
+- **AND** la liste et les réponses de lecture ne retournent ni la clé ni son texte chiffré
+- **AND** les quotas et crédits inconnus sont affichés sans valeur numérique et la clé peut être supprimée par sa corbeille
+
+### Requirement: Catalogues des fournisseurs et enrichissement des modèles
+
+CAB SHALL stocker les fournisseurs et leurs modèles dans PostgreSQL. CAB SHALL valider les listes facultatives de modèles, importer les formats OpenCode Go et OpenRouter et actualiser quotidiennement chaque source à un horaire aléatoire. Les tableaux SHALL être alimentés par une projection PostgreSQL synchronisée par Electric.
+
+#### Scenario: Importer et compléter un catalogue
+
+- **WHEN** l’URL de liste d’un fournisseur répond avec un catalogue valide
+- **THEN** CAB enregistre les modèles liés à ce fournisseur avec leurs données communes et leurs métadonnées d’origine
+- **AND** CAB récupère au moins quotidiennement la source de complétion configurée et l’utilise pour compléter les champs manquants des modèles identifiés en conservant le document dans un fichier privé et en préservant les valeurs du fournisseur
+
+#### Scenario: Échec de récupération
+
+- **WHEN** une liste devient indisponible ou invalide
+- **THEN** CAB conserve les derniers modèles valides
+
+#### Scenario: Vérifier les empreintes avant réajustement
+
+- **WHEN** le worker vérifie les catalogues ou reçoit un fichier validé
+- **THEN** CAB compare d’abord les empreintes des fichiers locaux de tous les catalogues, dont la source de complétion, aux empreintes PostgreSQL
+- **AND** seuls les changements d’empreinte validés déclenchent un réajustement des modèles
+- **AND** une source configurée dont le fichier manque fait l’objet d’une tentative dès sa détection
+- **AND** les téléchargements, vérifications et ajustements s’exécutent hors de la requête de lecture Web
+
+#### Scenario: Administrer les fichiers
+
+- **WHEN** un administrateur consulte un fournisseur ou le catalogue de complétion
+- **THEN** CAB expose l’horodatage et la présence et validité du fichier, ainsi qu’une action de rafraîchissement qui indique l’activité
+- **AND** un fichier présent et valide peut être consulté dans un Overview administrateur
+- **AND** le fournisseur peut être édité et le bloc de complétion permet de configurer l’URL, avec https://models.dev/api.json par défaut
+
+#### Scenario: Consulter les blocs Agents
+
+- **WHEN** un administrateur ouvre la page Agents ou Administration → Agents
+- **THEN** le témoin MCP et son information apparaissent sous le nom et la version de l’agent
+- **AND** l’administration présente les réglages des rappels et de la complétion dans des blocs adaptés à la largeur disponible
+
+### Requirement: Navigation dans les catalogues des agents
+
+Les tableaux Clés API, Fournisseurs et Modèles SHALL proposer une recherche instantanée, un tri ascendant ou descendant sur chaque colonne de données dans les vues qui autorisent le tri manuel et une navigation par page de dix lignes au plus.
+
+#### Scenario: Rechercher et trier avant pagination
+
+- **WHEN** l’administrateur recherche une entrée ou choisit un tri
+- **THEN** CAB applique l’opération à l’ensemble des résultats de la vue et repart de la première page
+- **AND** le champ de recherche se trouve en bas du tableau, à droite de Dernier
+
+#### Scenario: Supprimer un fournisseur
+
+- **WHEN** l’administrateur confirme la suppression d’un fournisseur sans clé API liée
+- **THEN** CAB retire le fournisseur et ses modèles
+- **AND** en présence d’une clé liée, CAB refuse la suppression et laisse la clé disponible pour une suppression individuelle
+
+#### Scenario: Ouvrir le tableau des modèles
+
+- **WHEN** l’administrateur ouvre l’onglet Tous
+- **THEN** le tableau affiche les colonnes Modèles et Fournisseurs, avec davantage de largeur pour Fournisseurs
+- **AND** le tri initial se fait par coût d’entrée croissant, avec les prix nuls en premier et les prix inconnus en dernier
+- **AND** le tri manuel reste disponible dans Tous
+
+### Requirement: Onglets de politiques de modèles
+
+CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et supprimer des onglets nommés persistés dans PostgreSQL. Les actions Éditer et Supprimer SHALL apparaître après Dernier pour la politique sélectionnée.
+
+#### Scenario: Appliquer une politique
+
+- **WHEN** une politique est ouverte
+- **THEN** ses réglages Free et Payant s’appliquent indépendamment, Free couvrant le marqueur free ou deux tarifs de base connus et nuls
+- **AND** les seuils de contexte et de sortie utilisent les crans convenus, avec 0, 500000, 1000000 et 1048576 ainsi que respectivement 262144 et 64000
+- **AND** les minima et maxima de coût de base et de lecture et d’écriture du cache sont appliqués de manière inclusive
+- **AND** zéro désactive une borne et une métrique inconnue est écartée pour une borne active
+
+#### Scenario: Exclure des modèles par nom
+
+- **WHEN** une politique contient un Filtre de modèles composé de termes séparés par des points-virgules
+- **THEN** CAB exclut de cette politique tout modèle dont le nom affiché contient au moins un terme non vide, sans distinction de casse ni d’accents
+- **AND** l’onglet Tous conserve le catalogue global
+
+#### Scenario: Afficher des tarifs de cache
+
+- **WHEN** la source ou l’enrichissement existant fournit un prix de cache
+- **THEN** CAB affiche les coûts de lecture et d’écriture par million de tokens, avec la durée d’écriture la plus courte lorsqu’il existe plusieurs durées tarifées
+- **AND** un tarif inconnu est affiché sans valeur numérique
+
+#### Scenario: Trier un onglet de politique
+
+- **WHEN** l’administrateur enregistre les réglages du bloc Triage
+- **THEN** la politique conserve le tri ascendant ou descendant selon le coût d’entrée, de sortie, de lecture du cache ou d’écriture du cache
+- **AND** le coût d’entrée croissant constitue le réglage par défaut des politiques nouvelles et existantes
+- **AND** le tableau de la politique utilise ce tri sans contrôle de tri manuel et numérote les résultats à partir de 1, en continu sur les pages
+
+#### Scenario: Éditer une politique
+
+- **WHEN** l’Overview est affiché sur un écran suffisamment large
+- **THEN** le nom et le filtre, les seuils de contexte et de sortie, puis les blocs Modèles à inclure et Triage s’affichent en paires sur trois lignes
+
+#### Scenario: Sélectionner les fournisseurs d’une politique
+
+- **WHEN** l’administrateur crée ou édite une politique
+- **THEN** CAB propose un champ ouvrant à choix multiples alimenté par la table des fournisseurs, dans un bloc distinct sous Modèles à inclure
+- **AND** par défaut tous les fournisseurs actuels et futurs sont inclus
+- **AND** une sélection personnalisée persiste et limite les modèles aux fournisseurs choisis
+- **AND** une sélection vide inclut tous les fournisseurs, même pour un tableau vide enregistré par une version antérieure
+
+#### Scenario: Disposer les contrôles d’inclusion
+
+- **WHEN** l’Overview de politique est ouvert
+- **THEN** Free et Payant apparaissent sur la même ligne et le champ Fournisseurs est placé dans un bloc séparé en dessous
+- **AND** le dialogue exploite davantage de hauteur disponible et les espacements des labels du nom, du filtre et des seuils sont alignés sur le formulaire de tri
+
+#### Scenario: Présenter les contrôles du filtre et du tri
+
+- **WHEN** l’administrateur ouvre l’Overview de politique
+- **THEN** le libellé Filtre de modèles (Séparé par des ;) indique le séparateur
+- **AND** dans Triage, chaque libellé occupe la même ligne que son sélecteur à choix unique
+
+### Requirement: Diagnostic de transport de l’authentification des forges
+
+CAB MUST afficher les étapes et les causes identifiables des erreurs de transport lors de l’authentification GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST conserver un résultat indéterminé sans preuve d’authentification ou de refus.
+
+#### Scenario: Connexion interrompue avant TLS
+
+- **WHEN** la résolution DNS échoue ou que la connexion TCP expire
+- **THEN** la console distingue les deux causes et conserve un résultat indéterminé.
+
+#### Scenario: Erreur après ouverture de la connexion
+
+- **WHEN** la négociation TLS échoue ou que la forge tarde à répondre après TLS
+- **THEN** la console indique l’étape TLS ou HTTP et la cause observable sans exposer de secret.
+
+#### Scenario: Réponse de la forge
+
+- **WHEN** la forge répond à la consultation du profil ou du dépôt
+- **THEN** la console indique le statut HTTP et CAB applique les règles d’authentification existantes.
+
+#### Scenario: Vérification TLS GitLab explicitement désactivée
+
+- **WHEN** un projet GitLab contient un ancien réglage TLS à `0`, `false` ou `no`
+- **THEN** CAB accepte tout certificat sur les requêtes HTTPS d’authentification GitLab, y compris la vérification du dépôt, et la console signale que le certificat du serveur n’est pas vérifié.
+
+#### Scenario: Changement de la politique TLS GitLab
+
+- **WHEN** CAB compare les paramètres à un résultat GitLab antérieur à la politique TLS commune
+- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat.
+
+#### Scenario: Certificat TLS de la forge Forgejo
+
+- **WHEN** CAB authentifie le profil ou vérifie le dépôt Forgejo par HTTPS
+- **THEN** CAB accepte tout certificat, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`, et la console signale que le certificat du serveur n’est pas vérifié.
+
+#### Scenario: Résultat Forgejo associé à la politique TLS
+
+- **WHEN** CAB compare les paramètres à un résultat d’authentification Forgejo mémorisé
+- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat et conserve l’état si seule la valeur de l’ancien réglage a changé.
+
+### Requirement: Reprise du slot de réplication Electric pendant les mises à jour Debian
+
+CAB SHALL configurer les messages PostgreSQL en locale C pour le seul rôle Electric dans la base CAB lors de l’amorçage et avant le redémarrage après mise à niveau Debian. CAB SHALL examiner le slot Electric existant avant le redémarrage et préserver le stockage des abonnements sans suppression automatique pour résoudre une collision.
+
+#### Scenario: Slot persistant valide avant redémarrage
+- **WHEN** une mise à niveau Debian redémarre Electric avec son slot persistant valide dans une base PostgreSQL localisée
+- **THEN** Electric reprend le slot et l’abonnement reçoit les changements conservés pendant l’arrêt
+- **AND** CAB redevient READY et la configuration Debian se termine
+
+#### Scenario: Slot absent
+- **WHEN** le slot Electric est absent au redémarrage après la mise à niveau
+- **THEN** Electric crée le slot et resynchronise les abonnements dont la position n’est plus valide
+- **AND** CAB redevient READY et la configuration Debian se termine
+
+#### Scenario: Slot incompatible ou invalidé
+- **WHEN** le slot de même nom est incompatible avec Electric ou invalidé
+- **THEN** CAB bloque la finalisation avec un diagnostic et préserve le slot et le stockage pour examen
+
+### Requirement: Politique TLS des connexions CAB aux forges configurées
+
+CAB MUST accepter tout certificat TLS lors de ses connexions HTTPS directes à GitLab, GitHub et Forgejo. CAB MUST ignorer les anciennes affectations `REMOTE_<FORGE>_SSL_VERIFY`, les exclure de la projection et les retirer du formulaire. Les connexions du démon Docker, le stockage externe et le téléchargement système CABU restent soumis à leurs politiques TLS propres.
+
+#### Scenario: Opérations sur une forge configurée
+
+- **WHEN** CAB vérifie l’authentification, lit le dépôt ou ses commits, prépare ou réalise un envoi Git, une synchronisation ou une publication de projet
+- **THEN** CAB applique la même politique TLS aux requêtes API et Git. Les contrôles de destination, d’autorisation, d’intégrité et de références distantes restent actifs.
+
+#### Scenario: Ancienne variable dans un projet
+
+- **WHEN** un projet contient un ancien réglage de vérification TLS
+- **THEN** sa valeur ne change ni le transport, ni le résultat mémorisé, et CAB conserve la ligne existante du fichier.
+
+#### Scenario: Diagnostic de transport
+
+- **WHEN** la console décrit le transport de la forge configurée
+- **THEN** elle indique que le certificat du serveur n’est pas vérifié.
+
+### Requirement: Réconciliation des résultats incertains sur une forge
+
+CAB MUST permettre à un administrateur de vérifier les références d’un envoi ou d’une synchronisation incertaine. Cette vérification MUST lire la forge sans envoyer ni rejouer l’opération. CAB MUST conserver le reçu initial et consigner la preuve de réconciliation.
+
+#### Scenario: Références cibles confirmées
+
+- **WHEN** l’administrateur vérifie un résultat `UNKNOWN` et que la branche distante et, pour une synchronisation, tous les tags correspondent exactement à la cible du reçu
+- **THEN** CAB enregistre l’état cible observé et autorise un nouvel aperçu sur cette forge.
+
+#### Scenario: Protection maintenue
+
+- **WHEN** la lecture est impossible, l’opération est encore `RUNNING`, ou la configuration ou le reçu change
+- **THEN** CAB conserve la protection de l’opération et indique la raison dans la fenêtre.
+
+#### Scenario: Action explicite dans l’Overview
+
+- **WHEN** un résultat incertain bloque les actions Envoyer ou Synchroniser
+- **THEN** la fenêtre propose « Vérifier l’envoi précédent » et affiche le résultat sans lancer un nouvel envoi ni un nouvel aperçu.
+
+#### Scenario: Clôture explicite malgré une divergence
+
+- **WHEN** les références distantes divergent et que l’administrateur confirme la clôture sur une observation encore valide
+- **THEN** CAB relit les références et, si le reçu, la configuration et l’état distant correspondent toujours à l’observation confirmée, conserve le reçu `UNKNOWN` dans l’historique et clôt la tentative sans en confirmer le résultat ni modifier la forge.
+- **AND** CAB permet de préparer un nouvel aperçu de synchronisation à partir de l’état distant courant. La confirmation de ce nouvel aperçu applique les protections de branche et de tags existantes.
+
+### Requirement: Sens de synchronisation des forges
+
+CAB MUST demander le dépôt source dans la fenêtre Synchroniser de GitLab, GitHub et Forgejo. L’aperçu MUST présenter la branche source et la branche destinataire ainsi que les tags créés, déplacés ou supprimés. L’alignement MUST exiger une confirmation sur un aperçu encore valable.
+
+#### Scenario: Git local vers la forge
+
+- **WHEN** l’administrateur sélectionne le dépôt local puis confirme l’aperçu
+- **THEN** CAB applique la synchronisation existante de la branche distante configurée et des tags de la forge.
+
+#### Scenario: Forge vers Git local
+
+- **WHEN** l’administrateur sélectionne la forge et confirme un aperçu encore valide
+- **THEN** CAB aligne la branche locale courante et ses tags sur la branche configurée et les tags distants. Les autres branches locales et la forge restent intactes.
+
+#### Scenario: Protection du dépôt local
+
+- **WHEN** le dépôt local est modifié ou une opération Git est en cours, ou lorsque le reçu, la configuration ou les références changent
+- **THEN** CAB refuse la synchronisation inverse ou protège son résultat incertain si l’alignement a déjà commencé.
+
+### Requirement: Message automatique du premier commit du projet
+
+Dans le formulaire de commit local, CAB MUST préremplir « Message du commit »
+avec « Initialisation du projet » pour un projet sans dépôt Git ou dont le
+dépôt ne possède aucun historique de commit accessible par ses références.
+Le champ MUST rester éditable. Si le message transmis est vide, CAB MUST
+choisir le défaut selon l’historique observé à la création du commit local.
+
+#### Scenario: Premier commit du projet
+
+- **WHEN** le projet n’a pas de dépôt Git ou possède un dépôt Git sans historique de commit
+- **THEN** CAB propose « Initialisation du projet » et utilise ce texte si aucun message n’est fourni.
+
+#### Scenario: Commit suivant
+
+- **WHEN** le dépôt possède déjà un historique de commit et que le message transmis est vide
+- **THEN** CAB utilise « Mise à jour du projet », y compris lorsque la branche courante est neuve.
+
+#### Scenario: Message personnalisé
+
+- **WHEN** le développeur fournit un message explicite pour un commit local
+- **THEN** CAB utilise ce message.
+
+### Requirement: Diagnostic des refus de transfert Git
+
+CAB MUST distinguer un refus prouvé d'un résultat incertain pour les envois manuels et les synchronisations atomiques vers Forgejo, GitHub et GitLab. CAB MUST conserver un motif filtré et maintenir la protection tant que le résultat du transfert reste incertain.
+
+#### Scenario: Refus confirmé de toutes les références
+
+- **WHEN** le résultat Git identifie toutes les références du transfert comme inchangées ou refusées et que la relecture confirme leur état initial
+- **THEN** CAB conserve le refus et rend possible la préparation explicite d'un nouvel aperçu
+
+#### Scenario: Observation insuffisante
+
+- **WHEN** le résultat Git est incomplet, le transport a échoué ou les références relues diffèrent de leur état initial
+- **THEN** CAB conserve la protection et propose la réconciliation existante
+
+### Requirement: Dimensions stables du centre de notifications
+
+Le centre de notifications MUST conserver la même taille pour une même
+fenêtre de navigateur. Le contenu MUST défiler à l’intérieur lorsque sa
+hauteur dépasse l’espace disponible.
+
+#### Scenario: Navigation entre des contenus de longueur différente
+
+- **WHEN** l’administrateur ouvre le centre ou passe à une autre notification
+- **THEN** les dimensions de la popup restent identiques à fenêtre constante
+- **AND** les commandes restent visibles lorsque le contenu défile
+- **AND** cette taille s’applique aussi au chargement et à l’état vide
+
+### Requirement: Purge globale des messages de notification
+
+Le centre MUST afficher **Effacer les messages** immédiatement après la
+flèche suivante. Son action MUST être autorisée aux seuls administrateurs et
+supprimer les messages de `cab_notifications` pour tous les projets et pour
+CAB. Les questions et les reçus existants MUST être conservés.
+
+#### Scenario: Purge depuis le centre
+
+- **WHEN** un administrateur active **Effacer les messages**
+- **THEN** tous les messages présents à la sélection de purge sont supprimés
+- **AND** l’aperçu retire les messages purgés et ceux déjà lus
+- **AND** les questions restent disponibles
+- **AND** les autres consommateurs reçoivent les suppressions par Electric
+
+#### Scenario: Republication d’un message purgé
+
+- **WHEN** un producteur republie un message purgé sous la même identité
+- **THEN** CAB retourne le reçu `CLEARED` et conserve l’état de la table
+
+### Requirement: Republication et rétention des artefacts de forge
+
+CAB MUST permettre de republier un artefact Docker ou Debian sous un tag de version déjà présent sur la forge et MUST conserver le tag Git existant. Cette règle s’applique aux publications manuelles et aux publications natives de livraison.
+
+#### Scenario: Republication d’une image Docker et nettoyage
+
+- **WHEN** CAB publie une image Docker sur Forgejo, GitHub ou GitLab
+- **THEN** CAB peut remplacer le contenu de la version et de `latest`
+- **AND THEN** CAB confirme les tags publiés avant de retirer les anciennes versions de la seule image ciblée et vérifie le résultat du nettoyage
+
+#### Scenario: Publication Docker incomplète
+
+- **WHEN** un envoi ou la confirmation d’un tag échoue
+- **THEN** CAB laisse les anciennes versions en place et signale l’échec dans le reçu
+
+#### Scenario: Suppression limitée ou incertaine
+
+- **WHEN** la forge refuse une suppression, que son résultat reste incertain ou qu’un ancien alias GitHub partage une version conservée
+- **THEN** CAB protège les tags publiés, expose la limite ou l’échec dans le reçu et conserve la protection des effets indéterminés
+
+#### Scenario: Republication d’un paquet Debian
+
+- **WHEN** un paquet du même nom est déjà attaché à la release du tag
+- **THEN** CAB assure la disponibilité du paquet publié sous ce nom et préserve les autres pièces jointes
+
+#### Scenario: Rétention des sept publications Debian
+
+- **WHEN** CAB confirme une publication Debian sur une forge prise en charge
+- **THEN** CAB garde la version publiée et les six précédentes pour le même paquet et la même architecture
+- **AND THEN** CAB retire les pièces jointes ou liens Debian en excédent, vérifie le résultat et conserve les autres artefacts, les releases et les tags Git

@@ -1,5 +1,37 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Construction Docker locale et diagnostic Fabrique — 23 novembre 2026
+
+[decouple-docker-factory-and-diagnose-builds](changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Synchronisation bidirectionnelle des forges — 23 novembre 2026
+
+[allow-fresh-forge-sync-after-divergence](changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Réconciliation des envois de forge — 23 novembre 2026
+
+[reconcile-uncertain-forge-operations](changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Politique TLS commune aux forges — 23 novembre 2026
+
+[unify-cab-project-forge-tls](changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Diagnostic du rafraîchissement des forges — 23 novembre 2026
+
+[diagnose-forge-repository-refresh](changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Politique TLS de l’authentification Forgejo — 23 novembre 2026
+
+[honor-forgejo-auth-tls-policy](changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Politique TLS de l’authentification GitLab — 23 novembre 2026
+
+[honor-gitlab-auth-tls-policy](changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
+## Diagnostic d’authentification des forges — 23 novembre 2026
+
+[diagnose-forge-auth-transport](changes/archive/2026-11-23-diagnose-forge-auth-transport/), code non attribué. Change archivé et diagnostic qualifié par les tests ciblés CAB. Attribution ultérieure par ACL.
+
 ## Confirmation de déconnexion MCP — 16 novembre 2026
 
 `confirm-stopped-mcp-relay`, code non attribué : change archivé ; attribution ultérieure par ACL.
@@ -463,6 +495,8 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 | SUP10 | fix-cab-shutdown-on-opencode-exit | Fermeture propre de CAB avec OpenCode — 2.1.6 | ARCHIVÉ | [fix-cab-shutdown-on-opencode-exit](changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/) | Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 ; [titre](changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/proposal.md) |
 
 ## Entrées provisoires sans code
+
+[correct-session-block-layout](changes/archive/2026-11-22-correct-session-block-layout/), code non attribué. Change archivé sur la présentation du bloc Session. Attribution ultérieure par ACL.
 
 Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
 État SCM vérifié le 2 novembre 2026 : 134 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state`, `restore-approved-native-operations`, `bind-native-requestid-in-literal-codemode-validation` et `reconcile-persisted-native-rejections`, `forward-recover-cabu-after-controller-rollback-failure` et `preserve-conflicting-restored-accesses` sont archivés sans code ; cette session n’attribue ni ne réserve de code.

@@ -10,22 +10,66 @@ import sys
 from . import __version__
 from .client import Client,ClientError
 
+DESKTOP_SETUP = Path('/usr/lib/cab/plugins/cabd/skills/cabd/scripts/desktop_daemon.py')
+
+
+def codex_desktop(step, username):
+    """Réapplique CABD au compte déclaré ou vérifie le chat courant."""
+    if not DESKTOP_SETUP.is_file():
+        raise ClientError('codex-desktop-setup-missing')
+    argv = ['/usr/bin/python3', '-B', str(DESKTOP_SETUP), step]
+    if os.getuid() != 0:
+        if username is not None:
+            raise ClientError('codex-desktop-user-selection-requires-root')
+        return subprocess.run(argv).returncode
+    if step != 'install':
+        raise ClientError('codex-desktop-check-requires-desktop-session')
+    accounts = Client(admin=True).get('administration/agent-users', agent='codex_desktop')['users']
+    eligible = []
+    for account in accounts:
+        if username is not None and username != account['username']:
+            continue
+        user = pwd.getpwnam(account['username'])
+        if user.pw_uid > 0 and user.pw_dir == account['home']:
+            eligible.append(user)
+    if len(eligible) != 1:
+        raise ClientError('codex-desktop-declared-user-required')
+    user = eligible[0]
+    return subprocess.run(
+        argv,
+        cwd='/',
+        user=user.pw_uid,
+        group=user.pw_gid,
+        extra_groups=os.getgrouplist(user.pw_name, user.pw_gid),
+        env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'},
+    ).returncode
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(prog='cab');parser.add_argument('--version',action='version',version=__version__)
     sub=parser.add_subparsers(dest='action',required=True)
     sub.add_parser('status')
     sub.add_parser('finalize')
     sub.add_parser('update-worker')
+    sub.add_parser('daemon-recovery')
     serve=sub.add_parser('serve');serve.add_argument('--port',type=int,default=8790)
     mcp=sub.add_parser('mcp');mcp.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
     worker=sub.add_parser('mcp-worker');worker.add_argument('--agent',choices=['codex','codex-cli','opencode'],default='codex')
     sub.add_parser('bootstrap-token')
-    update_parser=sub.add_parser('update');update_parser.add_argument('--package')
+    update_parser=sub.add_parser('update')
+    update_parser.add_argument('--version',default='')
+    update_parser.add_argument('--request-id')
+    update_parser.add_argument('--timeout-ms',type=int,default=1800000)
+    update_status=sub.add_parser('update-status')
+    update_status.add_argument('--request-id',required=True)
     enroll=sub.add_parser('enroll');enroll.add_argument('--user',required=True);enroll.add_argument('--agent',required=True);enroll.add_argument('--role',choices=['coder','orchestrator','collector'],default='coder')
     call=sub.add_parser('call');call.add_argument('name');call.add_argument('--admin',action='store_true')
     native=sub.add_parser('native-source');native.add_argument('--project-id',required=True);native.add_argument('--session-id',default=os.environ.get('CODEX_THREAD_ID',''));native.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',''))
     prepare=sub.add_parser('native-prepare');prepare.add_argument('--agent',choices=['codex','codex-cli'],required=True);prepare.add_argument('--user',required=True);prepare.add_argument('--binary',required=True)
     integrate=sub.add_parser('integrate');integrate.add_argument('agent',choices=['codex','codex-cli','opencode']);integrate.add_argument('--user',required=True);integrate.add_argument('--workspace')
+    desktop=sub.add_parser('codex-desktop')
+    desktop.add_argument('step',choices=['install','check'],nargs='?',default='install')
+    desktop.add_argument('--user',help='Compte déclaré de Codex Desktop, pour une installation depuis root.')
     maintenance=sub.add_parser('maintenance');maintenance.add_argument('step',choices=['prepare','resume','cancel','verify']);maintenance.add_argument('--transaction',required=True)
     imp=sub.add_parser('import-legacy');imp.add_argument('manifest')
     backup=sub.add_parser('backup');backup.add_argument('--destination',required=True)
@@ -43,17 +87,33 @@ def main(argv=None):
             run(args.agent);return 0
         elif args.action=='mcp-worker':
             from .mcp import run
-            os.environ['CAB_AGENT']=args.agent;run();return 0
+            os.environ['CAB_AGENT']=args.agent
+            startup=os.environ.pop('CAB_MCP_WORKER_STARTUP', '')
+            if startup:
+                print(json.dumps({'cab_worker_startup':startup,'version':__version__}),flush=True)
+            run();return 0
         elif args.action=='bootstrap-token':
             if os.getuid()!=0:raise ClientError('root-administration-required')
             from .paths import secret
             print(secret('bootstrap-token'));return 0
-        elif args.action=='update':
-            from .update import update
-            result=update(args.package)
+        elif args.action in ('update','update-status'):
+            from uuid import uuid4
+            from .host_update_cli import request as request_update, status as update_status
+            client=Client()
+            if args.action=='update':
+                result=request_update(client,args.request_id or 'CABU-'+uuid4().hex,args.version,args.timeout_ms)
+            else:
+                result=update_status(client,args.request_id)
+            print(json.dumps(result,ensure_ascii=False,default=str))
+            return 0 if result['state']=='OK' else 1 if result['state']=='FAILED' else 2
         elif args.action=='finalize':
             from .finalization import finalize
             result=finalize()
+        elif args.action=='daemon-recovery':
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
+            import django;django.setup()
+            from .component_recovery import recover_daemon
+            recover_daemon();return 0
         elif args.action=='update-worker':
             os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
             import django;django.setup()
@@ -74,6 +134,8 @@ def main(argv=None):
         elif args.action=='integrate':
             from .integration import integrate
             result=integrate(args.agent,args.user,args.workspace)
+        elif args.action=='codex-desktop':
+            return codex_desktop(args.step,args.user)
         elif args.action=='maintenance':
             if args.step=='verify':
                 from .maintenance import verify

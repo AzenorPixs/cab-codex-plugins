@@ -1,0 +1,125 @@
+:root {
+  --ui-monitor-header: var(--ui-tables-header-light, #215e54);
+  --ui-monitor-header-text: var(--ui-tables-header-text-light, #fff);
+  --ui-monitor-odd: var(--ui-tables-odd-light, transparent);
+  --ui-monitor-even: var(--ui-tables-even-light, var(--surface-alt));
+  --ui-monitor-hover: var(--ui-tables-hover-light);
+  --ui-monitor-separator: var(--ui-tables-separator-light, var(--border));
+}
+
+:root[data-theme="dark"] {
+  --ui-monitor-header: var(--ui-tables-header-dark, #215e54);
+  --ui-monitor-header-text: var(--ui-tables-header-text-dark, #fff);
+  --ui-monitor-odd: var(--ui-tables-odd-dark, transparent);
+  --ui-monitor-even: var(--ui-tables-even-dark, var(--surface-alt));
+  --ui-monitor-hover: var(--ui-tables-hover-dark);
+  --ui-monitor-separator: var(--ui-tables-separator-dark, var(--border));
+}
+
+.monitor-table tbody td {
+  font-size: calc(var(--ui-tables-body-font, 20px) * var(--font-scale));
+  font-weight: var(--ui-tables-body-weight, 400);
+  line-height: 1lh;
+}
+
+.monitor-table tbody td code {
+  font-size: calc((var(--ui-tables-body-font, 20px) - 1px) * var(--font-scale));
+  line-height: 0;
+}
+
+.monitor-table tbody tr:nth-child(odd) {
+  background: var(--ui-monitor-odd);
+}
+
+.monitor-table tbody tr:nth-child(even) {
+  background: var(--ui-monitor-even);
+}
+
+.monitor-table tbody tr:nth-child(odd):hover {
+  background: var(--ui-monitor-hover, var(--ui-monitor-odd));
+}
+
+.monitor-table tbody tr:nth-child(even):hover {
+  background: var(--ui-monitor-hover, var(--ui-monitor-even));
+}
+
+.monitor-table thead th {
+  background: var(--ui-monitor-header);
+  color: var(--ui-monitor-header-text);
+  font-size: calc(var(--ui-tables-head-font, 20px) * var(--font-scale));
+  font-weight: var(--ui-tables-head-weight, 700);
+}
+
+.monitor-table thead th > :is(span, .binary-sort) {
+  display: inline-flex;
+  padding: .15rem 0;
+  font-size: calc(var(--ui-tables-head-font, 20px) * var(--font-scale));
+  line-height: 1lh;
+}
+
+.monitor-table tbody td > small {
+  line-height: normal;
+}
+
+.monitor-table tbody td > button.text-button {
+  font-size: inherit;
+}
+
+:root:not([data-compact-tables]) .monitor-table thead tr {
+  height: var(--ui-tables-head-height, auto);
+}
+
+:root:not([data-compact-tables]) .monitor-table thead th {
+  padding: var(--ui-tables-head-padding, 15px) var(--ui-tables-inline-padding, 20px);
+}
+
+:root:not([data-compact-tables]) .monitor-table tbody tr {
+  height: var(--ui-tables-row-height, auto);
+}
+
+:root:not([data-compact-tables]) .monitor-table tbody td {
+  padding: var(--ui-tables-cell-padding, 14px) var(--ui-tables-inline-padding, 20px);
+  border-top: var(--ui-tables-separator-width, 1px) solid var(--ui-monitor-separator);
+}
+
+:root:not([data-compact-tables]) .monitor-table tbody td:has(> small, > .badge, > .session-actions, > .lifecycle-icon) {
+  padding-block: 0;
+  overflow-wrap: anywhere;
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody tr {
+  min-height: var(--ui-tables-row-height, 0px);
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody tr + tr {
+  border-top: var(--ui-tables-separator-width, 1px) solid var(--ui-monitor-separator);
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody td {
+  padding: var(--ui-tables-cell-padding, 10px) var(--ui-tables-inline-padding, 14px);
+}
+
+:root[data-compact-tables] .monitor-table tbody td::before {
+  line-height: normal;
+}
+
+:root[data-compact-tables] .monitor-table tbody td:first-child {
+  padding-block-start: 4px;
+}
+
+:root[data-compact-tables] .monitor-table tbody td:last-child {
+  padding-block-end: 4px;
+}
+
+.monitor-table tbody .table-filler td {
+  height: 1lh;
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody .table-filler td {
+  height: auto;
+  padding-block: var(--ui-tables-cell-padding, 10px);
+}
+
+:root[data-compact-tables] .table-wrap .monitor-table tbody .table-filler td::before {
+  display: none;
+}

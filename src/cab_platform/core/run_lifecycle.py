@@ -8,8 +8,18 @@ from .models import Event,Lease,Maintenance,MeasurementPeriod,Run,SessionArchive
 from cab_platform.statistics_documents import read_source
 
 
+def active_change(run):
+    c.identifier(run.change)
+    return c.safe_path(Path(run.project.root),'openspec/changes/'+run.change,exists=False)
+
+
+def require_closed_change(run):
+    if run.mode != 'service':
+        c.require(not active_change(run).exists(),'change-still-open')
+
+
 def archive_state(run):
-    c.identifier(run.change);root=Path(run.project.root);active=c.safe_path(root,'openspec/changes/'+run.change,exists=False)
+    root=Path(run.project.root);active=active_change(run)
     c.require(not active.exists(),'change-still-open')
     candidates=list((root/'openspec/changes/archive').glob('????-??-??-'+run.change))
     c.require(len(candidates)==1,'archive-missing-or-ambiguous')
@@ -23,9 +33,22 @@ def archive_state(run):
     return str(path.relative_to(root)),observed
 
 
-def guard(run,*,allow_measurement=False):
+def closed_change_issue(run):
+    """Contrôler les archives présentes, y compris celles des RUN importés."""
+    if run.mode=='service' or not run.change:return None
+    try:
+        require_closed_change(run)
+        parent=Path(run.project.root)/'openspec/changes/archive'
+        if any(parent.glob('????-??-??-'+run.change)):
+            archive_state(run)
+    except (c.Refused,OSError,ValueError) as error:
+        return getattr(error,'code','finalization-archive-unavailable')
+    return None
+
+
+def guard(run,*,allow_measurement=False,allow_terminal_git=False):
     c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
-    c.require(c.no_pending(run) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
+    c.require(c.no_pending(run,terminal_git=allow_terminal_git) and not Lease.objects.filter(run=run,state='HELD').exists(),'closure-effects-protected')
     c.require(allow_measurement or not MeasurementPeriod.objects.filter(run=run,ended__isnull=True).exists(),'closure-measurement-open')
     requested={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-requested')}
     decided={e.data.get('id') for e in Event.objects.filter(run=run,kind='exception-decided')}
@@ -51,6 +74,8 @@ def normal_valid(run):
 
 def terminal_proof(run):
     guard(run)
+    issue=closed_change_issue(run)
+    c.require(issue is None,issue)
     if run.mandate.get('legacy_snapshot_id'):
         if run.review.get('closure',{}).get('kind') in ('legacy-service-retirement','legacy-technical-retirement'):
             c.require(run.suspension=='IMPORT_PROTECTED','legacy-protection-divergent')
@@ -69,6 +94,14 @@ def terminal_proof(run):
 def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
     from .models import FinalizationPlan
+    from .run_replacement import CANCELLED
+    if run.state==CANCELLED:
+        result.update(action='cancelled',replacement=run.configuration.get('replacement'))
+        return {**result,'evaluation_digest':c.digest(result)}
+    if run.state == 'CLOSURE_INVALID':
+        result['reasons']=[closed_change_issue(run) or 'archive-missing-or-ambiguous']
+        result['evaluation_digest']=c.digest(result)
+        return result
     plan=FinalizationPlan.objects.filter(run=run).first()
     if plan is None and run.state=='WORKING' and not run.suspension and not run.operation_set.exists() and not run.review and not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'):
         from cab_platform.finalization_contract import next_actions
@@ -80,12 +113,15 @@ def evaluate(run):
         return {**result,'action':'finalize' if status['phase']=='READY' else 'waiting','reasons':status['missing'],'finalization':status}
     try:
         guard(run)
+        if run.state == 'CLOSED':
+            issue=closed_change_issue(run)
+            c.require(issue is None,issue)
         if SessionArchive.objects.filter(run=run).exists():result['action']='archived';return result
         if run.mode=='service':
             result['tasks_applicable']=False
             try:
                 proof=terminal_proof(run)
-                result.update(action='normalize' if run.state!='CLOSED' or run.stage!=11 else 'closed',terminal=proof,archive_allowed=run.state=='CLOSED')
+                result.update(action='normalize' if run.state!='CLOSED' or run.stage!=run.cycle_steps else 'closed',terminal=proof,archive_allowed=run.state=='CLOSED')
             except c.Refused as error:
                 result.update(action='service',reasons=['service-terminal-proof-required',error.code])
                 if error.code=='legacy-terminal-proof-missing':
@@ -96,7 +132,7 @@ def evaluate(run):
             result['evaluation_digest']=c.digest(result);return result
         if run.state=='CLOSED':
             proof=terminal_proof(run)
-            result.update(action='normalize' if run.stage!=11 else 'closed',terminal=proof)
+            result.update(action='normalize' if run.stage!=run.cycle_steps else 'closed',terminal=proof)
             if proof['kind']=='legacy-technical-retirement':
                 result['archive_allowed']=True;result['evaluation_digest']=c.digest(result);return result
             if plan and plan.receipt and plan.policy['nature']!='development':
@@ -145,7 +181,8 @@ def recheck(actor,data,*,automatic=False):
             run=Run.objects.select_for_update().get(pk=run.pk) if automatic else scoped(actor,data,lock=True)
             current=evaluate(run)
             c.require(current['action']=='normalize','closure-evaluation-changed')
-            run.state='CLOSED';run.stage=11;run.save(update_fields=['state','stage','updated'])
+            require_closed_change(run)
+            run.state='CLOSED';run.stage=run.cycle_steps;run.save(update_fields=['state','stage','updated'])
             c.event(run,'run-terminal-reconciled',{'proof':current['terminal'],'protection_retained':run.suspension,'automatic':automatic})
         return evaluate(run)
     return evaluation
@@ -167,6 +204,27 @@ def archive_session(actor,data):
 
 
 _cursor=0
+
+
+@transaction.atomic
+def reconcile_closed_change(run):
+    """Corriger un état affiché sans réécrire ni rejouer son reçu historique."""
+    current=Run.objects.select_for_update().select_related('project').get(pk=run.pk)
+    if current.mode=='service' or current.state not in ('CLOSED','CLOSURE_INVALID'):return current
+    issue=closed_change_issue(current)
+    if current.state=='CLOSED' and issue:
+        current.state='CLOSURE_INVALID'
+        current.save(update_fields=['state','updated'])
+        c.event(current,'run-closure-inconsistent',{'reason':issue,'receipt_id':current.review.get('closure',{}).get('receipt_id')})
+    elif current.state=='CLOSURE_INVALID':
+        try:archive,_=archive_state(current)
+        except (c.Refused,OSError,ValueError):return current
+        current.state='CLOSED'
+        current.save(update_fields=['state','updated'])
+        c.event(current,'run-closure-archive-reconciled',{'archive_path':archive,'replayed':False})
+    return current
+
+
 def sweep():
     global _cursor
     if Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():return
@@ -175,7 +233,10 @@ def sweep():
     try:
         for run in rows:
             from .models import FinalizationPlan
-            if FinalizationPlan.objects.filter(run=run).exists() and run.state!='CLOSED':
+            if run.state in ('CLOSED','CLOSURE_INVALID'):
+                try:run=reconcile_closed_change(run)
+                except (c.Refused,OSError,ValueError):continue
+            if run.state not in ('CLOSED','CLOSURE_INVALID','BLOCKED','BLOCKING','CANCELLED_BEFORE_START') and FinalizationPlan.objects.filter(run=run).exists():
                 from .run_finalization import process
                 try:process(run.pk)
                 except (c.Refused,OSError,ValueError):continue

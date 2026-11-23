@@ -1,0 +1,10 @@
+[Unit]
+Description=Reprise bornée du démon CAB
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/bin/cab daemon-recovery
+TimeoutStartSec=75s

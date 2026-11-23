@@ -2,24 +2,27 @@
 import hashlib
 import json
 import secrets
+from decimal import Decimal
 from pathlib import Path
-from typing import Any,Literal
+from typing import Annotated,Any,Literal
+from uuid import UUID
 from django.contrib.auth import authenticate,login,logout
 from django.db import transaction
-from django.http import HttpResponse,JsonResponse
+from django.http import HttpResponse,JsonResponse,StreamingHttpResponse
 from django.middleware.csrf import CsrfViewMiddleware,get_token
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 from ninja import NinjaAPI,Schema
 from ninja.security import HttpBearer,APIKeyHeader,APIKeyCookie
-from pydantic import Field
+from pydantic import Field, SecretStr
 from cab_platform import __version__
 from cab_platform.connector_process import identity,alive
 from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
+from .interface_style import FIELDS as INTERFACE_STYLE_FIELDS, patch_group, patch_profile
 from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration,SystemUpdate,McpConnector,InterfacePreferencesProjection
 
 class LocalBearer(HttpBearer):
@@ -65,6 +68,11 @@ class PageResponsiveAdjustment(Schema):
     profile:Literal['mobile','tablet','hd','fullhd','qhd','uhd']
     field:Literal['layout','font']
     value:int=Field(ge=50,le=150)
+class InterfaceStyleAdjustment(Schema):
+    group:Literal['blocs','columns','general','menus','resolutions','tables','titles','top_bar']
+    profile:Literal['mobile','tablet','hd','fullhd','qhd','uhd']|None=None
+    values:dict[str,Any]=Field(default_factory=dict)
+    reset:bool=False
 class ServiceConfiguration(Schema):
     revision:str
     configuration:dict[str,Any]
@@ -82,6 +90,11 @@ class ProjectConfigurationEdit(Schema):
     revision:str
     project_path:str|None=None
 
+class VersionPolicyEdit(Schema):
+    policy:int
+    side:str
+    preview_id:str|None=None
+
 class ForgeEdit(Schema):
     fields:dict[str,str]
     token:str|None=None
@@ -96,7 +109,11 @@ class AgentUserRemove(Schema):
     id:int
 
 @api.exception_handler(commands.Refused)
-def refused(request,error):return api.create_response(request,{'error':error.code},status=error.status)
+def refused(request,error):
+    body={'error':error.code}
+    if error.details is not None:
+        body['details']=error.details
+    return api.create_response(request,body,status=error.status)
 
 
 def csrf_check(request):
@@ -117,6 +134,51 @@ def conflict(request,error):return api.create_response(request,{'error':'identit
 @api.exception_handler(ValueError)
 def invalid_input(request,error):return api.create_response(request,{'error':'command-input-invalid'},status=400)
 
+class NotificationRead(Schema):
+    id:UUID
+
+class NotificationAnswer(NotificationRead):
+    choice:str=Field(min_length=1,max_length=100)
+
+class ReservationFileUpdate(Schema):
+    content: str = Field(max_length=262144)
+    digest: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+@api.get('/reservations/{reservation_id}/file')
+def reservation_file(request, reservation_id: int):
+    from cab_platform.reservation_file_view import view
+    return view(principal(request), reservation_id)
+
+
+@api.post('/reservations/{reservation_id}/file')
+def reservation_file_update(request, reservation_id: int, body: ReservationFileUpdate):
+    from cab_platform.reservation_file_view import view
+    return view(principal(request), reservation_id, body)
+
+
+@api.get('/notifications')
+def notifications_list(request):
+    from cab_platform.notifications import administrator,serialize
+    from .models import Notification
+    administrator(request.auth)
+    return {'notifications':[serialize(row) for row in Notification.objects.order_by('created','id')]}
+
+@api.post('/notifications/read')
+def notifications_read(request,body:NotificationRead):
+    from cab_platform.notifications import read
+    return read(request.auth,body.id)
+
+@api.post('/notifications/answer')
+def notifications_answer(request,body:NotificationAnswer):
+    from cab_platform.notifications import answer
+    return answer(request.auth,body.id,body.choice)
+
+@api.post('/notifications/clear-messages')
+def notifications_clear_messages(request):
+    from cab_platform.notifications import clear_messages
+    return clear_messages(request.auth)
+
 @api.get('/health',auth=None)
 def health(request):return {**bootstrap.status(),'csrf_token':get_token(request)}
 
@@ -132,13 +194,16 @@ def cab_version(request):
 def interface_preferences(request):
     from cab_platform.paths import runtime_config
     initialized=bool(runtime_config().get('initialized'));value={'font_scale':100,'theme':'light'}
+    styles={'component_style':{},'profile_styles':{}}
     if initialized:
         record=Configuration.objects.filter(pk='interface').first()
-        if record:value=InterfacePreferences.model_validate(record.value).model_dump()
+        if record:
+            value=InterfacePreferences.model_validate(record.value).model_dump()
+            styles={key:record.value.get(key) or {} for key in styles}
     if value.get('responsive') is None:value['responsive']=ResponsiveProfiles().model_dump()
     if value.get('developer_mode') is None:value['developer_mode']=False
     if value.get('page_responsive') is None:value['page_responsive']={}
-    return {**value,'persistent':initialized,'csrf_token':get_token(request)}
+    return {**value,**styles,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':initialized,'csrf_token':get_token(request)}
 
 @api.post('/interface/preferences',auth=None)
 def save_interface_preferences(request,body:InterfacePreferences):
@@ -154,9 +219,33 @@ def save_interface_preferences(request,body:InterfacePreferences):
         if value['developer_mode'] is None:value['developer_mode']=previous
         if value['developer_mode']!=previous:principal(request,admin=True)
         value['page_responsive']=(record.value.get('page_responsive') if record else None) or {}
+        value['component_style']=(record.value.get('component_style') if record else None) or {}
+        value['profile_styles']=(record.value.get('profile_styles') if record else None) or {}
         Configuration.objects.update_or_create(pk='interface',defaults={'value':value})
         InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
-    return {**value,'persistent':True}
+    return {**value,'style_fields':INTERFACE_STYLE_FIELDS,'persistent':True}
+
+@api.post('/interface/style')
+def save_interface_style(request,body:InterfaceStyleAdjustment):
+    csrf_check(request)
+    principal(request,admin=True)
+    with transaction.atomic():
+        record=Configuration.objects.select_for_update().get(pk='interface')
+        value=record.value.copy()
+        try:
+            if body.profile is not None:
+                value=patch_profile(value,body.profile,body.group,body.values,body.reset)
+            else:
+                if body.group in ('general','resolutions'):
+                    raise ValueError('interface-style-invalid')
+                value['component_style']=patch_group(value.get('component_style'),body.group,body.values,body.reset)
+        except ValueError as error:
+            raise commands.Refused('interface-style-invalid',400) from error
+        if value!=record.value:
+            record.value=value
+            record.save(update_fields=['value','updated'])
+            InterfacePreferencesProjection.objects.update_or_create(pk=1,defaults={'preferences':value})
+    return {key:value.get(key) or {} for key in ('component_style','profile_styles','responsive')}
 
 @api.post('/interface/responsive/page',auth=None)
 def save_page_responsive(request,body:PageResponsiveAdjustment):
@@ -183,6 +272,233 @@ def administration_agents(request):
     principal(request,admin=True)
     from cab_platform.agent_binaries import inventory
     return inventory()
+
+
+class AgentReminderSettings(Schema):
+    seconds: int
+    second_seconds: int
+    last_seconds: int
+
+
+@api.get('/administration/agent-reminders')
+def agent_reminder_settings(request):
+    principal(request,admin=True)
+    from cab_platform.stage_reminders import settings
+    return settings()
+
+
+@api.post('/administration/agent-reminders')
+def save_agent_reminder_settings(request,body:AgentReminderSettings):
+    principal(request,admin=True)
+    from cab_platform.stage_reminders import configure
+    return configure(**body.model_dump())
+
+class AgentProviderInput(Schema):
+    name: str
+    api_url: str
+    models_url: str = ''
+
+
+class AgentApiKeyInput(Schema):
+    provider_id: int = Field(gt=0, lt=2**63)
+    key: SecretStr
+
+
+class AgentApiKeyRemoval(Schema):
+    id: UUID
+
+
+def agent_catalog_response(key, data):
+    response = JsonResponse({key: data})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@api.get('/administration/agent-providers')
+def agent_providers(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import providers
+    return agent_catalog_response('providers', providers())
+
+
+@api.post('/administration/agent-providers')
+def save_agent_provider(request, body: AgentProviderInput):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import add_provider
+    return add_provider(**body.model_dump())
+
+
+@api.get('/administration/agent-api-keys')
+def agent_api_keys(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import keys
+    return agent_catalog_response('keys', keys())
+
+
+@api.post('/administration/agent-api-keys')
+def save_agent_api_key(request, body: AgentApiKeyInput):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import add_key
+    return add_key(body.provider_id, body.key.get_secret_value())
+
+
+@api.post('/administration/agent-api-keys/remove')
+def delete_agent_api_key(request, body: AgentApiKeyRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import remove_key
+    return remove_key(body.id)
+
+
+CatalogID = Annotated[int, Field(gt=0, lt=2**63)]
+PolicyPrice = Annotated[Decimal, Field(ge=0, max_digits=24, decimal_places=12)]
+
+
+class CatalogRemoval(Schema):
+    id: CatalogID
+
+
+PolicyProviderID = Annotated[int, Field(strict=True, gt=0, lt=2**63)]
+
+
+class ModelPolicyInput(Schema):
+    name: str
+    provider_ids: list[PolicyProviderID] | None = None
+    sort_column: Literal['input_cost', 'output_cost', 'cache_read_cost', 'cache_write_cost'] = 'input_cost'
+    sort_descending: bool = False
+    model_filter: str = ''
+    include_free: bool = True
+    include_paid: bool = True
+    context_min: int = 0
+    output_min: int = 0
+    input_price_min: PolicyPrice = Decimal(0)
+    input_price_max: PolicyPrice = Decimal(0)
+    output_price_min: PolicyPrice = Decimal(0)
+    output_price_max: PolicyPrice = Decimal(0)
+    cache_read_min: PolicyPrice = Decimal(0)
+    cache_read_max: PolicyPrice = Decimal(0)
+    cache_write_min: PolicyPrice = Decimal(0)
+    cache_write_max: PolicyPrice = Decimal(0)
+
+
+class ModelPolicyEdit(ModelPolicyInput):
+    id: CatalogID
+
+
+class AgentProviderEdit(AgentProviderInput):
+    id: CatalogID
+
+
+class CatalogSourceURL(Schema):
+    url: str
+
+
+def catalog_document(key):
+    from cab_platform.agent_catalog_files import preview
+    response = HttpResponse(preview(key), content_type='application/json')
+    response['Cache-Control'] = 'private, no-store'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+@api.get('/administration/agent-catalog-display')
+def agent_catalog_display(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import display
+    return agent_catalog_response('rows', display())
+
+
+@api.post('/administration/agent-catalog-scan')
+def scan_agent_catalog(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import request_scan
+    return request_scan()
+
+
+@api.post('/administration/agent-providers/edit')
+def edit_agent_provider(request, body: AgentProviderEdit):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import save_provider
+    return save_provider(body.id, **body.model_dump(exclude={'id'}))
+
+
+@api.post('/administration/agent-providers/refresh')
+def refresh_agent_provider(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import request_download
+    return request_download('provider-'+str(body.id))
+
+
+@api.get('/administration/agent-providers/file')
+def agent_provider_file(request, id: CatalogID):
+    principal(request, admin=True)
+    return catalog_document('provider-'+str(id))
+
+
+@api.post('/administration/agent-completion-catalog')
+def save_agent_completion_catalog(request, body: CatalogSourceURL):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import configure_completion
+    return configure_completion(body.url)
+
+
+@api.post('/administration/agent-completion-catalog/refresh')
+def refresh_agent_completion_catalog(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import COMPLETION, request_download
+    return request_download(COMPLETION)
+
+
+@api.get('/administration/agent-completion-catalog/file')
+def agent_completion_catalog_file(request):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog_files import COMPLETION
+    return catalog_document(COMPLETION)
+
+
+@api.post('/administration/agent-providers/remove')
+def delete_agent_provider(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import remove_provider
+    return remove_provider(body.id)
+
+
+@api.get('/administration/agent-models')
+def agent_models(request, policy_id: CatalogID | None = None):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import models
+    return agent_catalog_response('models', models(policy_id))
+
+
+@api.get('/administration/agent-model-policies')
+def list_agent_model_policies(request):
+    principal(request, admin=True)
+    from cab_platform.model_policies import policy_list
+    return agent_catalog_response('policies', policy_list())
+
+
+@api.post('/administration/agent-model-policies')
+def add_agent_model_policy(request, body: ModelPolicyInput):
+    principal(request, admin=True)
+    from cab_platform.model_policies import save_policy
+    return save_policy(None, body.model_dump())
+
+
+@api.post('/administration/agent-model-policies/edit')
+def edit_agent_model_policy(request, body: ModelPolicyEdit):
+    principal(request, admin=True)
+    from cab_platform.model_policies import save_policy
+    values = body.model_dump(exclude={'id'})
+    if 'provider_ids' not in body.model_fields_set:
+        values.pop('provider_ids')
+    return save_policy(body.id, values)
+
+
+@api.post('/administration/agent-model-policies/remove')
+def delete_agent_model_policy(request, body: CatalogRemoval):
+    principal(request, admin=True)
+    from cab_platform.model_policies import remove_policy
+    return remove_policy(body.id)
+
 
 @api.get('/administration/agent-status')
 def administration_agent_status(request):
@@ -260,7 +576,8 @@ def web_login(request,body:Login):
 def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'stage':run.stage,'phase':run.phase or None,'tasks_done':run.change_record.tasks_done if run.change_record else None,'tasks_total':run.change_record.tasks_total if run.change_record else None,'updated':run.updated.isoformat()}
+    change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'cycle_profile':run.configuration.get('cycle_profile',''),'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
 
 def operation_data(op):
     resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
@@ -291,6 +608,60 @@ def add_existing_project(request,body:ExistingProject):
     project,created=add_existing_project(actor,body.project_path)
     return {**project_data(project),'created':created}
 
+@api.get('/projects/{project_id}/artifacts')
+def read_project_artifacts(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.project_artifacts import snapshot
+    return snapshot(project)
+
+
+@api.get('/projects/{project_id}/published-artifacts')
+def read_published_artifacts(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from .models import ProjectArtifact,ProjectForgeArtifact,ProjectForgeArtifactPublication
+    from cab_platform.forge_publish_artifacts import public
+    local_kinds=list(ProjectArtifact.objects.filter(project=project).values_list('kind',flat=True).distinct())
+    jobs=ProjectForgeArtifactPublication.objects.filter(project=project).order_by('forge','-created').distinct('forge')
+    return {'rows':list(ProjectForgeArtifact.objects.filter(project=project).values('forge','source','artifacts')),
+            'local_kinds':local_kinds,'jobs':{job.forge:public(job) for job in jobs}}
+
+
+class ArtifactBuildInput(Schema):
+    request_id: str
+
+
+@api.post('/projects/{project_id}/published-artifacts/{forge}')
+def publish_project_artifacts(request,project_id:str,forge:str,body:ArtifactBuildInput):
+    actor=principal(request,admin=True)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.forge_publish_artifacts import request as enqueue
+    return enqueue(project,forge.upper(),body.request_id)
+
+
+@api.post('/projects/{project_id}/artifacts/{kind}/build')
+def build_project_artifact(request,project_id:str,kind:str,body:ArtifactBuildInput):
+    actor=principal(request,admin=True)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.project_artifacts import BuildConfigurationRefused, request_build
+    try:
+        return request_build(project,kind,body.request_id)
+    except BuildConfigurationRefused as error:
+        return api.create_response(request, {'error':error.code, 'details':{
+            'phase':'configuration', 'steps':['configuration'],
+            'configuration':error.configuration, 'process_started':False,
+        }}, status=error.status)
+
+
 @api.get('/projects/{project_id}/git/files/{kind}')
 def project_git_files(request,project_id:str,kind:str):
     actor=principal(request)
@@ -300,6 +671,106 @@ def project_git_files(request,project_id:str,kind:str):
     from cab_platform.project_git import files_overview
     return files_overview(project,kind)
 
+@api.get('/projects/{project_id}/git/branches')
+def project_git_branches(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import branches_overview
+    return branches_overview(project)
+
+@api.get('/projects/{project_id}/forges/{forge}/commit/{commit}')
+def project_forge_commit(request,project_id:str,forge:str,commit:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import commit_details
+    return commit_details(project,forge.upper(),commit)
+
+@api.get('/projects/{project_id}/forges/{forge}/comparison')
+def project_forge_comparison(request,project_id:str,forge:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_comparison import details
+    return details(project,forge.upper())
+
+@api.get('/projects/{project_id}/git/commit-removal')
+def preview_git_commit_removal(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import inspect
+    return inspect(Project.objects.get(pk=project_id))
+
+class GitCommitRemoval(Schema):
+    expected_head:str
+    expected_parent:str
+    expected_branch:str
+    mode:Literal['keep','discard']
+    expected_status:str=''
+
+@api.get('/projects/{project_id}/git/commit-removal/details')
+def git_commit_removal_details(request,project_id:str,expected_head:str,expected_parent:str,expected_branch:str):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import restoration_plan
+    return restoration_plan(Project.objects.get(pk=project_id),expected_head,expected_parent,expected_branch)
+
+@api.post('/projects/{project_id}/git/commit-removal')
+def remove_git_commit(request,project_id:str,body:GitCommitRemoval):
+    principal(request,admin=True)
+    from cab_platform.git_commit_remove import remove
+    return remove(project_id,body.expected_head,body.expected_parent,body.expected_branch,body.mode,body.expected_status)
+
+@api.get('/projects/{project_id}/git/tag')
+def read_project_git_tag(request,project_id:str,name:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.git_tag_edit import read_tag
+    return read_tag(project,name)
+
+class GitTagEditInput(Schema):
+    name:str
+    new_name:str
+    description:str
+    expected_oid:str
+    expected_commit:str
+
+class GitTagCreateInput(Schema):
+    name:str
+    description:str
+    expected_commit:str
+
+@api.post('/projects/{project_id}/git/tag/create')
+def create_project_git_tag(request,project_id:str,body:GitTagCreateInput):
+    principal(request,admin=True)
+    from cab_platform.git_tag_edit import create_tag
+    return create_tag(project_id,body.name,body.description,body.expected_commit)
+
+@api.post('/projects/{project_id}/git/tag')
+def edit_project_git_tag(request,project_id:str,body:GitTagEditInput):
+    principal(request,admin=True)
+    from cab_platform.git_tag_edit import edit_tag
+    return edit_tag(project_id,body.name,body.new_name,body.description,body.expected_oid,body.expected_commit)
+
+class GitStageModifiedInput(Schema):
+    digest:str
+
+@api.get('/projects/{project_id}/git/stage-modified')
+def preview_stage_modified(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.git_stage_modified import describe
+    return describe(Project.objects.get(pk=project_id))
+
+@api.post('/projects/{project_id}/git/stage-modified')
+def stage_modified(request,project_id:str,body:GitStageModifiedInput):
+    principal(request,admin=True)
+    from cab_platform.git_stage_modified import stage
+    return stage(project_id,body.digest)
+
 @api.get('/projects/{project_id}/git/changes')
 def project_git_changes(request,project_id:str):
     actor=principal(request)
@@ -308,6 +779,60 @@ def project_git_changes(request,project_id:str):
     if actor.role!='admin':commands.scope(actor,project)
     from cab_platform.project_git import changes_overview
     return changes_overview(project)
+
+@api.get('/projects/{project_id}/git/history')
+def project_git_history(request,project_id:str,page:int=1,head:str='',search:str=''):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import commit_history
+    return commit_history(project,page,head,search)
+
+class GitHistoryRemoval(Schema):
+    expected_head:str
+    commits:list[str]
+
+@api.post('/projects/{project_id}/git/history/remove')
+def project_git_history_remove(request,project_id:str,body:GitHistoryRemoval):
+    principal(request,admin=True)
+    from cab_platform.git_history_remove import remove_selected
+    return remove_selected(project_id,body.expected_head,body.commits)
+
+class GitCommitMetadataInput(Schema):
+    request_id:str
+    commit:str
+    expected_head:str
+    expected_branch:str
+    refs_digest:str
+    author:str
+    email:str
+    date:str
+    message:str
+    tag_name:str=''
+    new_tag:str=''
+    tag_description:str=''
+
+@api.get('/projects/{project_id}/git/history/commit/{commit}/metadata')
+def project_git_commit_metadata(request,project_id:str,commit:str,head:str=''):
+    principal(request,admin=True)
+    from cab_platform.git_commit_metadata import preview
+    return preview(Project.objects.get(pk=project_id),commit,head)
+
+@api.post('/projects/{project_id}/git/history/commit-metadata')
+def project_git_edit_commit_metadata(request,project_id:str,body:GitCommitMetadataInput):
+    principal(request,admin=True)
+    from cab_platform.git_commit_metadata import edit
+    return edit(project_id,body.model_dump())
+
+@api.get('/projects/{project_id}/git/history/commit/{commit}')
+def project_git_history_commit(request,project_id:str,commit:str,head:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import commit_overview
+    return commit_overview(project,commit,head)
 
 @api.get('/projects/{project_id}/git/commit/{commit}')
 def project_git_commit(request,project_id:str,commit:str):
@@ -322,6 +847,7 @@ class GitMonitorSettings(Schema):
     quiet_seconds:int
     interval_seconds:int
     maximum_seconds:int
+    forge_auto_interval_minutes:int=60
 
 @api.get('/administration/git')
 def git_monitor_settings(request):
@@ -335,6 +861,15 @@ def save_git_monitor_settings(request,body:GitMonitorSettings):
     from cab_platform.git_monitor_config import save
     return save(body.model_dump())
 
+@api.post('/projects/{project_id}/git/status/refresh/manual')
+def refresh_project_git_status_manually(request,project_id:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.project_git import refresh_status
+    return {'git_status':refresh_status(project.pk,manual=True)}
+
 @api.post('/projects/{project_id}/git/status/refresh')
 def refresh_project_git_status(request,project_id:str):
     actor=principal(request)
@@ -344,6 +879,87 @@ def refresh_project_git_status(request,project_id:str):
     from cab_platform.project_git import refresh_status
     return {'git_status':refresh_status(project.pk)}
 
+class GitCommitInput(Schema):
+    author:str|None = None
+    email:str|None = None
+    date:str|None = None
+    tag_description:str|None = None
+    tag:str|None = None
+    description:str = ''
+    expected_tag:str = ''
+    request_id:str = ''
+
+@api.post('/projects/{project_id}/git/commit')
+def commit_project_git(request,project_id:str,body:GitCommitInput):
+    principal(request,admin=True)
+    from cab_platform.project_git import commit_local,commit_progress
+    try:
+        return commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,author=body.author,email=body.email,date=body.date,tag_description=body.tag_description)
+    except Exception:
+        if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+            commit_progress(project_id,body.request_id,'failed')
+        raise
+
+@api.post('/projects/{project_id}/git/commit-stream')
+def stream_project_git_commit(request,project_id:str,body:GitCommitInput):
+    principal(request,admin=True)
+    import asyncio
+    import threading
+    from django.db import close_old_connections
+    from cab_platform.project_git import commit_local,commit_progress
+    async def events():
+        loop = asyncio.get_running_loop()
+        queue = asyncio.Queue()
+        def send(event):
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait,event)
+            except RuntimeError:
+                pass
+        def work():
+            emitted = 0
+            truncated = False
+            def output(text):
+                nonlocal emitted,truncated
+                remaining = 1048576 - emitted
+                if remaining > 0:
+                    part = text[:remaining]
+                    emitted += len(part)
+                    if part:send({'type':'output','text':part})
+                if len(text) > remaining and not truncated:
+                    truncated = True
+                    send({'type':'output','text':'\n[Sortie limitée à 1 Mio.]\n'})
+            try:
+                result=commit_local(project_id,body.tag,body.description,body.expected_tag,body.request_id,output,author=body.author,email=body.email,date=body.date,tag_description=body.tag_description)
+                send({'type':'result','result':result})
+            except commands.Refused as error:
+                if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+                    try:commit_progress(project_id,body.request_id,'failed')
+                    except Exception:pass
+                send({'type':'error','error':error.code})
+            except Exception:
+                if body.request_id and len(body.request_id)<=80 and all(c in '0123456789abcdef-' for c in body.request_id):
+                    try:commit_progress(project_id,body.request_id,'failed')
+                    except Exception:pass
+                send({'type':'error','error':'project-git-commit-uncertain'})
+            finally:
+                close_old_connections()
+                send({'type':'end'})
+        threading.Thread(target=work,daemon=True,name='cab-git-commit-stream').start()
+        while True:
+            event=await queue.get()
+            yield (json.dumps(event,ensure_ascii=False)+'\n').encode('utf-8')
+            if event['type']=='end':break
+    response=StreamingHttpResponse(events(),content_type='application/x-ndjson; charset=utf-8')
+    response['Cache-Control']='no-store'
+    response['X-Accel-Buffering']='no'
+    return response
+
+@api.post('/projects/{project_id}/git/clean')
+def clean_project_git(request,project_id:str):
+    principal(request,admin=True)
+    from cab_platform.project_git import clean_packed_objects
+    return {'git_status':clean_packed_objects(project_id)}
+
 @api.post('/projects/{project_id}/git/initialize')
 def initialize_project_git(request,project_id:str):
     principal(request,admin=True)
@@ -351,27 +967,35 @@ def initialize_project_git(request,project_id:str):
     return initialize(project_id)
 
 @api.post('/projects/{project_id}/refresh')
-def refresh_project(request,project_id:str):
+def refresh_project(request,project_id:str,include_forges:bool=True,include_git:bool=True):
     actor=principal(request)
     try:project=Project.objects.get(pk=project_id)
     except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
     if actor.role!='admin':commands.scope(actor,project)
     from cab_platform.project_metadata import synchronize
-    return {'public_metadata':synchronize(project.pk)}
+    return {'public_metadata':synchronize(project.pk,include_forges=include_forges,include_git=include_git)}
 
 @api.get('/projects/{project_id}/configuration')
 def project_configuration_read(request,project_id:str):
     principal(request,admin=True)
     from cab_platform.forge_settings import file_operation
     from cab_platform.project_configuration_edit import FIELDS
-    from cab_platform.project_metadata import synchronize
+    from cab_platform.project_metadata import initialize_version_policy, synchronize
     from cab_platform.paths import secret
+    import base64
     import hmac
-    project=Project.objects.get(pk=project_id);before=file_operation(project,{'op':'env-read'});snapshot=synchronize(project.pk);env=file_operation(project,{'op':'env-read'})
-    commands.require(before['digest']==env['digest'],'project-configuration-changed',409)
+    project=Project.objects.get(pk=project_id)
+    read={'op':'env-read','allow_missing':True}
+    before=file_operation(project,read);snapshot=synchronize(project.pk);env=file_operation(project,read)
+    if before['digest']!=env['digest']:
+        commands.require('missing' not in (before['digest'],env['digest']),'project-configuration-changed',409)
+        try:expected=initialize_version_policy(base64.b64decode(before['content'],validate=True))
+        except ValueError:raise commands.Refused('project-configuration-changed',409) from None
+        commands.require(hashlib.sha256(expected).hexdigest()==env['digest'],'project-configuration-changed',409)
     commands.require(Project.objects.filter(pk=project.pk,root=project.root).exists(),'project-configuration-changed',409)
     revision=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
-    response=JsonResponse({'fields':{key:snapshot.get('values',{}).get(key,'') for key in FIELDS},'project_path':project.root,'revision':revision})
+    values={} if env['digest']=='missing' else snapshot.get('values',{})
+    response=JsonResponse({'fields':{key:values.get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')},'project_path':project.root,'revision':revision})
     response['Cache-Control']='no-store';return response
 
 @api.post('/projects/{project_id}/configuration')
@@ -381,10 +1005,42 @@ def project_configuration_save(request,project_id:str,body:ProjectConfigurationE
     from cab_platform.project_configuration_edit import edit
     from cab_platform.paths import secret
     import hmac
-    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read'})
+    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read','allow_missing':True})
     expected=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
     commands.require(hmac.compare_digest(expected,body.revision),'project-configuration-changed',409)
     return edit(project.pk,body.fields,env['digest'],body.project_path)
+
+@api.post('/projects/{project_id}/version-policy')
+def project_version_policy(request,project_id:str,body:VersionPolicyEdit):
+    principal(request,admin=True)
+    from cab_platform.version_policy_migration import apply, preview
+    if body.preview_id is None:
+        return preview(project_id,body.policy,body.side)
+    return apply(project_id,body.policy,body.side,body.preview_id)
+
+@api.get('/projects/{project_id}/change-stage-metrics')
+def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,run_id:str|None=None,offset:int=0):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from .models import Change
+    changes=Change.objects.filter(project=project)
+    if run_id is not None:
+        from .models import Run
+        from cab_platform.change_stage_metrics import summarize
+        run=Run.objects.filter(project=project,run_id=run_id).select_related('change_record').first()
+        commands.require(run is not None,'run-not-found',404)
+        if run.change_record is None:return {'run_id':run_id,'stages':[],'cycles':[],'duration_seconds':None,'complete_cycle_duration_seconds':None,'cycle_summary':run.cycle_summary}
+        return {'identifier':run.change,'run_id':run_id,**summarize(run.change_record,run),'cycle_summary':run.cycle_summary}
+    if change_id is not None:
+        from cab_platform.change_stage_metrics import summarize
+        change=changes.filter(pk=change_id).first()
+        commands.require(change is not None,'change-not-found',404)
+        return {'identifier':change.identifier,**summarize(change)}
+    commands.require(0<=offset<=100000,'change-metrics-offset-invalid',400)
+    items=list(changes.order_by('identifier','pk').values('id','identifier')[offset:offset+51])
+    return {'changes':items[:50],'has_more':len(items)>50}
 
 @api.post('/projects/{project_id}/forges/authenticate')
 def forge_authenticate(request,project_id:str):
@@ -394,6 +1050,114 @@ def forge_authenticate(request,project_id:str):
     from cab_platform.forge_auth import enqueue
     enqueue(project.pk)
     return {'queued':True}
+
+@api.post('/projects/{project_id}/forges/repositories/refresh')
+def refresh_forge_repositories(request,project_id:str):
+    actor=principal(request)
+    project=Project.objects.get(pk=project_id)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import enqueue
+    enqueue(project.pk)
+    return {'queued':True}
+
+@api.post('/projects/{project_id}/forges/{forge}/authenticate-stream')
+def stream_forge_authentication(request,project_id:str,forge:str):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import FORGES
+    forge=forge.upper()
+    commands.require(forge in FORGES,'forge-refresh-invalid',400)
+    import asyncio
+    import threading
+    from django.db import close_old_connections
+    from cab_platform.forge_auth import refresh_one
+    async def events():
+        loop=asyncio.get_running_loop()
+        queue=asyncio.Queue()
+        def send(event):
+            try:loop.call_soon_threadsafe(queue.put_nowait,event)
+            except RuntimeError:pass
+        def work():
+            def report(message):send({'type':'output','text':message})
+            try:
+                state=refresh_one(project.pk,forge,managed=False,report=report)
+                report('Authentification réussie.\n' if state is True else 'Authentification échouée.\n' if state is False else 'Authentification non vérifiée.\n')
+                send({'type':'result','result':{'state':state}})
+            except Exception:
+                report('La vérification a échoué avant sa conclusion.\n')
+                send({'type':'error','error':'forge-auth-diagnostic-failed'})
+            finally:
+                close_old_connections()
+                send({'type':'end'})
+        threading.Thread(target=work,daemon=True,name='cab-forge-auth-stream').start()
+        while True:
+            event=await queue.get()
+            yield (json.dumps(event,ensure_ascii=False)+'\n').encode('utf-8')
+            if event['type']=='end':break
+    response=StreamingHttpResponse(events(),content_type='application/x-ndjson; charset=utf-8')
+    response['Cache-Control']='no-store'
+    response['X-Accel-Buffering']='no'
+    return response
+
+class ForgePushInput(Schema):
+    nonce:str
+
+class ForgeSyncInput(Schema):
+    source:Literal['local','remote']='local'
+
+class ForgeReconcileInput(Schema):
+    confirmation:str|None=None
+
+@api.post('/projects/{project_id}/forges/{forge}/push-prepare')
+def prepare_forge_push(request,project_id:str,forge:str):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_push import prepare
+    return prepare(project_id,forge.upper(),actor.pk)
+
+@api.post('/projects/{project_id}/forges/{forge}/push')
+def execute_forge_push(request,project_id:str,forge:str,body:ForgePushInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_push import execute
+    return execute(project_id,forge.upper(),actor.pk,body.nonce)
+
+@api.post('/projects/{project_id}/forges/{forge}/sync-prepare')
+def prepare_forge_sync(request,project_id:str,forge:str,body:ForgeSyncInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_sync import prepare
+    return prepare(project_id,forge.upper(),actor.pk,source=body.source)
+
+@api.post('/projects/{project_id}/forges/{forge}/sync')
+def execute_forge_sync(request,project_id:str,forge:str,body:ForgePushInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_sync import execute
+    return execute(project_id,forge.upper(),actor.pk,body.nonce)
+
+@api.post('/projects/{project_id}/forges/{forge}/reconcile')
+def reconcile_forge_operation(request,project_id:str,forge:str,body:ForgeReconcileInput):
+    actor=principal(request,admin=True)
+    from cab_platform.forge_repository import FORGES
+    from cab_platform.forge_sync import reconcile
+    forge=forge.upper()
+    commands.require(forge in FORGES,'forge-refresh-invalid',400)
+    result=reconcile(project_id,forge,actor.pk,body.confirmation)
+    return result if result['reconciled'] else api.create_response(request,result,status=409)
+
+@api.post('/projects/{project_id}/forges/{forge}/refresh')
+def refresh_one_forge(request,project_id:str,forge:str,automatic:bool=False):
+    actor=principal(request)
+    try:project=Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:return api.create_response(request,{'error':'project-not-authorized'},status=403)
+    if actor.role!='admin':commands.scope(actor,project)
+    from cab_platform.forge_repository import FORGES,refresh_one
+    forge=forge.upper()
+    commands.require(forge in FORGES,'forge-refresh-invalid',400)
+    if automatic:
+        return {'available':bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=True))}
+    diagnostics=[]
+    available=bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=False,report=diagnostics.append))
+    return {'available':True} if available else {'available':False,'diagnostics':''.join(diagnostics)}
 
 @api.get('/projects/{project_id}/forges/{forge}')
 def forge_read(request,project_id:str,forge:str):
@@ -448,16 +1212,16 @@ def closure_evaluations(request,project_id:str):
     return {'evaluations':[evaluate(r) for r in Run.objects.filter(project=p).order_by('-updated')[:500]]}
 
 @api.get('/session-archives')
-def session_archives(request,project_id:str):
-    actor=principal(request);p=Project.objects.get(pk=project_id);commands.scope(actor,p)
-    from .models import SessionArchive
-    return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in SessionArchive.objects.filter(run__project=p).select_related('run','run__change_record').order_by('-created')[:500]]}
+def session_archives(request,project_id:str='',page:int=1,page_size:int=10,search:str=''):
+    from cab_platform.archive_listing import archive_page
+    rows,pagination=archive_page(principal(request),project_id,page,page_size,search)
+    return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in rows],**pagination}
 
 @api.get('/run')
 def run_status(request,project_id:str,run_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     from .monitor import details
-    return {**run_data(r),'monitor':details(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
+    return {**run_data(r),'cycle_summary':r.cycle_summary,'monitor':details(r),'mandate':r.mandate,'review':r.review,'operations':[operation_data(o) for o in r.operation_set.order_by('pk')[:200]],'exceptions':list(Event.objects.filter(run=r,kind__startswith='exception-').values('id','kind','data','created'))}
 
 @api.get('/operation')
 def operation_status(request,project_id:str,run_id:str,request_id:str):
@@ -501,7 +1265,7 @@ def finalization_status(request,project_id:str,run_id:str):
 def handoff(request,project_id:str,run_id:str,after:int=0):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     commands.require(actor.role=='admin' or actor.pk==r.mandate.get('orchestrator_id') or r.mode=='direct' and r.actor_id==actor.pk,'handoff-authority-required',403)
-    rows=list(Event.objects.filter(run=r,id__gt=max(0,after),kind__in=['exception-requested','review-requested','run-closed']).order_by('id').values('id','kind','data')[:100])
+    rows=list(Event.objects.filter(run=r,id__gt=max(0,after),kind__in=['exception-requested','review-requested','run-closed','run-cancelled-before-start']).order_by('id').values('id','kind','data')[:100])
     return {'run_id':r.run_id,'state':r.state,'events':rows,'next_after':rows[-1]['id'] if rows else after,'submission':r.review.get('submission') if r.state=='REVIEW_PENDING' else None}
 
 @api.get('/events')
@@ -515,6 +1279,19 @@ def metrics(request,project_id:str,run_id:str,after:int=0):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)
     from .measurements import run_statistics
     return run_statistics(actor,r,after)
+
+@api.get('/projects/{project_id}/incidents')
+def project_incident_registry(request,project_id:str,page:int=1,page_size:int=25,search:str=''):
+    from .project_incidents import project_incidents
+    return project_incidents(request,project_id,page,page_size,search)
+
+class IncidentPurgeRequest(Schema):
+    expected_revision:str
+
+@api.post('/projects/{project_id}/incidents/{incident_id}/purge')
+def project_incident_purge(request,project_id:str,incident_id:str,payload:IncidentPurgeRequest):
+    from .project_incidents import purge_project_incident
+    return purge_project_incident(request,project_id,incident_id,payload.expected_revision)
 
 @api.get('/incidents')
 def incidents(request,project_id:str|None=None):
@@ -532,9 +1309,13 @@ def update_availability(request):
 @api.post('/command')
 def command(request,body:Command):
     actor=principal(request);data=body.data;name=body.name
+    native_thread=request.headers.get('X-CAB-Shared-Thread')
     if name=='connector.heartbeat':
         from .connectors import heartbeat
         return heartbeat(actor,data,getattr(request,'cab_peer',None))
+    if name=='connector.recovery_claim':
+        from cab_platform.mcp_disconnect_recovery import claim
+        return claim(actor,data,getattr(request,'cab_peer',None))
     if name=='connector.stop_report':
         from .connectors import stop_report
         return stop_report(actor,data,getattr(request,'cab_peer',None))
@@ -547,6 +1328,10 @@ def command(request,body:Command):
     if name=='connector.native_reload':
         from .native_control import request_connector
         return request_connector(actor,data,getattr(request,'cab_peer',None))
+    if name=='finalization.contest_check':
+        principal(request,admin=True)
+        from .run_evidence import contest_check
+        return contest_check(actor,data)
     if name in ('finalization.configure','finalization.revise_check','finalization.retarget_release','evidence.producer.register','evidence.producer.disable','evidence.attest'):
         from . import run_evidence
         return {'finalization.configure':run_evidence.configure,'finalization.revise_check':run_evidence.revise_check,'finalization.retarget_release':run_evidence.retarget_release,'evidence.producer.register':run_evidence.register_producer,'evidence.producer.disable':run_evidence.disable_producer,'evidence.attest':run_evidence.attest}[name](actor,data)
@@ -562,7 +1347,7 @@ def command(request,body:Command):
     if name in ('system.update','system.update.status'):
         commands.require(set(data)<=({'request_id','version'} if name=='system.update' else {'request_id'}),'update-fields-invalid',400)
         from cab_platform import system_updates
-        return system_updates.request(actor,data.get('request_id'),data.get('version','')) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
+        return system_updates.request(actor,data.get('request_id'),data.get('version',''),peer=getattr(request,'cab_peer',None)) if name=='system.update' else system_updates.status(actor,data.get('request_id'))
     if name=='operation.reconcile_stopped':
         from .operation_recovery import reconcile_stopped
         return reconcile_stopped(actor,data)
@@ -579,7 +1364,9 @@ def command(request,body:Command):
         from . import historical
         return historical.inspect(actor,data) if name=='run.inspect_historical' else historical.close(actor,data)
     if name=='project.register':
-        p=commands.register_project(actor,data['root']);return {'project_id':p.pk,'root':p.root}
+        p=commands.register_project(actor,data['root'])
+        from cab_platform.session_delivery import ensure_delivery_producer
+        return {'project_id':p.pk,'root':p.root,'delivery_producer':ensure_delivery_producer(p)}
     if name=='actor.enroll':
         principal(request,admin=True)
         uid=int(data['uid']);role=data.get('role','coder');commands.require(role in ('coder','orchestrator','collector','admin'),'actor-role-invalid',400)
@@ -587,8 +1374,35 @@ def command(request,body:Command):
         a=Actor.objects.create(pk=commands.identifier(data['id']),uid=uid,role=role,agent=data['agent'],token_hash=hashlib.sha256(token.encode()).hexdigest(),native=data.get('native',{}))
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
-    if name=='run.begin':return run_data(commands.begin_run(actor,data))
+    if name=='run.begin':
+        run=commands.begin_run(actor,data,stage_protocol=True)
+        if native_thread and run.mode=='piloted' and run.mandate.get('orchestrator_id')==actor.pk:
+            from uuid import UUID
+            try:thread=str(UUID(native_thread))
+            except ValueError:thread=None
+            if thread and not run.configuration.get('reminder_orchestrator_thread'):
+                run.configuration={**run.configuration,'reminder_orchestrator_thread':thread}
+                run.save(update_fields=['configuration'])
+        return run_data(run)
+    if name=='run.cancel_replaced':
+        from .run_replacement import reconcile
+        return reconcile(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
+    if name=='run.mandates.add':
+        from cab_platform.stage_actions import add_mandates
+        return add_mandates(actor,data)
+    if name in ('run.stage.begin','run.stage.validate','run.stage.status'):
+        from cab_platform import stage_protocol
+        return {'run.stage.begin':stage_protocol.begin,'run.stage.validate':stage_protocol.validate,'run.stage.status':stage_protocol.status}[name](actor,data)
+    if name in ('run.stage.action','run.stage.action_catalogue'):
+        from cab_platform import stage_actions
+        return (stage_actions.declare if name=='run.stage.action' else stage_actions.catalogue)(actor,data)
+    if name=='run.stage_substep':
+        from cab_platform.stage_substeps import command as record_substep
+        return record_substep(actor,data)
+    if name in ('version.skill_acknowledge','version.propose'):
+        from cab_platform.version_skill import acknowledge, propose
+        return (acknowledge if name=='version.skill_acknowledge' else propose)(actor,data)
     if name=='run.reconcile_archive':return commands.reconcile_archive(actor,data)
     if name=='run.adopt':
         with transaction.atomic():
@@ -607,8 +1421,119 @@ def command(request,body:Command):
                 session(r)
             r.source_revision=commands.revision(r);r.state='WORKING';r.suspension='';r.save();commands.event(r,'legacy-run-adopted',{'session_id':r.session_id,'generation':r.generation})
             return run_data(r)
+    if name=='notification.create':
+        from cab_platform.notifications import create
+        return create(actor,data)
+    if name=='notification.receipt':
+        from cab_platform.notifications import administrator,receipt_view
+        from .models import NotificationReceipt
+        administrator(actor)
+        commands.require(set(data)=={'id'},'notification-fields-invalid',400)
+        receipt=NotificationReceipt.objects.filter(pk=UUID(str(data['id']))).first()
+        return receipt_view(receipt) if receipt else {'id':data['id'],'state':'PENDING'}
+    if name in ('session.git.inspect_preexisting','session.git.authorize_preexisting'):
+        from cab_platform.preexisting_git import inspect_preexisting,authorize_preexisting
+        return (inspect_preexisting if name=='session.git.inspect_preexisting' else authorize_preexisting)(actor,data)
+    if name=='session.version.prepare':
+        from cab_platform.package_versions import prepare
+        return prepare(actor,data)
+    if name.startswith('session.effect.'):
+        from cab_platform import requested_effects as effects
+        actions={'authorize':effects.authorize,'inspect':effects.inspect,'request':effects.request,'status':effects.status,'open_recovery':effects.open_recovery,'diagnose':effects.diagnose,'remediate':effects.remediate}
+        action=name.removeprefix('session.effect.')
+        commands.require(action in actions,'session-effect-action-invalid',400)
+        return actions[action](actor,data)
+    if name=='session.git.adopt':
+        from cab_platform.session_git import adopt_files
+        return adopt_files(actor,data)
+    if name in ('session.git.stage_adopted','session.git.reserve_adopted'):
+        from cab_platform.session_git import administrative_stage
+        return administrative_stage(actor,data,reserve=name=='session.git.reserve_adopted')
+    if name in ('session.delivery.start_adopted','session.delivery.full_start_adopted','session.delivery.status_adopted'):
+        from cab_platform.session_git import administrative_run
+        from cab_platform.session_delivery import start_delivery,delivery_status
+        commands.require(set(data)=={'project_id','run_id','version'},'session-delivery-fields-invalid',400)
+        if name=='session.delivery.status_adopted':
+            commands.require(actor.active and actor.role=='admin','session-git-administrator-required',403)
+            current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
+            return delivery_status(current.actor,current,data['version'],None,administrator=actor)
+        current,connector_id=administrative_run(actor,data)
+        return start_delivery(current.actor,current,data['version'],connector_id,complete=name=='session.delivery.full_start_adopted')
+    if name in ('run.reframe_prequalification','finalization.host_completion','session.git.cancel_unpublished_stage'):
+        principal(request,admin=True)
+        from cab_platform.host_completion import reframe_prequalification,declare_host_completion,cancel_unpublished_stage
+        return {'run.reframe_prequalification':reframe_prequalification,'finalization.host_completion':declare_host_completion,'session.git.cancel_unpublished_stage':cancel_unpublished_stage}[name](actor,data)
+    if name in ('terminal.git.authorize','terminal.git.status'):
+        from cab_platform.closure_git import authorize,view
+        if name=='terminal.git.authorize':return authorize(actor,data)
+        current=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
+        return view(current)
+    if name=='session.delivery.select_version':
+        from cab_platform.session_delivery import select_delivery_version
+        return select_delivery_version(actor,data)
+    if name=='session.delivery.policy':
+        from cab_platform.session_delivery import configure_delivery_policy
+        return configure_delivery_policy(actor,data)
+    if name in ('session.delivery.start','session.delivery.full_start','session.delivery.status'):
+        from .connectors import current_worker_run,worker_connector
+        from cab_platform.session_delivery import start_delivery,delivery_status
+        commands.require('version' in data and set(data)<={'version','project_id','run_id'},'session-delivery-fields-invalid',400)
+        peer=getattr(request,'cab_peer',None)
+        current=current_worker_run(actor,peer,read_only=name=='session.delivery.status',native_thread=native_thread,
+                                   project_id=data.get('project_id',''),run_id=data.get('run_id',''))
+        connector=worker_connector(actor,peer)
+        commands.require(connector is not None,'session-connector-unbound',409)
+        if name=='session.delivery.status':
+            return delivery_status(actor,current,data['version'],connector.pk)
+        return start_delivery(actor,current,data['version'],connector.pk,complete=name=='session.delivery.full_start')
+    if name=='session.git.context':
+        commands.require(set(data)<={'project_id','run_id'},'session-git-fields-invalid',400)
+        from .connectors import current_worker_run
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),read_only=True,native_thread=native_thread,**data)
+        from cab_platform.session_delivery import version_policy
+        from cab_platform.version_skill import status as version_skill_status
+        return {'project_id':current.project_id,'run_id':current.run_id,'change':current.change,
+                'session_id':current.session_id,'cycle_steps':current.cycle_steps,
+                'version_policy':version_policy(current),'version_skill':version_skill_status(current)}
+    if name in ('session.reservations', 'session.reservations.renew'):
+        from .connectors import current_worker_run, worker_connector
+        from cab_platform.resource_reservations import session_reservations
+        peer = getattr(request, 'cab_peer', None)
+        renewal = name.endswith('.renew')
+        current = current_worker_run(actor, peer, read_only=not renewal, native_thread=native_thread,
+                                     project_id=data.get('project_id', ''), run_id=data.get('run_id', ''))
+        connector = worker_connector(actor, peer)
+        commands.require(connector is not None, 'session-connector-unbound', 409)
+        return session_reservations(actor, current, connector.pk, data, renewal=renewal)
+    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
+        from .connectors import current_worker_run,worker_connector
+        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
+        peer=getattr(request,'cab_peer',None)
+        current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'),native_thread=native_thread,
+                                   project_id=data.get('project_id',''),run_id=data.get('run_id',''))
+        connector=worker_connector(actor,peer)
+        commands.require(connector is not None,'session-connector-unbound',409)
+        commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)
+        scoped={**data,'project_id':current.project_id,'run_id':current.run_id}
+        if name=='session.git.release':return release_files(actor,scoped,connector.pk)
+        if name in ('session.git.reserve','session.git.stage'):
+            return (reserve_files if name=='session.git.reserve' else stage_files)(actor,scoped,connector.pk)
+        return (effect_status if name=='session.git.status' else inspect_session)(actor,scoped)
     if name=='native.locate':return commands.locate_native(actor,data)
-    if name=='native.bind':return commands.bind_native(actor,data)
+    if name=='native.reconcile_device':return commands.reconcile_native_device(actor,data)
+    if name=='native.bind':
+        from .connectors import bind_worker_run
+        with transaction.atomic():
+            Actor.objects.select_for_update().get(pk=actor.pk)
+            result=commands.bind_native(actor,data)
+            peer=getattr(request,'cab_peer',None)
+            connector_bound=bind_worker_run(actor,data,peer,native_thread=native_thread)
+            if not connector_bound:
+                from cab_platform.connector_process import identity,cab_process
+                process=identity(peer['pid']) if peer else None
+                run=commands.run_scope(actor,data['run_id'],data['project_id'])
+                commands.event(run,'native-connector-binding-unavailable',{'peer':peer,'process':process,'worker_agent':cab_process(peer['pid'],'mcp-worker') if peer else None,'parent_agent':cab_process(process['parent_pid'],'mcp') if process else None})
+            return {**result,'connector_bound':connector_bound}
     if name in ('statistics.begin','statistics.end','statistics.change'):
         from . import measurements
         if name=='statistics.change':
@@ -666,8 +1591,11 @@ def command(request,body:Command):
         candidate=commands.run_scope(actor,data['run_id'],data['project_id'])
         plan=FinalizationPlan.objects.filter(run=candidate).exclude(policy={}).first()
         if plan and data.get('branch')=='TERMINÉ':
-            from .run_finalization import process
-            if plan.receipt:return plan.receipt
+            from .run_finalization import process,view
+            if plan.receipt:
+                status=view(candidate,plan)
+                commands.require(status['phase']=='CLOSED','change-still-open')
+                return plan.receipt
             receipt=process(candidate.pk);commands.require(receipt,'finalization-proof-required');return receipt
         from .run_closure import close_normal
         return close_normal(actor,data)
@@ -676,8 +1604,26 @@ def command(request,body:Command):
     if name=='coordinate':return commands.coordinate(actor,data)
     if name=='bank.reserve':return commands.reserve_bank(actor,data)
     if name=='bank.release':return commands.release_bank(actor,data)
+    if name=='native.grant':
+        from .native_access import grant
+        return grant(actor,data)
+    if name=='native.grant.revoke':
+        from .native_access import revoke
+        return revoke(actor,data)
     if name=='exception.request':return commands.exception(actor,data)
     if name=='exception.decide':return commands.exception_decision(actor,data)
+    if name=='exception.authorize_direct_paths':
+        from .connectors import current_worker_run
+        commands.require(set(data)=={'project_id','run_id','request_id','paths','authorization'},
+                         'exception-scope-invalid',400)
+        current=current_worker_run(actor,getattr(request,'cab_peer',None),native_thread=native_thread,
+                                   project_id=data['project_id'],run_id=data['run_id'])
+        commands.require(current.mode=='direct' and current.actor_id==actor.pk,
+                         'exception-authority-required',403)
+        return commands.exception_decision(actor,{
+            'project_id':current.project_id,'run_id':current.run_id,'request_id':data['request_id'],
+            'decision':'approved','scope':{'paths':data['paths'],'authorization':data['authorization']},
+        },direct_connection=True)
     if name=='metric.record':
         commands.require(actor.role in ('collector','admin'),'collector-required',403)
         r=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
@@ -738,8 +1684,10 @@ def maintenance_command(actor,name,data):
         from django.db import connection
         with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[300001])
         commands.require(not Operation.objects.filter(state__in=['RUNNING','INTENT']).exists(),'maintenance-boundary-busy')
-        from .models import AgentUser
+        from .models import AgentUser,ProjectArtifactBuild,ProjectForgeArtifactPublication
         commands.require(not AgentUser.objects.filter(reconcile_state='RUNNING').exists(),'maintenance-boundary-busy')
+        commands.require(not ProjectArtifactBuild.objects.filter(state='RUNNING').exists(),'maintenance-boundary-busy')
+        commands.require(not ProjectForgeArtifactPublication.objects.filter(state='RUNNING').exists(),'maintenance-boundary-busy')
         commands.require(not Maintenance.objects.exclude(pk=key).filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-transaction-conflict')
         row,created=Maintenance.objects.get_or_create(pk=key,defaults={'state':'PREPARED','evidence':data.get('evidence',{})})
         return {'state':row.state,'transaction_id':key}

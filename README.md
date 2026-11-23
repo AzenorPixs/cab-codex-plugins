@@ -1,8 +1,18 @@
 # Codex Approval Bridge — CAB
 
+## Réservations du projet
+
+Le menu **Projet → Réservations** affiche les baux actifs et leurs échéances
+en temps réel. Les fichiers s’ouvrent dans un aperçu texte. Une session
+renouvelle une réservation encore nécessaire après 240 secondes pour éviter
+son expiration à 300 secondes.
+
 
 CAB prend officiellement en charge PostgreSQL17 et18 (Debian Trixie/Forky).
 La référence est conservée sous /etc/cab ; voir [le parcours PostgreSQL](docs/postgresql.md).
+
+Les règles de politique de version, l’adaptation des tags locaux et le suivi
+du temps par change sont décrits dans les [opérations CAB](docs/platform-operations.md).
 
 ## CAB 3.2.8
 
@@ -176,7 +186,7 @@ décrivent le contrat applicable aux agents.
 - `/CAB start`, `/CAB run` et `/CAB resume` suivent les mandats de pilotage.
 - `/CABU` lance la procédure de mise à jour et vérifie les composants actifs.
 - `/SGS` donne accès au traitement des statistiques selon le mode demandé.
-- `/CCAB` déclare, consulte ou traite les incidents sous le mandat applicable.
+- `/CCAB` porte le mandat des correctifs CAB nécessaires sous SCM avec CICD, jusqu’à leur activation requise et vérification par le déclarant.
 
 Pour une session Codex directe, demander explicitement CAB en mode direct.
 SGS et le Web Monitor suivent alors cette session sans créer de session
@@ -200,9 +210,17 @@ transfert vers le projet reste soumis à la validation de l’orchestrateur.
 
 ## Statistiques, incidents et nettoyage
 
+La page Incidents de chaque projet présente les déclarations CCAB dans un tableau paginé. L’identifiant ouvre une fenêtre en lecture seule contenant le résumé, les preuves, la prise en charge, la résolution et la déclaration complète. Tous les états conservés du registre restent consultables dans le périmètre autorisé du projet.
+
 SGS collecte les mesures natives disponibles, dont les tokens, le cache,
 les modèles et la chronologie des rôles. Les mesures indisponibles restent
 signalées comme telles. La vue Stats du Web Monitor lit SGS.
+
+L’invocation explicite du plugin, du skill ou de la commande CCAB autorise les
+correctifs CAB nécessaires : OpenSpec, code, tests, documentation, SCM/CICD
+et activation CABU requise. Aucune confirmation générique supplémentaire
+n’est demandée par correctif, fichier ou étape dans ce périmètre ; les
+restrictions explicites et protections techniques restent applicables.
 
 CCAB propose une file FIFO par défaut, avec regroupement justifié des
 incidents de cause commune. Le correcteur se coordonne avec les déclarants,

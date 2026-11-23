@@ -1,5 +1,47 @@
 # Cadrage et récupération de prévol CAB
 
+## Contester une réussite non probante
+
+Une réussite courante reste protégée contre `finalization.revise_check` ordinaire.
+Si elle ne mesure pas le critère (par exemple zéro test découvert), seule une
+contestation administrative explicite est admise :
+`cab call finalization.contest_check --admin`, avec `project_id`, `run_id`,
+`request_id`, `expected_policy_digest`, `check_id`, `operation_id`, `evidence_id`,
+`expected_evidence_digest`, `expected_receipt_digest`, `argv`, `reason` et
+`authorization`. Utiliser les identités et empreintes des preuves réelles.
+Le pair administrateur est authentifié ; le codeur ne se substitue pas à lui.
+
+CAB conserve la preuve et le reçu d'origine, journalise leur exclusion et ne
+change que l'argv et la révision du contrôle. Aucun test n'est lancé. Une preuve
+nouvelle à cette révision est obligatoire. Conserver le même request_id pour
+consulter le même résultat après réponse perdue ; un conflit ou une empreinte
+périmée impose de relire l'état, jamais de contourner la protection. Effets
+indécis, baux, gel, import, revue et clôture restent bloquants. Une source périmée
+est refusée : ne jamais modifier la source pour rendre une ancienne preuve fraîche.
+
+`native.bind` distingue `bound` (journal natif) et `connector_bound` (worker réel).
+Seul le second, suivi d'un contexte Git effectif, prouve le rattachement Git.
+Le service peut récupérer automatiquement un couple kernel authentifié sans
+heartbeat : son état OBSERVED conserve versions/catalogue inconnus et ne prouve
+pas une reconnexion complète après CABU. Un heartbeat réel adopte la liaison
+en conservant son historique ; le LLM n'inscrit aucun processus fictif.
+
+Avant toute opération ou preuve, `run.reframe_prequalification` peut corriger
+administrativement `nature=delivery` si l'admission était `development` et une
+publication déjà cadrée. Les critères transmis restent strictement identiques ;
+checks, producteurs et revue sont conservés. Les empreintes de politique et de
+cadrage attendues et l'autorisation explicite sont requises. Aucune transition
+inverse ni correction après preuve n'est admise. Une erreur de nature ne justifie
+ni un nouveau RUN de contournement ni une réécriture de source_revision.
+
+Dans une livraison regroupée autorisée, CAB inclut lui-même les rapports générés
+vérifiés des archives validées de la même session dont proposal.md et tasks.md
+sont réservés et indexés dans le lot. Ne pas réserver ou éditer ces rapports.
+Après `run.reconcile_archive`, les fichiers déjà réservés de ce même RUN sont
+reconnus sous leur chemin relatif dans l'archive vérifiée. Les réserver à ce
+nouveau chemin avant toute édition ; CAB refuse les sources encore présentes,
+les archives ambiguës, les liens et les propriétaires concurrents.
+
 ## Contrat admis
 
 `finalization` est un objet strict. Champs admis : nature, checks, requirements,
@@ -110,3 +152,23 @@ une ancienne commande non supervisée. Un build échoué après push du commit/t
 reste une livraison partielle ; la preuve de publication complète reste absente.
 La reprise des étapes échouées appartient à l'outil de livraison et à son état
 réel, sans déplacement d'un tag publié ni répétition aveugle d'effets acquis.
+
+## Reprise nécessaire à CABU
+
+Une demande CABU autorisée couvre aussi la reprise nécessaire de son instance
+observée, pour le même demandeur, UID, request_id et version. Ne pas redemander
+une confirmation pour cette seule reprise. Lire recovery_authorization dans
+le même reçu ; AUTHORIZED est une autorité bornée, pas une preuve de reconnexion.
+La préférence native reste prioritaire. Une reprise administrative contrôlée
+du frontend n'est admise qu'en dernier recours RELOAD_REQUIRED, avec identité
+kernel stable, frontière sûre de tous les acteurs du compte, PIDFD, reçu durable,
+supervision indépendante et sortie prouvée avant relance. Aucun arrêt arbitraire
+ni injection dans un canal privé. L'absence de mécanisme qualifié est un blocage
+technique explicite, pas une raison de redemander l'autorisation déjà donnée.
+
+Le propriétaire ou l'administrateur peut révoquer cette autorité par
+`native.control.configure` avec `cabu_recovery_authorized=false` ; seule cette
+préférence change, sans appel fournisseur ni nouvelle génération. Les reprises
+en attente sont revérifiées sous verrou avant dispatch. Un effet UNKNOWN, une
+instance divergente ou une révocation bloque sans rejeu. Un ancien reçu sans
+observation kernel n'acquiert aucune autorité rétroactive par simple lecture.

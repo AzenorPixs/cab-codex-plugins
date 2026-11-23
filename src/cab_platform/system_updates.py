@@ -15,7 +15,8 @@ TERMINAL={'OK','FAILED','UNKNOWN','RELOAD_REQUIRED'}
 UNIT='cab-update.service'
 
 def data(job):
-    return {'request_id':job.pk,'state':job.state,'target_version':job.target_version or None,**job.result}
+    from .cabu_recovery_policy import authorization
+    return {'request_id':job.pk,'state':job.state,'target_version':job.target_version or None,**job.result,'recovery_authorization':authorization(job),'frontend_recovery_authorization':authorization(job,frontend=True)}
 
 def receipt_path(job):return STATE/('system-update-'+hashlib.sha256(job.pk.encode()).hexdigest()+'.json')
 
@@ -26,7 +27,28 @@ def status(actor,request_id):
     if ConnectorReload.objects.filter(update=job).exists() and job.state in ('OK','RECONNECTING','RELOAD_REQUIRED'):return refresh_connectors(job.pk)
     return data(job)
 
-def request(actor,request_id,version=''):
+def release_obsolete_slot(actor, version, request_id, scope):
+    """Libérer le créneau d'une version remplacée, en conservant son reçu."""
+    from .frontend_recovery import observation
+    from .cabu_recovery_policy import same_instance
+    from .session_delivery import delivery_version_order
+    active = SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
+    if active is None:
+        return
+    old = active.result.get('version')
+    recovery = observation(active)
+    settled_relaunch = recovery.get('state') == 'WAITING_MCP' and same_instance(
+        recovery.get('replacement'), scope.get('frontend'))
+    admissible = (version and old and active.actor_id == actor.pk
+                  and active.state == 'RELOAD_REQUIRED' and active.result.get('verified') is True
+                  and delivery_version_order(old) < delivery_version_order(version) and (not recovery or settled_relaunch)
+                  and verified_local_installation(version) is not None)
+    c.require(admissible, 'update-already-active')
+    active.result = {**active.result, 'superseded_by': request_id}
+    active.active_slot = None
+    active.save(update_fields=['result', 'active_slot', 'updated'])
+
+def request(actor,request_id,version='',peer=None):
     c.require(actor.active,'update-not-authorized',403)
     c.identifier(request_id)
     c.require(isinstance(version,str) and (not version or bool(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',version))) and len(version)<=100,'update-version-invalid',400)
@@ -38,13 +60,52 @@ def request(actor,request_id,version=''):
                 c.require(prior.target_version==version,'update-request-conflict')
                 return status(actor,request_id)
             c.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress',503)
-            c.require(not SystemUpdate.objects.filter(active_slot=1).exists(),'update-already-active')
+            from .cabu_recovery_policy import capture
+            scope=capture(actor,peer,request_id,version)
+            release_obsolete_slot(actor, version, request_id, scope)
             c.require(not ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').exists(),'connector-reload-pending')
             from .core.connectors import snapshot
-            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot()})
+            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=version,result={'connector_targets':snapshot(),'recovery_context':scope})
             ConnectorReload.objects.create(update=job,targets=job.result['connector_targets'],version=version)
             return data(job)
     except IntegrityError:raise c.Refused('update-admission-conflict') from None
+
+def shared_owner(job):
+    scope=job.result.get('recovery_context',{})
+    if scope.get('frontend') and scope.get('actor_id')==job.actor_id:
+        from .frontend_recovery import shared_profile
+        if shared_profile(job.actor.uid,job.actor.agent):
+            return scope.get('instance')
+    return None
+
+def request_topology_recovery(row, owner, request_id):
+    """Reprendre un bureau vérifié à partir du heartbeat, sans réinstaller CAB."""
+    from . import __version__
+    from .cabu_recovery_policy import capture, same_instance
+    from .connector_process import identity
+    from .core.connectors import snapshot
+    from .frontend_recovery import shared_profile
+    actor=row.actor
+    if not same_instance(identity(row.process['pid']),row.process):
+        return None
+    scope=capture(actor,{'pid':row.process['pid'],'uid':actor.uid},request_id,__version__)
+    if not (scope['frontend'] and same_instance(scope['instance'],owner)
+            and shared_profile(actor.uid,actor.agent) and verified_local_installation(__version__)):
+        return None
+    targets=[target for target in snapshot() if target['agent']==actor.agent]
+    if not targets or any(not same_instance(target.get('owner'),owner) for target in targets):
+        return None
+    scope['provenance']='authenticated-heartbeat'
+    try:
+        with transaction.atomic():
+            if SystemUpdate.objects.filter(active_slot=1).exists():
+                return None
+            job=SystemUpdate.objects.create(pk=request_id,actor=actor,target_version=__version__,
+                result={'connector_targets':targets,'recovery_context':scope,'topology_only':True})
+            ConnectorReload.objects.create(update=job,targets=targets,version=__version__)
+    except IntegrityError:
+        return None
+    return job.pk
 
 def finish(job,state,result):
     public={key:value for key,value in result.items() if key in ('version','verified','package_sha256','error','finalization_id','previous_version')}
@@ -52,12 +113,15 @@ def finish(job,state,result):
     with transaction.atomic():
         current=SystemUpdate.objects.select_for_update().get(pk=job.pk)
         if current.state in ('OK','FAILED'):return data(current)
+        if 'recovery_context' in current.result:public['recovery_context']=current.result['recovery_context']
+        if current.result.get('topology_only'):public['topology_only']=True
+        receipt.update(public)
         reload,_=ConnectorReload.objects.get_or_create(update=current,defaults={'targets':current.result.get('connector_targets',[]),'version':public.get('version','')})
         public['connector_targets']=reload.targets
         if state=='OK':
             from .core.connectors import assess
             public['package_state']='OK'
-            state,outcomes=assess(public['connector_targets'],public['version'])
+            state,outcomes=assess(public['connector_targets'],public['version'],shared_owner=shared_owner(current))
             public['connectors']=outcomes
             reload.version=public['version'];reload.state=state;reload.observations=outcomes;reload.save()
         # Publication avant clôture SQL, sous le même verrou : une sonde tardive
@@ -70,15 +134,21 @@ def finish(job,state,result):
 
 def refresh_connectors(request_id):
     from .core.connectors import assess
+    from .frontend_recovery import observation
     from .core.native_control import ensure_update
-    ensure_update(SystemUpdate.objects.get(pk=request_id))
+    existing=SystemUpdate.objects.get(pk=request_id)
+    if existing.result.get('superseded_by'):return data(existing)
+    ensure_update(existing)
     with transaction.atomic():
         job=SystemUpdate.objects.select_for_update().get(pk=request_id)
+        if job.result.get('superseded_by'):return data(job)
         if job.state not in ('OK','RECONNECTING','RELOAD_REQUIRED') or job.result.get('verified') is not True:return data(job)
         reload=ConnectorReload.objects.select_for_update().get(update=job)
         if job.state=='OK' and reload.state=='OK':return data(job)
-        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]))
+        recovery=observation(job)
+        state,outcomes=assess(reload.targets,job.result['version'],job.result.get('confirmed_disconnected',[]),recovery=recovery,shared_owner=shared_owner(job))
         result={**job.result,'connector_targets':reload.targets,'package_state':'OK','connectors':outcomes}
+        if recovery:result['frontend_recovery']=recovery
         reload.version=job.result['version'];reload.state=state;reload.observations=outcomes;reload.save()
         if state!=job.state or result!=job.result:
             job.state=state;job.result=result;job.active_slot=None if state=='OK' else 1
@@ -119,6 +189,14 @@ def confirm_disconnected(actor,data):
 def dispatch():
     # Cette fonction est appelée par le superviseur, jamais par le client MCP.
     for key in ConnectorReload.objects.exclude(state='OK').filter(update__state='OK').values_list('update_id',flat=True)[:20]:refresh_connectors(key)
+    pending=SystemUpdate.objects.filter(active_slot=1,state__in=['RECONNECTING','RELOAD_REQUIRED']).first()
+    if pending:
+        refresh_connectors(pending.pk)
+        pending.refresh_from_db()
+        if pending.state == 'RELOAD_REQUIRED':
+            from .frontend_recovery import recover
+            recover(pending)
+        return
     with transaction.atomic():
         job=SystemUpdate.objects.select_for_update().filter(active_slot=1).first()
         if not job:return
@@ -154,7 +232,10 @@ def worker():
     try:
         c.require(job.actor.active,'update-requester-inactive',403)
         from .update import update
-        result=update(version=job.target_version or None,progress=progress)
+        result=verified_local_installation(job.target_version)
+        if result is None:
+            c.require(not job.result.get('topology_only'),'topology-installation-not-verified')
+            result=update(version=job.target_version or None,progress=progress)
         c.require(result.get('verified') is True and bool(result.get('version')) and (not job.target_version or result['version']==job.target_version),'update-verification-failed')
         return finish(job,'OK',result)
     except subprocess.TimeoutExpired:
@@ -162,3 +243,23 @@ def worker():
     except (ClientError,c.Refused,OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
         code=str(error) if isinstance(error,(ClientError,c.Refused)) else type(error).__name__
         return finish(job,'FAILED',{'error':code[:160]})
+
+
+def verified_local_installation(version):
+    """Rattacher une demande native explicite à une installation CABU déjà vérifiée."""
+    from .client import Client
+    if not version:
+        return None
+    prior = read_json(STATE / 'last-update.json', {})
+    if (prior.get('version') != version or prior.get('verified') is not True
+            or not re.fullmatch('[a-f0-9]{64}', prior.get('package_sha256', ''))):
+        return None
+    installed = subprocess.check_output(
+        ['/usr/bin/dpkg-query', '-W', '-f=${Status}|${Version}', 'cab'], text=True, timeout=10
+    ).strip()
+    if installed != 'install ok installed|' + version:
+        return None
+    health = Client(admin=True).get('health')
+    if health.get('state') == 'READY' and health.get('version') == version:
+        return prior
+    return None

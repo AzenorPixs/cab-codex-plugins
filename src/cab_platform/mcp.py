@@ -1,14 +1,34 @@
 """FaçadeMCP, sans règles métier et sans accès aux credentials du service."""
 import asyncio
+from contextvars import ContextVar
 import json
 import inspect
+import os
+import re
 from functools import wraps
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from .client import Client,ClientError
 from . import __version__
 
-server=MCPServer('CAB',version=__version__,instructions='CAB système. Initialiser sur http://127.0.0.1:8790 si nécessaire. Les mandats pilotés sont autonomes ; exceptions et revue finale seulement. Aucun rejeu d’une requête connue.')
+shared_thread=ContextVar('cab_native_thread',default=None)
+
+
+class ScopedMCPServer(MCPServer):
+    async def call_tool(self,name,arguments,context=None):
+        thread=None
+        if os.environ.get('CAB_MCP_SHARED_STDIO')=='1':
+            ctx=context.request_context if context is not None else None
+            meta=ctx.meta if ctx is not None else None
+            extra=meta if isinstance(meta,dict) else getattr(meta,'model_extra',None) or {}
+            value=extra.get('threadId')
+            thread=value if isinstance(value,str) and re.fullmatch(r'[0-9a-fA-F-]{36}',value) else ''
+        token=shared_thread.set(thread)
+        try:return await super().call_tool(name,arguments,context)
+        finally:shared_thread.reset(token)
+
+
+server=ScopedMCPServer('CAB',version=__version__,instructions='CAB système. Initialiser sur http://127.0.0.1:8790 si nécessaire. Les mandats pilotés sont autonomes ; exceptions et revue finale seulement. Aucun rejeu d’une requête connue.')
 
 def public_tool():
     """Conserver signatures et refus publics, y compris pour les appels async."""
@@ -26,7 +46,7 @@ def public_tool():
         return server.tool()(wrapped)
     return decorate
 
-def client():return Client()
+def client():return Client(native_thread=shared_thread.get())
 @public_tool()
 def cab_status()->dict:
     """État du service, amorçage et version ; ne lance aucun RUN."""
@@ -58,7 +78,7 @@ def cab_contract()->dict:
 def finalization_validate(policy:dict,criteria:list[str],mode:str='direct')->dict:
     """Prévol pur : schéma strict, critères exacts et modes ; aucun RUN ni effet."""
     from .finalization_contract import validate,describe,ContractError
-    try:return {'valid':True,'policy':validate(policy,criteria,mode),'contract':describe(),'effects_issued':False}
+    try:return {'valid':True,'policy':validate(policy,criteria,mode,legacy=False),'contract':describe(),'effects_issued':False}
     except ContractError as error:return {'valid':False,'error':str(error),'contract':describe(),'effects_issued':False}
 @public_tool()
 def native_control(project_id:str,run_id:str,session_id:str,generation:int,request_id:str,action:str,text:str='')->dict:
@@ -69,9 +89,95 @@ def project_register(root:str)->dict:
     """Rattache un projet canonique autorisé au compte effectif."""
     return client().command('project.register',{'root':root})
 @public_tool()
-def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None)->dict:
+def run_begin(project_id:str,run_id:str,session_id:str,change:str,mode:str,paths:list[str],criteria:list[str],decisions:list[str],resources:list[str]|None=None,orchestrator_id:str='',coder_id:str='',external_profiles:list[dict]|None=None,runtime_roots:list[str]|None=None,model:dict|None=None,finalization:dict|None=None,replaces_run_id:str='',mandates:list[str]|None=None)->dict:
     """Cadre un RUN. Piloté : autorité orchestrateur requise, choix résolus avant codage."""
-    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization})
+    return client().command('run.begin',{'project_id':project_id,'run_id':run_id,'session_id':session_id,'change':change,'mode':mode,'paths':paths,'criteria':criteria,'decisions':decisions,'decisions_resolved':True,'resources':resources or [],'orchestrator_id':orchestrator_id,'coder_id':coder_id,'external_profiles':external_profiles or [],'runtime_roots':runtime_roots or [],'model':model,'finalization':finalization,**({'replaces_run_id':replaces_run_id} if replaces_run_id else {}),**({'mandates':mandates} if mandates is not None else {})})
+@public_tool()
+def run_cancel_replaced(project_id:str,run_id:str,replacement_run_id:str,request_id:str)->dict:
+    """Annule sur preuves un RUN direct jamais exécuté, relié au RUN livré."""
+    return client().command('run.cancel_replaced',locals())
+
+
+def run_target(project_id,run_id):
+    return {key:value for key,value in (('project_id',project_id),('run_id',run_id)) if value}
+
+
+@public_tool()
+def session_delivery_start(version:str,project_id:str='',run_id:str='')->dict:
+    """CICD livre les fichiers préparés dans l’index du change courant."""
+    return client().command('session.delivery.start',{'version':version,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_delivery_full_start(version:str,project_id:str='',run_id:str='')->dict:
+    """CICDF livre tous les fichiers admissibles modifiés ou indexés du projet, sur mandat explicite."""
+    return client().command('session.delivery.full_start',{'version':version,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_delivery_select_version(project_id:str,run_id:str,version:str)->dict:
+    """Déclare la version choisie : orchestrateur en piloté, codeur en direct ; sans question systématique au développeur."""
+    return client().command('session.delivery.select_version',{'project_id':project_id,'run_id':run_id,'version':version})
+
+@public_tool()
+def version_skill_acknowledge(project_id:str,run_id:str,revision:str,confirmed:bool)->dict:
+    """Confirme à CAB la lecture et la compréhension du skill Version."""
+    return client().command('version.skill_acknowledge',locals())
+
+@public_tool()
+def version_propose(project_id:str,run_id:str,position:int,reason:str,explicit_version:str='')->dict:
+    """Le codeur propose une composante, ou la version explicite du développeur."""
+    return client().command('version.propose',locals())
+
+@public_tool()
+def session_delivery_status(version:str,project_id:str='',run_id:str='')->dict:
+    """Lit le reçu de cette version sans relancer ses effets."""
+    return client().command('session.delivery.status',{'version':version,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_reservations(project_id:str='', run_id:str='')->dict:
+    """Lit les réservations actives et les avis d’échéance et de restitution de la session."""
+    return client().command('session.reservations', run_target(project_id, run_id))
+
+
+@public_tool()
+def session_reservations_renew(reservation_ids:list[int], request_id:str, project_id:str='', run_id:str='')->dict:
+    """Renouvelle les réservations encore utilisées à 240 secondes, avant leur échéance."""
+    return client().command('session.reservations.renew', {
+        'reservation_ids':reservation_ids, 'request_id':request_id, **run_target(project_id, run_id),
+    })
+
+
+@public_tool()
+def session_git_context(project_id:str='',run_id:str='')->dict:
+    """Identifie le RUN attaché à cette connexion MCP."""
+    return client().command('session.git.context',run_target(project_id,run_id))
+
+@public_tool()
+def session_git_release(request_id:str,project_id:str='',run_id:str='',paths:list[str]|None=None)->dict:
+    """Libère les fichiers validés et indexés, tous ou seulement les chemins précisés."""
+    data={'request_id':request_id,**run_target(project_id,run_id)}
+    if paths is not None:data['paths']=paths
+    return client().command('session.git.release',data)
+
+@public_tool()
+def session_git_reserve(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
+    """Réserve avant modification les fichiers du RUN lié à cette connexion."""
+    return client().command('session.git.reserve',{'request_id':request_id,'paths':paths,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_git_stage(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
+    """Indexe les fichiers réservés d'une étape validée dans l'index de session."""
+    return client().command('session.git.stage',{'request_id':request_id,'paths':paths,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_git_status(request_id:str,project_id:str='',run_id:str='')->dict:
+    """Lit le reçu de la même indexation sans la rejouer."""
+    return client().command('session.git.status',{'request_id':request_id,**run_target(project_id,run_id)})
+
+@public_tool()
+def session_git_inspect(include_paths:bool=False,project_id:str='',run_id:str='')->dict:
+    """Lit l’état compact Git et les réservations du RUN lié à cette connexion."""
+    return client().command('session.git.inspect',{'include_paths':include_paths,**run_target(project_id,run_id)})
+
 @public_tool()
 def finalization_status(project_id:str,run_id:str)->dict:
     """Consulte le contrat, les preuves et les attentes ; aucun reçu inventé."""
@@ -97,10 +203,38 @@ def run_status(project_id:str,run_id:str)->dict:
     """Lit le mandat, la revue et les reçus ; aucune reprise implicite."""
     return client().get('run',project_id=project_id,run_id=run_id)
 @public_tool()
-def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK')->dict:
-    """Déclare la position 1–11 ; phase : 0 à 32 caractères A-Z, 0-9, _ ou - ; ne valide aucune étape."""
+def run_progress(project_id:str,run_id:str,stage:int,phase:str='WORK',description:str|None=None)->dict:
+    """Déclare la position du cycle. CAB calcule les durées et conserve la description facultative."""
     try:return client().command('run.progress',locals())
     except ClientError as error:raise ToolError(str(error)) from error
+@public_tool()
+def run_stage_begin(project_id:str,run_id:str,request_id:str,stage:int,text:str,version:str|None=None,scope:str|None=None,restart:bool=False)->dict:
+    """Annonce un début ou un retour d’étape et lance les tâches CAB prévues."""
+    return client().command('run.stage.begin',{key:value for key,value in locals().items() if value is not None})
+@public_tool()
+def run_stage_validate(project_id:str,run_id:str,request_id:str,attempt:int,text:str)->dict:
+    """Valide la part agent si les retours CAB de ce passage sont tous réussis."""
+    return client().command('run.stage.validate',locals())
+@public_tool()
+def run_stage_status(project_id:str,run_id:str)->dict:
+    """Lit la tentative active et les retours CAB sans relancer leurs effets."""
+    return client().command('run.stage.status',locals())
+@public_tool()
+def run_stage_action(project_id:str,run_id:str,request_id:str,attempt:int,action:str,text:str='',mandates:list[str]|None=None,blocker_path:str|None=None)->dict:
+    """Enregistre une validation réellement effectuée dans le passage d’étape courant."""
+    return client().command('run.stage.action',{key:value for key,value in locals().items() if value is not None})
+@public_tool()
+def run_mandates_add(project_id:str,run_id:str,request_id:str,mandates:list[str],authorization:str)->dict:
+    """Ajoute au RUN actif les mandats explicitement autorisés par le développeur."""
+    return client().command('run.mandates.add',locals())
+@public_tool()
+def run_stage_action_catalogue(project_id:str,run_id:str)->dict:
+    """Lit les validations agent possibles pour l’étape et les mandats déclarés à l’Initialisation."""
+    return client().command('run.stage.action_catalogue',locals())
+@public_tool()
+def run_stage_substep(project_id:str,run_id:str,request_id:str,key:str,state:str,description:str)->dict:
+    """Enregistre une sous-étape réelle du RUN avec un identifiant par tentative."""
+    return client().command('run.stage_substep',locals())
 @public_tool()
 def run_reevaluate(project_id:str,run_id:str)->dict:
     """Réévalue et clôture seulement sur preuves ; aucun rejeu ni levée de protection."""
@@ -119,6 +253,11 @@ def run_inspect_historical(project_id:str,run_id:str,archive_path:str)->dict:
     """Inspecte les preuves locales pour une régularisation historique explicite."""
     return client().command('run.inspect_historical',locals())
 @public_tool()
+def run_block(project_id:str,run_id:str,receipt_id:str,dependencies:list[str])->dict:
+    """Arrêter sur des dépendances non satisfaites et produire BLOCKERS.md sans archiver le change."""
+    return client().command('run.close',{**locals(),'branch':'BLOQUÉ'})
+
+@public_tool()
 def run_close_historical(project_id:str,run_id:str,archive_path:str,evidence_digest:str,receipt_id:str,authorization:str,reason:str,developer_authorized:bool)->dict:
     """Clôture historique autorisée ; aucun test rejoué ni acceptation reconstruite."""
     return client().command('run.close_historical',locals())
@@ -130,7 +269,7 @@ async def wait_for_handoff(project_id:str,run_id:str,after:int=0,timeout_ms:int=
     while asyncio.get_running_loop().time()<deadline:
         try:
             result=await asyncio.to_thread(c.get,'handoff',project_id=project_id,run_id=run_id,after=after)
-            if result['events'] or result['state'] in ('REVIEW_PENDING','CLOSED','BLOCKED'):return result
+            if result['events'] or result['state'] in ('REVIEW_PENDING','CLOSED','BLOCKED','CANCELLED_BEFORE_START'):return result
         except ClientError as error:
             if str(error)!='cab-unavailable':raise
         await asyncio.sleep(1)
@@ -190,8 +329,8 @@ def bank_reserve(project_id:str,run_id:str,resource:str)->dict:
     """Réserve une ressource déjà cadrée ; ne crée pas d’autorisation métier."""
     return client().command('bank.reserve',{'project_id':project_id,'run_id':run_id,'resource':resource})
 @public_tool()
-def external_release(project_id:str,run_id:str,lease_id:int,cleanup_request_id:str,verification_request_id:str)->dict:
-    """Restitue un banc après nettoyage et vérification corrélés, sans effet incertain."""
+def external_release(project_id:str,run_id:str,lease_id:int,cleanup_request_id:str='',verification_request_id:str='')->dict:
+    """Restitue un banc inutilisé ou un banc avec preuves de nettoyage et de vérification corrélées."""
     return client().command('bank.release',locals())
 @public_tool()
 def external_attach(project_id:str,run_id:str,profile:dict)->dict:
@@ -201,6 +340,11 @@ def external_attach(project_id:str,run_id:str,profile:dict)->dict:
 def session_coordinate(project_id:str,run_id:str,action:str,args:dict)->dict:
     """Abonnements, avis, boîte et acquittements par le codeur, sans relais courant du parent."""
     return client().command('coordinate',locals())
+@public_tool()
+def run_authorize_paths(project_id:str,run_id:str,request_id:str,paths:list[str],authorization:str)->dict:
+    """En direct, enregistre l’autorisation du développeur pour des fichiers exacts du RUN rattaché."""
+    return client().command('exception.authorize_direct_paths',locals())
+
 @public_tool()
 def autonomy_exception(project_id:str,run_id:str,request_id:str,category:str,summary:str)->dict:
     """Soumet seulement hors change, hors cadrage, outil absent ou consultation web."""
@@ -218,6 +362,29 @@ def autonomy_review(project_id:str,run_id:str,submission_digest:str,decision:str
 def incident_report(project_id:str,incident_id:str,category:str,summary:str,evidence:list[dict])->dict:
     """Déclare un incident avec références etSHA256, sans secret ni prompt."""
     return client().command('incident.report',locals())
+
+@public_tool()
+def session_effect(project_id:str,run_id:str,action:str,args:dict)->dict:
+    """Commit/build/publication demandés ou reprise ; inspect puis request, même reçu, sans rejeu."""
+    if action not in ('authorize','inspect','request','status','open_recovery','diagnose','remediate'):raise ValueError('session-effect-action-invalid')
+    if set(args)&{'project_id','run_id'}:raise ValueError('session-effect-identity-invalid')
+    result=client().command('session.effect.'+action,{'project_id':project_id,'run_id':run_id,**args})
+    if action=='request' and result.get('state')=='INTENT':
+        import time
+        deadline=time.monotonic()+45
+        while time.monotonic()<deadline:
+            time.sleep(.5)
+            result=client().command('session.effect.status',{'project_id':project_id,'run_id':run_id,'request_id':args['request_id']})
+            if result.get('state')!='INTENT':break
+    if action in ('request','status') and isinstance(result.get('delivery'),dict):
+        item=result['delivery']
+        return {'state':result['state'],'request_id':result['request_id'],'delivery_id':result.get('delivery_id'),'delivery_state':item.get('state'),'commit':item.get('commit'),'version':item.get('version'),'failed_steps':[s['key'] for s in item.get('steps',[]) if s['state'] in ('FAILED','UNKNOWN')]}
+    return result
+
+@public_tool()
+def session_version_prepare(project_id:str,run_id:str,request_id:str,version:str)->dict:
+    """Aligne les versions publiques CAB réservées avant qualification et commit."""
+    return client().command('session.version.prepare',locals())
 @public_tool()
 def statistics(project_id:str,run_id:str,after:int=0)->dict:
     """Mesures bornées du RUN ; totaux historiques de session exclus, manques explicites."""

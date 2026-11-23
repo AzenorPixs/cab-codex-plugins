@@ -1,6 +1,7 @@
 """Validation pure du contrat ; aucune inférence à partir du texte des critères."""
 import re
 from copy import deepcopy
+from .cabu_recovery_policy import describe as recovery_policy
 
 KINDS={'verification','publication','installation','availability','service_end'}
 NATURES={'development','delivery','activation','service'}
@@ -14,7 +15,7 @@ def identifier(value):return isinstance(value,str) and re.fullmatch(r'[A-Za-z0-9
 
 def describe():
     """Contrat public consultable sans RUN, effet ou heuristique métier."""
-    return {'nature':sorted(NATURES),'policy_fields':['nature','checks','requirements','review_required','update_request_id','target_version'],'check_fields':['id','argv','criteria','executor','adapter_id'],'requirement_fields':['id','kind','producer','criteria','artifact_group'],'requirement_kinds':sorted(KINDS),'criteria':'exact-run-criteria-full-coverage','check_purpose':'verification','native_publication':'authorized-collector-requirement','local_execution':'isolated-no-host-privileges','preflight_correction':'before-operation-proof-source-change-review-freeze-import'}
+    return {'cabu_recovery':recovery_policy(),'nature':sorted(NATURES),'policy_fields':['nature','checks','requirements','review_required','update_request_id','target_version'],'check_fields':['id','argv','criteria','executor','adapter_id'],'requirement_fields':['id','kind','producer','criteria','artifact_group'],'requirement_kinds':sorted(KINDS),'criteria':'exact-run-criteria-full-coverage','check_purpose':'verification','version_selection':{'direct':'coding-agent','piloted':'orchestrator','ask_developer_when_missing':False,'project_versioning_required':True},'work_without_delivery':{'closure_authorization':'finalization.host_completion','prequalification_reframe':'run.reframe_prequalification','completion':'validate-stage-release','release_tool':'session_git_release','expected_active_reservations':0,'index_state':'RELEASED'},'ccab_authorization':{'source':'explicit-ccab-invocation','workflow':['SCM','CICD'],'additional_confirmation_required':False,'technical_guards_unchanged':True},'preexisting_files':{'inspect':'session.git.inspect_preexisting','authorize':'session.git.authorize_preexisting','authority':'authenticated-administrator','baseline':'preserved','clean_history':'head-bytes-and-mode'},'native_publication':'authorized-collector-requirement','local_execution':'isolated-no-host-privileges','preflight_correction':'before-operation-proof-source-change-review-freeze-import','contested_checks':{'command':'finalization.contest_check','authority':'authenticated-administrator','original_receipt':'preserved','new_execution_required':True,'automatic_invalidation':False},'native_binding':{'effective_field':'connector_bound','kernel_recovery':'automatic-verified-pair','unknown_versions':'preserved','heartbeat_adoption':'automatic'}}
 
 def replace_check_argv(policy: dict,check_id: str,argv: list[str]) -> dict:
     """Le cadrage reste fixe : seule la commande du contrôle est révisable."""
@@ -54,7 +55,14 @@ def next_actions(missing: list[str],policy: dict) -> list[dict]:
         actions.append(action)
     return actions
 
-def validate(policy: dict,criteria: list[str],mode: str) -> dict:
+def require_change_policy(policy,mode):
+    """Les preuves d’une mise à jour d’hôte ne cadrent pas un nouveau change."""
+    if mode in ('direct','piloted'):
+        require(not policy.get('update_request_id') and not any(rule.get('producer')=='cab-update'
+                for rule in policy.get('requirements',[])),'host-update-outside-change-cycle')
+
+
+def validate(policy: dict,criteria: list[str],mode: str, *, legacy=True) -> dict:
     require(isinstance(policy,dict) and not set(policy)-{'nature','checks','requirements','review_required','update_request_id','target_version'},'finalization-fields-invalid')
     nature=policy.get('nature','development');require(nature in NATURES,'finalization-nature-invalid')
     checks=policy.get('checks',[]);requirements=policy.get('requirements',[])
@@ -77,9 +85,10 @@ def validate(policy: dict,criteria: list[str],mode: str) -> dict:
                 require(item['producer']!='cab-update' or item['kind'] in ('installation','availability'),'finalization-builtin-kind-invalid')
                 clean_requirements.append(dict(item))
     require(covered==set(criteria),'finalization-criteria-not-covered')
+    if not legacy:require_change_policy(policy,mode)
     review=policy.get('review_required',mode=='piloted');require(type(review) is bool and (mode!='piloted' or review),'finalization-reserved-review-required')
     if any(r['producer']=='cab-update' for r in clean_requirements):
-        require(identifier(policy.get('update_request_id')) and isinstance(policy.get('target_version'),str) and re.fullmatch(r'\d+\.\d+\.\d+',policy['target_version']),'finalization-update-binding-required')
+        require(identifier(policy.get('update_request_id')) and isinstance(policy.get('target_version'),str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',policy['target_version']),'finalization-update-binding-required')
     if nature=='service':require(any(r['kind']=='service_end' for r in clean_requirements),'finalization-service-proof-required')
     if nature=='activation':require({'installation','availability'}<={r['kind'] for r in clean_requirements},'finalization-activation-proofs-required')
     if nature=='delivery':require(any(r['kind']=='publication' for r in clean_requirements),'finalization-publication-proof-required')

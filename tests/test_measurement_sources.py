@@ -20,9 +20,10 @@ class MeasurementSourcesTests(unittest.TestCase):
             run.mandate={'native_source':inspect(os.getuid(),'SID',folder,str(path))}
             def append(value):
                 with path.open('a') as f:f.write(json.dumps({'timestamp':datetime.now(timezone.utc).isoformat(),'type':'event_msg','payload':{'type':'token_count','info':{'total_token_usage':{'input_tokens':value,'total_tokens':value}}}})+'\n')
-            append(100);start=codex_snapshot(run);append(135);end=codex_snapshot(run)
-            values,coverage=difference(start,end);self.assertEqual(values['tokens_total'],'35');self.assertEqual(coverage['state'],'bounded')
-            append(4);self.assertEqual(difference(end,codex_snapshot(run))[1]['reason'],'native-counter-reset')
+            with patch('cab_platform.core.native_access.root_for',return_value=folder):
+                append(100);start=codex_snapshot(run);append(135);end=codex_snapshot(run)
+                values,coverage=difference(start,end);self.assertEqual(values['tokens_total'],'35');self.assertEqual(coverage['state'],'bounded')
+                append(4);self.assertEqual(difference(end,codex_snapshot(run))[1]['reason'],'native-counter-reset')
     def test_missing_fields_and_changed_source_are_not_zero(self):
         start={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'100','tokens_input':'80'},'offset':10,'native_at':'2026-11-13T00:00:00Z','observed_at':'2026-11-13T00:00:00Z'}
         end={'status':'ok','source':{'inode':1},'counters':{'tokens_total':'120'},'offset':20,'native_at':'2026-11-13T00:01:00Z','observed_at':'2026-11-13T00:02:00Z'}

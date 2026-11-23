@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 import time
@@ -32,6 +33,8 @@ class Bridge:
         self.lock=asyncio.Lock();self.output_lock=asyncio.Lock();self.bootstrap=None;self.stopped=False
         self.client_factory=Client;self.client=self.client_factory()
         self.uncertain=False;self.client_closed=False;self.worker_identity=None;self.stop_reports=[];self.write_uncertain=set()
+        self.startup_nonce=None
+        self.catalog_seen=False
 
     async def output(self,message):
         if self.client_closed:return
@@ -49,12 +52,35 @@ class Bridge:
             raise ConnectionError('mcp-worker-write-outcome-unconfirmed') from error
 
     async def spawn(self):
-        self.child=await asyncio.create_subprocess_exec('/usr/bin/cab','mcp-worker','--agent',self.agent,stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=None,limit=MAX_LINE+1)
-        self.reader_task=asyncio.create_task(self.read_worker(self.child))
+        self.startup_nonce=secrets.token_hex(16)
+        self.catalog_seen=False
+        self.version=''
+        self.child=await asyncio.create_subprocess_exec('/usr/bin/cab','mcp-worker','--agent',self.agent,
+            env={**os.environ,'CAB_MCP_WORKER_STARTUP':self.startup_nonce},
+            stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=None,limit=MAX_LINE+1)
         self.worker_identity=identity(self.child.pid)
+        self.reader_task=asyncio.create_task(self.read_worker(self.child))
+
+    def observe_worker_startup(self,message):
+        if 'cab_worker_startup' not in message:
+            return False
+        version=message.get('version')
+        if (not self.startup_nonce or message['cab_worker_startup']!=self.startup_nonce
+                or not isinstance(version,str) or not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',version)):
+            raise ValueError('mcp-worker-startup-invalid')
+        self.startup_nonce=None
+        self.version=version
+        if self.catalog_seen:
+            self.catalog=version
+        return True
+
+    def acknowledge_client(self,message):
+        if message.get('method')=='notifications/initialized':self.initialized=True
+        elif self.initial is not None and self.version and 'id' in message and message.get('method') in ('tools/list','tools/call'):
+            self.initialized=True
 
     def quiet(self):
-        return not self.pending and not self.server_pending and not ((self.uncertain or self.write_uncertain) and self.child and identity(self.child.pid))
+        return not self.pending and not self.server_pending and not ((self.uncertain or self.write_uncertain) and self.child and self.child.returncode is None and identity(self.child.pid))
 
     async def stop_worker(self,process):
         import importlib
@@ -90,6 +116,7 @@ class Bridge:
                 if len(line)>MAX_LINE:raise ValueError('mcp-worker-frame-too-large')
                 message=json.loads(line)
                 if process is not self.child:return
+                if self.observe_worker_startup(message):continue
                 if self.bootstrap and message.get('id')==self.bootstrap[0]:
                     future=self.bootstrap[1];self.bootstrap=None
                     if not future.done():future.set_result(message)
@@ -102,9 +129,14 @@ class Bridge:
                     if original:
                         method=original.get('method')
                         if method=='initialize' and 'result' in message:
-                            self.version=message['result'].get('serverInfo',{}).get('version','')
+                            negotiated=message['result'].get('serverInfo',{}).get('version')
+                            if negotiated and self.version and negotiated!=self.version:
+                                raise ValueError('mcp-worker-version-divergent')
+                            self.version=negotiated or self.version
+                            if self.catalog_seen:self.catalog=self.version
                             message['result'].setdefault('capabilities',{}).setdefault('tools',{})['listChanged']=True
-                        if method=='tools/list' and 'result' in message and not message['result'].get('nextCursor'):
+                        if method=='tools/list' and 'result' in message and isinstance(message['result'].get('tools'),list) and not message['result'].get('nextCursor'):
+                            self.catalog_seen=True
                             self.catalog=self.version
                 await self.output(message)
         except (OSError,ValueError,asyncio.LimitOverrunError) as error:
@@ -125,7 +157,7 @@ class Bridge:
         async with self.lock:
             if not self.quiet() or not self.initialized:return
             self.state='RELOADING';old=self.child;task=self.reader_task
-            if old:
+            if old and old.returncode is None:
                 report=await self.stop_worker(old)
                 if report['state']!='STOPPED':
                     self.state='FAILED';self.error=report['reason'];return
@@ -158,14 +190,33 @@ class Bridge:
             self.error=code
 
     async def watch(self):
+        next_recovery=0
         while not self.stopped:
             try:
                 target=await asyncio.to_thread(installed_version)
+                if self.initialized and self.quiet() and time.monotonic()>=next_recovery:
+                    next_recovery=time.monotonic()+5
+                    try:
+                        reply=await asyncio.to_thread(self.client.command,'connector.recovery_claim',
+                                                      {'connector_id':self.connector_id})
+                    except ClientError:
+                        reply={}
+                    if reply.get('reload') is True:
+                        await self.reload()
+                        await self.heartbeat()
+                        await asyncio.sleep(1)
+                        continue
                 if self.initialized and self.quiet() and (self.state=='FAILED' or self.child is None or self.child.returncode is not None or self.version!=target):
                     try:health=await asyncio.to_thread(self.client.get,'health')
                     except ClientError:health={}
                     if health.get('version')==target and health.get('state') in ('READY','UNINITIALIZED'):
                         try:
+                            # Un fils dont l’arrêt est confirmé n'exige aucun arrêt ni API frontend.
+                            if self.child is None or self.child.returncode is not None:
+                                await self.reload()
+                                await self.heartbeat()
+                                await asyncio.sleep(1)
+                                continue
                             policy=await asyncio.to_thread(self.client.get,'connectors/policy',connector_id=self.connector_id,version=target)
                             native=policy.get('native_control',{'mode':'fallback'})
                             if native['mode']=='request-native':
@@ -208,7 +259,7 @@ class Bridge:
                 message=json.loads(line)
                 if not isinstance(message,dict):raise ValueError('mcp-client-frame-invalid')
                 if message.get('method')=='initialize':self.initial=copy.deepcopy(message.get('params',{}))
-                if message.get('method')=='notifications/initialized':self.initialized=True
+                self.acknowledge_client(message)
                 if message.get('method')=='notifications/cancelled':
                     task=self.control.get(key(message.get('params',{}).get('requestId')))
                     if task:task.cancel();continue

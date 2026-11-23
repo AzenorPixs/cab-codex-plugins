@@ -30,7 +30,10 @@ def transition(actor,data,action):
         prior=MeasurementAction.objects.filter(run=run,request_id=request_id).first()
         if prior:
             commands.require(prior.digest==fingerprint,'statistics-request-conflict');return prior.result
-        if action=='begin':commands.working(run);commands.require(not run.mandate.get('native_frozen_at'),'statistics-source-frozen')
+        if action=='begin':
+            commands.working(run);commands.require(not run.mandate.get('native_frozen_at'),'statistics-source-frozen')
+            from cab_platform.publication_boundary import frozen
+            commands.require(not frozen(run),'statistics-publication-boundary-frozen')
         active=MeasurementPeriod.objects.select_for_update().select_related('run__actor','run__project','change','session').filter(session=session,ended__isnull=True).first()
         if action=='end' and active and active.run_id!=run.pk:active=None
         if action=='begin' or active:
@@ -98,7 +101,9 @@ def change_statistics(actor,data):
             contribution['metrics'][key]={'state':value['state'],'value':value['value'],'reason':value['reason'],'evidence':[{'line':1,'note':'Périodes CAB : bornes et empreintes de l’export.'}]}
     if result['change_coverage_complete']:
         contribution['bounds']={'start':str(Decimal(str(result['started'].timestamp()))),'end':str(Decimal(str(result['ended'].timestamp())))}
-        for key,value in [('duration',str(Decimal(str((result['ended']-result['started']).total_seconds())))),('net_duration',result['active_seconds'])]:
+        modern=all(r.configuration.get('cycle_profile')=='publication-12-v1' for r in runs)
+        duration=result['active_seconds'] if modern else str(Decimal(str((result['ended']-result['started']).total_seconds())))
+        for key,value in [('duration',duration),('net_duration',result['active_seconds'])]:
             contribution['metrics'][key]={'state':'known','value':value,'reason':None,'evidence':[{'line':1,'note':'Bornes serveur et union des périodes fermées.'}]}
     result['sgs_evidence']={'schema_version':1,'session_id':'cab-change-'+(change.pk if change else commands.digest(data))[:64],'scope':'cumulative','contribution':contribution,'notes':{'1':['Agrégat de périodes CAB bornées, plusieurs RUN et SID possibles ; aucun total historique de session repris.'],'3':['Les mesures natives portent les incréments observés entre instantanés ; pas de ventilation à l’intérieur d’un événement natif ou des événements tardifs.']}}
     if not result['change_coverage_complete']:

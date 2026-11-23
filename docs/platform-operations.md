@@ -194,14 +194,36 @@ de mise à jour automatique ou une preuve de compatibilité d’un fork.
 
 ## Cycle et tâches des changes
 
-Le propriétaire déclare l’étape1–11 et sa phase via `cab call run.progress`
-(project_id,run_id,stage,phase) ou run_progress. Les positions peuvent reculer.
+Le propriétaire déclare l’étape et sa phase via `cab call run.progress`
+ou `run_progress`. Le cycle courant compte douze étapes et insère la lecture
+de Version après Spécification. Les anciens RUN gardent leur cycle de onze
+étapes. Les positions peuvent reculer.
 Le tableau temps réel porte étape et tâches réalisées ; le RUN ouvre
 /projects/<project_id>/runs/<run_id>. Les inconnues restent explicites.
 Les tâches proviennent du tasks.md unique actif ou archivé ; change_tasks
 mémorise les libellés, cases, ordre, lignes et empreinte, y compris les anciennes
 lignes retirées sous état inactif. Une source indisponible conserve le dernier
 instantané et le signale. Les cases ne valident ni le RUN ni le gate terminal.
+
+CAB ouvre et ferme les passages d’étape observés avec son horloge serveur.
+Le change conserve ses passages lors d’une reprise sous un autre RUN.
+Overview donne les dates, le détail des passages et la somme des durées
+mesurées. Les durées de passages simultanés s’additionnent.
+
+## Politique de version d’un projet
+
+`PROJECT_VERSION_POLICY` fixe de une à sept composantes. CAB complète la
+variable absente à partir de la version courante ou choisit 3 en l’absence
+de version. Le fichier `project.env` fait autorité. Le champ d’Overview ouvre
+un aperçu de la version et des renommages de tags avant la confirmation.
+Une migration change les références du dépôt local et conserve leurs objets,
+y compris les tags annotés. Un aperçu périmé ou une collision bloque
+l’application. Une interruption se traite sur le même identifiant d’aperçu.
+
+Une version de politique supérieure est toujours ordonnée après une version
+de politique inférieure. Par exemple, `0.3.8.0` vient après `4.0.0`. Une
+réduction locale laisse les tags distants en place. Une livraison ultérieure
+reste bloquée si un tag distant est classé au-dessus du numéro proposé.
 
 La migration normalise les tables projects, runs, sessions, changes et
 change_tasks sans modifier SID, générations, mandats ou reçus. Le service est
@@ -557,3 +579,242 @@ Le reçu UNKNOWN et son hash restent intacts. Aucun résultat de test n'est vali
 aucune commande n'est rejouée ; seuls les baux de l'opération prouvée arrêtée sont
 libérés. operation/status expose autonomous_recovery avec le motif si le cas
 reste protégé. Les motifs identiques ne produisent pas un événement à chaque tour.
+# Contestation d'une preuve de contrôle
+
+Une publication statistique interrompue peut être réconciliée automatiquement
+quand l'écrivain est arrêté, l'exécution propriétaire terminée et tous les fichiers et entrées
+d'index concernés correspondent encore exactement à l'état avant. Le verrou
+de projet et le verrou transactionnel Git protègent le constat jusqu'au commit.
+CAB conserve le reçu original et son digest dans l'événement
+`statistics-stopped-before-publication`, classe séparément `FAILED_NO_CHANGE`,
+puis laisse la finalisation normale poursuivre. Ce constat ne prouve pas une
+réussite passée ni l'absence universelle de tout effet transitoire. Une divergence
+ou un écrivain vivant conserve UNKNOWN ; le LLM ne force aucun statut ni verrou.
+Un propriétaire local de même PID/start hors ACTIVE peut être réconcilié sans
+redémarrage ; le constat distingue processus vivant et exécution terminée.
+Un propriétaire extérieur vivant ou un job encore ACTIVE reste protégé.
+
+Après une réponse initialize réussie observée, le premier tools/list ou tools/call
+du client acquitte aussi la négociation pour le relais, même si la notification
+initialized manque. Un fils confirmé arrêté peut être remplacé sans arrêt ni
+API du frontend, avec sa seule négociation et sans rejeu métier. Un moteur vivant
+conserve le contrôle natif prioritaire et ses protections. Un ancien relais déjà
+chargé en mémoire ne reçoit pas ce code par simple remplacement du fichier ;
+sa première reprise réelle reste à vérifier séparément.
+
+L'administrateur authentifié utilise `finalization.contest_check` pour un contrôle
+courant réussi qui ne mesure pas le critère. Le RUN, le check, l'opération et la
+preuve sont désignés explicitement avec les empreintes de politique, de preuve
+et de reçu attendues. La demande fournit un request_id stable, un argv corrigé,
+une justification et la référence de l'autorisation développeur. CAB conserve
+le reçu original et une exclusion durable, augmente la révision du check et
+exige une nouvelle preuve. Il ne lance aucune commande et ne modifie pas les
+critères, producteurs, exigences, autorités de revue ni protections existantes.
+Les preuves contestées restent consultables mais ne sont plus sélectionnables.
+Un retour à l'ancien argv exige encore une nouvelle exécution.
+
+Pour diagnostiquer un rattachement, `native.bind` expose `connector_bound` en
+complément du journal `bound`. Si le worker ne peut être reconnu, CAB conserve
+un événement `native-connector-binding-unavailable` contenant uniquement les
+identités publiques du pair et les classifications des processus. Cette trace
+ne lit ni mémoire, ni secrets, ni contenu des pipes.
+
+
+## Reprise nécessaire à CABU
+
+Une demande CABU autorisée couvre aussi la reprise nécessaire de son instance
+observée, pour le même demandeur, UID, request_id et version. Ne pas redemander
+une confirmation pour cette seule reprise. Lire recovery_authorization dans
+le même reçu ; AUTHORIZED est une autorité bornée, pas une preuve de reconnexion.
+La préférence native reste prioritaire. Une reprise administrative contrôlée
+du frontend n'est admise qu'en dernier recours RELOAD_REQUIRED, avec identité
+kernel stable, frontière sûre de tous les acteurs du compte, PIDFD, reçu durable,
+supervision indépendante et sortie prouvée avant relance. Aucun arrêt arbitraire
+ni injection dans un canal privé. L'absence de mécanisme qualifié est un blocage
+technique explicite, pas une raison de redemander l'autorisation déjà donnée.
+
+Le superviseur relance l'instance graphique identifiée avec `runuser` et
+le gestionnaire systemd du compte d'origine. Après un SIGTERM sans sortie
+au bout de 15 secondes, CAB peut envoyer SIGKILL au même PIDFD. Le reçu
+`frontend_recovery` consigne les signaux et la nouvelle instance. CABU reste
+en attente jusqu'à ce que les relais rattachés à cette instance observent le
+moteur et le catalogue de la version installée.
+Une demande native portant sur une version déjà installée via CABU local
+réutilise le reçu de cette installation si dpkg et la santé du service
+confirment encore la même version. La réconciliation des relais garde son
+propre reçu et n’exige pas une seconde installation.
+
+Le propriétaire ou l'administrateur peut révoquer cette autorité par
+`native.control.configure` avec `cabu_recovery_authorized=false` ; seule cette
+préférence change, sans appel fournisseur ni nouvelle génération. Les reprises
+en attente sont revérifiées sous verrou avant dispatch. Un effet UNKNOWN, une
+instance divergente ou une révocation bloque sans rejeu. Un ancien reçu sans
+observation kernel n'acquiert aucune autorité rétroactive par simple lecture.
+
+
+## Mandat CCAB et fichiers préexistants autorisés
+
+L’invocation explicite de CCAB porte le mandat développeur des correctifs CAB
+nécessaires sous SCM avec CICD : spécifications, réalisation, qualification,
+intégrations distribuées et activation requise. Ne pas redemander ce mandat
+pour chaque incident ou écriture dans ce périmètre. Une restriction explicite,
+une permission technique ou une opération hors du périmètre reste applicable.
+Le projet déclarant conserve son mandat métier et l’autorisation de ses fichiers.
+
+Un fichier préexistant explicitement autorisé peut être pris en charge sans
+remplacer sa baseline ni utiliser l’adoption legacy :
+
+1. L’administrateur authentifié appelle `session.git.inspect_preexisting` avec
+   `project_id`, `run_id` et les `paths` littéraux déjà cadrés. L’inspection
+   retourne `expected_state` : contexte et empreintes, aucun contenu de fichier.
+2. Il appelle `session.git.authorize_preexisting` avec ces mêmes identités,
+   `paths`, `expected_state`, un `request_id` stable et `authorization` contenant
+   la référence de l’autorisation développeur applicable. Le reçu conserve
+   `grant_id` et `observation_digest`. Une répétition identique lit le même reçu ;
+   ne pas changer la requête pour contourner un résultat incertain.
+3. Le codeur reprend `session_git_reserve` depuis sa connexion native réelle.
+   CAB revérifie fichier, HEAD, cadrage, baseline et index ciblé, puis journalise
+   l’autorisation utilisée. Il suit ensuite les validations et la livraison
+   normales ; aucune preuve antérieure n’est reconstruite.
+
+L’interface locale commune est `sudo cab call --admin <commande>` avec le JSON
+sur stdin ; les credentials restent traités par le Client local. Cette
+autorisation n’accorde pas le rôle administrateur au codeur. L’inspection et
+l’admission ne changent aucun fichier ou entrée d’index et ne font aucun commit.
+Le manifeste est limité à128fichiers et64Mio ; liens, renommages, fichiers
+ignorés/protégés, contenu déjà modifié dans l’index partagé, réservations
+concurrentes, gel/import/revue/clôture, baux et effets indécis sont refusés.
+Une modification du chemin ou du contexte après autorisation empêche sa prise
+en charge ; un nouvel état requiert une nouvelle inspection et un autre reçu.
+
+Un statut dirty seulement historique se traite automatiquement si le chemin
+actuel correspond aux octets du blob de HEAD et au mode exécutable lorsque
+Git le suit. Depuis3.2.23, core.filemode=false conserve les permissions du disque
+sans bloquer cette réservation ; les octets restent comparés intégralement et
+une configuration invalide ou instable refuse la prise en charge. Le constat est tracé
+dans `clean_initial_paths` ; un statut clean masquant d’autres octets ne suffit
+pas. La baseline initiale reste inchangée dans les deux parcours.
+
+## Sessions canoniques sans dossier de change
+
+Un RUN de livraison cadré sur un fichier canonique `openspec/specs/<capacité>/spec.md`
+peut être finalisé sans créer un faux dossier de change, tâches ou archive. CAB
+publie son maître local dans `statistics/runs/<empreinte-identité>/STATISTICS.md`,
+où l’empreinte couvre projet, RUN, SID, génération et identifiant logique du change.
+Un ancien ChangeSource disparu interdit ce repli.
+
+Le rapport comporte les six sections usuelles et les seules périodes/preuves du
+RUN. Les mesures absentes ou les couvertures tronquées restent N/A. PostgreSQL
+projette le contenu et ses empreintes dans la configuration interne du RUN ;
+les révisions sont auditées par événements. Les blocs manuels restent préservés.
+Le global concatène chaque maître une fois, sans addition de compteurs partagés.
+Si un vrai maître de change devient disponible, il prend sa place dans le global
+sans supprimer le rapport canonique existant.
+
+CAB publie et indexe atomiquement ce rapport, puis le global. Son moteur terminal
+accepte seulement le chemin dérivé du RUN, garde les contrôles des réservations
+et des destinations, déplace le tag de version sans v sur le commit final vérifié
+et ferme le RUN ensuite. Une publication ou un commit UNKNOWN conserve son reçu
+et n’est jamais réémis comme nouvelle livraison.
+
+La consultation expose la phase FINALIZING et ses blocages postérieurs au dossier,
+notamment un rapport indisponible ou une publication indécise ; elle n’annonce
+plus READY sur la seule validité des preuves préalables.
+
+## Reprise administrative avant commit
+
+Une livraison PARTIAL dont le commit a échoué avant déplacement des références
+ne se relance pas avec un nouveau start, une nouvelle version ou un autre RUN.
+Le moteur expose à l’administrateur système local les actions strictes
+`inspect_precommit`, `resume_precommit` et `status_precommit` sous la commande
+`session.delivery.policy`. Les champs habituels de politique de publication
+restent inchangés quand aucune action de reprise n’est fournie.
+
+L’inspection prend `project_id`, `run_id`, `delivery_id` et éventuellement
+`resolutions` ; elle retourne `expected_state` et `effects_issued=false`.
+La reprise ajoute un `request_id` stable, cet état exact et une justification.
+Le statut relit le même identifiant ; une réponse perdue n’autorise aucun rejeu.
+Seul le commit FAILED connu avant références est admissible ; version et
+projection doivent déjà être COMPLETED et toute étape aval encore PENDING.
+CLOSED/BLOCKED/FINALIZING, effet UNKNOWN, bail, gel ou source divergente protègent
+la session. Le worker revérifie le CAS sous le verrou Git avant tout effet.
+
+La résolution automatique traite uniquement les scalaires de version déclarés
+si les autres octets et données, ainsi que le mode, sont identiques à HEAD.
+Les autres conflits restent refusés. Une résolution manuelle nécessite les
+chemins réservés et leurs OID/modes HEAD et staged, le SHA256 de chaque diff,
+ainsi que `resolution_approval` avec `paths_digest`, `owner_reference` et
+`reviewer_reference`. Le propriétaire et le responsable doivent avoir relu ces
+deltas exacts ; une référence libre ne constitue pas une preuve native nouvelle.
+L’administrateur porte cette décision explicite et la conserve avec le CAS.
+Aucun choix ours implicite ni modification du fichier de travail/index source
+n’est effectué pour cette résolution ; seul l’index candidat reçoit les blobs
+exactement approuvés. Toute divergence refuse l’admission ou son dispatch.
+
+L’échec original et son reçu restent inchangés ; un événement immuable conserve
+le snapshot de l’étape FAILED. La nouvelle tentative de commit est corrélée,
+et la continuation reprend les seules étapes aval jamais émises. Le PID encore
+vivant d’un service n’est pas une preuve d’activité d’un worker logiquement terminé.
+Les opérations Git restent exclusivement exécutées par CAB.
+
+
+Pour un CICDF dont le commit a échoué avant les références avec
+`session-delivery-shared-index-conflict`, `inspect_precommit` accepte aussi
+les écarts de rapports attestés dans l’index partagé. Le candidat conserve
+l’arbre Git du lot initial. La reprise vérifie les témoins de statistiques,
+le code de travail, la version et les empreintes d’index avant le commit.
+Une entrée de code modifiée dans l’index partagé ou une preuve manquante
+empêche l’admission. Le reçu original et les étapes version et projection
+sont conservés.
+
+Quand un change est archivé alors que son ancien rapport reste en attente,
+CAB peut classer le reste `FAILED_REMAINDER_NO_CHANGE`. Le chemin retiré,
+le blob ancien attesté avant le lot et les rapports achevés sont vérifiés sous
+verrou. L’événement conserve le reçu UNKNOWN d’origine et les preuves.
+
+
+## Effets ponctuels et reprises de session
+
+Les commandes `session.effect.authorize`, `.inspect`, `.request`, `.status` et
+`.open_recovery` sont exposées par `session_effect` dans MCP. Les identités du
+projet et du RUN restent celles de la connexion. L'autorisation ponctuelle
+porte une nature précise et une référence stable ; seul le propriétaire direct,
+l'administrateur ou l'orchestrateur désigné peut la porter. Le codeur piloté
+peut exécuter une autorisation reçue ou demander la reprise d'une étape FAILED.
+
+Les natures sont `commit` (sans nouveau tag), `build:debian`, `build:docker`,
+`publish:FORGEJO`, `publish:GITHUB`, `publish:GITLAB` et `resume` pour la reprise
+après commit. Une demande sans expected_state capture le CAS côté service ;
+inspect permet de fournir explicitement ce snapshot pour un diagnostic.
+Le couple RUN/request_id désigne une seule tentative. L'intention, son dispatch,
+les progrès et le résultat sont immuables. Une intention indécise bloque les
+effets suivants ; une requête connue ne redispatche rien.
+
+La reprise après commit ouvre une édition sur une livraison PARTIAL arrêtée,
+avec commit COMPLETED, échec connu et aucun effet RUNNING/UNKNOWN. Elle conserve
+les reçus/plan originaux, rouvre uniquement son index et garde sa version. Sous
+mandat CICDF explicite, le CAS capture tous les fichiers admissibles du projet.
+Le commit supplémentaire avance la branche et déplace son tag atomiquement,
+puis les envois utilisent les références distantes observées comme leases.
+Les étapes aval nécessaires reçoivent de nouveaux reçus ; les inconnues restent
+protégées. Aucun statut SQL manuel ni appel Git client n'est un parcours de reprise.
+
+`session.version.prepare` (`session_version_prepare`) réserve et aligne les
+versions du Python, pyproject, frontend/verrou, manifestes plugins et commandes
+CAB. En piloté ces fichiers doivent être dans le cadrage de l'orchestrateur.
+L'intention d'écriture est conservée avant mutation. Qualifier les sources après
+préparation ; le prévol et la création du commit refusent un désalignement.
+
+
+### Remédiation avant reprise
+
+Un échec de build suit diagnostic → remédiation → qualification → reprise.
+`session_effect(action="diagnose", args={delivery_id})` expose des causes et
+remédiations structurées, sans sortie brute du processus. Après open_recovery,
+`action="remediate"` prépare les versions publiques nécessaires et retourne
+SOURCE_QUALIFICATION_REQUIRED. `request(kind="resume", mode="recovery")` déclenche
+aussi cette préparation automatiquement si elle manque ; si elle modifie les
+sources, il rend la main pour leur qualification, avant toute nouvelle tentative.
+Un manque de dépendance ou un défaut de source non corrigé reste explicitement
+à traiter. Le moteur n'installe pas de dépendance nouvelle ni ne rejoue UNKNOWN.
+Le suivi natif constate aussi un arrêt du worker, avec reçu conservé.
