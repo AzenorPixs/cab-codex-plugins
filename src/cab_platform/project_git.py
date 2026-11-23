@@ -64,6 +64,15 @@ def initialize(project_id):
     return {'public_metadata': synchronize(project_id)}
 
 
+def _has_commit_history(root, env, options):
+    result = subprocess.run(
+        ['/usr/bin/git', '-C', str(root), 'rev-list', '--all', '--max-count=1'],
+        cwd='/', env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        timeout=20, **options,
+    )
+    return bool(result.stdout.strip()) if result.returncode == 0 else None
+
+
 def measure(project):
     """Mesure locale uniquement ; les noms des fichiers ne sont pas conservés."""
     if probe(project) != 1:
@@ -128,6 +137,9 @@ def measure(project):
         else:
             state['commit_time'] = ''
             state['commit_tags'] = []
+            has_history = _has_commit_history(project.root, env, options)
+            if has_history is not None:
+                state['initial_commit'] = not has_history
         return state
     except (OSError, KeyError, subprocess.TimeoutExpired):
         return None
@@ -162,13 +174,13 @@ def commit_local(project_id, tag=None, description="", expected_tag="", request_
     require(isinstance(expected_tag, str) and (not expected_tag or len(expected_tag) in (40, 64) and all(c in '0123456789abcdef' for c in expected_tag)), 'project-git-tag-invalid', 400)
     tag, description = tag.strip(), description.strip()
     require(not tag.startswith('-'), 'project-git-tag-invalid', 400)
-    message = description or 'Mise à jour du projet'
+    default_message = 'Mise à jour du projet'
     values = (project.public_metadata or {}).get('values', {})
     name, configured_email = values.get('GIT_USER_NAME', ''), values.get('GIT_USER_EMAIL', '')
     require(bool(name and configured_email), 'project-git-identity-missing', 409)
     require(tag_description is None or isinstance(tag_description,str) and len(tag_description)<=16000 and '\0' not in tag_description,'git-tag-invalid',400)
     require(bool(tag) or not tag_description,'git-tag-invalid',400)
-    tag_message=message if tag_description is None else tag_description
+    tag_message=(description or default_message) if tag_description is None else tag_description
     metadata_env={}
     if author is not None or email is not None or date is not None:
         from datetime import datetime
@@ -262,6 +274,11 @@ def commit_local(project_id, tag=None, description="", expected_tag="", request_
             difference = git('diff', '--cached', '--quiet')
             require(difference in (0, 1), 'project-git-commit-failed', 409)
             if difference == 1:
+                message = description
+                if not message:
+                    has_history = _has_commit_history(project.root, env, options)
+                    require(has_history is not None, 'project-git-commit-failed', 409)
+                    message = default_message if has_history else 'Initialisation du projet'
                 commit_progress(project_id, request_id, 'committing')
                 require(git('commit', '-m', message, timeout=120) == 0, 'project-git-commit-failed', 409)
                 created = True

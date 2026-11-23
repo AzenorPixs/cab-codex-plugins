@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Préremplir « Initialisation du projet » pour le premier commit local et appliquer ce défaut si le message est vide.
+
 - Ouvrir l’éditeur Overview sans `project.env` et créer le fichier au premier enregistrement. Initialiser aussi le fichier avec les métadonnées disponibles lors de la création d’un projet.
 
 - Construire et inventorier les images Docker dans la Fabrique indépendamment des forges, avec les tags `latest` et de version. Ouvrir l’Overview pour les demandes refusées et les constructions échouées.

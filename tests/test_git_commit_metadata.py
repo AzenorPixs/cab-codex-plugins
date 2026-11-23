@@ -5,6 +5,7 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock,patch
 
@@ -97,9 +98,51 @@ class MetadataTests(unittest.TestCase):
         from cab_platform import project_git
         self.project.public_metadata={'values':{'GIT_USER_NAME':'Identité projet','GIT_USER_EMAIL':'projet@example.invalid','PROJECT_VERSION':'0.0.1'}}
         projects=MagicMock();projects.objects.get.return_value=self.project
+        projects.objects.select_for_update.return_value.get.return_value=self.project
         reservations=MagicMock();reservations.objects.filter.return_value.exists.return_value=True
-        with patch.object(project_git,'Project',projects),patch.object(project_git,'commit_progress'),patch.object(project_git,'_refresh_status'),patch('cab_platform.core.models.GitFileReservation',reservations),patch('django.db.connection',types.SimpleNamespace(cursor=MagicMock())):
+        with patch.object(project_git,'Project',projects),patch.object(project_git,'commit_progress'),patch.object(project_git,'_refresh_status'),patch('cab_platform.core.models.GitFileReservation',reservations),patch('django.db.connection',types.SimpleNamespace(cursor=MagicMock())),patch.object(project_git.transaction,'atomic',nullcontext),patch('cab_platform.project_metadata.synchronize',return_value={}):
             return project_git.commit_local('fixture',**fields)
+
+    def test_premier_commit_avec_ou_sans_initialisation_git(self):
+        from cab_platform.project_git import measure
+
+        for initialized in (False, True):
+            with self.subTest(initialized=initialized):
+                root = Path(self.folder.name) / f'neuf-{initialized}'
+                root.mkdir()
+                self.project.root = str(root)
+                (root / 'file.txt').write_text('première version\n', encoding='utf-8')
+                if initialized:
+                    self.git('init', '--initial-branch=main')
+                    self.assertIs(measure(self.project)['initial_commit'], True)
+                else:
+                    self.assertIsNone(measure(self.project))
+
+                result = self.new_commit(tag='')
+                self.assertTrue(result['created'])
+                self.assertEqual(self.git('show', '-s', '--format=%s', 'HEAD').strip(), 'Initialisation du projet')
+                self.assertEqual(measure(self.project)['commit_count'], 1)
+
+    def test_premier_commit_avec_message_personnalise(self):
+        root = Path(self.folder.name) / 'personnalise'
+        root.mkdir()
+        self.project.root = str(root)
+        self.git('init', '--initial-branch=main')
+        (root / 'file.txt').write_text('première version\n', encoding='utf-8')
+
+        self.assertTrue(self.new_commit(tag='', description='Mon premier commit')['created'])
+        self.assertEqual(self.git('show', '-s', '--format=%s', 'HEAD').strip(), 'Mon premier commit')
+
+    def test_defaut_de_mise_a_jour_avec_historique(self):
+        from cab_platform.project_git import measure
+
+        self.assertTrue(self.new_commit(tag='')['created'])
+        self.assertEqual(self.git('show', '-s', '--format=%s', 'HEAD').strip(), 'Mise à jour du projet')
+
+        self.git('symbolic-ref', 'HEAD', 'refs/heads/orpheline')
+        self.assertIs(measure(self.project)['initial_commit'], False)
+        self.assertTrue(self.new_commit(tag='')['created'])
+        self.assertEqual(self.git('show', '-s', '--format=%s', 'HEAD').strip(), 'Mise à jour du projet')
 
     def test_indexation_web_des_fichiers_suivis_reserves(self):
         from cab_platform import git_stage_modified as stage

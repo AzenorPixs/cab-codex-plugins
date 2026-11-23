@@ -5,7 +5,7 @@ import {Link,useNavigate} from '@tanstack/react-router'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
-export type GitStatus={available:boolean;branch?:string;commit?:string;commit_time?:string;commit_tags?:string[];commit_count?:number;object_stats?:Record<string,number>;tracked?:number;ignored?:number;modified?:number;staged?:number;untracked?:number;conflicts?:number}
+export type GitStatus={available:boolean;branch?:string;commit?:string;commit_time?:string;commit_tags?:string[];commit_count?:number;initial_commit?:boolean;object_stats?:Record<string,number>;tracked?:number;ignored?:number;modified?:number;staged?:number;untracked?:number;conflicts?:number}
 export type ForgeRepository={available:boolean;branch?:string;commit?:string;commit_time?:string|null;commit_count?:number|null;repository_size?:number|null;versions?:string[]|null}
 export type ForgeComparison={available:boolean;local:string;remote:string;ahead?:number;behind?:number}
 export type PublicMetadata={state:string;values:Record<string,string>;revision:number;project_root?:string;git_initialized?:number;git_status?:GitStatus;git_commit_progress?:{request_id:string;stage:string};git_delivery?:{version:string;state:string;commit:string|null;steps:{key:string;state:string;receipt:Record<string,unknown>}[]};forge_versions?:Record<string,string>;forge_auth?:Record<string,boolean|null>;forge_repositories?:Record<string,ForgeRepository>;forge_refresh?:Record<string,{running:boolean;started_at:number|null}>;forge_comparisons?:Record<string,ForgeComparison>}

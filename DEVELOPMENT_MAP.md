@@ -147,6 +147,14 @@ politiques et Overview élargi. Vérifications du 22 novembre 2026 dans CAB
 sur Chromium, Firefox et PostgreSQL isolé, reçus `STAGE-889-7-model-sort-web`
 et `STAGE-889-7-model-sort-data`.
 
+## Message du premier commit
+
+[default-initial-project-commit-message](openspec/changes/archive/2026-11-23-default-initial-project-commit-message/),
+code non attribué. Le formulaire et le serveur utilisent « Initialisation du projet »
+par défaut pour le premier commit. Vérifications du 23 novembre 2026 avec 13 tests
+Git, TypeScript et les trois états du formulaire dans Chromium et Firefox.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
 ## Correctif des contrôles de politique
 
 [correct-model-policy-controls](openspec/changes/archive/2026-11-22-correct-model-policy-controls/),
