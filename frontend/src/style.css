@@ -312,7 +312,9 @@ header .brand {
   .stage-token-totals{border-inline-start:0;padding-inline-start:0;border-block-start:1px solid var(--border);padding-block-start:14px}
 }
 
-.agent-catalog-search{width:min(21rem,100%);max-width:100%;font:inherit}
+.agent-catalog-pagination-tail,.agent-catalog-pagination-search{display:flex;align-items:center;gap:8px;min-inline-size:0;max-inline-size:100%}
+.agent-catalog-pagination-tail{flex-wrap:wrap}
+.agent-catalog-search{inline-size:clamp(10rem,20vw,16rem);min-inline-size:0;margin:0;font:inherit}
 .model-policy-toolbar,.model-policy-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .model-policy-toolbar{margin-block:8px}
 .model-policy-toolbar .project-tabs{margin:0}
@@ -335,5 +337,6 @@ header .brand {
 .model-policy-provider-list button{text-align:start;background:var(--surface);color:var(--text);border:1px solid var(--border)}
 .model-policy-provider-list button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .model-policy-sort{display:grid;gap:8px;border:1px solid var(--border)}
+.model-policy-overview .model-policy-sort .model-policy-label{grid-template-columns:minmax(6.5rem,40%) minmax(0,1fr);align-items:center}
 @media(min-width:761px){.monitor-table .model-catalog-provider{min-inline-size:12ch}}
 @media(max-width:550px){.model-policy-pair{grid-template-columns:minmax(0,1fr)}}

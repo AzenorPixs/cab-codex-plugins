@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Alignement des contrôles du catalogue
+
+[align-model-policy-editor-fields](openspec/changes/archive/2026-11-23-align-model-policy-editor-fields/),
+code non attribué. Recherche après Dernier dans les trois tableaux, libellé
+du filtre et placement des sélecteurs de Triage. Vérifications du
+23 novembre 2026 sur Chromium et Firefox, reçu `STAGE-892-7-editor-fields-web`.
+
 ## Sélecteur de fournisseurs des politiques
 
 [correct-model-policy-provider-picker](openspec/changes/archive/2026-11-23-correct-model-policy-provider-picker/),

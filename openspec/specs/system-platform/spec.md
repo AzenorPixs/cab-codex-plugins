@@ -2890,6 +2890,7 @@ Les tableaux Clés API, Fournisseurs et Modèles SHALL proposer une recherche in
 
 - **WHEN** l’administrateur recherche une entrée ou choisit un tri
 - **THEN** CAB applique l’opération à l’ensemble des résultats de la vue et repart de la première page
+- **AND** le champ de recherche se trouve en bas du tableau, à droite de Dernier
 
 #### Scenario: Supprimer un fournisseur
 
@@ -2953,3 +2954,9 @@ CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et suppr
 - **WHEN** l’Overview de politique est ouvert
 - **THEN** Free et Payant apparaissent sur la même ligne et le champ Fournisseurs est placé dans un bloc séparé en dessous
 - **AND** le dialogue exploite davantage de hauteur disponible et les espacements des labels du nom, du filtre et des seuils sont alignés sur le formulaire de tri
+
+#### Scenario: Présenter les contrôles du filtre et du tri
+
+- **WHEN** l’administrateur ouvre l’Overview de politique
+- **THEN** le libellé Filtre de modèles (Séparé par des ;) indique le séparateur
+- **AND** dans Triage, chaque libellé occupe la même ligne que son sélecteur à choix unique

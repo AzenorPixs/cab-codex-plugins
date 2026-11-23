@@ -1,4 +1,4 @@
-import {useId,useState} from 'react'
+import {useState} from 'react'
 
 export const policyPath='administration/agent-model-policies'
 const contextSteps=[0,262144,500000,1000000,1048576]
@@ -84,14 +84,12 @@ function ProviderFilter({initial,options}:{initial:number[]|null;options:PolicyP
 }
 
 export function ModelPolicyFields({policy,providerOptions}:{policy?:Policy;providerOptions:PolicyProviders}){
-  const filterHelp=useId()
   return <>
     <div className="model-policy-pair">
       <label className="model-policy-label">Nom de la politique<input name="name" required maxLength={120} defaultValue={policy?.name}/></label>
-      <label className="model-policy-label">Filtre de modèles<input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}
-        aria-describedby={filterHelp}/><span className="field-help" id={filterHelp}>
-          Séparez par des points-virgules les termes à exclure des noms de modèles.
-        </span></label>
+      <label className="model-policy-label">Filtre de modèles (Séparé par des ;)
+        <input name="model_filter" maxLength={2048} defaultValue={policy?.model_filter}/>
+      </label>
     </div>
     <div className="model-policy-pair">
       <Limit name="context_min" label="Contexte minimum" steps={contextSteps} initial={policy?.context_min??0}/>
@@ -110,10 +108,10 @@ export function ModelPolicyFields({policy,providerOptions}:{policy?:Policy;provi
       </div>
       <fieldset className="model-policy-sort">
         <legend>Triage</legend>
-        <label className="model-policy-label">Colonne de tri<select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>
+        <label className="model-policy-label"><span>Colonne de tri</span><select name="sort_column" defaultValue={policy?.sort_column??'input_cost'}>
           {sortColumns.map(([key,label])=><option key={key} value={key}>{label}</option>)}
         </select></label>
-        <label className="model-policy-label">Tri<select name="sort_direction" defaultValue={policy?.sort_descending?'descending':'ascending'}>
+        <label className="model-policy-label"><span>Tri</span><select name="sort_direction" defaultValue={policy?.sort_descending?'descending':'ascending'}>
           <option value="ascending">Du - Cher au + Cher</option>
           <option value="descending">Du + Cher au - Cher</option>
         </select></label>

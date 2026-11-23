@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 3.17.2
+
+- Recherche à droite de Dernier dans les tableaux des agents et réglages de Triage alignés dans l’Overview.
+
 ## 3.17.1
 
 - Sélecteur de fournisseurs cliquable dans un bloc distinct et catalogue complet lorsque le champ est vide.

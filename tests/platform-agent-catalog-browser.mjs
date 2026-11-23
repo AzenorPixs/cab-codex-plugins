@@ -35,6 +35,10 @@ const readRows=title=>rows(title).map(row=>row.textContent);
 async function pagination(title,needle){
   await wait(()=>rows(title).length===10,'Dix entrées '+title);
   const pag='nav[aria-label="Pagination '+title+'"]';
+  const box=find(search(title));
+  const last=box.previousElementSibling;
+  check(box.closest('nav')===find(pag)&&last.textContent==='Dernier','Recherche après Dernier '+title);
+  check(box.getBoundingClientRect().left>=last.getBoundingClientRect().right,'Recherche à droite de Dernier '+title);
   find(pag).querySelectorAll('button')[2].click();
   await wait(()=>rows(title).length===2,'Deux entrées en seconde page '+title);
   fill(search(title),needle);
@@ -106,8 +110,15 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>providerOption('Fournisseur témoin'),'Fournisseurs provenant de la table');
   check(!selectedProvider('Fournisseur 11'),'Aucun fournisseur sélectionné par défaut');
   providerField().click();
+  const filterLabel=addForm.elements.namedItem('model_filter').closest('label');
+  check(filterLabel.textContent.trim()==='Filtre de modèles (Séparé par des ;)'&&!filterLabel.querySelector('.field-help'),'Libellé demandé sans aide sous le champ');
   const sortColumn=addForm.elements.namedItem('sort_column');
   const sortDirection=addForm.elements.namedItem('sort_direction');
+  for(const select of [sortColumn,sortDirection]){
+    const label=select.previousElementSibling.getBoundingClientRect();
+    const box=select.getBoundingClientRect();
+    check(box.left>=label.right&&box.top<label.bottom&&box.bottom>label.top&&!select.multiple,'Libellé et sélection unique sur la même ligne');
+  }
   check(sortColumn.value==='input_cost'&&sortColumn.options.length===4&&sortDirection.value==='ascending','Valeurs par défaut du tri');
   sortColumn.value='cache_read_cost';
   sortDirection.value='descending';
@@ -125,10 +136,11 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Premier').click();
   const paginationBar=find('nav[aria-label="Pagination Modèles"]');
   const policyActions=paginationBar.querySelector('.model-policy-actions');
-  const [last,edit,remove]=policyActions.querySelectorAll(':scope > button');
-  check(last.textContent==='Dernier'&&edit.getAttribute('aria-label')==='Éditer la politique de modèles','Éditer après Dernier');
+  const [edit,remove]=policyActions.querySelectorAll(':scope > button');
+  const policySearch=find(search('Modèles'));
+  check(policySearch.previousElementSibling.textContent==='Dernier','Recherche à côté de Dernier sur un onglet de politique');
+  check(edit.getAttribute('aria-label')==='Éditer la politique de modèles'&&policySearch.compareDocumentPosition(edit)&4,'Éditer après la recherche');
   check(remove.getAttribute('aria-label')==='Supprimer la politique de modèles','Supprimer après Éditer');
-  check(edit.getBoundingClientRect().left>=last.getBoundingClientRect().right,'Actions à droite de Dernier');
   await click('button[aria-label="Éditer la politique de modèles"]');
   await wait(()=>find('dialog[open] [name=name]')?.value==='Rapides','Politique préremplie');
   const policyForm=find('dialog[open] form');

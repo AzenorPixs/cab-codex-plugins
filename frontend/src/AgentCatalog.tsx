@@ -68,14 +68,10 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
     setSort(previous=>({column,descending:previous?.column===column&&!previous.descending}))
     setPage(1)
   }
-  const last=<button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
   return <>
     <section className="project-home project-forges-page">
       <div className="section-heading"><div className="project-identity">
         {actions}<h1>{title}</h1>
-        <input className="agent-catalog-search" type="search" value={query} placeholder="Rechercher…"
-          aria-label={'Rechercher dans '+title}
-          onChange={event=>{setQuery(event.target.value);setPage(1)}}/>
       </div></div>
     </section>
     {toolbar}
@@ -98,7 +94,15 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
       <button type="button" disabled={current===1} onClick={()=>setPage(current-1)}>Précédent</button>
       <span aria-live="polite">Page {current} / {pages} · {visible.length} résultat{visible.length===1?'':'s'}</span>
       <button type="button" disabled={current===pages} onClick={()=>setPage(current+1)}>Suivant</button>
-      {paginationActions?<div className="model-policy-actions">{last}{paginationActions}</div>:last}
+      <div className="agent-catalog-pagination-tail">
+        <div className="agent-catalog-pagination-search">
+          <button type="button" disabled={current===pages} onClick={()=>setPage(pages)}>Dernier</button>
+          <input className="agent-catalog-search" type="search" value={query} placeholder="Rechercher…"
+            aria-label={'Rechercher dans '+title}
+            onChange={event=>{setQuery(event.target.value);setPage(1)}}/>
+        </div>
+        {paginationActions&&<div className="model-policy-actions">{paginationActions}</div>}
+      </div>
     </nav>
   </>
 }
