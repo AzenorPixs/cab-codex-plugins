@@ -29,7 +29,7 @@ const {readFile}=await import('node:fs/promises');
 const project={id:'fixture',identifier:'fixture',name:'Projet',root:'/fixture',creation_state:'READY'};
 const run={mode:'piloted',session_id:'SID-DEMO',run_id:'RUN',change:'change-demo',state:'CLOSED',suspension:'',monitor:{stage:12,cycle_steps:12,stages:Array.from({length:12},(_,i)=>'Étape '+(i+1)),phase:'PHASE FIXTURE',blocking_runs:[],terminal_gate:{branch:'TERMINÉ'},change_record:{tasks_total:1,tasks_done:1,tasks:[{id:1,label:'Tâche visible',completed:true}],source_state:'open',source_path:'tasks.md'}}};
 const time='2026-11-22T12:00:00Z';
-const tokenCounts=(input='1250')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0'},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
+const tokenCounts=(input='1250',write='7654')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0',cache_write_tokens:write},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
 const iterations=[1,2,3,4].map(id=>({id,number:id,duration_seconds:[15.8,641.2,3661.2,null][id-1],state:'COMPLETED',started_at:time,ended_at:time,description:'Passage '+id,tokens:tokenCounts()}));
 const metrics={piloted:true,tokens:tokenCounts(),session_tokens:tokenCounts(),cycles:[
  {id:1,number:1,started_at:time,ended_at:time,duration_seconds:100,complete:true,tokens:tokenCounts('1')},
@@ -45,7 +45,7 @@ const server=httpServer(async(req,res)=>{
   res.end('ok');return;
  }
  if(path==='/mutate'){
-  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:3,duration_seconds:400,last_duration_seconds:100,tokens:tokenCounts('4567')};metrics.cycles[1].tokens=tokenCounts('4567');revision++;
+  metrics.cycle_summary={...metrics.cycle_summary,iteration_count:3,duration_seconds:400,last_duration_seconds:100,tokens:tokenCounts('4567','9876')};metrics.cycles[1].tokens=tokenCounts('4567','9876');revision++;
   res.end('ok');return;
  }
  if(path==='/api/v1/sync/run-data/run'){
@@ -100,12 +100,13 @@ try{
       parseFloat(style.borderInlineStartWidth)>0 && parseFloat(getComputedStyle(header).borderBottomWidth)>0 &&
       card.previousElementSibling.getAttribute('role')==='tablist' && !info.querySelector('.badge') && !info.innerText.includes('PHASE FIXTURE');
    })()`),'titre et informations');
-   assert(await ev(`(()=>{const labels=Array.from(document.querySelectorAll('.run-information dt')).map(x=>x.textContent);return labels[0]==='Mandat courant' && labels[1]==='Étape' && labels.length===15 && labels.slice(8,12).join('|')==='Durée totale des cycles « Attente »|Tokens Entrant total des cycles|Tokens Sortant total des cycles|Tokens en Cache total des cycles' && document.querySelector('.run-information').innerText.includes('5\\u202fmin 0\\u202fs')})()`),'informations et cumul des deux cycles');
-   assert(await ev(`Array.from(document.querySelectorAll('.forge-card-content .run-information > div')).length===15 &&
+   assert(await ev(`(()=>{const labels=Array.from(document.querySelectorAll('.run-information dt')).map(x=>x.textContent);return labels[0]==='Mandat courant' && labels[1]==='Étape' && labels.length===16 && labels.slice(8,13).join('|')==='Durée totale des cycles « Attente »|Tokens Entrant total des cycles|Tokens Sortant total des cycles|Tokens lus dans le cache total des cycles|Tokens écrits dans le cache total des cycles' && document.querySelector('.run-information').innerText.includes('5\\u202fmin 0\\u202fs')})()`),'informations et cumul des deux cycles');
+   assert(await ev(`Array.from(document.querySelectorAll('.forge-card-content .run-information > div')).length===16 &&
      Array.from(document.querySelectorAll('.run-information > div')).every(row=>row.children.length===2 &&
        row.lastElementChild.getBoundingClientRect().left>row.firstElementChild.getBoundingClientRect().left &&
        Math.abs(row.lastElementChild.getBoundingClientRect().top-row.firstElementChild.getBoundingClientRect().top)<1)`),'une ligne libellé/valeur par information');
    assert(await ev('document.querySelector(".run-information").innerText.includes("1,25\u202fK")'),'totaux Informations avec détail des étapes indisponible');
+   assert(await ev(`(()=>{const rows=Array.from(document.querySelectorAll('.run-information > div'));const write=rows.find(row=>row.firstElementChild.textContent==='Tokens écrits dans le cache total des cycles');return write.lastElementChild.innerText.includes('7,65')&&write.lastElementChild.innerText.includes('Orchestrateur : —')})()`),'écritures observées et absentes par rôle');
    const click=label=>ev(`Array.from(document.querySelectorAll('[role=tab]')).find(x=>x.textContent===${JSON.stringify(label)}).click() || true`);
    await click('Finalisation');
    assert(await ev('document.body.innerText.includes("preuve visible") && !document.querySelector(".run-session-card details")'));
@@ -121,13 +122,14 @@ try{
    await click('Étapes du cycle');
    await fetch(new URL('/restore-metrics',url));
    await wait(()=>ev('document.querySelector(".run-cycle-heading").innerText.includes("4,57\u202fK")'),'tokens du dernier cycle actualisés');
+   assert(await ev("document.querySelector('.run-cycle-heading').innerText.includes('9,88') && document.querySelector('.cycle-total').innerText.includes('9,88')"),'écritures du dernier cycle et du cumul actualisées');
    assert(await ev('document.querySelector(".run-cycle-heading").innerText.includes("2,35\u202fB")'));
    assert(await ev('document.querySelector(".run-cycle-heading").innerText.includes("1\u202fM")'));
    for(let stage=1;stage<=12;stage++){
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 4")'),'actions de l’étape');
     assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().left>=durations.getBoundingClientRect().right && tokens.innerText.includes('8,98\u202fM') && durations.innerText.includes('Attente')})()`),'cumuls dans le même bloc à droite, étape '+stage);
-    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers[5]==='TeCodeur' && headers[10]==='TcOrchestrateur' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
+    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers.slice(5,-1).join('|')==='TeCodeur|TsCodeur|TrCodeur|TwCodeur|TeOrchestrateur|TsOrchestrateur|TrOrchestrateur|TwOrchestrateur' && table.tBodies[0].rows[0].cells[8].textContent.includes('7,65') && table.tBodies[0].rows[0].cells[12].textContent==='—' && JSON.stringify(durations)===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
    }
    assert(await ev(`Array.from(document.querySelectorAll('.stage-overview section table')).every(table=>{
      const controls=table.parentElement.nextElementSibling;

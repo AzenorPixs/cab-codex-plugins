@@ -60,7 +60,7 @@ def codex_metrics(run):
                 if row.get('type')=='session_meta':identity=row.get('payload',{})
                 if row.get('type')=='event_msg' and row.get('payload',{}).get('type')=='token_count':last=row['payload'].get('info',{}).get('total_token_usage')
         if not identity or not last or identity.get('id')!=run.session_id or identity.get('cwd')!=run.project.root:return
-        metrics={key:str(last[name]) for name,key in [('input_tokens','tokens_input'),('output_tokens','tokens_output'),('cached_input_tokens','tokens_cache_read'),('reasoning_output_tokens','tokens_reasoning'),('total_tokens','tokens_total')] if type(last.get(name)) is int and last[name]>=0}
+        metrics={key:str(last[name]) for name,key in [('input_tokens','tokens_input'),('output_tokens','tokens_output'),('cached_input_tokens','tokens_cache_read'),('cache_write_input_tokens','tokens_cache_write'),('reasoning_output_tokens','tokens_reasoning'),('total_tokens','tokens_total')] if type(last.get(name)) is int and last[name]>=0}
         sequence=info.st_mtime_ns//1000000
         with transaction.atomic():
             current,created=Metric.objects.select_for_update().get_or_create(run=run,source='codex-native',stream='native-tokens',defaults={'sequence':sequence})

@@ -723,6 +723,7 @@ class CycleTokenUsage(models.Model):
     input_tokens=models.PositiveBigIntegerField(null=True)
     output_tokens=models.PositiveBigIntegerField(null=True)
     cache_read_tokens=models.PositiveBigIntegerField(null=True)
+    cache_write_tokens=models.PositiveBigIntegerField(null=True)
 
     class Meta:
         db_table='cycle_token_usage'

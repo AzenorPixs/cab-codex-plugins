@@ -1,11 +1,12 @@
 const fields=[
   ['input_tokens','Te','Token/Entrant'],
   ['output_tokens','Ts','Token/Sortant'],
-  ['cache_read_tokens','Tc','Token/Cache'],
+  ['cache_read_tokens','Tr','Tokens lus dans le cache'],
+  ['cache_write_tokens','Tw','Tokens écrits dans le cache'],
 ] as const
 type TokenField=typeof fields[number][0]
 type TokenRole='coder'|'orchestrator'
-type TokenCounts=Record<TokenField,string|null>
+type TokenCounts=Partial<Record<TokenField,string|null>>
 export type CycleTokens=Partial<Record<TokenRole,TokenCounts>>
 
 const formatter=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2})
@@ -23,6 +24,7 @@ export function formatTokens(value:string|null|undefined){
 }
 
 const roles=(piloted:boolean):TokenRole[]=>piloted?['coder','orchestrator']:['coder']
+export const tokenColumnCount=(piloted:boolean)=>roles(piloted).length*fields.length
 const roleLabel:Record<TokenRole,string>={coder:'Codeur',orchestrator:'Orchestrateur'}
 
 export function TokenColumns({tokens,piloted=false,header=false}:{tokens?:CycleTokens;piloted?:boolean;header?:boolean}){

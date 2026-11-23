@@ -10,8 +10,8 @@ from django.utils import timezone
 from .native_sources import inspect,indexed_path,NativeSourceError
 
 TOKEN_FIELDS={'input_tokens':'tokens_input','output_tokens':'tokens_output','cached_input_tokens':'tokens_cache_read','cache_write_input_tokens':'tokens_cache_write','reasoning_output_tokens':'tokens_reasoning','total_tokens':'tokens_total'}
-USAGE_FIELDS=('input_tokens','output_tokens','cache_read_tokens')
-_CODEX_USAGE_FIELDS=('input_tokens','output_tokens','cached_input_tokens')
+USAGE_FIELDS=('input_tokens','output_tokens','cache_read_tokens','cache_write_tokens')
+_CODEX_USAGE_FIELDS=('input_tokens','output_tokens','cached_input_tokens','cache_write_input_tokens')
 _MAX_TOKEN_COUNT=2**63-1
 
 
@@ -30,13 +30,16 @@ def _codex_usage(payload, stamp, previous, usage):
     total = _usage_counts(info['total_token_usage'], _CODEX_USAGE_FIELDS)
     last = info.get('last_token_usage')
     if previous is None:
-        last = _usage_counts(last, _CODEX_USAGE_FIELDS) if isinstance(last, dict) else (None,)*3
+        last = _usage_counts(last if isinstance(last, dict) else {}, _CODEX_USAGE_FIELDS)
         delta = tuple(value if value == current else None for value, current in zip(last, total))
     else:
         delta = tuple(current - before if current is not None and before is not None and current >= before
                       else None for current, before in zip(total, previous))
     if total != previous and (any(delta) or previous is None and 0 in delta):
-        usage.append((stamp, (stamp.isoformat(), total), delta))
+        # Keep the original key for events already collected with three counters.
+        legacy_delta = delta[:-1]
+        key_counts = total[:-1] if any(legacy_delta) or previous is None and 0 in legacy_delta else total
+        usage.append((stamp, (stamp.isoformat(), key_counts), delta))
     return total
 
 def native_time(value):
@@ -191,7 +194,7 @@ def _opencode_usage(row):
         return None
     cache = counters.get('cache')
     counts = (*_usage_counts(counters, ('input','output')),
-              _token_count(cache.get('read')) if isinstance(cache, dict) else None)
+              *_usage_counts(cache if isinstance(cache, dict) else {}, ('read','write')))
     return counts if any(value is not None for value in counts) else None
 
 

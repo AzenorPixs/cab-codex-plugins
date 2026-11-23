@@ -72,7 +72,8 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       {([
         ['input_tokens','Tokens Entrant total des cycles'],
         ['output_tokens','Tokens Sortant total des cycles'],
-        ['cache_read_tokens','Tokens en Cache total des cycles'],
+        ['cache_read_tokens','Tokens lus dans le cache total des cycles'],
+        ['cache_write_tokens','Tokens écrits dans le cache total des cycles'],
       ] as const).map(([field,label])=><div key={field}><dt>{label}</dt><dd>
         {piloted?<span className="cycle-token-group">
           <span>Codeur : {formatTokens(cycleTokens?.coder?.[field])}</span>

@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Afficher les tokens écrits dans le cache pour les sessions de codage Codex et OpenCode. Les vues du cycle utilisent Te, Ts, Tr et Tw pour l’entrée, la sortie, la lecture et l’écriture dans le cache.
+
 - Afficher les refus des actions de Git local et des forges dans leurs Overviews. Distinguer un refus de transfert Git confirmé et détailler les prérequis et reçus de publication Docker.
 
 - Préremplir « Initialisation du projet » pour le premier commit local et appliquer ce défaut si le message est vide.

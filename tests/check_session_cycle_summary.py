@@ -29,7 +29,7 @@ def main():
             database_name='cab_effects_fixture_cycles'
             subprocess.run([str(PG/'createdb'),'-h','127.0.0.1','-p',str(port),database_name],check=True)
             import py_compile
-            for name in ('src/cab_platform/change_stage_metrics.py','src/cab_platform/time_projection.py','src/cab_platform/web_views.py','src/cab_platform/core/api.py','src/cab_platform/core/models.py','src/cab_platform/core/migrations/0052_run_cycle_summary.py','src/cab_platform/core/migrations/0053_cycle_token_usage.py','src/cab_platform/cycle_tokens.py','src/cab_platform/measurement_sources.py','src/cab_platform/stage_actions.py','src/cab_platform/mcp.py','tests/test_cycle_tokens.py','tests/test_stage_actions.py','tests/test_session_cycle_summary.py', 'tests/check_session_cycle_summary.py'):
+            for name in ('src/cab_platform/change_stage_metrics.py','src/cab_platform/time_projection.py','src/cab_platform/web_views.py','src/cab_platform/core/api.py','src/cab_platform/core/models.py','src/cab_platform/core/migrations/0052_run_cycle_summary.py','src/cab_platform/core/migrations/0053_cycle_token_usage.py','src/cab_platform/core/migrations/0061_cycle_cache_write_tokens.py','src/cab_platform/collectors.py','src/cab_platform/cycle_tokens.py','src/cab_platform/measurement_sources.py','src/cab_platform/stage_actions.py','src/cab_platform/mcp.py','tests/test_cycle_tokens.py','tests/test_stage_actions.py','tests/test_session_cycle_summary.py', 'tests/check_session_cycle_summary.py'):
                 py_compile.compile(str(ROOT/name),cfile=str(base/(Path(name).name+'c')),doraise=True)
             from django.conf import settings
             settings.configure(SECRET_KEY='isolated-fixture',USE_TZ=True,

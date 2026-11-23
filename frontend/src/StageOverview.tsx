@@ -1,7 +1,7 @@
 import {type ReactNode} from 'react'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {stageDuration} from './stageDuration'
-import {formatTokens,TokenColumns,TokenSummary,type CycleTokens} from './cycleTokens'
+import {formatTokens,tokenColumnCount,TokenColumns,TokenSummary,type CycleTokens} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
 type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null}
@@ -37,7 +37,7 @@ function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
 function Passages({items,piloted}:{items:Passage[];piloted:boolean}){
-  return <StageTable title="Itérations de l’étape" items={items} columns={piloted?13:10}
+  return <StageTable title="Itérations de l’étape" items={items} columns={7+tokenColumnCount(piloted)}
     header={<><th>Itération</th><th>Début</th><th>Fin</th><th>Travail observé par CAB</th><th>Agent(s)</th><th>Attente</th><TokenColumns header piloted={piloted}/><th>État</th></>}
     content={item=>[item.number,date(item.started_at),date(item.ended_at),stageDuration(item.cab_seconds),
       stageDuration(item.agent_seconds),stageDuration(item.waiting_seconds),item.description,item.receipt?.error,
@@ -45,7 +45,7 @@ function Passages({items,piloted}:{items:Passage[];piloted:boolean}){
     render={item=><tr key={item.id}><td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td><td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td><TokenColumns tokens={item.tokens} piloted={piloted}/><td>{item.state?states[item.state]||item.state:''}{item.description&&<p>{item.description}</p>}{typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}</td></tr>}/>
 }
 function ActionTable({title,actions,passage,piloted}:{title:string;actions:Passage[];passage:Passage;piloted:boolean}){
-  return <StageTable title={title} items={actions} columns={piloted?12:9}
+  return <StageTable title={title} items={actions} columns={6+tokenColumnCount(piloted)}
     header={<><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><TokenColumns header piloted={piloted}/><th>État</th></>}
     content={action=>[action.description,action.source,date(action.started_at),date(action.ended_at),
       stageDuration(action.duration_seconds),action.state&&states[action.state],action.receipt?.note,action.receipt?.mandates,
@@ -99,7 +99,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false}:{stage:
 }
 export function CycleIterations({cycles,piloted=false}:{cycles:CycleMetric[];piloted?:boolean}){
   return <section className="change-progress"><h2>Itérations du cycle</h2>
-    <StageTable title="Itérations du cycle" items={cycles} columns={piloted?14:11}
+    <StageTable title="Itérations du cycle" items={cycles} columns={8+tokenColumnCount(piloted)}
       header={<><th>Itération</th><th>Début</th><th>Fin</th><th>CAB</th><th>Agent(s)</th><th>Attente</th><th>Durée totale</th><TokenColumns header piloted={piloted}/><th>État</th></>}
       content={cycle=>[cycle.number,date(cycle.started_at),date(cycle.ended_at),stageDuration(cycle.cab_seconds),
         stageDuration(cycle.agent_seconds),stageDuration(cycle.waiting_seconds),
