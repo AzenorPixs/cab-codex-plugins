@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Diagnostic du rafraîchissement des forges — 23 novembre 2026
+
+[diagnose-forge-repository-refresh](changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Politique TLS de l’authentification Forgejo — 23 novembre 2026
 
 [honor-forgejo-auth-tls-policy](changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué. Change archivé. Attribution ultérieure par ACL.

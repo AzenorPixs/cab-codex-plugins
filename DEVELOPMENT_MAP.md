@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Diagnostic du rafraîchissement des forges
+
+[diagnose-forge-repository-refresh](openspec/changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. La fenêtre de
+l’Overview affiche les étapes de la tentative manuelle qui a échoué.
+Le rafraîchissement GitLab applique son réglage TLS. Contrôles locaux
+Python, Chromium et Firefox réussis le 23 novembre 2026.
+
+```mermaid
+flowchart LR
+    forgeRefresh["diagnose-forge-repository-refresh<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeRefresh provisional
+```
+
 ## Politique TLS de l’authentification Forgejo
 
 [honor-forgejo-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué.

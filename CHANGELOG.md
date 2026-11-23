@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Ouvrir le diagnostic de la tentative dans l’Overview lorsqu’un rafraîchissement manuel de forge échoue. Appliquer le réglage TLS GitLab à la lecture du dépôt.
 - Accepter tout certificat TLS lors de l’authentification Forgejo et de la vérification du dépôt, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`. La console indique ce mode.
 - Appliquer `REMOTE_GITLAB_SSL_VERIFY` à l’authentification GitLab et à la vérification du dépôt. La console indique quand le certificat TLS n’est pas vérifié.
 - Reprendre le slot de réplication Electric après une mise à jour Debian sur un PostgreSQL localisé, en conservant le WAL et les abonnements.

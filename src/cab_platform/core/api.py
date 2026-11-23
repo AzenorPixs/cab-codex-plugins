@@ -1118,7 +1118,11 @@ def refresh_one_forge(request,project_id:str,forge:str,automatic:bool=False):
     from cab_platform.forge_repository import FORGES,refresh_one
     forge=forge.upper()
     commands.require(forge in FORGES,'forge-refresh-invalid',400)
-    return {'available':bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=automatic))}
+    if automatic:
+        return {'available':bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=True))}
+    diagnostics=[]
+    available=bool(refresh_one(project.pk,forge,wait=True,managed=False,automatic=False,report=diagnostics.append))
+    return {'available':True} if available else {'available':False,'diagnostics':''.join(diagnostics)}
 
 @api.get('/projects/{project_id}/forges/{forge}')
 def forge_read(request,project_id:str,forge:str):

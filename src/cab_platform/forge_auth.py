@@ -41,9 +41,9 @@ def transport_failure(error, phase):
 
 
 @contextmanager
-def forge_request(client, endpoint, headers, report, operation, **kwargs):
+def forge_request(client, endpoint, headers, report, operation, *, method='GET', **kwargs):
     if report is None:
-        with client.stream('GET', endpoint, headers=headers, **kwargs) as response:
+        with client.stream(method, endpoint, headers=headers, **kwargs) as response:
             yield response
         return
 
@@ -68,9 +68,9 @@ def forge_request(client, endpoint, headers, report, operation, **kwargs):
 
     report(f'{operation}.\n')
     try:
-        with client.stream('GET', endpoint, headers=headers, extensions={'trace': trace}, **kwargs) as response:
+        with client.stream(method, endpoint, headers=headers, extensions={'trace': trace}, **kwargs) as response:
             yield response
-    except httpx.HTTPError as error:
+    except httpx.RequestError as error:
         report(f'Vérification impossible — {transport_failure(error, phase)}.\n')
         raise
 

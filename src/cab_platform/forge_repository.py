@@ -1,6 +1,7 @@
 """Observation bornée des dépôts distants et projection PostgreSQL."""
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from functools import partial
 import hashlib
 import json
 import secrets
@@ -13,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, require
 from .core.models import Project, ProjectMetadataProjection
+from .forge_auth import forge_request, verify_tls_for
 from .forge_settings import crypt
 from .forge_version import base_for
 
@@ -29,35 +31,66 @@ def identity(project, values, forge):
     return hashlib.sha256(json.dumps([*fields, encrypted], ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
 
 
-def configured(project, values, forge):
+def missing_configuration(project, values, forge):
     prefix = 'REMOTE_' + forge + '_'
-    return bool(base_for(values, forge) and values.get(prefix + 'OWNER') and values.get(prefix + 'REPOSITORY') and (project.configuration or {}).get('forge_tokens_tpm', {}).get(forge))
+    required = (
+        ('URL HTTPS valide', base_for(values, forge)),
+        ('propriétaire du dépôt', values.get(prefix + 'OWNER')),
+        ('nom du dépôt', values.get(prefix + 'REPOSITORY')),
+        ('jeton de forge enregistré', (project.configuration or {}).get('forge_tokens_tpm', {}).get(forge)),
+    )
+    return [label for label, value in required if not value]
 
 
-def get_json(client, url, **kwargs):
-    with client.stream('GET', url, **kwargs) as response:
+def configured(project, values, forge):
+    return not missing_configuration(project, values, forge)
+
+
+def verify_repository_tls(values, forge):
+    return forge != 'GITLAB' or verify_tls_for(values, forge)
+
+
+def get_json(client, url, *, headers=None, report=None, operation='', max_bytes=1048576, **kwargs):
+    with forge_request(client, url, headers, report, operation, **kwargs) as response:
+        if report:
+            report(f'Réponse HTTP {response.status_code}.\n')
         response.raise_for_status()
         data = b''
         for chunk in response.iter_bytes():
             data += chunk
-            if len(data) > 1048576:
+            if len(data) > max_bytes:
+                if report:
+                    report('La réponse dépasse la taille autorisée.\n')
                 raise ValueError('Réponse distante trop volumineuse')
         return json.loads(data), dict(response.headers)
 
 
-def observe(project, values, forge):
+def observe(project, values, forge, report=None):
     prefix = 'REMOTE_' + forge + '_'
     base = base_for(values, forge)
     owner, repo = values.get(prefix + 'OWNER', ''), values.get(prefix + 'REPOSITORY', '')
     branch = values.get(prefix + 'BRANCH', '')
-    if not configured(project, values, forge) or not all(isinstance(x, str) for x in (owner, repo, branch)):
+    missing = missing_configuration(project, values, forge)
+    if missing:
+        if report:
+            report('Configuration incomplète ou invalide — ' + ', '.join(missing) + '.\n')
+        return None
+    if not all(isinstance(x, str) for x in (owner, repo, branch)):
+        if report:
+            report('Les paramètres du dépôt ou de la branche sont invalides.\n')
         return None
     if not owner or not repo or '/' in repo or repo in ('.', '..') or any(not x or x in ('.', '..') for x in owner.split('/')):
+        if report:
+            report('Le propriétaire ou le nom du dépôt est invalide.\n')
         return None
     try:
+        if report:
+            report('Déchiffrement local du jeton.\n')
         encrypted = project.configuration['forge_tokens_tpm'][forge]
         token = crypt(project, forge, encrypted.encode(), True).decode('utf-8')
         if not token or any(x in token for x in '\r\n\0'):
+            if report:
+                report('Le jeton est vide ou invalide.\n')
             return None
         headers = {'Accept': 'application/json', 'User-Agent': 'CAB-forge-repository'}
         headers['PRIVATE-TOKEN' if forge == 'GITLAB' else 'Authorization'] = token if forge == 'GITLAB' else ('token ' if forge == 'FORGEJO' else 'Bearer ') + token
@@ -69,12 +102,21 @@ def observe(project, values, forge):
         else:
             api = ('https://api.github.com' if github_public else base + '/api/v3') if forge == 'GITHUB' else base + '/api/v1'
             root = api + '/repos/' + '/'.join(quote(x, safe='') for x in owner.split('/')) + '/' + quote(repo, safe='')
-        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False, headers=headers) as client:
-            info, _ = get_json(client, root, params={'statistics': 'true'} if forge == 'GITLAB' else {})
+        verify = verify_repository_tls(values, forge)
+        if report:
+            report('Vérification du certificat TLS active.\n' if verify
+                   else 'Vérification du certificat TLS désactivée pour cette forge GitLab.\n')
+        read = partial(get_json, report=report)
+        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False, verify=verify, headers=headers) as client:
+            info, _ = read(client, root, operation='Lecture des métadonnées du dépôt', params={'statistics': 'true'} if forge == 'GITLAB' else {})
             if not isinstance(info, dict):
+                if report:
+                    report('La forge n’a pas renvoyé de métadonnées de dépôt exploitables.\n')
                 return None
             branch = branch or info.get('default_branch') or ''
             if not isinstance(branch, str) or not branch:
+                if report:
+                    report('Aucune branche exploitable dans la configuration ou la réponse de la forge.\n')
                 return None
             size = info.get('statistics', {}).get('repository_size') if forge == 'GITLAB' and isinstance(info.get('statistics'), dict) else info.get('size')
             if not isinstance(size, int) or isinstance(size, bool) or size < 0:
@@ -83,14 +125,18 @@ def observe(project, values, forge):
                 size *= 1024
             endpoint = root + ('/repository/commits' if forge == 'GITLAB' else '/commits')
             params = {'ref_name': branch, 'per_page': 1} if forge == 'GITLAB' else {'sha': branch, 'per_page' if forge == 'GITHUB' else 'limit': 1}
-            commits, response_headers = get_json(client, endpoint, params=params)
+            commits, response_headers = read(client, endpoint, operation='Lecture du dernier commit de la branche', params=params)
             if not isinstance(commits, list) or not commits or not isinstance(commits[0], dict):
+                if report:
+                    report('La forge n’a pas renvoyé de commit exploitable pour cette branche.\n')
                 return None
             first = commits[0]
             sha = first.get('id') if forge == 'GITLAB' else first.get('sha')
             details = first.get('commit', {}) if forge != 'GITLAB' else first
             date = details.get('committed_date') if forge == 'GITLAB' else details.get('committer', {}).get('date') if isinstance(details.get('committer'), dict) else None
             if not isinstance(sha, str) or not 7 <= len(sha) <= 64 or any(c not in '0123456789abcdef' for c in sha):
+                if report:
+                    report('La forge a renvoyé un identifiant de commit invalide.\n')
                 return None
             if not isinstance(date, str) or not parse_datetime(date):
                 date = None
@@ -100,15 +146,16 @@ def observe(project, values, forge):
                 graphql = 'https://api.github.com/graphql' if github_public else base + '/api/graphql'
                 query = 'query($owner:String!,$repo:String!,$ref:String!){repository(owner:$owner,name:$repo){object(expression:$ref){... on Commit{history{totalCount}}}}}'
                 try:
-                    response = client.post(graphql, json={'query': query, 'variables': {'owner': owner, 'repo': repo, 'ref': sha}})
-                    if response.status_code == 200 and len(response.content) <= 262144:
-                        document = response.json()
+                    document, _ = read(client, graphql, operation='Lecture du nombre de commits', method='POST',
+                                       max_bytes=262144, json={'query': query, 'variables': {'owner': owner, 'repo': repo, 'ref': sha}})
+                    if isinstance(document, dict):
                         history = (((document.get('data') or {}).get('repository') or {}).get('object') or {}).get('history') or {}
                         candidate = history.get('totalCount') if isinstance(history, dict) else None
                         if isinstance(candidate, int) and not isinstance(candidate, bool) and candidate >= 0:
                             count = candidate
                 except (httpx.HTTPError, ValueError, TypeError, KeyError):
-                    pass
+                    if report:
+                        report('Nombre de commits indisponible.\n')
             tags = None
             try:
                 tags_url = root + ('/repository/tags' if forge == 'GITLAB' else '/tags')
@@ -116,7 +163,7 @@ def observe(project, values, forge):
                 limit = 50 if forge == 'FORGEJO' else 100
                 for page in range(1, 11):
                     params = {'page': page, 'limit' if forge == 'FORGEJO' else 'per_page': limit}
-                    found, _ = get_json(client, tags_url, params=params)
+                    found, _ = read(client, tags_url, operation=f'Lecture des tags associés au commit — page {page}', params=params)
                     if not isinstance(found, list):
                         tags = None
                         break
@@ -128,10 +175,16 @@ def observe(project, values, forge):
                     tags = None
             except (httpx.HTTPError, ValueError, TypeError, KeyError):
                 tags = None
+            if report and tags is None:
+                report('Tags associés au commit indisponibles.\n')
             from .forge_artifacts import observe as observe_artifacts
-            artifacts = observe_artifacts(client,get_json,values,root,api,forge,owner,repo,info)
+            artifacts = observe_artifacts(client,partial(read,operation='Lecture des artefacts publiés'),values,root,api,forge,owner,repo,info)
             return {'available': True, 'branch': branch, 'commit': sha, 'commit_time': date, 'commit_count': count, 'repository_size': size, 'versions': tags, 'published_artifacts': artifacts}
-    except (httpx.HTTPError, Refused, ValueError, UnicodeError, KeyError, TypeError, OSError):
+    except (httpx.RequestError, httpx.HTTPStatusError):
+        return None
+    except (Refused, ValueError, UnicodeError, KeyError, TypeError, OSError) as error:
+        if report:
+            report(f'Lecture du dépôt impossible — {type(error).__name__}.\n')
         return None
 
 
@@ -211,11 +264,13 @@ def publish_refresh(project_id, forge, running):
         ProjectMetadataProjection.objects.update_or_create(pk=project.pk, defaults={'public_metadata': snapshot})
 
 
-def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
+def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True, report=None):
     lock_id = int.from_bytes(hashlib.sha256((str(project_id) + ':' + forge).encode()).digest()[:4], 'big', signed=True)
     acquired = False
     announced = False
     try:
+        if report:
+            report('Attente de l’accès au rafraîchissement de la forge.\n')
         with connection.cursor() as cursor:
             if wait:
                 cursor.execute('SELECT pg_advisory_lock(%s,%s)', [7348510, lock_id])
@@ -224,17 +279,27 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
                 cursor.execute('SELECT pg_try_advisory_lock(%s,%s)', [7348510, lock_id])
                 acquired = cursor.fetchone()[0]
         if not acquired:
+            if report:
+                report('Un autre rafraîchissement de cette forge est en cours.\n')
             return
         project = Project.objects.get(pk=project_id)
         values = (project.public_metadata or {}).get('values', {})
         signature = identity(project, values, forge)
-        if not configured(project, values, forge):
+        verify = verify_repository_tls(values, forge)
+        if report:
+            report('Lecture des paramètres enregistrés.\n')
+        missing = missing_configuration(project, values, forge)
+        if missing:
+            if report:
+                report('Configuration incomplète ou invalide — ' + ', '.join(missing) + '.\n')
             return False
         from .git_monitor_config import read as read_monitor_settings
         with transaction.atomic():
             current = Project.objects.select_for_update().get(pk=project_id)
             current_values = (current.public_metadata or {}).get('values', {})
-            if identity(current, current_values, forge) != signature:
+            if identity(current, current_values, forge) != signature or verify_repository_tls(current_values, forge) != verify:
+                if report:
+                    report('La configuration a changé avant le rafraîchissement.\n')
                 return False
             config = dict(current.configuration or {})
             records = dict(config.get('forge_repositories') or {})
@@ -253,12 +318,14 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
             current.save(update_fields=['configuration'])
         publish_refresh(project_id, forge, True)
         announced = True
-        observed = observe(project, values, forge)
+        observed = observe(project, values, forge, report=report) if report else observe(project, values, forge)
         with transaction.atomic():
             project = Project.objects.select_for_update().get(pk=project_id)
             snapshot = dict(project.public_metadata or {})
             latest_values=snapshot.get('values',{})
-            if identity(project, latest_values, forge) != signature:
+            if identity(project, latest_values, forge) != signature or verify_repository_tls(latest_values, forge) != verify:
+                if report:
+                    report('La configuration a changé pendant le rafraîchissement. Résultat écarté.\n')
                 return
             from .forge_artifacts import persist
             persist(project,latest_values,forge,observed.pop('published_artifacts',{}) if observed else {})
@@ -297,7 +364,13 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True):
                 project.save(update_fields=['configuration'])
         if observed is not None:
             from .forge_auth import refresh_one as refresh_auth
-            refresh_auth(project_id, forge, managed=False)
+            if report:
+                report('Vérification de l’authentification de la forge.\n')
+                refresh_auth(project_id, forge, managed=False, report=report)
+            else:
+                refresh_auth(project_id, forge, managed=False)
+        elif report:
+            report('Actualisation indisponible. Les dernières données valides sont conservées.\n')
         from .forge_comparison import enqueue
         enqueue(project_id)
         return observed is not None

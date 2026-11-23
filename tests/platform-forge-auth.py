@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 settings.configure(INSTALLED_APPS=['django.contrib.auth', 'django.contrib.contenttypes', 'cab_platform.core'])
 django.setup()
 
-from cab_platform import forge_auth
+from cab_platform import forge_auth, forge_repository
 
 
 class ForgeAuthTests(unittest.TestCase):
@@ -198,6 +198,73 @@ class ForgeAuthTests(unittest.TestCase):
             self.assertEqual(request.url.params['service'], 'git-upload-pack')
             return httpx.Response(200, headers={'content-type': 'application/x-git-upload-pack-advertisement'})
         return httpx.Response(200, json={'permissions': {'pull': True}})
+
+
+class ForgeRefreshTests(unittest.TestCase):
+    token = 'jeton-fictif-pour-le-rafraichissement'
+
+    def fixture(self, forge, tls_setting):
+        prefix = f'REMOTE_{forge}_'
+        values = {
+            prefix + 'BASE_URL': 'https://forge.example/interne',
+            prefix + 'OWNER': 'groupe',
+            prefix + 'REPOSITORY': 'projet',
+            prefix + 'SSL_VERIFY': tls_setting,
+        }
+        project = SimpleNamespace(configuration={'forge_tokens_tpm': {forge: 'chiffré'}})
+        return project, values
+
+    def test_gitlab_repository_refresh_respects_explicit_tls_policy(self):
+        for forge, setting, verify in (('GITLAB', '0', False), ('GITLAB', '1', True),
+                                       ('GITLAB', '', True), ('FORGEJO', '0', True), ('GITHUB', '0', True)):
+            with self.subTest(forge=forge, setting=setting):
+                project, values = self.fixture(forge, setting)
+                messages = []
+                client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(403, text=self.token)))
+                with patch.object(forge_repository, 'crypt', return_value=self.token.encode()), patch.object(
+                    forge_repository.httpx, 'Client', return_value=client,
+                ) as launch:
+                    self.assertIsNone(forge_repository.observe(project, values, forge, report=messages.append))
+                self.assertIs(launch.call_args.kwargs['verify'], verify)
+                log = ''.join(messages)
+                self.assertIn('Lecture des métadonnées du dépôt', log)
+                self.assertIn('Réponse HTTP 403', log)
+                self.assertNotIn(self.token, log)
+
+    def test_refresh_distinguishes_transport_failure_and_missing_configuration(self):
+        project, values = self.fixture('GITLAB', '1')
+        messages = []
+        with patch.object(forge_repository, 'crypt', return_value=self.token.encode()), patch(
+            'socket.create_connection', side_effect=socket.gaierror(socket.EAI_NONAME, self.token),
+        ):
+            self.assertIsNone(forge_repository.observe(project, values, 'GITLAB', report=messages.append))
+        self.assertIn('DNS — résolution du nom impossible', ''.join(messages))
+        self.assertNotIn(self.token, ''.join(messages))
+        values.pop('REMOTE_GITLAB_REPOSITORY')
+        messages.clear()
+        with patch.object(forge_repository, 'crypt') as decrypt:
+            self.assertIsNone(forge_repository.observe(project, values, 'GITLAB', report=messages.append))
+        decrypt.assert_not_called()
+        self.assertIn('nom du dépôt', ''.join(messages))
+
+    def test_manual_refresh_endpoint_returns_only_its_own_diagnostics(self):
+        from cab_platform.core import api
+
+        def refresh(project_id, forge, **kwargs):
+            self.assertEqual((project_id, forge), ('projet', 'GITLAB'))
+            if not kwargs['automatic']:
+                kwargs['report']('Réponse HTTP 401.\n')
+            return False
+
+        with patch.object(api, 'principal', return_value=SimpleNamespace(role='admin')), patch.object(
+            api.Project.objects, 'get', return_value=SimpleNamespace(pk='projet'),
+        ), patch.object(forge_repository, 'refresh_one', side_effect=refresh) as run:
+            self.assertEqual(api.refresh_one_forge(None, 'projet', 'gitlab'),
+                             {'available': False, 'diagnostics': 'Réponse HTTP 401.\n'})
+            run.assert_called_once()
+            self.assertEqual(api.refresh_one_forge(None, 'projet', 'gitlab', automatic=True),
+                             {'available': False})
+            self.assertNotIn('report', run.call_args.kwargs)
 
 
 if __name__ == '__main__':
