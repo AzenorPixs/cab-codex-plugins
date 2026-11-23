@@ -10,6 +10,7 @@ from django.db import close_old_connections, transaction
 from django.utils import timezone
 from .core.models import ForgeVersion, Project, ProjectMetadataProjection
 from .core.commands import Refused
+from .forge_settings import forge_client
 
 FORGES = ('FORGEJO', 'GITLAB', 'GITHUB')
 
@@ -52,7 +53,7 @@ def observe(project, forge, base):
                 if not token or any(c in token for c in '\r\n\0'):
                     return None
                 headers['PRIVATE-TOKEN' if forge == 'GITLAB' else 'Authorization'] = token if forge == 'GITLAB' else 'token ' + token
-        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False) as client:
+        with forge_client(timeout=8) as client:
             with client.stream('GET', endpoint, headers=headers) as response:
                 if response.status_code != 200:
                     return None

@@ -1,5 +1,7 @@
 """Création d’un dossier borné et catalogue PostgreSQL, sans initialisation Git."""
+import base64
 import hashlib
+import json
 import os
 from pathlib import Path
 import pwd
@@ -38,8 +40,11 @@ def project_data(project):
     return {'identifier':project.identifier,'id':project.pk,'name':project.name or Path(project.root).name,'root':project.root,'owner_uid':project.owner_uid,'owner_gid':project.owner_gid,'creation_state':project.creation_state,'public_metadata':project.public_metadata}
 
 def create_project(actor,name,folder,request_id,project_path=''):
+    from .forge_settings import file_operation
+    from .project_metadata import initialize_version_policy,public_value,synchronize
+
     require(actor.role=='admin','administrator-required',403)
-    require(isinstance(name,str) and 1<=len(name.strip())<=120 and not any(ord(c)<32 for c in name),'project-name-invalid',400)
+    require(isinstance(name,str) and public_value('PROJECT_NAME',name.strip()),'project-name-invalid',400)
     require(isinstance(folder,str) and FOLDER.fullmatch(folder) and folder not in ('.','..'),'project-folder-invalid',400)
     try:request_id=str(uuid.UUID(request_id))
     except (ValueError,TypeError,AttributeError):raise Refused('project-request-invalid',400) from None
@@ -70,8 +75,15 @@ def create_project(actor,name,folder,request_id,project_path=''):
         os.mkdir(path.name,mode=0o770,dir_fd=parent)
         directory=os.open(path.name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
         os.fchown(directory,user.pw_uid,group.gr_gid);os.fchmod(directory,0o2770);os.fsync(parent)
+        values={'PROJECT_NAME':name}
+        if identifier:values={'PROJECT_ID':identifier,**values}
+        content=initialize_version_policy(''.join(
+            f'{key}={json.dumps(value,ensure_ascii=False)}\n' for key,value in values.items()
+        ).encode('utf-8'))
+        file_operation(project,{'op':'env-write','digest':'missing','content':base64.b64encode(content).decode('ascii')})
         with transaction.atomic():
             project=Project.objects.select_for_update().get(pk=identity)
+            project.public_metadata=synchronize(project.pk,include_forges=False,include_git=False)
             project.creation_state='READY';project.save(update_fields=['creation_state']);actor.projects.add(project)
         return project,True
     except (OSError,Refused) as error:

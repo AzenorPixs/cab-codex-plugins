@@ -1,5 +1,5 @@
 """CAB possède les écritures ; fichiers locaux maîtres, PostgreSQL projection."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 import hashlib
 import fcntl
@@ -12,7 +12,7 @@ import secrets
 import subprocess
 import sys
 import threading
-from django.db import transaction
+from django.db import connection,transaction
 from django.utils import timezone
 from cab_platform import statistics_documents as documents
 from cab_platform import sgs_engine as engine
@@ -21,6 +21,9 @@ from .monitor import identity,observe_tasks
 from .models import Project,Change,ChangeSource,StatisticsDocument,StatisticsRevision,StatisticsMetric,ProjectStatistics,StatisticsJob,StatisticsLock,Run,Operation,Maintenance
 
 ACTIVE=set()
+from contextvars import ContextVar
+SNAPSHOT=ContextVar('cab_statistics_snapshot',default=None)
+STAGE_DOCUMENTS=ContextVar('cab_statistics_stage_documents',default=True)
 
 def process_identity(pid):
     try:return Path('/proc/sys/kernel/random/boot_id').read_text().strip()+':'+Path('/proc',str(pid),'stat').read_text().split(') ',1)[1].split()[19]
@@ -32,6 +35,206 @@ def file_hash(project,path):
     try:return documents.sha(documents.read_source(Path(project.root),Path(path),64*1024*1024)[0])
     except FileNotFoundError:return None
 
+def global_index_matches(project,expected):
+    """Vérifie le contenu indexé sans le modifier ni le restituer."""
+    from cab_platform.git_commit_remove import context,run
+    options,env=context(project)
+    result=run(project,options,env,'show',':STATISTICS.md')
+    return result.returncode==0 and documents.sha(result.stdout)==expected
+
+
+def document_index_matches(project,relative,expected):
+    from cab_platform.git_commit_remove import context,run
+    options,env=context(project)
+    result=run(project,options,env,'show',':'+relative)
+    return result.returncode==0 and documents.sha(result.stdout)==expected
+
+
+def stage_document(job,path,expected):
+    from cab_platform.project_git import probe
+    from cab_platform.git_commit_remove import context,run
+    project=job.project;root=Path(project.root);path=Path(path)
+    commands.require(path.is_relative_to(root),'statistics-target-invalid')
+    relative=str(path.relative_to(root))
+    if relative.startswith('statistics/runs/'):
+        from cab_platform.canonical_statistics import check_target
+        check_target(project,relative)
+    else:commands.require(relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name in ('STATISTICS.md','BLOCKERS.md'),'statistics-target-invalid')
+    available=probe(project);commands.require(available is not None,'statistics-git-unavailable')
+    receipt={'path':relative,'sha256':expected,'state':'SKIPPED' if available==0 or not STAGE_DOCUMENTS.get() else 'RUNNING'}
+    indexed={**job.result.get('indexed_documents',{}),relative:receipt}
+    job.result={**job.result,'indexed_documents':indexed}
+    if relative=='STATISTICS.md':job.result['global_index']=receipt
+    job.save(update_fields=['result','updated'])
+    if available==0 or not STAGE_DOCUMENTS.get():return
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:
+        commands.require(file_hash(project,path)==expected,'statistics-global-index-divergent')
+        options,env=context(project)
+        result=run(project,options,{**env,'GIT_LITERAL_PATHSPECS':'1'},'add','--',relative)
+        commands.require(result.returncode==0,'statistics-global-index-unconfirmed')
+        commands.require(file_hash(project,path)==expected and document_index_matches(project,relative,expected),'statistics-global-index-divergent')
+        receipt={**receipt,'state':'COMPLETED'}
+        job.result={**job.result,'indexed_documents':{**job.result.get('indexed_documents',{}),relative:receipt}}
+        if relative=='STATISTICS.md':job.result['global_index']=receipt
+        job.save(update_fields=['result','updated'])
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def stage_global(job,path,expected):
+    commands.require(Path(path)==Path(job.project.root)/'STATISTICS.md','statistics-target-invalid')
+    return stage_document(job,path,expected)
+
+
+def before_publication_evidence(job):
+    """Constat d'état initial, jamais une reconstruction d'écriture réussie."""
+    from cab_platform.git_commit_remove import context,run
+    from cab_platform.session_git import shared_scope_digest
+    if not job.expected or job.action not in ('sync','generate'):return None
+    indexed=job.result.get('indexed_documents',{})
+    if not indexed or any(item.get('state') not in ('PENDING','RUNNING') for item in indexed.values()):return None
+    root=Path(job.project.root);paths={}
+    for absolute,expected in job.expected.items():
+        path=Path(absolute)
+        if not path.is_relative_to(root) or path.resolve()!=path:return None
+        relative=str(path.relative_to(root))
+        if relative not in indexed or indexed[relative].get('sha256')!=expected.get('after'):return None
+        if not (relative=='STATISTICS.md' or relative.startswith('openspec/changes/') and path.name=='STATISTICS.md'):
+            from cab_platform.canonical_statistics import owner
+            if owner(job.project,relative) is None:return None
+        if file_hash(job.project,path)!=expected.get('before'):return None
+        paths[relative]=expected.get('before')
+    if set(paths)!=set(indexed):return None
+    options,env=context(job.project)
+    lockpath=run(job.project,options,env,'rev-parse','--path-format=absolute','--git-path','index.lock')
+    if lockpath.returncode!=0:return None
+    if Path(lockpath.stdout.decode().strip()).exists():return None
+    digest=shared_scope_digest(job.project,options,env,sorted(paths))
+    for relative,before in paths.items():
+        entries=run(job.project,options,env,'ls-files','--stage','-z','--',relative)
+        if entries.returncode!=0:return None
+        if before is None:
+            if entries.stdout:return None
+        elif not document_index_matches(job.project,relative,before):return None
+    if Path(lockpath.stdout.decode().strip()).exists() or shared_scope_digest(job.project,options,env,sorted(paths))!=digest:return None
+    if any(file_hash(job.project,root/path)!=before for path,before in paths.items()):return None
+    child=job.result.get('child',{})
+    owner_alive=alive(job.owner_pid,job.owner_start)
+    if owner_alive and (job.owner_pid!=os.getpid() or job.pk in ACTIVE):return None
+    if alive(child.get('pid',0),child.get('start','')):return None
+    return {'classification':'FAILED_NO_CHANGE','scope_digest':digest,'before':paths,'writer_stopped':True,'owner_stopped':not owner_alive,'owner_process_stopped':not owner_alive,'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False}
+
+
+def retired_pending_publication_evidence(job):
+    """Prouve que le dernier rapport, devenu obsolète, n'a pas été publié."""
+    from datetime import date
+    import hashlib
+    from cab_platform.git_commit_remove import context, run
+    from cab_platform.session_git import shared_scope_digest
+
+    if job.state!='UNKNOWN' or job.action!='sync' or job.result.get('error')!='statistics-publication-unconfirmed':
+        return None
+    project=job.project
+    root=Path(project.root)
+    changes=root/'openspec/changes'
+    receipts=job.result.get('indexed_documents',{})
+    candidates=[name for name,item in receipts.items() if item.get('state')=='PENDING']
+    if len(candidates)!=1:
+        return None
+    retired=candidates[0]
+    path=commands.safe_path(root,retired,exists=False)
+    change=path.parent.name
+    if path.name!='STATISTICS.md' or path.parent.parent!=changes or change=='archive' or not commands.ID.fullmatch(change):
+        return None
+    archives=[]
+    for candidate in (changes/'archive').glob('????-??-??-'+change):
+        try:date.fromisoformat(candidate.name[:10])
+        except ValueError:continue
+        archives.append(candidate)
+    if len(archives)!=1:
+        return None
+    directory=commands.safe_path(root,str(archives[0].relative_to(root)),exists=False)
+    if not directory.is_dir() or not commands.safe_path(root,str((directory/'proposal.md').relative_to(root)),exists=False).is_file():
+        return None
+    sibling=str(directory.relative_to(root))
+    expectation=job.expected.get(str(path),{})
+    pending=receipts[retired]
+    if 'before' not in expectation or expectation['before'] is not None or not pending.get('sha256') or pending['sha256']!=expectation.get('after'):
+        return None
+    completed={name:item for name,item in receipts.items() if name!=retired}
+    if not completed or any(item.get('state')!='COMPLETED' or not item.get('sha256') for item in completed.values()):
+        return None
+    for absolute,expected in job.expected.items():
+        if absolute==str(path):
+            continue
+        target=Path(absolute)
+        if not target.is_relative_to(root) or completed.get(str(target.relative_to(root)),{}).get('sha256')!=expected.get('after'):
+            return None
+    global_index=job.result.get('global_index')
+    if global_index and global_index.get('state') not in ('COMPLETED','SKIPPED'):
+        return None
+    if path.parent.exists() or path.parent.is_symlink():
+        return None
+    child=job.result.get('child',{})
+    owner_alive=alive(job.owner_pid,job.owner_start)
+    if (owner_alive and (job.owner_pid!=os.getpid() or job.pk in ACTIVE)) or alive(child.get('pid',0),child.get('start','')):
+        return None
+
+    options,env=context(project)
+    def git(*args):
+        return run(project,options,env,*args)
+    head=git('rev-parse','--verify','HEAD')
+    index_lock=git('rev-parse','--path-format=absolute','--git-path','index.lock')
+    if head.returncode!=0 or index_lock.returncode!=0:
+        return None
+    lockpath=Path(index_lock.stdout.decode().strip())
+    if lockpath.exists() or lockpath.is_symlink():
+        return None
+    paths=sorted(receipts)
+    digest=shared_scope_digest(project,options,env,paths)
+    cached=git('show',':'+retired)
+    prior=git('show','HEAD:'+retired)
+    previous_sha=None
+    witness=None
+    if cached.returncode==0 and prior.returncode==0:
+        if cached.stdout!=prior.stdout or git('diff','--cached','--quiet','HEAD','--',retired).returncode!=0:
+            return None
+        previous_sha=hashlib.sha256(cached.stdout).hexdigest()
+        if previous_sha==pending['sha256']:
+            return None
+        witness=StatisticsJob.objects.filter(
+            project=project,
+            state='COMPLETED',updated__lt=job.created,
+            result__indexed_documents__contains={retired:{'sha256':previous_sha,'state':'COMPLETED'}},
+        ).order_by('-updated','pk').first()
+        if witness is None:
+            return None
+    else:
+        # Un échec de git show seul ne prouve pas l'absence d'une entrée.
+        entries=git('ls-files','--stage','-z','--',retired)
+        tree=git('ls-tree','-z','HEAD','--',retired)
+        if entries.returncode!=0 or tree.returncode!=0 or entries.stdout or tree.stdout:
+            return None
+    for relative,item in completed.items():
+        target=commands.safe_path(root,relative,exists=False)
+        if file_hash(project,target)!=item['sha256'] or not document_index_matches(project,relative,item['sha256']):
+            return None
+    if (path.parent.exists() or path.parent.is_symlink() or lockpath.exists() or lockpath.is_symlink()
+        or git('rev-parse','--verify','HEAD').stdout!=head.stdout
+        or shared_scope_digest(project,options,env,paths)!=digest):
+        return None
+    return {
+        'classification':'FAILED_REMAINDER_NO_CHANGE','scope_digest':digest,
+        'retired_path':retired,'archive':sibling,'file_before_absent':True,
+        'head':head.stdout.decode().strip(),'index_before_sha256':previous_sha,
+        'index_before_absent':previous_sha is None,
+        'prior_index_receipt':witness.request_id if witness else None,'completed_documents':completed,
+        'writer_stopped':True,'owner_process_stopped':not owner_alive,
+        'owner_execution_stopped':True,'success_reconstructed':False,'effects_replayed':False,
+    }
+
+
 def recover_lock(lock):
     job=lock.owner
     if not job:return
@@ -39,29 +242,56 @@ def recover_lock(lock):
     if alive(job.owner_pid,job.owner_start) and (job.owner_pid!=os.getpid() or job.pk in ACTIVE):raise commands.Refused('statistics-project-busy')
     child=job.result.get('child',{})
     if alive(child.get('pid',0),child.get('start','')):raise commands.Refused('statistics-effect-unknown')
+    commands.require(connection.in_atomic_block,'statistics-recovery-transaction-required')
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s,%s)',[7348501,7348502])
+    before=before_publication_evidence(job) or retired_pending_publication_evidence(job)
+    if before:
+        from .models import Event
+        original={'state':job.state,'expected':job.expected,'result':job.result}
+        original_digest=commands.digest(original)
+        kind='statistics-stopped-before-remaining-publication' if before['classification']=='FAILED_REMAINDER_NO_CHANGE' else 'statistics-stopped-before-publication'
+        Event.objects.create(project=job.project,kind=kind,data={'job_id':job.pk,'request_id':job.request_id,'original_receipt':original,'original_receipt_digest':original_digest,'evidence':before})
+        job.state='FAILED';job.result={**job.result,'recovery':{**before,'original_receipt_digest':original_digest}};job.save(update_fields=['state','result','updated'])
+        lock.owner=None;lock.save(update_fields=['owner']);return
     for path,expected in job.expected.items():
         if file_hash(job.project,path) not in (expected['before'],expected['after']):raise commands.Refused('statistics-effect-unknown')
+    indexed=job.result.get('global_index',{})
+    if indexed and indexed.get('state') not in ('COMPLETED','SKIPPED'):
+        if file_hash(job.project,Path(job.project.root)/'STATISTICS.md')!=indexed.get('sha256') or not global_index_matches(job.project,indexed.get('sha256')):raise commands.Refused('statistics-effect-unknown')
+        job.result={**job.result,'global_index':{**indexed,'state':'COMPLETED','recovered':True}}
+    for relative,item in job.result.get('indexed_documents',{}).items():
+        if item.get('state') in ('PENDING','RUNNING'):
+            if file_hash(job.project,Path(job.project.root)/relative)!=item.get('sha256') or not document_index_matches(job.project,relative,item.get('sha256')):raise commands.Refused('statistics-effect-unknown')
     job.state='FAILED';job.result={**job.result,'recovered':'writer-stopped-files-verified'};job.save();lock.owner=None;lock.save()
 
 @contextmanager
-def guarded(project,action,request_id):
-    with transaction.atomic():
-        Project.objects.select_for_update().get(pk=project.pk)
-        lock,_=StatisticsLock.objects.get_or_create(project=project)
-        lock=StatisticsLock.objects.select_for_update(of=('self',)).select_related('owner__project').get(pk=project.pk)
-        previous=StatisticsJob.objects.filter(project=project,request_id=request_id).first()
-        if previous:
-            commands.require(previous.action==action,'statistics-request-conflict')
-            yield None,previous;return
-        recover_lock(lock)
-        job=StatisticsJob.objects.create(pk=secrets.token_hex(16),project=project,action=action,request_id=request_id,owner_pid=os.getpid(),owner_start=process_identity(os.getpid()))
-        lock.owner=job;lock.fencing+=1;lock.save()
+def guarded(project,action,request_id,lock_observed=None):
+    lock_started=lock_end=None
+    try:
+        with transaction.atomic():
+            if lock_observed:lock_started=timezone.now()
+            Project.objects.select_for_update().get(pk=project.pk)
+            lock,_=StatisticsLock.objects.get_or_create(project=project)
+            lock=StatisticsLock.objects.select_for_update(of=('self',)).select_related('owner__project').get(pk=project.pk)
+            if lock_started:lock_end=timezone.now()
+            previous=StatisticsJob.objects.filter(project=project,request_id=request_id).first()
+            if previous:
+                commands.require(previous.action==action,'statistics-request-conflict')
+                yield None,previous;return
+            recover_lock(lock)
+            job=StatisticsJob.objects.create(pk=secrets.token_hex(16),project=project,action=action,request_id=request_id,owner_pid=os.getpid(),owner_start=process_identity(os.getpid()))
+            lock.owner=job;lock.fencing+=1;lock.save()
+    finally:
+        if lock_started and lock_end:
+            lock_observed(lock_started,lock_end)
     ACTIVE.add(job.pk)
     try:
         yield job,None
     except (OSError,ValueError,commands.Refused,subprocess.SubprocessError) as error:
         known=getattr(error,'code','') in {'statistics-local-conflict','statistics-target-invalid','statistics-target-unsafe'} or not job.expected
         job.state='FAILED' if known else 'UNKNOWN';job.result={**job.result,'error':getattr(error,'code',type(error).__name__)};job.save()
+        if any(item.get('state') in ('PENDING','RUNNING') for item in job.result.get('indexed_documents',{}).values()):
+            known=False;job.state='UNKNOWN';job.save(update_fields=['state','updated'])
         if known:StatisticsLock.objects.filter(project=project,owner=job).update(owner=None)
         raise
     else:
@@ -70,9 +300,26 @@ def guarded(project,action,request_id):
     finally:ACTIVE.discard(job.pk)
 
 def write(job,path,content):
+    with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+    try:return _write_locked(job,path,content)
+    finally:
+        with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
+
+
+def _write_locked(job,path,content):
+    snapshot=SNAPSHOT.get()
+    if snapshot and snapshot.get('run_pk'):
+        current=Run.objects.get(pk=snapshot['run_pk']).configuration.get('publication_boundary',{})
+        commands.require(current.get('state')=='FROZEN' and current.get('generation')==snapshot['generation'],'statistics-snapshot-superseded')
     project=job.project;root=Path(project.root);path=Path(path);expected=file_hash(project,path);desired=documents.sha(content.encode())
-    if expected==desired:return desired
-    job.expected={**job.expected,str(path):{'before':expected,'after':desired}};job.save(update_fields=['expected','updated'])
+    if expected==desired:
+        stage_document(job,path,desired);return desired
+    relative=str(path.relative_to(root))
+    pending={'path':relative,'sha256':desired,'state':'PENDING'}
+    job.result={**job.result,'indexed_documents':{**job.result.get('indexed_documents',{}),relative:pending}}
+    job.expected={**job.expected,str(path):{'before':expected,'after':desired}};job.save(update_fields=['expected','result','updated'])
+    if path==root/'STATISTICS.md':
+        job.result={**job.result,'global_index':{'path':'STATISTICS.md','sha256':desired,'state':'PENDING'}};job.save(update_fields=['result','updated'])
     try:info=path.stat();uid=info.st_uid;gid=info.st_gid;mode=info.st_mode&0o777
     except FileNotFoundError:uid=project.owner_uid;gid=project.owner_gid if project.owner_gid is not None else root.stat().st_gid;mode=0o770
     user=pwd.getpwuid(uid);env={'HOME':user.pw_dir,'USER':user.pw_name,'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','PYTHONPATH':str(Path(__file__).resolve().parents[2]),'PYTHONDONTWRITEBYTECODE':'1'}
@@ -87,6 +334,7 @@ def write(job,path,content):
         if result.get('error') in {'statistics-local-conflict','statistics-target-invalid','statistics-target-unsafe'}:raise commands.Refused(result['error'])
         commands.require(process.returncode==0 and result.get('ok') and result['result']['sha256']==desired,'statistics-publication-unconfirmed')
         commands.require(file_hash(project,path)==desired,'statistics-publication-divergent')
+        stage_document(job,path,desired)
         return desired
     finally:
         if process.poll() is None:process.kill();process.communicate()
@@ -144,6 +392,13 @@ def discover(project):
     return sources
 
 def evidence_for_change(change):
+    snapshot=SNAPSHOT.get()
+    if snapshot and snapshot['change_id']==change.pk:return __import__('copy').deepcopy(snapshot['contribution'])
+    from cab_platform.publication_boundary import KEY
+    runs=list(Run.objects.filter(change_record=change).order_by('-pk'))
+    active=[r for r in runs if r.state not in ('CLOSED','BLOCKED','CANCELLED_BEFORE_START') and r.configuration.get(KEY,{}).get('state')!='FROZEN']
+    sealed=[r.configuration[KEY] for r in runs if r.configuration.get(KEY,{}).get('state')=='FROZEN' and 'contribution' in r.configuration[KEY]]
+    if sealed and not active:return __import__('copy').deepcopy(sealed[0]['contribution'])
     actor=Run.objects.filter(change_record=change).select_related('actor').order_by('-pk').first()
     if actor:
         data=measurements.change_statistics(actor.actor,{'project_id':change.project_id,'change':change.identifier});contribution=data['sgs_evidence']['contribution']
@@ -157,6 +412,10 @@ def evidence_for_change(change):
         accepted += [row.payload['request_id'] for row in RunEvidence.objects.filter(run=run,source='cab-operation',payload__result='passed') if row.payload.get('request_id')]
     test_count=0;observed=False
     for operation in Operation.objects.filter(run__change_record=change,request_id__in=set(accepted),state='COMPLETED'):
+        boundary=operation.run.configuration.get(KEY,{})
+        if boundary.get('cutoff') and boundary.get('state')=='FROZEN':
+            from django.utils.dateparse import parse_datetime
+            if operation.created>parse_datetime(boundary['cutoff']):continue
         if operation.receipt.get('exit_code')!=0:continue
         counts=re.findall(r'(?m)^Ran (\d+) tests? in ',operation.receipt.get('output',''))
         if counts:test_count+=sum(map(int,counts));observed=True
@@ -172,7 +431,7 @@ def generate_change(job,change):
     observations=[]
     from .models import MeasurementPeriod
     from cab_platform.measurement_sources import snapshot,difference
-    for period in MeasurementPeriod.objects.filter(change=change,ended__isnull=True).select_related('run__actor','run__project','session')[:50]:
+    for period in ([] if SNAPSHOT.get() else MeasurementPeriod.objects.filter(change=change,ended__isnull=True).select_related('run__actor','run__project','session')[:50]):
         values,coverage=difference(period.start_snapshot,snapshot(period.run))
         observations.extend([[period.run.run_id,period.session.native_id,key,value,coverage['state']] for key,value in sorted(values.items())])
         if not values:observations.append([period.run.run_id,period.session.native_id,'N/A','N/A',coverage.get('reason','non observé')])
@@ -190,6 +449,8 @@ def generate_global(job):
     for source in ChangeSource.objects.filter(change__project=project,present=True).select_related('change','statistics').order_by('change__identifier','path'):
         document=import_document(source)
         entries.append({'change':source.change.identifier,'path':source.path+'/STATISTICS.md','content':document.content,'sha256':document.sha256,'status':document.status})
+    from cab_platform.canonical_statistics import entries as canonical_entries
+    entries.extend(canonical_entries(project))
     state=ProjectStatistics.objects.get(project=project)
     commands.require(state.inventory_complete,'statistics-inventory-incomplete')
     text=documents.global_document(project.identifier or project.name or Path(project.root).name,entries)
@@ -217,21 +478,78 @@ def retire_file_lock(project):
         path.unlink()
     finally:os.close(fd)
 
-def sync(project,request_id=None,generate=None,full=False,automatic=False):
+def stage_blockers(job):
+    from .models import GitFileReservation
+    for source in ChangeSource.objects.filter(change__project=job.project,present=True).select_related('change'):
+        relative=source.path+'/BLOCKERS.md';path=Path(job.project.root)/relative
+        if not path.is_file():continue
+        owners=list(Run.objects.filter(change_record=source.change,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','ACCEPTED','REVIEW_PENDING'],suspension='',configuration__terminal_git__required=True))
+        reservation=GitFileReservation.objects.filter(project=job.project,path=relative,active=True).select_related('git_index').first()
+        if reservation:owners=[run for run in owners if run.coding_session_id==reservation.git_index.session_id]
+        if len(owners)!=1:continue
+        digest=file_hash(job.project,path)
+        if digest:stage_document(job,path,digest)
+
+
+def sync(project,request_id=None,generate=None,full=False,automatic=False,*,canonical_run=None,canonical_proofs=None,blocker=None,observe_report=None,blocker_written=None,lock_observed=None):
     commands.require(not Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists(),'maintenance-in-progress')
     commands.require(Path(project.root).is_dir() and Path(project.root).resolve()==Path(project.root),'statistics-project-unavailable')
+    active_cycles=Run.objects.filter(project=project,configuration__cycle_profile='publication-12-v1',state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'])
+    if automatic and active_cycles.filter(configuration__publication_boundary__state='FROZEN').exists():
+        return {'state':'DEFERRED','reason':'publication-cycle-reports-owned-by-statistics-phase'}
     open_before=set(Change.objects.filter(project=project,source_state='open').values_list('pk',flat=True))
     # Une protection d’écriture incertaine ne bloque pas la projection du maître local.
-    discover(project)
-    with guarded(project,'sync',request_id or 'SYNC-'+secrets.token_hex(12)) as (job,previous):
+    with (observe_report('preparation') if observe_report else nullcontext()):
+        discover(project)
+    with guarded(project,'sync',request_id or 'SYNC-'+secrets.token_hex(12),lock_observed) as (job,previous):
         if previous:return {'job_id':previous.pk,'state':previous.state,'result':previous.result}
         retire_file_lock(project)
+        if blocker:
+            relative,content=blocker
+            path=commands.safe_path(Path(project.root),relative,exists=False)
+            with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
+            try:
+                if path.exists():
+                    raw,_=documents.read_source(Path(project.root),path,1024*1024)
+                    commands.require(raw.strip(),'blockers-proof-required')
+                    stage_document(job,path,documents.sha(raw))
+                else:
+                    started = timezone.now()
+                    sha256 = _write_locked(job,path,content)
+                    if blocker_written:
+                        blocker_written(relative,sha256,started,timezone.now())
+            finally:
+                with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_unlock(%s,%s)',[7348501,7348502])
         targets={generate} if isinstance(generate,str) else set(generate or [])
         if automatic:
             targets.update(Run.objects.filter(project=project,state__in=['WORKING','FINALIZATION_PENDING','FINALIZING','REVIEW_PENDING','ACCEPTED'],suspension='').values_list('change',flat=True))
             targets.update(Change.objects.filter(pk__in=open_before,source_state='archived').values_list('identifier',flat=True))
-        for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():generate_change(job,change)
-        state=generate_global(job)
+            targets.difference_update(active_cycles.values_list('change',flat=True))
+        trace = observe_report or (lambda _key: nullcontext())
+        for change in Change.objects.filter(project=project,identifier__in=targets,local_sources__present=True).distinct():
+            with trace('change'):
+                report=generate_change(job,change)
+                if report is not None and report.status=='ready':
+                    relative=report.source.path+'/STATISTICS.md'
+                    indexed=job.result.get('indexed_documents',{}).get(relative,{})
+                    if indexed.get('state')!='COMPLETED' or indexed.get('sha256')!=report.sha256:
+                        stage_document(job,Path(project.root)/relative,report.sha256)
+                    if observe_report:
+                        commands.require(file_hash(project,Path(project.root)/relative)==report.sha256,'statistics-change-report-divergent')
+                elif observe_report:
+                    raise commands.Refused('statistics-change-report-unavailable')
+        if canonical_run is not None:
+            with trace('change'):
+                from cab_platform.canonical_statistics import generate as generate_canonical
+                report=generate_canonical(job,canonical_run,canonical_proofs or [])
+                if observe_report:
+                    commands.require(file_hash(project,Path(project.root)/report['path'])==report['sha256'],'statistics-change-report-divergent')
+                job.result={**job.result,'canonical_report':report};job.save(update_fields=['result','updated'])
+        stage_blockers(job)
+        with trace('global'):
+            state=generate_global(job)
+            if observe_report:
+                commands.require(file_hash(project,Path(project.root)/'STATISTICS.md')==state.sha256,'statistics-global-report-divergent')
         if full or state.next_full_sync is None:
             state.last_full_sync=timezone.now();state.next_full_sync=state.last_full_sync+timedelta(seconds=43200+secrets.randbelow(43201));state.save(update_fields=['last_full_sync','next_full_sync'])
         job.result={**job.result,'changes':Change.objects.filter(project=project).count(),'reports':StatisticsDocument.objects.filter(source__change__project=project,status='ready',source__present=True).count(),'global_sha256':state.sha256,'coverage_complete':state.coverage_complete}

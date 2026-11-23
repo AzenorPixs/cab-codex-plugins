@@ -1,5 +1,58 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Baux de ressources
+
+La table PostgreSQL `resource_reservations` matérialise les baux actifs des
+réservations Git et des baux d’opération ou de banc. Des triggers suivent les
+transitions sources et la migration reprend les baux existants. Une Shape
+Electric filtrée par projet projette les champs d’affichage. La surveillance
+à la seconde traite les échéances et enregistre les avis. Au bout de 300
+secondes sans renouvellement, le bail disparaît. Les effets à réconcilier
+restent protégés dans leur enregistrement source.
+
+L’aperçu de fichier s’exécute sous l’UID du propriétaire du bail, borne la
+lecture UTF-8 et exige un bail courant et une empreinte de contenu inchangée
+pour une écriture.
+
+La synthèse `runs.cycle_summary` conserve le nombre d’itérations, les bornes et
+la durée du dernier cycle, ainsi que les cumuls des durées connues et leurs
+ventilations CAB/Agent(s)/Attente. Les cycles interrompus mesurés sont inclus ;
+les étapes parallèles ne sont pas additionnées. Les indicateurs de couverture
+signalent les cumuls partiels. Le producteur temporel actualise cette synthèse
+sous verrou et le flux Electric autorisé du RUN diffuse ce seul champ public.
+Le Web utilise ces valeurs persistées ; les anciennes données manquantes
+restent non observées jusqu’au rattrapage du producteur.
+
+L’admission administrative session.git.inspect_preexisting / session.git.authorize_preexisting
+porte sur les fichiers réguliers explicitement autorisés du mandat. Le CAS lie
+RUN/SID, cadrage, révision, baseline, HEAD, index éventuel et empreintes entières.
+L’événement ne modifie ni baseline, ni fichier, ni index ; la réservation native
+revérifie l’état du chemin. Les contenus déjà modifiés dans l’index partagé,
+les conflits, liens, réservations et frontières protégées restent refusés.
+Un ancien statut dirty n’empêche plus un fichier réellement identique à HEAD
+d’être réservé ; la capture historique n’est jamais réécrite.
+
+Le service expose la politique de versionnement dans `session.git.context`.
+En direct, le codeur choisit la version et CAB enregistre ce choix à l'admission.
+En piloté, `session.delivery.select_version` exige l'identité de l'orchestrateur
+du RUN ; le moteur refuse un numéro non déclaré ou différent avant tout Git.
+Les reçus de livraison conservent l'autorité et la version choisie.
+
+Le centre administrateur utilise `cab_notifications` et les reçus immuables
+`cab_notification_receipts`. Lectures et réponses sont transactionnelles et
+idempotentes ; les questions ne portent aucune commande exécutable. Le flux
+Electric `/api/v1/sync/notifications` reste authentifié et réservé aux admins.
+`notification.create` crée un message ou une question (`request_id`, `title`,
+`body`, `project_id` facultatif, `kind`, `choices` avec `id`/`label`). Le reçu
+retourne l'`id` corrélé. `notification.receipt` consulte son état READ/ANSWERED
+et la réponse sans recréer la notification. Les réponses sont accessibles au
+producteur CAB autorisé ; leur prise en compte conserve les règles du mandat.
+Le POST administrateur `/api/v1/notifications/clear-messages` retire uniquement
+les lignes `message`, tous projets confondus. Les nouveaux reçus `CLEARED`
+empêchent la republication de la même identité. La suppression et ses reçus
+sont transactionnels. Le retour des identifiants retirés permet à l’aperçu
+d’ignorer les lignes déjà purgées pendant que le flux Electric se met à jour.
+
 ## Architecture CAB 3.2.8
 
 La version déclarée dans la configuration CAB est projetée dans PostgreSQL et diffusée seule par Electric pour l'affichage web ; les autres valeurs du fichier restent privées.
@@ -180,7 +233,7 @@ OpenSpec et le contrat distribué de la version effectivement active font autori
 |---|---|
 | 1. Autorité et autonomie | Dans le change validé, l’orchestrateur décide, orchestre, contrôle et valide ; le codeur réalise librement lectures, exploration et essais. Toute écriture projet hors atelier et tout accès web requièrent sa validation préalable. Toute action hors change et toute allocation de ressources supplémentaires nécessitent l’accord du développeur. Les ressources déjà allouées restent utilisables. Tous les résultats de tests sont soumis à validation de l’orchestrateur avant d’être retenus comme preuves. |
 | 2. SGS | Service permanent, collecte native autonome Codex/OpenCode des deux rôles, sources des briques transmises directement, complément LLM limité aux faits absents. Modèle, fournisseur, niveau de raisonnement et changements horodatés ; chronologie, attentes, durées et tokens entrée/sortie/raisonnement/cache séparés, totaux natifs préservés. N/A motivé pour les mesures non exposées. Tous les rapports statistiques archivés sont importables avec provenance et déduplication. |
-| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination ciblée avec les déclarants y compris entre projets et résolution individuelle. Correctif code ou documentaire sous SCM/version/CI-CD/CABU ; réponse possible sans correctif avec limites. Après réponse et résolution, nettoyage individuel ou par lot sans attendre les autres entrées ; CCAB ne sert pas d’archive. Aucun nouveau chat imposé. |
+| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination ciblée avec les déclarants y compris entre projets et résolution individuelle. L’invocation CCAB porte le mandat correctif CAB, OpenSpec et SCM/CI-CD/CABU nécessaires sans confirmation générique répétée ; mandats des déclarants et protections préservés. Réponse possible sans correctif avec limites. Après réponse et résolution, nettoyage individuel ou par lot sans attendre les autres entrées ; CCAB ne sert pas d’archive. Aucun nouveau chat imposé. |
 | 4. CABU | Préparation à chaud, bascule minimale, reprise du même reçu, versions chargées vérifiées et retour des communications. Aucun rejeu d’effet ni de permission once. Une coupure brève se traite comme une interruption réseau avec reprise sur reçus. Chaque UID modifie uniquement ses données privées. |
 | 5. Nettoyage et Web Monitor | RUN en cours refusé au nettoyage. À l’archivage ou à l’arrêt explicite pour dépendance insatisfaite : rapports durables, nettoyage OC puis données du change dans toutes les briques, avec préservation des pairs. Une pause ou un incident technique ne vaut pas clôture. Archives montre les données réellement conservées et permet leur suppression explicite par le développeur sans approbation CAB supplémentaire. Stats lit seulement SGS ; incidents encore nécessaires visibles dans CCAB. |
 | 6. Distribution et connaissance | Chaque acteur connaît le contrat applicable avant son travail et après reprise/update ; rôle et version sont tracés. Skills, plugins et commandes restent cohérents et agnostiques des projets et machines. Le noyau compact renvoie aux références utiles sans relire tout l’historique. |
@@ -2170,7 +2223,7 @@ la présence locale d’une décision, pas son application native. Procédure :
 
 ## Coordination des incidents CAB
 
-Le skill et la commande distribuent la procédure [coding-incidents.md](plugins/cab-approval-bridge/skills/approval-bridge/references/coding-incidents.md) : signalement au chat « Correctif CAB - OC », réutilisation ou création conditionnelle et suivi jusqu’au correctif puis à son activation CABU vérifiée. Les propriétaires des sessions conservent leurs mandats et preuves ; la livraison source et l’activation restent distinctes.
+Le plugin, le skill et la commande CCAB distribués depuis integrations/codex/ccab et integrations/commands portent le mandat des correctifs CAB nécessaires sous SCM avec CICD, y compris les écritures OpenSpec et l’activation requise. Le correcteur coordonne les déclarants sans imposer de nouveau chat ni redemander le mandat pour chaque correctif ou fichier. Les propriétaires des projets déclarants conservent leurs mandats et permissions ; leurs fichiers préexistants ne sont pas attribués implicitement. Livraison, activation et retour vérifié restent des preuves distinctes ; une purge globale exige sa demande explicite.
 
 
 ## Entrées modèle du client V2
@@ -2348,4 +2401,47 @@ Les contrôles administratifs forcés restent authentifiés et distincts du cach
 
 ## Surveillance Git récursive
 
-Un surveillant inotify par projet suit récursivement ses répertoires sans suivre les liens symboliques. Les modifications sont regroupées en mémoire par projet ; l’inventaire réaffecte les surveillances après déplacement et une perte d’événements déclenche une reconstruction. Les délais PostgreSQL sont appliqués à chaud. Les analyses automatiques et explicites partagent une exclusion PostgreSQL globale et l’intervalle minimal ; leur projection existante est transmise via Electric.
+Un surveillant inotify par projet suit récursivement ses répertoires sans suivre les liens symboliques. Les modifications sont regroupées en mémoire par projet ; l’inventaire réaffecte les surveillances après déplacement et une perte d’événements déclenche une reconstruction. Les délais PostgreSQL sont appliqués à chaud. Les analyses partagent une exclusion PostgreSQL globale. L’intervalle minimal s’applique aux seules analyses automatiques ; le clic manuel le contourne. Une lecture automatique en attente est satisfaite par une mesure manuelle plus récente. Leur projection existante est transmise via Electric.
+
+## Git par session — CAB 3.2.16
+
+Les migrations 0030 à 0036 créent git_changes, les index et réservations de
+session, les effets idempotents, les liaisons MCP/RUN et les étapes de livraison.
+Les références internes refs/cab/session-index et refs/cab/session-base
+protègent les objets et le commit de base jusqu'au retrait contrôlé de l'index.
+Une archive conserve les index encore nécessaires ; une suppression de session
+ne peut pas détruire un index actif. Les états UNKNOWN conservent leur protection.
+
+La connexion MCP fournit le RUN réel ; la livraison reçoit seulement la version.
+Les autorisations interprojets sont des événements administratifs persistés,
+bornés aux chemins du RUN et révocables, sans identité native modifiée. Les
+projections de livraison sont synchronisées par Electric. Les builds DIU utilisent
+le projet courant ; leur exécution ne prouve pas une release. Un report explicite
+des releases est enregistré par RUN et version. Les commits et indexations manuels
+refusent les réservations concurrentes ; le global STATISTICS.md est indexé
+séparément par le service statistique avant libération de son verrou PostgreSQL.
+
+Le project_register expose delivery_producer, identité interne de publication
+Git sans profil de connexion. Le collecteur calcule l'empreinte de l'objet tag
+réellement envoyé, après vérification des étapes. Un ancien producteur peut
+être explicitement délégué par l'administrateur pour un RUN et une version.
+L'adoption d'une session antérieure à la migration 0030 est administrative,
+bornée à sa liste de fichiers et enregistrée comme legacy-adoption ; elle ne
+remplace jamais une capture initiale historique.
+
+## Commit terminal — CAB 3.2.17
+
+La table terminal_git_commits conserve un reçu unique par RUN, ses documents
+figés, le parent, le commit, le tag et les résultats de chaque forge. Le moteur
+modifie branche et tag dans une transaction de références locale puis les envoie
+atomiquement avec leurs valeurs attendues. CLOSED ou BLOCKED attend leur
+confirmation ; une incertitude protège le RUN sans rejouer l'effet.
+Les rapports du change et le global sont indexés après écriture ; BLOCKERS.md
+est indexé dès son observation si son attribution est non ambiguë. La clôture
+bloquée conserve le change actif et le code non livré. Les nouveaux RUN adoptent
+la barrière ; un ancien RUN doit être habilité explicitement.
+
+Le module versioning impose les écritures sans préfixe v pour les versions du
+projet et de release et les nouveaux tags de version. Le défaut est la version
+du projet. Les lecteurs des données historiques restent compatibles et CABU
+n'invente pas de préfixe dans ses recherches de release.

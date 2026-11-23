@@ -1,0 +1,5 @@
+# Conception
+
+La route `/projects/<ID>/factory` reprend le titre, le menu et les cartes de Forges. Les indicateurs Debian et Docker du projet contrôlent les cartes disponibles. La lecture utilise PostgreSQL. L’inventaire observe périodiquement `dist/` et le moteur Docker local. Le tableau conserve le dernier paquet par nom et architecture, ainsi que la dernière image locale du projet.
+
+Les actions manuelles sont réservées à l’administration authentifiée. Chaque reçu désigne un type d’artefact, un projet et une demande. Elles sont sérialisées avec la CI/CD du projet et la maintenance. Après succès, CAB relit l’artefact local. Un effet indéterminé ne se rejoue pas automatiquement. Les constructeurs utilisent le dossier source habituel. La recette Debian est `build/debian-package.json`. La recette Docker est `dockerfile`, avec les arguments littéraux facultatifs de `build/docker-build.args` et les tags habituels. CAB conserve les octets ou l’identité d’un artefact de même version déjà présent si le contenu produit est équivalent. Une divergence est signalée. Les dates et attestations de deux constructions indépendantes peuvent diverger.

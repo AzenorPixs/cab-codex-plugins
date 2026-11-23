@@ -13,8 +13,9 @@ class UnixConnection(http.client.HTTPConnection):
     def connect(self):self.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);self.sock.settimeout(self.timeout);self.sock.connect(self.path)
 
 class Client:
-    def __init__(self,admin=False):
+    def __init__(self,admin=False,*,native_thread=None):
         self.admin=admin;self.profile={}
+        self.native_thread=native_thread
         self.socket=os.environ.get('CAB_SOCKET','/run/cab/cab.sock')
         agent=os.environ.get('CAB_AGENT','codex')
         if not __import__('re').fullmatch('[A-Za-z0-9_-]{1,40}',agent):raise ClientError('client-agent-invalid')
@@ -35,6 +36,8 @@ class Client:
             from .paths import secret
             headers['X-CAB-Admin']=secret('admin-token')
         elif self.profile.get('token'):headers['Authorization']='Bearer '+self.profile['token']
+        if self.native_thread is not None:
+            headers['X-CAB-Shared-Thread']=self.native_thread
         conn=UnixConnection(self.socket)
         try:
             conn.request('POST' if body is not None else 'GET','/api/v1/'+path,json.dumps(body) if body is not None else None,headers)

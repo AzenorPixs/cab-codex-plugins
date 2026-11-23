@@ -144,6 +144,7 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
  const [,,uid,gid]=candidate,root=mkdtempSync(join(tmpdir(),'cab-owner-two-uids-'));chmodSync(root,0o755);
  const workspace=join(root,'project'),master=join(root,'master'),foreign=join(root,'foreign'),code=join(root,'code');
  for(const path of [workspace,master,code])mkdirSync(path,{mode:path===master?0o700:0o755});
+ for(const path of [workspace,code])chmodSync(path,0o755);
  assert.equal(spawnSync('sudo',['-n','install','-d','-m','0755','-o',uid,'-g',gid,foreign]).status,0);
  t.after(()=>{spawnSync('sudo',['-n','rm','-rf','--',root]);});
  for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs','cgpt-approval-bridge-permission-replies.mjs']){
@@ -220,7 +221,8 @@ for line in sys.stdin:
    except Exception as diagnostic_error:detail['diagnosticError']=type(diagnostic_error).__name__+':'+str(diagnostic_error)
   print(json.dumps(detail),flush=True)
  `;
- const child=spawn('sudo',['-n','-u','#'+uid,'python3','-B','-c',childCode],{stdio:['pipe','pipe','pipe']});let stderr='';child.stderr.on('data',b=>stderr+=b);
+ const python=process.env.CAB_TEST_PYTHON||'python3';
+ const child=spawn('sudo',['-n','-u','#'+uid,python,'-B','-c',childCode],{stdio:['pipe','pipe','pipe']});let stderr='';child.stderr.on('data',b=>stderr+=b);
  t.after(()=>{child.stdin.end();if(child.exitCode===null)child.kill('SIGTERM');});
  const lines=readline.createInterface({input:child.stdout}),iterator=lines[Symbol.asyncIterator]();
  const next=async()=>{let timer;try{const r=await Promise.race([iterator.next(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('fixture-timeout '+stderr)),10000)})]);assert.equal(r.done,false,stderr);return JSON.parse(r.value);}finally{clearTimeout(timer)}};

@@ -2,8 +2,10 @@
 import json
 import sys
 from .transports import sandbox,ssh
+from .reservation_file_view import FileRefused, edit_file
 
 def handle(packet):
+    if packet['action']=='reservation-file':return edit_file(packet)
     if packet['action']=='sandbox':return sandbox.sandbox_command(packet['args'],packet['grant'])
     if packet['action']=='describe':return {'profile':{**packet['profile'],'connection_fingerprint':ssh.connection(packet['directory'],packet['profile'])['fingerprint']},'credential_values_exposed':False}
     profile=packet['profile'];cfg=ssh.connection(packet['directory'],profile)
@@ -21,5 +23,5 @@ if __name__=='__main__':
     try:
         data=json.load(sys.stdin);result=handle(data);json.dump({'ok':True,'result':result},sys.stdout,ensure_ascii=False)
     except (ValueError,OSError,KeyError) as error:
-        code=str(error) if isinstance(error,(sandbox.AtelierError,ssh.ExternalError)) else 'execution-preparation-failed'
+        code=str(error) if isinstance(error,(sandbox.AtelierError,ssh.ExternalError,FileRefused)) else 'execution-preparation-failed'
         json.dump({'ok':False,'error':code},sys.stdout);raise SystemExit(2)

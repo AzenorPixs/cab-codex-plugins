@@ -137,7 +137,7 @@ class CodexAPI:
                 except (ValueError,UnicodeError) as error:raise NativeFailure('native-response-invalid','UNKNOWN' if self.mutation_sent else 'UNAVAILABLE') from error
     def _call(self,method,params=None):
         key='cab-'+uuid.uuid4().hex
-        mutator=method in ('config/mcpServer/reload','config/batchWrite')
+        mutator=method in ('config/mcpServer/reload','config/batchWrite','turn/start')
         if mutator:self.mutation_sent=True
         try:self._send({'id':key,'method':method,**({'params':params} if params is not None else {})})
         except OSError as error:raise NativeFailure('native-write-unconfirmed','UNKNOWN' if self.mutation_sent else 'UNAVAILABLE') from error
@@ -155,6 +155,19 @@ class CodexAPI:
     def call(self,method,params=None):
         if method not in self.ALLOWED:raise NativeFailure('native-method-not-allowed')
         return self._call(method,params)
+    def remind_thread(self, thread_id, project_root, uid, message):
+        from .native_sources import same_git_worktree
+        thread = self._call('thread/read', {'threadId':thread_id,'includeTurns':False}).get('thread', {})
+        cwd = thread.get('cwd')
+        if thread.get('id') != thread_id or not (cwd == project_root or same_git_worktree(uid,project_root,cwd)):
+            raise NativeFailure('reminder-native-thread-divergent')
+        if (thread.get('status') or {}).get('type') != 'idle':
+            raise NativeFailure('reminder-native-thread-busy')
+        result = self._call('turn/start', {'threadId':thread_id,'input':[{'type':'text','text':message,'text_elements':[]}]})
+        turn = result.get('turn', {}).get('id')
+        if not isinstance(turn,str) or not turn:
+            raise NativeFailure('reminder-native-receipt-missing','UNKNOWN')
+        return turn
     def mark_reload(self,request_id):
         # Seul ce marqueur CAB change : pas les autres serveurs ni leurs secrets.
         if not isinstance(request_id,str) or not 1<=len(request_id)<=200:raise NativeFailure('native-request-id-invalid')

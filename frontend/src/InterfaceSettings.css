@@ -1,0 +1,56 @@
+.interface-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-menus-tabs-gap, .25rem) var(--ui-menus-tabs-gap, .5rem);
+  margin-block: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.interface-tabs button {
+  padding: var(--ui-menus-tabs-padding, .6rem) var(--ui-menus-tabs-padding, .9rem);
+  border-bottom: var(--ui-menus-tabs-marker, 2px) solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: calc(var(--ui-menus-tabs-font, 17px) * var(--font-scale));
+}
+
+.interface-tabs button[aria-selected="true"] {
+  border-color: currentColor;
+  color: var(--ui-menus-tabs-active, var(--accent-text));
+  font-weight: var(--ui-menus-tabs-weight, 700);
+}
+
+.interface-component-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: .6rem 1rem;
+}
+
+.interface-component-fields label {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.interface-component-fields input[type="color"] {
+  inline-size: min(100%, 6rem);
+  block-size: 2.4rem;
+  padding: .2rem;
+}
+
+.interface-component-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin-block-start: 1rem;
+}
+
+.interface-resolution-tabs {
+  gap: var(--ui-menus-tabs-gap, .2rem) var(--ui-menus-tabs-gap, .4rem);
+  margin-block-start: -.45rem;
+}
+
+.interface-resolution-tabs button {
+  padding: var(--ui-menus-tabs-padding, .4rem) var(--ui-menus-tabs-padding, .65rem);
+  font-size: calc(var(--ui-menus-tabs-font, 15px) * var(--font-scale));
+}

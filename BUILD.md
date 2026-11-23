@@ -1,4 +1,42 @@
+La migration `0039_ccab_incident_table` renomme la table des incidents en `ccab`. Elle conserve les identifiants, relations, preuves, claims et résolutions. Sauvegarder avant migration et vérifier l’empreinte canonique complète du registre avant/après à une frontière coordonnée.
+
+Un reçu PARTIAL dont le commit est FAILED avant références peut être inspecté
+puis repris par l’administrateur local avec un CAS exact, sans nouveau start ni
+nouvelle version. La reprise ne rejoue pas la mutation de version/projection.
+Les résolutions de code nécessitent les deltas et blobs exactement approuvés ;
+les effets UNKNOWN restent protégés. Voir docs/platform-operations.md.
+
 # BUILD.md — Codex Approval Bridge (CAB)
+
+La migration additive `0052_run_cycle_summary` ajoute une synthèse dérivée JSON
+sur les RUN. Sauvegarder avant migration ; le retour retire uniquement ce champ
+et ne supprime aucune itération ni preuve temporelle. Le producteur temporel
+existant remplit progressivement les RUN actifs et historiques après activation.
+
+Les RUN de livraison cadrés sur une spécification canonique peuvent publier
+leur rapport réel sous statistics/runs/<identité>/STATISTICS.md, sans migration
+ni faux change. L’activation du paquet précède la reprise automatique de ces
+clôtures ; une livraison déjà confirmée ne doit pas être rejouée. Le reçu
+terminal conserve les documents, empreintes et destinations vérifiés.
+
+La demande CABU porte une autorité de reprise nécessaire liée à son pair Unix
+réel, son compte et sa version. Le reçu conserve ce périmètre ; le contrôle natif
+le revérifie avant dispatch. Une révocation ne change pas la configuration du
+fournisseur. Aucune confirmation répétitive ne remplace les gardes techniques.
+
+Le build DIU lancé par CAB reçoit une umask022 limitée à ce subprocess ; l'umask
+du service reste inchangée. La préparation fixe les modes des seuls payloads
+publics générés (Python et Web) à0755 pour les répertoires et0644 pour les fichiers.
+CABU contrôle les chemins publics du.deb, leur propriétaire et les versions
+Python/manifeste avant toute invocation APT. Un payload privatisé ou périmé est
+refusé avant installation. Ces contrôles ne modifient ni secrets, ni configuration
+locale, ni profils utilisateurs et n'imposent aucune normalisation des projets.
+
+La migration additive 0038 crée `cab_notifications` et
+`cab_notification_receipts`. Sauvegarder avant migration. L'installation et la
+mise à niveau publient uniquement la table des notifications dans Electric ;
+les reçus de décision restent hors de son flux. La migration inverse supprime
+les notifications et reçus : elle nécessite un choix explicite de restauration.
 
 ## Livraison CAB — Debian et clients légers
 
@@ -28,20 +66,45 @@ sans totaux partagés. Couverture incomplète : N/A, pas de rétroactivité. Par
 et limites dans docs/platform-operations.md et docs/sgs-schema.md.
 
 
-Préparer le frontend avec `npm ci` puis `npm run build` dans frontend.
-Préparer les dépendances Python3.13 selon packaging/python-lock.txt et extraire
-l’image publique Electric figée par digest dans output/package/electric-public.
-`python3 packaging/prepare.py` produit les payloads publics vérifiés, le code et
-les plugins sous output/package. Aucun secret de compte ni état local n’entre
-dans ces payloads. Les archives de runtime contiennent des dépendances publiques,
-licences et certificats CA publics ; les sources privées du projet restent exclues.
+Installer les dépendances frontend verrouillées avec `npm ci` dans
+`frontend`. Préparer les dépendances Python3.13 de `packaging/python-lock.txt`
+et extraire l’image Electric figée dans `output/package/electric-public`.
 
-Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
-DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
-build. La CI/CD finale est `diu projects cicd cab 3.2.15` ; PROJECT_VERSION est
-alors mis à jour par DIU avant commit/tag et construction du paquet exact.
-Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
-prépaquet ne constitue pas la release cible.
+La fabrication Debian native via CAB utilise `build/debian-package.json`.
+Pour la recette qui installe le manifeste du runtime CAB, le constructeur
+invoque `packaging/prepare.py` dans un dossier temporaire sous l’identité POSIX
+du projet. La préparation compile le frontend, copie les sources Python et
+génère le manifeste pour la version demandée. Elle utilise les dépendances
+préparées de `output/package`. Elle peut aussi être lancée en amont par
+l’interpréteur et le Node déclarés dans `DEVOPS.md`, avec `--node` et
+`--expected-version`. Aucun secret de compte n’entre dans ces contenus.
+
+La construction vérifie le paquet assemblé avant de le placer dans `dist/`.
+La publication vérifie la version et les empreintes des contenus Python, Web
+et des archives depuis le descripteur de fichier utilisé pour le transfert.
+CABU effectue son propre contrôle avant APT.
+
+Dans la Fabrique d’un projet, la construction et l’inventaire Docker utilisent
+la configuration locale. Une construction réussie applique à la même image
+`latest` et la version du projet sans préfixe `v`. La publication reprend
+l’identifiant de l’image versionnée et valide les réglages de la forge choisie.
+Le registre GitLab accepte un nom d’hôte avec un port facultatif.
+Forgejo, GitHub et GitLab acceptent la republication sous un tag existant.
+Après avoir confirmé la version Docker publiée et son alias `latest`, CAB
+retire les anciennes versions de cette image. GitHub supprime un manifeste
+entier. Si un ancien alias partage le manifeste conservé, le reçu le signale.
+
+Après une publication Debian confirmée, CAB conserve sept versions par nom
+de paquet et par architecture sur chaque forge, publication courante incluse.
+Il utilise la date de publication de la release, puis le numéro de version
+pour départager les releases de même date ou sans date. Seules les pièces
+jointes Debian de la série publiée sont retirées. Les releases et tags Git
+restent disponibles.
+
+En cas de refus ou d’échec, l’Overview de la Fabrique indique les étapes
+observées, les causes reconnues et le code de sortie lorsqu’il est disponible.
+Les diagnostics de configuration indiquent les clés et lignes concernées
+sans afficher leurs valeurs.
 
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 
@@ -53,7 +116,14 @@ migrent uniquement une base déjà initialisée, redémarrent et vérifient le m
 reçu. Un effet incertain n’est pas réémis. Une première installation reste en
 mode Web bootstrap ; le parcours authentifié crée la base et ses tables.
 
-Les plugins CAB/CCAB/CABU distribués par le catalogue viennent désormais de
+Sur PostgreSQL localisé, le rôle Electric reçoit `lc_messages=C` uniquement
+dans la base CAB. Electric 1.8.1 utilise le libellé anglais de PostgreSQL pour
+reconnaître le slot persistant existant au redémarrage. La mise à niveau vérifie
+le slot avant de démarrer CAB. En cas de `electric-replication-slot-incompatible`,
+examiner sa base, son plugin, sa persistance et son état WAL avant toute reprise.
+Le paquet conserve le slot et le stockage des abonnements lors de ce refus.
+
+Les plugins CAB/CCAB/CABU/CICD distribués par le catalogue viennent désormais de
 integrations/codex ; commandes minimes sous integrations/commands. Les anciens
 plugins du répertoire plugins restent sources historiques et ne sont plus les
 payloads distribués par ce catalogue. La présence de source ou d’un .deb ne
@@ -825,20 +895,16 @@ profil et la mise en service des composants sont des opérations distinctes.
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.3.2` pour le broker,
-le contrôleur, le superviseur, le moniteur, le moteur SGS et les plugins CAB/CABU ; chaque plugin ajoute uniquement un
-cachebuster Codex à cette version.
+CAB utilise une version de projet explicite et cohérente entre ses artefacts.
+Les tags de livraison sont égaux à la version, sans préfixe `v`. Les versions
+historiques préfixées restent lisibles. La construction vérifie l’alignement
+des métadonnées des sources, des clients et des plugins distribués.
 
-Les releases Git devraient être identifiées par des tags de forme :
-
-```text
-vMAJOR.MINOR.PATCH
-```
-
-Le `CHANGELOG.md` accompagne les releases et décrit les changements significatifs.
-
-Les numéros de version du broker et du plugin doivent être synchronisés ou leur relation explicitement documentée.
+La politique de projet indique le nombre de composantes. Une politique de
+numéro supérieur est ordonnée après toute politique de numéro inférieur.
+À politique égale, CAB compare les composantes de gauche à droite.
+Consulter le change OpenSpec pour l’adaptation des tags locaux et les contrôles
+de la livraison. Le `CHANGELOG.md` décrit les changements significatifs.
 
 ## 8. Publication du plugin
 
@@ -1554,3 +1620,12 @@ un ancien paquet sans outil MCP passe une fois par l’update administratif exis
 Les versions3.2.0 partiellement configurées ne sont pas des succès CABU.
 
 La surveillance Git utilise inotify et le paquet `inotify-tools` déclaré au manifeste. Les délais sont initialisés dans PostgreSQL et modifiables à chaud dans Administration / Git.
+
+## Clôture Git 3.2.17
+
+La migration additive 0037 crée le journal terminal sans modifier les données
+existantes. Elle utilise le rôle migrateur CAB ; le compte applicatif ne reçoit
+pas de permission de création de schéma. Après les builds et publications Git,
+CAB fige les statistiques et le BLOCKERS.md éventuel, puis publie le commit
+terminal et déplace son tag de version sans v. La clôture attend les reçus.
+Pour 3.2.17, les releases DIU restent différées sur choix explicite du développeur.

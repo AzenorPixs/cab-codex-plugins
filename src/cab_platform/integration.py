@@ -71,7 +71,7 @@ def initialize_profiles(profiles):
         write_profile(user,agent,{'actor_id':actor.pk,'token':token})
 
 def payload_digest(package_root):
-    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu')]:
+    for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf'),('CABD','cabd')]:
         manifest=package_root/'plugins'/folder/'.codex-plugin/plugin.json'
         if not manifest.is_file() or not (package_root/'plugins'/folder/'skills'/folder/'SKILL.md').is_file() or not (package_root/'commands'/(label+'.md')).is_file():raise ClientError('integration-payload-missing')
         data=json.loads(manifest.read_text())
@@ -89,9 +89,9 @@ def integration_files(user,agent,package_root):
     home=Path(user.pw_dir);target=home/('.codex/config.toml' if agent in ('codex','codex-cli') else '.config/opencode/opencode.json')
     values={'configuration':hashlib.sha256(read_user_file(target,user.pw_uid)).hexdigest()}
     if agent in ('codex','codex-cli'):
-        for name in ('CAB.md','CCAB.md','CABU.md'):
+        for name in ('CAB.md','CCAB.md','CABU.md','CICD.md','CICDF.md','CABD.md'):
             values[name]=hashlib.sha256(read_user_file(home/'.codex/commands'/name,user.pw_uid)).hexdigest()
-        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu')]:
+        for label,folder in [('CAB','cab'),('CCAB','ccab'),('CABU','cabu'),('CICD','cicd'),('CICDF','cicdf'),('CABD','cabd')]:
             source=package_root/'plugins'/folder
             version=json.loads((source/'.codex-plugin/plugin.json').read_text())['version']
             cached=home/'.codex/plugins/cache/cab_codex_plugins'/label/version
@@ -160,8 +160,13 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if any(str(value).endswith(('/cgpt-approval-bridge-broker.mjs','/cgpt_approval_bridge_server.py')) for value in literals):
                 removed=subprocess.run([executable,'mcp','remove',name],env=env,capture_output=True,text=True,timeout=30,**options)
                 if removed.returncode:raise ClientError('codex-legacy-mcp-removal-failed')
-        result=subprocess.run([executable,'mcp','add','cab','--','/usr/bin/cab','mcp','--agent',agent],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
-        if result.returncode:raise ClientError('codex-mcp-registration-failed')
+        from . import __version__
+        from .mcp_epoch import codex_epoch,shared_stdio
+        existing=old.get('mcp_servers',{}).get('cab',{})
+        if not isinstance(existing,dict):raise ClientError('codex-mcp-config-conflict')
+        if existing.get('command')!='/usr/bin/cab' or existing.get('args')!=['mcp','--agent',agent]:
+            result=subprocess.run([executable,'mcp','add','cab','--env','CAB_MCP_PACKAGE_VERSION='+__version__,'--','/usr/bin/cab','mcp','--agent',agent],env=env,cwd=workspace or user.pw_dir,capture_output=True,text=True,timeout=30,**options)
+            if result.returncode:raise ClientError('codex-mcp-registration-failed')
         text=read_user_file(target,user.pw_uid).decode()
         match=re.search(r'(?m)^\[mcp_servers\.cab\]\s*$',text)
         if not match:raise ClientError('codex-cab-table-missing')
@@ -169,7 +174,11 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
         section=text[match.end():end];section=re.sub(r'(?m)^tool_timeout_sec\s*=.*\n?','',section)
         text=text[:match.end()]+'\ntool_timeout_sec = 86430\n'+section+text[end:]
         if tomllib.loads(text)['mcp_servers']['cab']['tool_timeout_sec']!=86430:raise ClientError('codex-tool-timeout-invalid')
-        write_user_file(target,text.encode(),env,options)
+        changed=codex_epoch(text.encode(),__version__)
+        features=subprocess.run([executable,'features','list'],env=env,capture_output=True,text=True,timeout=30,**options)
+        if features.returncode==0 and any(line.split() and line.split()[0]=='mcp_connection_sharing' for line in features.stdout.splitlines()):
+            changed=shared_stdio(changed,str(home))
+        write_user_file(target,changed,env,options)
         previous=old.get('features',{}).get('mcp_tool_list_changed')
         if previous is False:catalog_refresh='explicitly-disabled'
         elif previous is True:catalog_refresh='enabled'
@@ -190,12 +199,12 @@ def _integrate(agent,username,workspace=None,package_root=Path('/usr/lib/cab')):
             if removed.returncode:raise ClientError('codex-old-cab-marketplace-removal-failed')
         added=subprocess.run([executable,'plugin','marketplace','add',str(package_root),'--json'],env=env,capture_output=True,text=True,timeout=30,**options)
         if added.returncode:raise ClientError('codex-cab-marketplace-registration-failed')
-        for plugin in ['CAB','CCAB','CABU']:
+        for plugin in ['CAB','CCAB','CABU','CICD','CICDF','CABD']:
             installed=subprocess.run([executable,'plugin','add',plugin+'@cab_codex_plugins','--json'],env=env,capture_output=True,text=True,timeout=30,**options)
             if installed.returncode:raise ClientError('codex-cab-plugin-installation-failed')
         commands=home/'.codex/commands';commands.mkdir(parents=True,exist_ok=True)
         if commands.resolve()!=commands:raise ClientError('codex-command-directory-unsafe')
-        for name in ['CAB.md','CCAB.md','CABU.md']:
+        for name in ['CAB.md','CCAB.md','CABU.md','CICD.md','CICDF.md','CABD.md']:
             source=package_root/'commands'/name;destination=commands/name
             if destination.exists():
                 if destination.resolve()!=destination or not destination.is_file():raise ClientError('codex-command-target-unsafe')

@@ -15,7 +15,7 @@ class InstallerTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.body=b'synthetic-debian-payload';self.version='3.2.1';self.apt_rc=0;self.dpkg_state='install ok installed|3.2.1';self.health={'state':'READY','version':'3.2.1'};self.final={'verified':True,'version':'3.2.1'};self.compare_rc=1
         self.asset={'name':'cab_3.2.1_amd64.deb','digest':'sha256:'+hashlib.sha256(self.body).hexdigest(),'browser_download_url':'https://github.com/AzenorPixs/cab-codex-plugins/releases/download/v3.2.1/cab_3.2.1_amd64.deb'}
-        self.patches=[patch.object(u,'STATE',Path(self.tmp.name)),patch.object(u,'os',SimpleNamespace(getuid=lambda:0)),patch.object(u,'urlopen',side_effect=self.urlopen),patch.object(u.subprocess,'check_output',side_effect=self.output),patch.object(u.subprocess,'run',side_effect=self.run_command),patch('cab_platform.client.Client')]
+        self.patches=[patch.object(u,'STATE',Path(self.tmp.name)),patch.object(u,'os',SimpleNamespace(getuid=lambda:0)),patch.object(u,'urlopen',side_effect=self.urlopen),patch.object(u.subprocess,'check_output',side_effect=self.output),patch.object(u.subprocess,'run',side_effect=self.run_command),patch.object(u,'preflight_package',side_effect=lambda *args:{'public_paths_verified':1,'embedded_version_verified':self.version}),patch('cab_platform.client.Client')]
         self.mocks=[item.start() for item in self.patches];self.mocks[-1].return_value.get.side_effect=lambda *a,**k:self.health
     def tearDown(self):
         for item in reversed(self.patches):item.stop()

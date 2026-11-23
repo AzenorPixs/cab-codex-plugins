@@ -1,5 +1,244 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Centre de notifications
+
+[uniform-notification-popup-and-clear-messages](openspec/changes/archive/2026-11-23-uniform-notification-popup-and-clear-messages/),
+code non attribué. Ce change fixe la taille de la popup et ajoute la purge
+globale des messages administrateur, avec maintien des questions et reçus.
+Il s’appuie sur le centre de notifications du socle `system-platform`.
+Le 23 novembre 2026, le test de persistance isolé et les contrôles Chromium
+et Firefox ont réussi, ainsi que la compilation du frontend.
+
+## Diagnostics des actions Git et de la publication Docker
+
+[diagnose-project-forge-actions](openspec/changes/archive/2026-11-23-diagnose-project-forge-actions/),
+code non attribué. Les Overviews détaillent les refus d’action Git et les
+échecs de publication. Le 23 novembre 2026, les tests Python ont exercé le
+refus atomique sur des dépôts temporaires. Chromium et Firefox ont vérifié
+l’affichage d’un échec de rafraîchissement local et d’un reçu de publication.
+
+## Construction Docker locale et diagnostic Fabrique
+
+[decouple-docker-factory-and-diagnose-builds](openspec/changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/),
+code non attribué. La Fabrique observe les images Docker indépendamment des
+forges et ouvre l’Overview en cas de refus ou d’échec. Le 23 novembre 2026,
+les contrôles Python, Chromium et Firefox vérifient les deux tags, la reprise
+de l’image par le plan de publication et les diagnostics. Les échanges Docker
+et forge sont simulés dans ce banc.
+
+## Synchronisation bidirectionnelle des forges
+
+[allow-fresh-forge-sync-after-divergence](openspec/changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué.
+L’Overview permet de choisir le dépôt source ou de clore une tentative
+divergente avant un nouvel aperçu. Les tests Python, Chromium et Firefox
+ont passé le 23 novembre 2026 sur les trois forges de test.
+
+```mermaid
+flowchart LR
+    forgeResume["allow-fresh-forge-sync-after-divergence<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeResume provisional
+```
+
+## Réconciliation des envois de forge
+
+[reconcile-uncertain-forge-operations](openspec/changes/archive/2026-11-23-reconcile-uncertain-forge-operations/), code non attribué. L’Overview
+propose une lecture de la branche et des tags attendus après une opération
+incertaine. Qualification locale Python, Chromium et Firefox le 23 novembre
+2026. La réconciliation préserve le reçu initial et n’effectue aucun envoi.
+
+```mermaid
+flowchart LR
+    forgeReconcile["reconcile-uncertain-forge-operations<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeReconcile provisional
+```
+
+## Politique TLS commune aux forges
+
+[unify-cab-project-forge-tls](openspec/changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Les clients API et Git de CAB
+acceptent tout certificat sur les forges configurées. L’éditeur retire le
+réglage historique. Les tests Python, Chromium et Firefox ont passé le
+23 novembre 2026 sur des cibles de test.
+
+```mermaid
+flowchart LR
+    forgeTls["unify-cab-project-forge-tls<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeTls provisional
+```
+
+## Diagnostic du rafraîchissement des forges
+
+[diagnose-forge-repository-refresh](openspec/changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. La fenêtre de
+l’Overview affiche les étapes de la tentative manuelle qui a échoué.
+Le rafraîchissement GitLab applique son réglage TLS. Contrôles locaux
+Python, Chromium et Firefox réussis le 23 novembre 2026.
+
+```mermaid
+flowchart LR
+    forgeRefresh["diagnose-forge-repository-refresh<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeRefresh provisional
+```
+
+## Politique TLS de l’authentification Forgejo
+
+[honor-forgejo-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-forgejo-auth-tls-policy/), code non attribué.
+Le profil et la vérification du dépôt Forgejo acceptent tout certificat par
+HTTPS. Les tests ciblés du 23 novembre 2026 couvrent aussi les politiques
+GitLab et GitHub, la console et le résultat mémorisé.
+
+```mermaid
+flowchart LR
+    forgejoTls["honor-forgejo-auth-tls-policy<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgejoTls provisional
+```
+
+## Politique TLS de l’authentification GitLab
+
+[honor-gitlab-auth-tls-policy](openspec/changes/archive/2026-11-23-honor-gitlab-auth-tls-policy/), code non attribué.
+Le réglage existant s’applique au profil et au dépôt. Les tests locaux du
+23 novembre 2026 couvrent les modes TLS et l’invalidation du cache.
+
+```mermaid
+flowchart LR
+    gitlabTls["honor-gitlab-auth-tls-policy<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class gitlabTls provisional
+```
+
+## Diagnostic d’authentification des forges
+
+[diagnose-forge-auth-transport](openspec/changes/archive/2026-11-23-diagnose-forge-auth-transport/),
+code non attribué. Diagnostic DNS, TCP, TLS et HTTP pour le profil et le dépôt
+de GitLab, GitHub et Forgejo. Six tests qualifiés le 23 novembre 2026 par CAB
+sur le reçu `STAGE-894-8-forge-auth`. La sonde GitLab expire avant TLS.
+
+```mermaid
+flowchart LR
+    forgeAuth["diagnose-forge-auth-transport<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeAuth provisional
+```
+
+## Synchronisation des catalogues des agents
+
+[synchronize-agent-catalogs-live](openspec/changes/archive/2026-11-23-synchronize-agent-catalogs-live/),
+code non attribué. Projection Electric, vérification SHA-256 avant recalcul,
+fichiers consultables et administration de la complétion. Vérifications du
+23 novembre 2026 sur Chromium, Firefox et PostgreSQL isolé, reçus
+`STAGE-893-7-agent-live-web` et `STAGE-893-7-agent-live-data`. Le serveur
+Electric isolé a reçu l’instantané PostgreSQL puis une modification WAL sur le
+même flux.
+
+## Alignement des contrôles du catalogue
+
+[align-model-policy-editor-fields](openspec/changes/archive/2026-11-23-align-model-policy-editor-fields/),
+code non attribué. Recherche après Dernier dans les trois tableaux, libellé
+du filtre et placement des sélecteurs de Triage. Vérifications du
+23 novembre 2026 sur Chromium et Firefox, reçu `STAGE-892-7-editor-fields-web`.
+
+## Sélecteur de fournisseurs des politiques
+
+[correct-model-policy-provider-picker](openspec/changes/archive/2026-11-23-correct-model-policy-provider-picker/),
+code non attribué. Champ ouvrant distinct et inclusion de tous les fournisseurs
+sans sélection. Vérifications du 23 novembre 2026 sur Chromium, Firefox et
+PostgreSQL isolé, reçus `STAGE-891-7-provider-picker-web` et
+`STAGE-891-7-provider-picker-data`.
+
+## Filtre de fournisseurs des politiques de modèles
+
+[filter-model-policy-providers](openspec/changes/archive/2026-11-22-filter-model-policy-providers/),
+code non attribué. Sélection multiple des fournisseurs et ajustements de
+l’Overview. Vérifications du 22 novembre 2026 sur Chromium, Firefox et
+PostgreSQL isolé, reçus `STAGE-890-7-policy-providers-web` et
+`STAGE-890-7-policy-providers-data`.
+
+## Tri des politiques de modèles
+
+[configure-model-policy-sort](openspec/changes/archive/2026-11-22-configure-model-policy-sort/),
+code non attribué. Tri tarifaire enregistré, numérotation des résultats des
+politiques et Overview élargi. Vérifications du 22 novembre 2026 dans CAB
+sur Chromium, Firefox et PostgreSQL isolé, reçus `STAGE-889-7-model-sort-web`
+et `STAGE-889-7-model-sort-data`.
+
+## Message du premier commit
+
+[default-initial-project-commit-message](openspec/changes/archive/2026-11-23-default-initial-project-commit-message/),
+code non attribué. Le formulaire et le serveur utilisent « Initialisation du projet »
+par défaut pour le premier commit. Vérifications du 23 novembre 2026 avec 13 tests
+Git, TypeScript et les trois états du formulaire dans Chromium et Firefox.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
+## Correctif des contrôles de politique
+
+[correct-model-policy-controls](openspec/changes/archive/2026-11-22-correct-model-policy-controls/),
+code non attribué. Actions après Dernier, exclusion par nom et quatre bornes
+de cache. Vérifications du 22 novembre 2026 sur Chromium, Firefox et PostgreSQL
+isolé, reçus `STAGE-888-7-policy-controls-web` et `STAGE-888-7-policy-controls-data`.
+
+## Politiques du catalogue de modèles
+
+[filter-agent-model-catalogs](openspec/changes/archive/2026-11-22-filter-agent-model-catalogs/),
+code non attribué. Tableaux paginés, suppression protégée des fournisseurs,
+tarifs de cache et politiques de modèles persistantes. Vérifications CAB
+du 22 novembre 2026 sur PostgreSQL, Chromium et Firefox, reçus
+`STAGE-887-7-catalog-rules` et `STAGE-887-7-catalog-web`.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
+## Catalogue des agents et des fournisseurs
+
+[manage-agent-provider-catalogs](openspec/changes/archive/2026-11-22-manage-agent-provider-catalogs/),
+code non attribué. Rappels sous Administration → Agents, clés chiffrées au TPM,
+catalogues PostgreSQL et enrichissement quotidien par models.dev. Vérifications CAB
+du 22 novembre 2026 sur Chromium, Firefox et PostgreSQL isolé, reçus
+`STAGE-886-11-agent-catalog-web` et `STAGE-886-11-agent-catalog-data`.
+La publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
+## Réservations de ressources
+
+[unify-resource-reservations](openspec/changes/archive/2026-11-22-unify-resource-reservations/),
+code non attribué. Table PostgreSQL des baux, échéances et notifications,
+restitution protégée et page Electric. La qualification locale du 22 novembre 2026 couvre PostgreSQL éphémère,
+TypeScript/Vite et Chromium/Firefox avec un flux Electric simulé. La
+publication et l’activation sont suivies sur les reçus CICDF et CABU.
+
+## Tokens du cycle de session
+
+[measure-session-cycle-tokens](openspec/changes/archive/2026-11-22-measure-session-cycle-tokens/), code non attribué. Mesures de tokens PostgreSQL par rôle et par action, étape et cycle, cumuls de session et de change actualisés via Electric. Les mandats autorisés peuvent être complétés pendant un RUN avec un reçu distinct. Contrôles locaux le 22 novembre 2026 sur PostgreSQL, Chromium et Firefox. Livraison et activation sont vérifiables sur les reçus CICDF et CABU.
+
+## Synthèse des itérations de session
+
+[summarize-session-cycle-iterations](openspec/changes/archive/2026-11-22-summarize-session-cycle-iterations/), code non attribué. Synthèse PostgreSQL/Electric des cycles du RUN, Informations réordonnées, distinction cumul/dernier cycle et durée des actions des douze étapes. Validation native le 22 novembre 2026 : 31 tests PostgreSQL, 3 contrôles de formatage, TypeScript/Vite et Chromium/Firefox avec actualisation Electric sans navigation. Sources : tâches du change et reçus STAGE-878-8-cycles / STAGE-878-8-web. Livraison CICDF et activation CABU à vérifier séparément.
+
+## Bloc Session et détails du cycle
+
+[correct-session-block-layout](openspec/changes/archive/2026-11-22-correct-session-block-layout/), code non attribué. Change archivé le 22 novembre 2026. TypeScript, compilation Vite, navigation et affichage vérifiés sur Chromium et Firefox. Livraison et activation à vérifier sur les reçus CAB.
+
+## Tableau des incidents CCAB — 19 novembre 2026
+
+`show-project-ccab-incidents-table`, code non attribué : tableau paginé par projet,
+consultation structurée en lecture seule et déclaration JSON complète.
+Validation directe sur l’hôte : huit déclarations conservées après renommage en
+`ccab`, empreinte SHA256 complète identique avant/après ; compatibilité de l’API
+CCAB et périmètre projet vérifiés. Tableau et détail vérifiés dans le navigateur,
+affichage mobile sans débordement et tableau large en 3840×2160.
+La livraison et l’activation 3.2.25 sont attestées séparément par les reçus du RUN
+`SCM-CCAB-TABLE-20261119` ; leur préparation ne prouve pas leur réussite.
+Source : [change archivé](openspec/changes/archive/2026-11-19-show-project-ccab-incidents-table/).
+
+
+## CCAB — fichiers préexistants autorisés, 19 novembre2026
+
+`authorize-preexisting-session-files`, code non attribué : mandat d’invocation
+CCAB sous SCM/CICD et admission administrative CAS sans réécriture de baseline.
+Implémentation en cours ; premiers tests PostgreSQL/Git réussis sur fixtures.
+Livraison, activation et retour des déclarants restent distincts et à vérifier
+sur les reçus du RUN SCM-CCAB-CORRECTIONS-20261119 et du registre CCAB.
+Source : [change](openspec/changes/authorize-preexisting-session-files/).
+
 ## Confirmation de déconnexion MCP — 16 novembre 2026
 
 `confirm-stopped-mcp-relay`, code non attribué : constat administratif audité d’une liaison arrêtée et conservation des preuves ; change archivé, vérifié sur l’hôte. Livraison distincte.
@@ -1633,3 +1872,9 @@ Livraison et activation sont vérifiées séparément, sans preuve déduite du c
 ## Surveillance Git récursive — change archivé
 
 `monitor-project-git-recursively` : code non attribué ; surveillance inotify, file d’analyse globale et délais en base. Archivage et validations ciblées réalisés ; livraison CI/CD distincte. Voir `openspec/changes/archive/2026-11-16-monitor-project-git-recursively`.
+
+- `manage-project-versioning-and-track-change-stages` — change archivé, code non attribué. Politique de version de 1 à 7, adaptation Git locale, accusé Version, cycle à douze étapes et mesures par change. Qualification ciblée effectuée. La publication, l’activation et la vérification native sont suivies par les reçus CAB. [Proposition](openspec/changes/archive/2026-11-21-manage-project-versioning-and-track-change-stages/proposal.md).
+
+- `recover-cicdf-statistics-index-conflict` — archivé, code non attribué. Reprise du commit CICDF sur le même reçu lorsque seuls les rapports CAB attestés ont modifié l’index partagé. [Proposition](openspec/changes/archive/2026-11-21-recover-cicdf-statistics-index-conflict/proposal.md).
+
+- `recover-retired-statistics-publication` — archivé, code non attribué. Réconciliation d’un rapport retiré sur preuves avec conservation des rapports acquis. [Proposition](openspec/changes/archive/2026-11-21-recover-retired-statistics-publication/proposal.md).

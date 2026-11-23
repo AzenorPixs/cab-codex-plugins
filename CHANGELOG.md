@@ -2,6 +2,177 @@
 
 ## Non publié
 
+- Autoriser la republication d’un artefact sous un tag existant sur Forgejo, GitHub et GitLab. Après confirmation, conserver la dernière image Docker avec son alias `latest` et les sept dernières versions de chaque paquet Debian et architecture.
+
+- Stabiliser la taille de la fenêtre de notifications et ajouter **Effacer les messages** après la flèche suivante pour purger les messages de tous les projets et de CAB. Conserver les questions et les reçus.
+
+- Afficher les tokens écrits dans le cache pour les sessions de codage Codex et OpenCode. Les vues du cycle utilisent Te, Ts, Tr et Tw pour l’entrée, la sortie, la lecture et l’écriture dans le cache.
+
+- Afficher les refus des actions de Git local et des forges dans leurs Overviews. Distinguer un refus de transfert Git confirmé et détailler les prérequis et reçus de publication Docker.
+
+- Préremplir « Initialisation du projet » pour le premier commit local et appliquer ce défaut si le message est vide.
+
+- Ouvrir l’éditeur Overview sans `project.env` et créer le fichier au premier enregistrement. Initialiser aussi le fichier avec les métadonnées disponibles lors de la création d’un projet.
+
+- Construire et inventorier les images Docker dans la Fabrique indépendamment des forges, avec les tags `latest` et de version. Ouvrir l’Overview pour les demandes refusées et les constructions échouées.
+- Ajouter le choix du sens de synchronisation pour GitLab, Forgejo et GitHub. Une opération incertaine et divergente peut être close sur confirmation de l’état observé pour préparer un nouvel aperçu.
+- Permettre de vérifier un envoi ou une synchronisation de forge dont le résultat est incertain. CAB débloque l’aperçu si les références distantes correspondent exactement à la cible du reçu.
+- Unifier la politique TLS des connexions CAB à GitLab, GitHub et Forgejo, y compris les envois Git et les publications. Retirer le réglage `REMOTE_<FORGE>_SSL_VERIFY` de l’éditeur et de la projection.
+- Ouvrir le diagnostic de la tentative dans l’Overview lorsqu’un rafraîchissement manuel de forge échoue. Appliquer le réglage TLS GitLab à la lecture du dépôt.
+- Accepter tout certificat TLS lors de l’authentification Forgejo et de la vérification du dépôt, quelle que soit la valeur de `REMOTE_FORGEJO_SSL_VERIFY`. La console indique ce mode.
+- Appliquer `REMOTE_GITLAB_SSL_VERIFY` à l’authentification GitLab et à la vérification du dépôt. La console indique quand le certificat TLS n’est pas vérifié.
+- Reprendre le slot de réplication Electric après une mise à jour Debian sur un PostgreSQL localisé, en conservant le WAL et les abonnements.
+- Préciser les échecs DNS, TCP, TLS et HTTP dans la console d’authentification de GitLab, GitHub et Forgejo, y compris lors de la vérification des dépôts.
+
+## 3.18.0
+
+- Catalogues des agents synchronisés par Electric et fichiers comparés par SHA-256 avant chaque réajustement.
+- Rafraîchissement, consultation des fichiers, édition des fournisseurs et administration de la complétion.
+
+## 3.17.2
+
+- Recherche à droite de Dernier dans les tableaux des agents et réglages de Triage alignés dans l’Overview.
+
+## 3.17.1
+
+- Sélecteur de fournisseurs cliquable dans un bloc distinct et catalogue complet lorsque le champ est vide.
+
+## 3.17.0
+
+- Sélection multiple des fournisseurs enregistrée dans les politiques de modèles.
+- Overview des politiques rehaussé et contrôles d’inclusion regroupés.
+
+## 3.16.0
+
+- Tri tarifaire enregistré par politique, résultats numérotés et tri initial de Tous par coût d’entrée croissant.
+- Overview des politiques élargi et réorganisé en deux colonnes.
+
+## 3.15.1
+
+- Actions des politiques après Dernier, exclusions par nom et bornes complètes de lecture et d’écriture du cache.
+
+## 3.15.0
+
+- Recherche instantanée, tri et pages de dix lignes pour les catalogues des agents.
+- Suppression de fournisseurs avec protection des clés liées.
+- Onglets de politiques de modèles persistants et tarifs de lecture et d’écriture du cache.
+
+## 3.14.0
+
+- Rappels d’inactivité déplacés sous Administration → Agents dans un tableau.
+- Pages Agents pour les clés API chiffrées au TPM, les fournisseurs et les modèles, avec import PostgreSQL quotidien et enrichissement depuis models.dev.
+
+## 3.13.0
+
+- Confirmation explicite pour supprimer une session de codage sans preuve de clôture lorsqu’aucune autre protection ne s’y oppose.
+- Nettoyage transactionnel des cycles, passages et mesures propres à la session, avec recalcul des agrégats du change.
+
+## 3.12.1
+
+- Réservation SCM de nouveau disponible, avec contrôle des baux de fichiers concurrents.
+
+## 3.12.0
+
+- Réservations de ressources de 300 secondes, renouvellement à 240 secondes, avis d’échéance et de restitution, et protection des effets à réconcilier.
+- Page Projet Réservations synchronisée par Electric et aperçu de fichiers avec édition sous bail actif.
+
+## 3.11.1
+
+- Cumuls de tokens intégrés au bloc des durées de chaque étape, avec disposition adaptée aux écrans étroits.
+- Totaux de tokens dans Informations et ligne de cumul simplifiée dans Résumé.
+
+## 3.11.0
+
+- Tokens entrants, sortants et lus depuis le cache par action, étape et cycle, avec cumuls de session et de change, détail par rôle et actualisation Electric.
+- Ajout tracé de mandats explicitement autorisés pendant un RUN actif.
+
+## 3.10.1
+
+- Informations de session alignées sur les blocs forge et compteurs persistés servis directement par le détail du RUN.
+
+## 3.10.0
+
+- Synthèse persistée de toutes les itérations de session, diffusée par Electric : cumuls CAB, Agent(s), Attente et durée distincte du dernier cycle.
+- Informations réordonnées et colonne Durée des actions dans les douze étapes, avec unités adaptées.
+
+## 3.9.14
+
+- Bloc Session aligné sur les blocs forge, avec onglets au-dessus du titre, preuves visibles et un sous-onglet par étape du cycle.
+
+## 3.9.3
+
+- Réconciliation sur preuves du dernier rapport rendu obsolète par un archivage, avec conservation des publications déjà achevées et du reçu UNKNOWN.
+
+## 3.9.1
+
+- Reprise sur le même reçu CICDF après un conflit d’index partagé dû uniquement à des rapports CAB attestés. Le plan et l’arbre de code restent figés.
+
+## 3.9.0
+
+- Politique de version de 1 à 7 composantes, avec aperçu et adaptation des tags
+  Git locaux dans Overview.
+- Cycle à douze étapes avec accusé de lecture du skill Version et conservation
+  des itérations et durées sous le change.
+
+## 3.2.26
+- Reprise administrative sous CAS du seul commit échoué avant références, dans la même livraison et sans rejouer version/projection.
+- Résolution automatique des seuls scalaires de version ; résolutions de code limitées aux blobs et diffs explicitement revus.
+- Échec original conservé, nouvelle tentative corrélée et contrôle du contexte sous verrou avant effet ; états UNKNOWN protégés.
+
+## 3.2.25
+- Tableau paginé des incidents de chaque projet et consultation détaillée en lecture seule avec preuves, prise en charge, résolution et déclaration JSON complète.
+- Conservation du registre CCAB existant dans la table PostgreSQL `ccab`, sans perte des identifiants, relations ou baux.
+
+## 3.2.24
+- Clôture des RUN canoniques sans faux dossier de change : rapport statistique réel du RUN, projection PG, global et commit terminal vérifié.
+- Visibilité des blocages postérieurs au dossier de preuves ; états UNKNOWN et documents modifiés ou étrangers protégés.
+- Les statistiques de succès des tests restent N/A lorsqu’un bilan ne démontre pas un plain OK sans tests ignorés ou échecs attendus.
+
+## 3.2.23
+- Réservation des fichiers identiques à HEAD dans les dépôts core.filemode=false sans normaliser les permissions ni masquer des octets étrangers.
+- Conservation du refus des modes suivis divergents et des configurations instables.
+
+## 3.2.22
+- L’invocation CCAB mandate les correctifs CAB sous SCM/CICD, avec OpenSpec, distribution et activation nécessaires, sans confirmations génériques répétées.
+- Admission administrative ciblée de fichiers préexistants explicitement autorisés, avec CAS, reçus idempotents et baseline conservée.
+- Réservation des chemins historiquement dirty désormais réellement propres à HEAD, sans absorption de contenu étranger.
+
+## 3.2.21
+- CABU conserve une autorisation de reprise nécessaire par demandeur, UID, instance observée et version, sans confirmation supplémentaire.
+- Révocation auditée et revérification avant reprise native ; reçus, états inconnus et frontières sûres restent protégés.
+
+## 3.2.20 — 2026-11-19
+
+- Récupération autonome d’une publication statistique arrêtée quand fichier et index restent à l’état avant, avec UNKNOWN original conservé et classement FAILED_NO_CHANGE sans rejeu.
+- Umask022 limitée au subprocess de build DIU et modes explicites des seuls payloads publics générés.
+- Prévol CABU des permissions publiques et des versions embarquées du.deb avant APT ; refus des payloads privatisés ou périmés.
+- Acquittement de négociation MCP par le premier appel après initialize réussi, et reprise du seul worker possédé confirmé arrêté sans API frontend ni rejeu métier.
+
+## 3.2.19 — 2026-11-19
+
+- Rattachement autonome du worker MCP réel sur preuves kernel, avec versions inconnues conservées et adoption atomique d'un heartbeat ultérieur, sans rejeu.
+- Distinction explicite entre journal natif lié et connecteur réellement rattaché.
+- Contestation administrative d'une réussite non probante : originaux conservés, preuve exclue et nouvelle révision/exécution obligatoires.
+- Livraison regroupée des évolutions DCAB validées : navigation Projets, métadonnées des commits, listes Sessions/Archives à10lignes et clôture hôte sans livraison.
+
+## 3.2.17 — 2026-11-18
+
+- Clôture achevée ou bloquée retenue jusqu'au dernier commit des statistiques et de BLOCKERS.md éventuel, puis confirmation des envois Git.
+- Tag de version déplacé automatiquement par le moteur vers le commit terminal, avec protection des références locales et distantes.
+- Indexation immédiate des rapports du change et du global, et de BLOCKERS.md attribuable au RUN.
+- Règle centrale sans préfixe v pour les versions du projet, les tags Git et les métadonnées de release ; défaut égal à PROJECT_VERSION.
+- CABU recherche les releases sans construire de préfixe et conserve la lecture compatible des publications historiques.
+
+## 3.2.16 — 2026-11-18
+
+- Instantané Git PostgreSQL au démarrage des nouveaux changes, réservations de fichiers et index isolés par session conservés après archivage.
+- Orchestration Git et builds DIU par CAB, reçus durables, refus de rejeu des effets incertains ; releases DIU différées pour cette livraison.
+- Plugin, skill et commande CICD ; autorisations interprojets génériques et révocables sans modifier l'identité native.
+- Indexation du STATISTICS.md global par CAB après écriture et avant libération de sa réservation.
+- Protection des index et preuves de session contre une suppression prématurée ; suivi de livraison dans la projection projet.
+
+## Non publié
+
 - Réconciliation d’une archive OpenSpec déjà couverte par un répertoire parent du mandat.
 
 - Surveillance Git récursive des projets, file d’analyse globale et délais configurables en base dans Administration / Git.
@@ -2453,3 +2624,13 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - Normalisation de l'arborescence du plugin Codex.
 - Déplacement de la marketplace Codex et du plugin à la racine du dépôt pour la distribution GitHub privée.
 - Réparation du contrat HTTP du contrôleur local.
+# 3.2.18
+
+- Centre de notifications global PostgreSQL/Electric avec cloche animée,
+  navigation, expéditeur projet, purge à la lecture et questions interactives.
+- Déplacement du journal CI/CD du bloc Git vers les notifications ; reçus de
+  réponses durables et réponses idempotentes sans commande implicite.
+- Message du commit final de clôture égal au nom du change concerné.
+- Choix de version confié au codeur direct ou à l'orchestrateur en piloté,
+  avec contrôle de l'autorité par le service et protocole CICD harmonisé.
+

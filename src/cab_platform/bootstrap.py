@@ -13,6 +13,30 @@ from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json,secret,
 
 class BootstrapError(Exception):pass
 
+# Electric 1.8.1 recognizes an existing slot by PostgreSQL's English message.
+ELECTRIC_MESSAGES_SQL = "ALTER ROLE cab_electric IN DATABASE cab SET lc_messages TO 'C';"
+
+STAGE_ELECTRIC_SQL = """
+DO $$
+DECLARE table_name text;
+BEGIN
+    FOREACH table_name IN ARRAY ARRAY[
+        'runs', 'change_stages', 'change_stage_iterations', 'run_cycle_iterations',
+        'run_evidence', 'run_finalization_plans', 'resource_reservations'
+    ] LOOP
+        EXECUTE format('GRANT SELECT ON %I TO cab_electric', table_name);
+        EXECUTE format('ALTER TABLE %I REPLICA IDENTITY FULL', table_name);
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables
+            WHERE pubname = 'electric_publication_default'
+              AND schemaname = 'public' AND tablename = table_name
+        ) THEN
+            EXECUTE format('ALTER PUBLICATION electric_publication_default ADD TABLE %I', table_name);
+        END IF;
+    END LOOP;
+END $$;
+"""
+
 def status():
     cfg=runtime_config()
     if not cfg.get('initialized'):return {'state':'UNINITIALIZED','initialized':False,'version':__version__,'port':8790}
@@ -86,6 +110,7 @@ def initialize(data,token):
                 cursor.execute('GRANT cab_owner TO cab_migrate')
                 cursor.execute('ALTER ROLE cab_electric REPLICATION')
                 if not exists:cursor.execute('CREATE DATABASE cab OWNER cab_owner')
+                cursor.execute(ELECTRIC_MESSAGES_SQL)
             cfg.update(initializing=True,database='cab',database_host=host,database_port=port,database_user='cab_app',database_password=passwords['cab_app'],migrator_user='cab_migrate',migrator_password=passwords['cab_migrate'],electric_user='cab_electric',electric_password=passwords['cab_electric'],electric_secret=secrets.token_urlsafe(48),schema_version=1,version=__version__)
             if not admin_dsn:cfg['postgresql']=reference(int(major),port)
             atomic_json(CONFIG,cfg)
@@ -109,15 +134,26 @@ def initialize(data,token):
                     cursor.execute('GRANT SELECT ON agent_users TO cab_electric')
                     cursor.execute('GRANT SELECT ON cab_version_projection TO cab_electric')
                     cursor.execute('GRANT SELECT ON interface_preferences_projection TO cab_electric')
+                    cursor.execute('GRANT SELECT ON cab_notifications, cab_binary_counts, cab_observed_binaries TO cab_electric')
+                    cursor.execute('GRANT SELECT ON agent_catalog_projection TO cab_electric')
+                    cursor.execute('GRANT SELECT ON project_forge_artifacts TO cab_electric')
+                    cursor.execute('ALTER TABLE project_forge_artifacts REPLICA IDENTITY FULL')
                     cursor.execute('ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL')
                     cursor.execute('ALTER TABLE agents REPLICA IDENTITY FULL')
                     cursor.execute('ALTER TABLE agent_users REPLICA IDENTITY FULL')
                     cursor.execute('ALTER TABLE cab_version_projection REPLICA IDENTITY FULL')
                     cursor.execute('ALTER TABLE interface_preferences_projection REPLICA IDENTITY FULL')
+                    cursor.execute('ALTER TABLE cab_notifications REPLICA IDENTITY FULL')
+                    cursor.execute('ALTER TABLE cab_binary_counts REPLICA IDENTITY FULL')
+                    cursor.execute('ALTER TABLE cab_observed_binaries REPLICA IDENTITY FULL')
                     cursor.execute('REVOKE cab_migrate FROM cab_electric')
                     cursor.execute('ALTER TABLE cab_core_sessionprojection REPLICA IDENTITY FULL')
                     cursor.execute("SELECT 1 FROM pg_publication WHERE pubname='electric_publication_default'")
                     if not cursor.fetchone():cursor.execute('CREATE PUBLICATION electric_publication_default FOR TABLE cab_core_sessionprojection')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agent_catalog_projection'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE agent_catalog_projection')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_forge_artifacts'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE project_forge_artifacts')
                     cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_metadata_projection'")
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE project_metadata_projection')
                     cursor.execute('GRANT CREATE ON DATABASE cab TO cab_electric')
@@ -131,6 +167,13 @@ def initialize(data,token):
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_version_projection')
                     cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='interface_preferences_projection'")
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE interface_preferences_projection')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_notifications'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_notifications')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_binary_counts'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_binary_counts')
+                    cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries'")
+                    if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries')
+                    cursor.execute(STAGE_ELECTRIC_SQL)
                     cursor.execute('ALTER PUBLICATION electric_publication_default OWNER TO cab_electric')
                     cursor.execute('REVOKE CREATE ON DATABASE cab FROM cab_electric')
             finally:db_admin.close()

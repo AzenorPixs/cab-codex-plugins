@@ -11,6 +11,21 @@ from . import __version__
 from .client import Client,ClientError
 from .paths import CONFIG,STATE,atomic_json,config,private_dir,read_json
 
+INCOMPATIBLE_ELECTRIC_SLOT_SQL = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_replication_slots
+    WHERE slot_name = 'electric_slot_default'
+      AND (
+          database IS DISTINCT FROM current_database()
+          OR slot_type <> 'logical'
+          OR plugin IS DISTINCT FROM 'pgoutput'
+          OR temporary
+          OR invalidation_reason IS NOT NULL
+          OR wal_status = 'lost'
+      )
+);
+"""
+
 def installed():
     cfg=config()
     if not cfg:
@@ -18,19 +33,32 @@ def installed():
         return {'state':'BOOTSTRAP_ONLY'}
     if cfg.get('initialized'):
         from .postgresql import ensure as ensure_postgresql
+        from .bootstrap import ELECTRIC_MESSAGES_SQL,STAGE_ELECTRIC_SQL,_psql
         ensure_postgresql();cfg=config()
+        if _psql(cfg['database_port'],INCOMPATIBLE_ELECTRIC_SLOT_SQL,cfg['database']) == 't':
+            raise ClientError('electric-replication-slot-incompatible')
         result=subprocess.run([sys.executable,'-m','django','migrate','--noinput'],env={**os.environ,'DJANGO_SETTINGS_MODULE':'cab_platform.settings','CAB_MIGRATE':'1'},capture_output=True,text=True,timeout=120)
         if result.returncode:raise RuntimeError('package-schema-migration-failed')
         # La publication appartient à Electric, pas au rôle de migration.
         # Seul l'installateur système administre sa liste de colonnes publiques.
-        from .bootstrap import _psql
-        _psql(cfg['database_port'],"""GRANT SELECT ON mcp_connector_projection, agents, agent_users, cab_version_projection, interface_preferences_projection TO cab_electric;
+        _psql(cfg['database_port'],ELECTRIC_MESSAGES_SQL+"""
+        GRANT SELECT ON mcp_connector_projection, agents, agent_users, cab_version_projection, interface_preferences_projection, cab_notifications, cab_binary_counts, cab_observed_binaries, project_forge_artifacts, agent_catalog_projection TO cab_electric;
         ALTER TABLE mcp_connector_projection REPLICA IDENTITY FULL;
         ALTER TABLE agents REPLICA IDENTITY FULL;
         ALTER TABLE agent_users REPLICA IDENTITY FULL;
         ALTER TABLE cab_version_projection REPLICA IDENTITY FULL;
         ALTER TABLE interface_preferences_projection REPLICA IDENTITY FULL;
+        ALTER TABLE cab_notifications REPLICA IDENTITY FULL;
+        ALTER TABLE cab_binary_counts REPLICA IDENTITY FULL;
+        ALTER TABLE cab_observed_binaries REPLICA IDENTITY FULL;
+        ALTER TABLE project_forge_artifacts REPLICA IDENTITY FULL;
         DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='agent_catalog_projection') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE agent_catalog_projection;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_forge_artifacts') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE project_forge_artifacts;
+            END IF;
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='project_metadata_projection') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE project_metadata_projection;
             END IF;
@@ -49,7 +77,16 @@ def installed():
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='interface_preferences_projection') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE interface_preferences_projection;
             END IF;
-        END $$;""",cfg['database'])
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_notifications') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE cab_notifications;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_binary_counts') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE cab_binary_counts;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries') THEN
+                ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries;
+            END IF;
+        END $$;"""+STAGE_ELECTRIC_SQL,cfg['database'])
     cfg['version']=__version__;atomic_json(CONFIG,cfg)
     return {'state':'CONFIGURED' if cfg.get('initialized') else 'BOOTSTRAP_ONLY'}
 

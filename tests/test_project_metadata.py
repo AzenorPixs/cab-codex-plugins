@@ -13,7 +13,8 @@ class MetadataReaderTests(unittest.TestCase):
         self.file.write_text(text,encoding='utf-8');return read_metadata(self.root)
     def test_literal_values_comments_types_and_forges(self):
         result=self.read('PROJECT_NAME="Projet démonstration"\nPROJECT_VERSION=1.2.3\nPROJECT_TYPE="Python, TypeScript, React" # commentaire\nREMOTE_FORGEJO_BASE_URL=https://forge.example/team\nREMOTE_GITHUB_OWNER=team\nREMOTE_GITLAB_SSL_VERIFY=1\n')
-        self.assertEqual(result['state'],'ready');self.assertEqual(len(result['values']),6)
+        self.assertEqual(result['state'],'ready');self.assertEqual(len(result['values']),5)
+        self.assertNotIn('REMOTE_GITLAB_SSL_VERIFY',result['values'])
         self.assertEqual(result['values']['PROJECT_TYPE'],'Python, TypeScript, React')
     def test_secrets_unknown_and_authenticated_urls_are_not_retained(self):
         result=self.read('PROJECT_NAME=Public\nREMOTE_GITHUB_TOKEN=synthetic-secret\nPG_PASSWORD=synthetic-secret\nREMOTE_GITHUB_BASE_URL=https://user:synthetic-secret@example.org\nREMOTE_GITLAB_BASE_URL=https://example.org?token=synthetic-secret\nREMOTE_FORGEJO_BASE_URL=https://example.org#synthetic-secret\n')

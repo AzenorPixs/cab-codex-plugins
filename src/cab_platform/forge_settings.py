@@ -9,10 +9,16 @@ import re
 import stat
 import subprocess
 import sys
+import httpx
 from django.db import transaction
 from .core.commands import Refused,require
 from .core.models import Project
 from .project_metadata import FORGES,SUFFIXES,ASSIGNMENT,public_value
+
+
+def forge_client(**kwargs):
+    """Client HTTPS pour les opérations sur une forge de projet configurée."""
+    return httpx.Client(verify=False, follow_redirects=False, trust_env=False, **kwargs)
 
 _IO=r'''import base64,fcntl,hashlib,json,os,secrets,stat,sys
 p=json.load(sys.stdin);root=p['root'];uid=os.getuid();rfd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW);dfd=None
@@ -55,10 +61,13 @@ def put(fd,name,data,old,info):
             try:os.unlink(tmp,dir_fd=fd)
             except FileNotFoundError:pass
 try:
-    op=p['op'];env,envinfo=read(rfd,'project.env')
-    if op=='env-read':result={'content':base64.b64encode(env).decode(),'digest':hashlib.sha256(env).hexdigest()}
+    op=p['op']
+    allow_missing=(op=='env-read' and p.get('allow_missing') is True) or (op=='env-write' and p['digest']=='missing')
+    env,envinfo=read(rfd,'project.env',allow_missing)
+    digest='missing' if env is None else hashlib.sha256(env).hexdigest()
+    if op=='env-read':result={'content':base64.b64encode(env or b'').decode(),'digest':digest}
     elif op=='env-write':
-        if hashlib.sha256(env).hexdigest()!=p['digest']:raise ValueError('file-changed')
+        if digest!=p['digest']:raise ValueError('file-changed')
         data=base64.b64decode(p['content'],validate=True)
         if data!=env:put(rfd,'project.env',data,env,envinfo)
         result={'saved':True}
@@ -112,12 +121,16 @@ def token_read(project,forge):
 
 def crypt(project,forge,data,decrypt=False):
     name='cab-forge-'+hashlib.sha256((project.pk+':'+forge).encode()).hexdigest()[:24]
+    return crypt_credential(name, data, decrypt)
+
+
+def crypt_credential(name, data, decrypt=False, failure='forge-tpm-unavailable'):
     argv=['/usr/bin/systemd-creds','--name='+name]
     if not decrypt:argv+=['--with-key=tpm2','--tpm2-device=/dev/tpmrm0']
     argv+=['decrypt' if decrypt else 'encrypt','-','-']
     try:r=subprocess.run(argv,input=data,capture_output=True,timeout=20,env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'})
-    except (OSError,subprocess.TimeoutExpired):raise Refused('forge-tpm-unavailable',503) from None
-    require(r.returncode==0,'forge-tpm-unavailable',503)
+    except (OSError,subprocess.TimeoutExpired):raise Refused(failure,503) from None
+    require(r.returncode==0,failure,503)
     return r.stdout
 
 

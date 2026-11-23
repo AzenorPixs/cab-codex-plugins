@@ -42,4 +42,19 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
             await b.watch()
         b.reload.assert_not_awaited();self.assertEqual(b.catalog,'');b.heartbeat.assert_awaited_once()
 
+    async def test_worker_startup_publishes_heartbeat_before_catalog(self):
+        b=self.bridge();b.child=Mock(pid=41,returncode=None);b.startup_nonce='expected'
+        b.client.command=Mock()
+        self.assertTrue(b.observe_worker_startup({'cab_worker_startup':'expected','version':'3.2.29'}))
+        await b.heartbeat()
+        self.assertEqual(b.client.command.call_args.args[1]['state'],'CATALOG_PENDING')
+        self.assertEqual(b.client.command.call_args.args[1]['loaded_version'],'3.2.29')
+        self.assertEqual(b.client.command.call_args.args[1]['catalog_version'],'')
+
+    async def test_unexpected_worker_startup_frame_does_not_prove_version(self):
+        b=self.bridge();b.startup_nonce='expected'
+        with self.assertRaisesRegex(ValueError,'startup-invalid'):
+            b.observe_worker_startup({'cab_worker_startup':'other','version':'3.2.29'})
+        self.assertEqual(b.version,'')
+
 if __name__=='__main__':unittest.main()

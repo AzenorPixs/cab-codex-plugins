@@ -1,5 +1,6 @@
 """Surveillance récursive et regroupement borné des analyses Git."""
 import ctypes
+import errno
 import logging
 import os
 from pathlib import Path
@@ -37,7 +38,9 @@ class GitMonitor:
     def close_project(self, project_id):
         entry = self.projects.pop(project_id, None)
         if entry is not None:
-            os.close(entry['fd'])
+            try:os.close(entry['fd'])
+            except OSError as error:
+                if error.errno!=errno.EBADF:raise
         self.pending.pop(project_id, None)
         self.last_started.pop(project_id, None)
 
@@ -52,7 +55,10 @@ class GitMonitor:
                 continue
             wd = self.lib.inotify_add_watch(entry['fd'], os.fsencode(parent), MASK)
             if wd < 0:
-                log.warning('Git monitor watch unavailable', extra={'code': str(ctypes.get_errno())})
+                code=ctypes.get_errno()
+                if code in (errno.EBADF,errno.ENFILE,errno.EMFILE,errno.ENOSPC,errno.ENOMEM):
+                    raise OSError(code,'git-inotify-watch-unavailable')
+                log.warning('Git monitor watch unavailable', extra={'code': str(code)})
                 entry['retry'] = True
                 entry['retry_at'] = time.monotonic() + 60
                 continue
@@ -83,8 +89,7 @@ class GitMonitor:
                 continue
             fd = self.lib.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
             if fd < 0:
-                log.warning('Git monitor initialization unavailable', extra={'code': str(ctypes.get_errno())})
-                continue
+                raise OSError(ctypes.get_errno(),'git-inotify-unavailable')
             entry = {'root': root, 'fd': fd, 'paths': {}, 'watches': {}, 'retry': False}
             self.projects[project_id] = entry
             self.add_tree(entry, root)
@@ -165,9 +170,9 @@ class GitMonitor:
 
 
 def run(stop):
-    watcher = None
+    from .service_recovery import InotifyMonitor
+    watcher = InotifyMonitor(GitMonitor,'inotify-git','Surveillance inotify Git')
     try:
-        watcher = GitMonitor()
         while not stop.wait(.2):
             try:
                 watcher.tick()
@@ -175,6 +180,5 @@ def run(stop):
                 log.warning('Git monitor unavailable', extra={'code': type(error).__name__})
                 stop.wait(5)
     finally:
-        if watcher is not None:
-            watcher.close()
+        watcher.close()
         close_old_connections()

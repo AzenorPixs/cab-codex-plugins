@@ -87,7 +87,9 @@ def background_native():
     from django.db import close_old_connections
     from .core.native_control import recover,queue_mismatched,work_one
     from .opencode_recovery import sweep as recover_opencode
-    try:recover();queue_mismatched();work_one();recover_opencode()
+    from .mcp_disconnect_recovery import sweep as recover_connections
+    from .mcp_convergence import sweep as converge
+    try:recover();converge();recover_connections();queue_mismatched();work_one();recover_opencode()
     finally:close_old_connections()
 
 def background_agents():
@@ -123,11 +125,40 @@ def update_agent_mcp():
             if changed:row.save(update_fields=changed)
 
 
+def background_updates():
+    from .system_updates import dispatch
+    from .project_artifacts import dispatch as dispatch_artifact
+    from .phase_statistics import dispatch as dispatch_statistics
+    from .stage_reminders import launch as launch_reminders
+    from .stage_protocol import dispatch as dispatch_stage_protocol
+    from .time_projection import launch as launch_time_projection
+    dispatch()
+    dispatch_artifact()
+    dispatch_statistics()
+    launch_reminders()
+    dispatch_stage_protocol()
+    launch_time_projection()
+    from .forge_publish_artifacts import dispatch as dispatch_publication
+    dispatch_publication()
+
+
+def background_forge_updates():
+    from .forge_version import sweep as sweep_versions
+    from .forge_repository import sweep as sweep_repositories
+    try:
+        sweep_versions()
+    finally:
+        sweep_repositories()
+    from .project_artifacts import sweep as sweep_artifacts
+    sweep_artifacts()
+
+
 def run(port=8790):
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','cab_platform.settings')
     configure();private_dir(STATE)
     from .postgresql import ensure as ensure_postgresql
-    log.info('PostgreSQL qualification: %s',ensure_postgresql())
+    pg_qualification=ensure_postgresql()
+    log.info('PostgreSQL qualification: %s',pg_qualification)
     # Le parent des sockets est traversable ; les requêtes exigent ensuite
     # l’identité du pair et son jeton. Les autres états restent0700.
     created=False
@@ -135,18 +166,47 @@ def run(port=8790):
     except FileExistsError:pass
     if created:os.chmod(RUNTIME,0o711)
     import django;django.setup();configure()
+    from django.db import DatabaseError
+    from . import process_registry
+    registry_initialized=bool(config().get('initialized'))
+    if registry_initialized:
+        retained=process_registry.initialize()
+        log.info('Inventaire des binaires : %s', 'conservé pour la mise à jour' if retained else 'réinitialisé')
     stop=threading.Event();reload_requested=threading.Event()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set());signal.signal(signal.SIGHUP,lambda *_:reload_requested.set())
-    context=multiprocessing.get_context('fork');api=context.Process(target=api_process,args=(port,));api.start()
-    electric=None;tasks={};recovered=False;next_collect=0;next_electric_start=0;next_metadata=0;metadata=None
+    from .component_recovery import ChildRecovery, api_ready, electric_ready, observe_daemon
+    context=multiprocessing.get_context('spawn')
+
+    def spawn_api():
+        child=context.Process(target=api_process,args=(port,))
+        child.start()
+        return child
+
+    def spawn_electric():
+        args,env,cwd=electric_command()
+        child=subprocess.Popen(args,env=env,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
+        threading.Thread(target=relay,args=(child.stdout,),daemon=True).start()
+        return child
+
+    api_recovery=ChildRecovery('cab-api','API CAB',spawn_api,lambda child:child.is_alive(),
+                               lambda child:api_ready(pid=child.pid))
+    electric_recovery=ChildRecovery('electric','Electric',spawn_electric,lambda child:child.poll() is None,electric_ready)
+    api=api_recovery.tick()
+    next_daemon_report=0
+    from .service_recovery import InotifyMonitor,PostgresMonitor
+    postgres_monitor=PostgresMonitor(was_ready=pg_qualification.get('state') in ('QUALIFIED','MIGRATED'))
+    postgres_thread=threading.Thread(target=postgres_monitor.run,args=(stop,),name='cab-postgres-watch',daemon=True)
+    postgres_thread.start()
+    electric=None;tasks={};recovered=False;next_collect=0;next_metadata=0;metadata=None
     statistics_watcher=None;statistics_future=None;statistics_project=None
     closure_future=None;next_closure=0;next_update=0;next_connectors=0
     update_future=None;availability_future=None;native_future=None;next_native=0
     agents_future=None;next_agents=0
+    catalog_future=None;next_catalog=0
     agent_config_future=None;next_agent_config=0
     forge_version_future=None;next_forge_version=0
     git_monitor_thread=None;next_git_monitor=0
-    cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0
+    cab_version_signature=None;next_cab_version=0;next_cab_version_refresh=0;next_process_inventory=0
     from .core.models import Operation,Maintenance
     from .core import commands
     from .execution import execute_operation,recover_receipts
@@ -156,6 +216,8 @@ def run(port=8790):
     closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
+    from .agent_catalog_files import refresh as refresh_agent_catalog
+    catalog_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-catalog')
     agents_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agents')
     agent_config_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-agent-config')
     forge_version_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-forge-version')
@@ -169,13 +231,37 @@ def run(port=8790):
                 native_future=native_pool.submit(background_native);next_native=time.monotonic()+1
             if reload_requested.is_set():
                 try:
-                    level=configure();os.kill(api.pid,signal.SIGHUP);log.info('configuration reloaded: %s',level)
+                    level=configure()
+                    if api_recovery.confirmed and api and api.is_alive():os.kill(api.pid,signal.SIGHUP)
+                    log.info('configuration reloaded: %s',level)
                     log.debug('diagnostic logging enabled')
                 except (OSError,ValueError,RuntimeError) as error:
                     log.error('configuration reload refused',extra={'code':type(error).__name__})
                 finally:reload_requested.clear()
-            if not api.is_alive():raise RuntimeError('cab-api-process-exited')
+            api=api_recovery.tick()
             if not config().get('initialized'):continue
+            electric=electric_recovery.tick()
+            if catalog_future is not None and catalog_future.done():
+                try:catalog_future.result()
+                except Exception as error:log.warning('agent catalog unavailable',extra={'code':type(error).__name__})
+                catalog_future=None
+            if catalog_future is None and time.monotonic()>=next_catalog:
+                catalog_future=catalog_pool.submit(refresh_agent_catalog);next_catalog=time.monotonic()+5
+            if time.monotonic()>=next_daemon_report:
+                next_daemon_report=time.monotonic()+5
+                observe_daemon()
+            if time.monotonic()>=next_process_inventory:
+                try:
+                    if not registry_initialized:
+                        process_registry.initialize();registry_initialized=True
+                    supervised={os.getpid():'cab'}
+                    if api and api.is_alive():supervised[api.pid]='cab-api'
+                    if (postgres_pid:=postgres_monitor.pid):supervised[postgres_pid]='postgresql'
+                    if electric is not None and electric.poll() is None:supervised[electric.pid]='electric'
+                    process_registry.refresh(supervised)
+                except (DatabaseError,OSError,ValueError,RuntimeError) as error:
+                    log.warning('inventaire des binaires indisponible',extra={'code':type(error).__name__})
+                next_process_inventory=time.monotonic()+3
             if (git_monitor_thread is None or not git_monitor_thread.is_alive()) and time.monotonic()>=next_git_monitor:
                 from .git_monitor import run as run_git_monitor
                 git_monitor_thread=threading.Thread(target=run_git_monitor,args=(stop,),name='cab-git-watch',daemon=True)
@@ -202,24 +288,24 @@ def run(port=8790):
                     except Exception as error:log.warning('forge version observation unavailable',extra={'code':type(error).__name__})
                     forge_version_future=None
                 if forge_version_future is None and time.monotonic()>=next_forge_version:
-                    from .forge_version import sweep
-                    forge_version_future=forge_version_pool.submit(sweep);next_forge_version=time.monotonic()+60
+                    forge_version_future=forge_version_pool.submit(background_forge_updates);next_forge_version=time.monotonic()+60
                 if time.monotonic()>=next_connectors:
                     from .core.connectors import refresh_projection
                     refresh_projection();update_agent_mcp();next_connectors=time.monotonic()+1
+                    from .resource_reservations import launch as launch_reservations
+                    launch_reservations()
                 if time.monotonic()>=next_update:
-                    from .system_updates import dispatch
                     from .update_availability import check as check_update
                     for future in (update_future,availability_future):
                         if future is not None and future.done():
                             try:future.result()
                             except Exception as error:log.warning('update worker unavailable',extra={'code':type(error).__name__})
-                    if update_future is None or update_future.done():update_future=update_pool.submit(dispatch)
+                    if update_future is None or update_future.done():update_future=update_pool.submit(background_updates)
                     if availability_future is None or availability_future.done():availability_future=update_pool.submit(check_update)
                     next_update=time.monotonic()+2
                 recover_receipts()
                 if not recovered:
-                    configure();os.kill(api.pid,signal.SIGHUP)
+                    configure()
                     # Les opérations engagées ne sont jamais réémises après crash.
                     for op in Operation.objects.filter(state__in=['INTENT','RUNNING']):
                         op.state='UNKNOWN';op.save(update_fields=['state','updated']);commands.event(op.run,'operation-recovery-protected',{'request_id':op.request_id})
@@ -246,30 +332,26 @@ def run(port=8790):
                     if closure_future is None and time.monotonic()>=next_closure:
                         closure_future=closure_pool.submit(background_closure);next_closure=time.monotonic()+5
                     from .statistics_watch import Watcher,synchronize
-                    if statistics_watcher is None:statistics_watcher=Watcher()
+                    if statistics_watcher is None:
+                        statistics_watcher=InotifyMonitor(Watcher,'inotify-statistics','Surveillance inotify Statistiques')
                     if statistics_future is not None and statistics_future.done():
                         try:statistics_future.result()
                         except Exception as error:log.warning('statistics synchronization unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
                         statistics_future=None
                     due=statistics_watcher.tick()
-                    env_due=[key for key,at in statistics_watcher.env_dirty.items() if time.monotonic()-at>=.3]
-                    if statistics_future is None and env_due:
-                        from .project_metadata import synchronize as synchronize_metadata
-                        project_id=env_due[0];statistics_watcher.env_dirty.pop(project_id,None)
-                        statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
-                    elif statistics_future is None and due:
-                        statistics_project=due[0];statistics_watcher.dirty.pop(statistics_project,None)
-                        statistics_future=statistics_pool.submit(synchronize,statistics_project)
+                    observed=statistics_watcher.watcher
+                    if due is not None and observed is not None:
+                        env_due=[key for key,at in observed.env_dirty.items() if time.monotonic()-at>=.3]
+                        if statistics_future is None and env_due:
+                            from .project_metadata import synchronize as synchronize_metadata
+                            project_id=env_due[0];observed.env_dirty.pop(project_id,None)
+                            statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
+                        elif statistics_future is None and due:
+                            statistics_project=due[0];observed.dirty.pop(statistics_project,None)
+                            statistics_future=statistics_pool.submit(synchronize,statistics_project)
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:
                         if len(tasks)>=4:break
                         if op.pk not in tasks:tasks[op.pk]=pool.submit(execute_operation,op.pk)
-                if (electric is None or electric.poll() is not None) and time.monotonic()>=next_electric_start:
-                    next_electric_start=time.monotonic()+10
-                    args,env,cwd=electric_command()
-                    if Path(args[0]).is_file():
-                        electric=subprocess.Popen(args,env=env,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
-                        threading.Thread(target=relay,args=(electric.stdout,),daemon=True).start();log.info('Electric started')
-                    else:log.error('Electric executable missing',extra={'code':'electric-unavailable'})
                 if metadata is not None and metadata.done():
                     try:metadata.result()
                     except Exception as error:log.warning('metadata refresh unavailable',extra={'code':type(error).__name__})
@@ -286,8 +368,10 @@ def run(port=8790):
     finally:
         stop.set()
         if git_monitor_thread is not None:git_monitor_thread.join(timeout=30)
+        postgres_thread.join(timeout=10)
         forge_version_pool.shutdown(wait=True,cancel_futures=True)
         agent_config_pool.shutdown(wait=True,cancel_futures=True)
+        catalog_pool.shutdown(wait=True,cancel_futures=True)
         agents_pool.shutdown(wait=True,cancel_futures=True)
         native_pool.shutdown(wait=True,cancel_futures=True)
         update_pool.shutdown(wait=True,cancel_futures=True)
@@ -300,6 +384,6 @@ def run(port=8790):
             os.killpg(electric.pid,signal.SIGTERM)
             try:electric.wait(timeout=10)
             except subprocess.TimeoutExpired:os.killpg(electric.pid,signal.SIGKILL);electric.wait()
-        if api.is_alive():api.terminate();api.join(20)
-        if api.is_alive():api.kill();api.join()
+        if api and api.is_alive():api.terminate();api.join(20)
+        if api and api.is_alive():api.kill();api.join()
         log.info('service stopped')

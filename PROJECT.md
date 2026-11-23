@@ -1,5 +1,20 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Réservations de ressources
+
+Les sessions réservent les fichiers et ressources avant leur usage, prorogent
+le bail à 240 secondes si nécessaire, puis libèrent les ressources dès la fin
+d’usage. La page Projet [Réservations](http://127.0.0.1:8790/projects/reservations)
+affiche les baux actifs via Electric. Le propriétaire reçoit les avis à
+30 secondes de l’échéance et lors de la restitution s’il est encore joignable.
+
+Le centre de notifications de la top barre remplace le journal de livraison du
+bloc Git. PostgreSQL conserve les messages et questions ; Electric actualise la
+cloche. L'expéditeur est le projet concerné, ou CAB pour les messages globaux.
+Les messages sont consommés à la lecture, les questions restent jusqu'à réponse.
+La fenêtre garde une taille constante et fait défiler les contenus longs.
+**Effacer les messages** purge les messages de tous les projets et de CAB.
+
 ## Plateforme CAB 3.2.8
 
 La page Agents présente un catalogue latéral issu de PostgreSQL ; les états des agents et de leurs connexions restent des observations courantes.
@@ -155,7 +170,7 @@ OpenSpec et le contrat distribué de la version effectivement active font autori
 |---|---|
 | 1. Autorité et autonomie | Dans le change validé, l’orchestrateur décide, orchestre, contrôle et valide ; le codeur réalise librement lectures, exploration et essais. Toute écriture projet hors atelier et tout accès web requièrent sa validation préalable. Toute action hors change et toute allocation de ressources supplémentaires nécessitent l’accord du développeur. Les ressources déjà allouées restent utilisables. Tous les résultats de tests sont soumis à validation de l’orchestrateur avant d’être retenus comme preuves. |
 | 2. SGS | Service permanent, collecte native autonome Codex/OpenCode des deux rôles, sources des briques transmises directement, complément LLM limité aux faits absents. Modèle, fournisseur, niveau de raisonnement et changements horodatés ; chronologie, attentes, durées et tokens entrée/sortie/raisonnement/cache séparés, totaux natifs préservés. N/A motivé pour les mesures non exposées. Tous les rapports statistiques archivés sont importables avec provenance et déduplication. |
-| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination ciblée avec les déclarants y compris entre projets et résolution individuelle. Correctif code ou documentaire sous SCM/version/CI-CD/CABU ; réponse possible sans correctif avec limites. Après réponse et résolution, nettoyage individuel ou par lot sans attendre les autres entrées ; CCAB ne sert pas d’archive. Aucun nouveau chat imposé. |
+| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination ciblée avec les déclarants y compris entre projets et résolution individuelle. L’invocation CCAB porte le mandat correctif CAB, OpenSpec et SCM/CI-CD/CABU nécessaires sans confirmation générique répétée ; mandats des déclarants et protections préservés. Réponse possible sans correctif avec limites. Après réponse et résolution, nettoyage individuel ou par lot sans attendre les autres entrées ; CCAB ne sert pas d’archive. Aucun nouveau chat imposé. |
 | 4. CABU | Préparation à chaud, bascule minimale, reprise du même reçu, versions chargées vérifiées et retour des communications. Aucun rejeu d’effet ni de permission once. Une coupure brève se traite comme une interruption réseau avec reprise sur reçus. Chaque UID modifie uniquement ses données privées. |
 | 5. Nettoyage et Web Monitor | RUN en cours refusé au nettoyage. À l’archivage ou à l’arrêt explicite pour dépendance insatisfaite : rapports durables, nettoyage OC puis données du change dans toutes les briques, avec préservation des pairs. Une pause ou un incident technique ne vaut pas clôture. Archives montre les données réellement conservées et permet leur suppression explicite par le développeur sans approbation CAB supplémentaire. Stats lit seulement SGS ; incidents encore nécessaires visibles dans CCAB. |
 | 6. Distribution et connaissance | Chaque acteur connaît le contrat applicable avant son travail et après reprise/update ; rôle et version sont tracés. Skills, plugins et commandes restent cohérents et agnostiques des projets et machines. Le noyau compact renvoie aux références utiles sans relire tout l’historique. |
@@ -1239,7 +1254,7 @@ la présence locale d’une décision, pas son application native. Procédure :
 
 ## Coordination des incidents CAB
 
-Le skill et la commande distribuent la procédure [coding-incidents.md](plugins/cab-approval-bridge/skills/approval-bridge/references/coding-incidents.md) : signalement au chat « Correctif CAB - OC », réutilisation ou création conditionnelle et suivi jusqu’au correctif puis à son activation CABU vérifiée. Les propriétaires des sessions conservent leurs mandats et preuves ; la livraison source et l’activation restent distinctes.
+Le plugin, le skill et la commande CCAB distribués depuis integrations/codex/ccab et integrations/commands portent le mandat des correctifs CAB nécessaires sous SCM avec CICD, y compris les écritures OpenSpec et l’activation requise. Le correcteur coordonne les déclarants sans imposer de nouveau chat ni redemander le mandat pour chaque correctif ou fichier. Les propriétaires des projets déclarants conservent leurs mandats et permissions ; leurs fichiers préexistants ne sont pas attribués implicitement. Livraison, activation et retour vérifié restent des preuves distinctes ; une purge globale exige sa demande explicite.
 
 
 ## Entrées modèle du client V2
@@ -1422,3 +1437,18 @@ asynchrone à chaque ouverture et propose le bouton manuel permanent.
 ## Surveillance Git récursive
 
 La plateforme surveille les dossiers des projets enregistrés, y compris après déplacement, et regroupe en mémoire les changements avant la réconciliation de leur état Git. Les trois délais sont administrables en base ; une seule analyse est active pour l’ensemble des projets.
+
+## Git des sessions et CI/CD
+
+CAB conserve l'instantané Git initial des nouveaux changes, les réservations
+coopératives des fichiers et les index isolés des sessions. Les agents demandent
+les opérations au service ; Git et la mise à jour PROJECT_VERSION appartiennent
+à CAB. Le plugin CICD transmet la version et suit les reçus, y compris les
+builds DIU sur le projet courant et les éventuelles releases différées.
+Le global STATISTICS.md reste une production partagée de CAB, indexée après
+chaque écriture avant libération de sa réservation.
+
+La finalisation des sessions inclut un dernier commit des statistiques et des
+blocages, envoyé et vérifié avant CLOSED ou BLOCKED. CAB y déplace le tag de
+version sans préfixe v. Le service porte cette logique, ses réservations et ses
+reçus ; les skills en décrivent l'usage sans exécuter Git à sa place.

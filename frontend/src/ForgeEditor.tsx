@@ -3,7 +3,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {api} from './api'
 
 type Snapshot={fields:Record<string,string>;token:string;revision:string}
-const suffixes=['BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY']
+const suffixes=['BASE_URL','OWNER','REPOSITORY','NAME','BRANCH']
 export function ForgeEditor({projectId,forge,label,metadataRevision}:{projectId:string;forge:string;label:string;metadataRevision:number}){
   const [open,setOpen]=useState(false);const [snapshot,setSnapshot]=useState<Snapshot|null>(null);const [fields,setFields]=useState<Record<string,string>>({});const [token,setToken]=useState('');const [showToken,setShowToken]=useState(false);const [dirty,setDirty]=useState(false);const [tokenDirty,setTokenDirty]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const dialog=useRef<HTMLDialogElement>(null);const client=useQueryClient()
   const path=`projects/${projectId}/forges/${forge}`

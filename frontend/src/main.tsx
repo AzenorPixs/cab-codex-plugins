@@ -1,30 +1,40 @@
+import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
+import {agentCatalogPages} from './AgentCatalog'
 import {useEffect,useRef,useState,type FormEvent} from 'react'
 import {createRoot} from 'react-dom/client'
-import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query'
-import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate,Navigate} from '@tanstack/react-router'
+import {QueryClient,QueryClientProvider,useQuery,useQueryClient} from '@tanstack/react-query'
+import {createRootRoute,createRoute,createRouter,RouterProvider,Link,Outlet,useSearch,useParams,useRouterState,useNavigate} from '@tanstack/react-router'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
-import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle} from './Appearance'
+import {AppearanceProvider,DeveloperToolbar,PageAppearance,ThemeToggle,useTablePageSize} from './Appearance'
 import {GitMonitorSettings} from './GitMonitorSettings'
 import {ConfigurationAccess,AdministrationShell} from './Administration'
+import {BinaryCounters} from './BinaryCounters'
+import {BinaryList,type BinaryStatus} from './BinaryList'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
+import {ProjectForges} from './ProjectForges'
+import {ProjectFactory} from './ProjectFactory'
+import {ProjectIncidents} from './ProjectIncidents'
+import {ProjectReservations} from './ProjectReservations'
 import {UpdateBadge,HomeVersionCheck,SystemUpdatePage} from './SystemUpdate'
 import {RunView,stageLabel} from './RunView'
-import {SessionActions,SessionArchives,useEvaluations,runStateLabel} from './SessionLifecycle'
+import {SessionActions,SessionArchives,useEvaluations,runStateLabel,runProtection} from './SessionLifecycle'
 import {McpConnectionsProvider,McpVersions} from './McpConnections'
 import {CabVersionProvider,useCabVersion} from './CabVersion'
+import {Notifications} from './Notifications'
 import './style.css'
+import './MonitorTable.css'
 
 type Health={state:string;initialized:boolean;version:string;csrf_token:string}
-type Session={run_id:string;session_id:string;mode:string;state:string;suspension:string;archived:boolean;change:string;generation:number|string;updated:string;stage:number|null;tasks_done:number|null;tasks_total:number|null}
+type Session={project_id:string;run_id:string;session_id:string;mode:string;state:string;suspension:string;archived:boolean;change:string;generation:number|string;updated:string;stage:number|null;cycle_steps?:number;cycle_profile?:string;tasks_done:number|null;tasks_total:number|null}
 const client=new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false}}})
 function Layout(){
   const header=useRef<HTMLElement>(null)
   const cabVersion=useCabVersion()
   const pathname=useRouterState({select:state=>state.location.pathname})
   useEffect(()=>{const node=header.current;if(!node)return;const resize=new ResizeObserver(()=>document.documentElement.style.setProperty('--app-header-height',node.getBoundingClientRect().height+'px'));resize.observe(node);return ()=>resize.disconnect()},[])
-  return <><PageAppearance path={pathname}/><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>{cabVersion||''}</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><McpVersions header/><DeveloperToolbar/><a href="/api/v1/docs" className="api-link">API</a><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'||pathname.startsWith('/agents/')?'workspace-main':undefined}><Outlet/></main></>
+  return <><PageAppearance path={pathname}/><header ref={header}><div className="brand-group"><Link to="/" reloadDocument activeOptions={{exact:true}} className="brand">CAB <span>{cabVersion||''}</span></Link><UpdateBadge/><nav className="primary-links" aria-label="Navigation principale"><Link to="/" reloadDocument activeOptions={{exact:true}} className="header-control home-link" aria-label="Revenir à l’accueil" title="Accueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/administration">Administration</Link><Link to="/agents">Agents</Link><Link to="/projects">Projets</Link></nav></div><nav className="header-navigation" aria-label="Outils"><McpVersions header/><DeveloperToolbar/><a href="/api/v1/docs" className="api-link">API</a><Notifications/><ThemeToggle/></nav></header><main className={pathname.startsWith('/administration')||pathname.startsWith('/projects')||pathname==='/agents'||pathname.startsWith('/agents/')?'workspace-main':undefined}><Outlet/></main></>
 }
 
 function Gate({children}:{children:React.ReactNode}){
@@ -52,51 +62,99 @@ function Projects({children}:{children:(projects:Project[])=>React.ReactNode}){
   if(query.error)return <Login/>
   return children(query.data.projects)
 }
-function SessionList({project}:{project:Project}){
-  const [rows,setRows]=useState<Session[]>([]);const [status,setStatus]=useState('Connexion au suivi…');const evaluations=useEvaluations(project.id)
+function SessionRows({project,rows,showProject}:{project:Project;rows:Session[];showProject:boolean}){
+  const evaluations=useEvaluations(project.id)
+  return <>{rows.map(row=><tr key={`${project.id}:${row.run_id}`}>{showProject&&<td data-label="Projets"><Link className="text-button" to="/projects/$projectId" params={{projectId:project.identifier||project.id}}>{project.identifier||project.id}</Link></td>}<td data-label="RUN / Session"><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.identifier||project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td data-label="Change">{row.change}</td><td data-label="Profil">{row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe'}</td><td data-label="État"><span className="badge">{runStateLabel(row.state,row.suspension)}</span>{runProtection(row.suspension)&&<small className="protection-label">{runProtection(row.suspension)}</small>}</td><td data-label="Étape">{stageLabel(row.stage,row.cycle_steps,undefined,row.cycle_profile)}</td><td data-label="Tâches réalisées">{row.mode==='service'?'Sans objet':row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td data-label="Actualisation">{new Date(row.updated).toLocaleString('fr-FR')}</td><td data-label="Actions"><SessionActions projectId={project.id} runId={row.run_id} evaluation={evaluations.data?.evaluations.find(item=>item.run_id===row.run_id)}/></td></tr>)}</>
+}
+function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]}){
+  const pageSize=useTablePageSize('sessions')
+  const [rows,setRows]=useState<Session[]>([]),[status,setStatus]=useState('')
+  const navigation=useTableSearch()
   useEffect(()=>{
-    const controller=new AbortController();setRows([]);setStatus('Connexion au suivi…')
-    const stream=new ShapeStream({url:new URL('/api/v1/sync/sessions',location.origin).href,params:{project_id:project.id},signal:controller.signal,onError:()=>{setStatus('Suivi temporairement indisponible · reconnexion en cours');return {}}})
+    const controller=new AbortController();setRows([]);setStatus('')
+    const stream=new ShapeStream({url:new URL(project?'/api/v1/sync/sessions':'/api/v1/sync/project-sessions',location.origin).href,params:project?{project_id:project.id}:undefined,signal:controller.signal,onError:()=>{setStatus('Suivi temporairement indisponible · reconnexion en cours');return {}}})
     const shape=new Shape(stream)
-    const unsubscribe=shape.subscribe(({rows})=>{setRows(rows.map(row=>({run_id:String(row.run_id),session_id:String(row.session_id),mode:String(row.mode),state:String(row.state),suspension:String(row.suspension||''),archived:row.archived===true||String(row.archived)==='true',change:String(row.change),generation:String(row.generation),updated:String(row.updated),stage:row.stage==null?null:Number(row.stage),tasks_done:row.tasks_done==null?null:Number(row.tasks_done),tasks_total:row.tasks_total==null?null:Number(row.tasks_total)})));setStatus('Suivi en direct · Electric')})
+    const unsubscribe=shape.subscribe(({rows})=>{setRows(rows.map(row=>({project_id:String(row.project_id||project?.id||''),run_id:String(row.run_id),session_id:String(row.session_id),mode:String(row.mode),state:String(row.state),suspension:String(row.suspension||''),archived:row.archived===true||String(row.archived)==='true',change:String(row.change),generation:String(row.generation),updated:String(row.updated),cycle_profile:String(row.cycle_profile||''),cycle_steps:Number(row.cycle_steps)||11,stage:row.stage==null?null:Number(row.stage),tasks_done:row.tasks_done==null?null:Number(row.tasks_done),tasks_total:row.tasks_total==null?null:Number(row.tasks_total)})));setStatus('')})
     return ()=>{unsubscribe();controller.abort()}
-  },[project.id])
-  return <><div className="section-heading"><div><p className="eyebrow">COORDINATION AUTONOME</p><h1>Sessions de codage</h1></div><p role="status" className="live">{status}</p></div><p className="project-path">{project.root}</p><div className="table-wrap"><table><thead><tr><th>RUN / Session</th><th>Change</th><th>Profil</th><th>État</th><th>Étape</th><th>Tâches réalisées</th><th>Actualisation</th><th>Actions</th></tr></thead><tbody>{rows.filter(row=>!row.archived).map(row=><tr key={row.run_id}><td data-label="RUN / Session"><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.identifier||project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td data-label="Change">{row.change}</td><td data-label="Profil">{row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe'}</td><td data-label="État"><span className="badge">{runStateLabel(row.state)}</span>{row.suspension&&<small className="protection-label">{row.suspension}</small>}</td><td data-label="Étape">{stageLabel(row.stage)}</td><td data-label="Tâches réalisées">{row.mode==='service'?'Sans objet':row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td data-label="Actualisation">{new Date(row.updated).toLocaleString('fr-FR')}</td><td data-label="Actions"><SessionActions projectId={project.id} runId={row.run_id} evaluation={evaluations.data?.evaluations.find(item=>item.run_id===row.run_id)}/></td></tr>)}</tbody></table>{!rows.some(row=>!row.archived)&&<p className="empty">Aucune session pour ce projet.</p>}</div></>
+  },[project?.id])
+  const available=project?[project]:projects
+  const all=available.flatMap(value=>rows.filter(row=>!row.archived&&row.project_id===value.id).map(row=>({project:value,row})))
+  const matching=filterTableRows(all,navigation.query,({project:value,row})=>[
+    value.identifier,value.name,row.run_id,row.session_id,row.change,
+    row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe',
+    runStateLabel(row.state,row.suspension),runProtection(row.suspension),
+    stageLabel(row.stage,row.cycle_steps,undefined,row.cycle_profile),new Date(row.updated).toLocaleString('fr-FR'),
+    row.tasks_total!=null?`${row.tasks_done}/${row.tasks_total}`:'',
+  ])
+  const {rows:visible,current,pages}=tablePage(matching,navigation.page,pageSize)
+  const groups=available.map(value=>({project:value,rows:visible.filter(item=>item.project.id===value.id).map(item=>item.row)})).filter(value=>value.rows.length)
+  useEffect(()=>navigation.setPage(1),[project?.id])
+  return <><div className="section-heading"><div><p className="eyebrow">SESSIONS DE CODAGE EN COURS</p></div>{status&&<p role="status" className="live">{status}</p>}</div><div className="table-wrap"><table className="monitor-table"><thead><tr>{!project&&<th scope="col"><span>Projets</span></th>}<th scope="col"><span>RUN / Session</span></th><th scope="col"><span>Change</span></th><th scope="col"><span>Profil</span></th><th scope="col"><span>État</span></th><th scope="col"><span>Étape</span></th><th scope="col"><span>Tâches réalisées</span></th><th scope="col"><span>Actualisation</span></th><th scope="col"><span>Actions</span></th></tr></thead><tbody>{groups.map(group=><SessionRows key={group.project.id} project={group.project} rows={group.rows} showProject={!project}/>)}
+    <TableFiller count={visible.length} columns={project?8:9} empty={navigation.query.trim()?'Aucun résultat.':project?'Aucune session pour ce projet.':'Aucune session pour les projets accessibles.'}/>
+    </tbody></table></div>
+    <TableNavigation {...navigation} label="Pagination des sessions" searchLabel="Rechercher dans les sessions"
+      current={current} pages={pages} total={matching.length}/></>
+}
+function AllProjectSessions({projects,archives=false}:{projects:Project[];archives?:boolean}){
+  return <div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{archives?'Archives':'Sessions'}</h1></div></div></section>{archives?<SessionArchives projects={projects}/>:<SessionList projects={projects}/>}</section></div>
 }
 function ProjectRunScreen({projects}:{projects:Project[]}){
   const params=useParams({strict:false});const navigate=useNavigate();const project=projects.find(item=>item.id===params.projectId||item.identifier===params.projectId)
   useEffect(()=>{if(project?.identifier&&params.projectId===project.id&&params.runId)navigate({to:'/projects/$projectId/runs/$runId',params:{projectId:project.identifier,runId:params.runId},replace:true})},[project?.identifier,params.projectId,params.runId])
   return <div className="projects-layout"><ProjectSidebar projects={projects} selected={project?.id}/><section className="project-content">{project&&params.runId?<RunView projectId={project.id} routeId={project.identifier||project.id} runId={params.runId}/>:<h1>Projet introuvable</h1>}</section></div>
 }
-function ProjectScreen({projects,incidents=false,archives=false,sessions=false}:{projects:Project[];incidents?:boolean;archives?:boolean;sessions?:boolean}){
+function ProjectScreen({projects,incidents=false,archives=false,sessions=false,forges=false,factory=false}:{projects:Project[];incidents?:boolean;archives?:boolean;sessions?:boolean;forges?:boolean;factory?:boolean}){
   const search=useSearch({strict:false});const params=useParams({strict:false});const requested=params.projectId||search.project;const selected=requested?projects.find(p=>p.id===requested||p.identifier===requested):incidents?projects[0]:undefined
   const navigate=useNavigate()
-  useEffect(()=>{if(selected?.identifier&&params.projectId===selected.id)navigate({to:archives?'/projects/$projectId/archives':incidents?'/projects/$projectId/incidents':sessions?'/projects/$projectId/sessions':'/projects/$projectId',params:{projectId:selected.identifier},replace:true})},[selected?.identifier,params.projectId,incidents,archives,sessions])
-  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={selected?.id}/><section className="project-content">{selected&&<ProjectNavigation projectId={selected.identifier||selected.id}/>}<div className="project-page-heading">{selected&&(sessions||incidents||archives)&&<p className="eyebrow">{selected.public_metadata?.values?.PROJECT_NAME||selected.name||selected.root.split('/').pop()}</p>}</div>{!selected?<section><h1>{requested?'Projet introuvable':'Projets'}</h1><p>{requested?'Ce projet est introuvable ou ne fait pas partie de vos projets accessibles.':projects.length?'Sélectionnez un projet dans la colonne de gauche pour ouvrir sa page.':'Aucun projet enregistré. Utilisez le bouton + pour créer votre premier projet.'}</p></section>:selected.creation_state!=='READY'?<section><h1>{selected.name}</h1><p role="alert">La création de ce projet nécessite une vérification. Aucun dossier ne sera recréé automatiquement.</p></section>:archives?<SessionArchives projectId={selected.id} routeId={selected.identifier||selected.id}/>:incidents?<IncidentList project={selected}/>:sessions?<SessionList project={selected}/>:<ProjectHome project={selected}/>}</section></div>
+  useEffect(()=>{if(selected?.identifier&&params.projectId===selected.id)navigate({to:factory?'/projects/$projectId/factory':forges?'/projects/$projectId/forges':archives?'/projects/$projectId/archives':incidents?'/projects/$projectId/incidents':sessions?'/projects/$projectId/sessions':'/projects/$projectId',params:{projectId:selected.identifier},replace:true})},[selected?.identifier,params.projectId,incidents,archives,sessions,forges,factory])
+  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={selected?.id}/><section className="project-content">{selected?<ProjectNavigation projectId={selected.identifier||selected.id}/>:!requested?<ProjectsNavigation/>:null}{!selected?<section className="project-home project-forges-page">{requested&&<div className="section-heading"><div className="project-identity"><h1>Projet introuvable</h1></div></div>}<p>{requested?'Ce projet est introuvable ou ne fait pas partie de vos projets accessibles.':projects.length?'Sélectionnez un projet dans la colonne de gauche pour ouvrir sa page.':'Aucun projet enregistré. Utilisez le bouton + pour créer votre premier projet.'}</p></section>:selected.creation_state!=='READY'?<section><h1>{selected.name}</h1><p role="alert">La création de ce projet nécessite une vérification. Aucun dossier ne sera recréé automatiquement.</p></section>:factory?<><ProjectPageTitle project={selected} title="Fabrique"/><ProjectFactory project={selected}/></>:forges?<><ProjectPageTitle project={selected} title="Forges"/><ProjectForges project={selected}/></>:archives?<><ProjectPageTitle project={selected} title="Archives"/><SessionArchives projectId={selected.id} routeId={selected.identifier||selected.id}/></>:incidents?<><ProjectPageTitle project={selected} title="Incidents"/><ProjectIncidents project={selected}/></>:sessions?<><ProjectPageTitle project={selected} title="Sessions"/><SessionList project={selected}/></>:<ProjectHome project={selected}/>}</section></div>
 }
-function IncidentList({project}:{project:Project}){
-  const query=useQuery({queryKey:['incidents',project.id],queryFn:()=>api<{incidents:unknown[]}>('incidents?'+new URLSearchParams({project_id:project.id})),refetchInterval:15000})
-  return <section><p className="eyebrow">REGISTRE CCAB</p><h1>Incidents</h1><p>{project.root}</p>{query.error?<p role="alert">Registre indisponible.</p>:query.data?.incidents.length?<pre>{JSON.stringify(query.data.incidents,null,2)}</pre>:<p>Aucun incident ouvert dans ce périmètre.</p>}</section>
+function ProjectPageTitle({project,title}:{project:Project;title:string}){
+  const client=useQueryClient()
+  useEffect(()=>{
+    const controller=new AbortController();const stream=new ShapeStream({url:new URL('/api/v1/sync/project',location.origin).href,params:{project_id:project.id},signal:controller.signal,onError:()=>({})});const shape=new Shape(stream)
+    const unsubscribe=shape.subscribe(({rows})=>{for(const row of rows){if(row.id!==project.id||!row.public_metadata||typeof row.public_metadata!=='object')continue;const next=row.public_metadata as Project['public_metadata'];if(!next||typeof next.revision!=='number'||!next.values||typeof next.values!=='object')continue;client.setQueryData<{projects:Project[]}>(['projects'],old=>old&&({projects:old.projects.map(item=>item.id===project.id&&next.revision>=(item.public_metadata?.revision||0)?{...item,public_metadata:next}:item)}))}})
+    return ()=>{unsubscribe();controller.abort()}
+  },[project.id,client])
+  const values=project.public_metadata?.values||{}
+  return <section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{values.PROJECT_NAME||project.name}</h1>{values.PROJECT_VERSION&&<span className="project-version project-release-version">{values.PROJECT_VERSION}</span>}<span className="project-version" aria-hidden="true">|</span><span className="project-page-title">{title}</span></div></div></section>
 }
 const rootRoute=createRootRoute({component:Layout})
-function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link></nav>}
+function ProjectsNavigation(){return <nav className="project-tabs" aria-label="Projets"><Link to="/projects" activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil des projets" title="Accueil des projets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/archives">Archives</Link><Link to="/projects/sessions">Sessions</Link><Link to="/projects/reservations">Réservations</Link></nav>}
+function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link><Link to="/projects/$projectId/factory" params={{projectId}}>Fabrique</Link><Link to="/projects/$projectId/forges" params={{projectId}}>Forges</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link></nav>}
 const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof search.project==='string'?{project:search.project}:{}
 const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:HomeVersionCheck})
 const projectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectDetailRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
+const projectFactoryRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/factory',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} factory/>}</Projects></Gate>})
+const projectForgesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/forges',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} forges/>}</Projects></Gate>})
+const allProjectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/archives',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects} archives/>}</Projects></Gate>})
+const allProjectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/sessions',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects}/>}</Projects></Gate>})
+const projectReservationsRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/reservations',
+  component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><ProjectReservations projects={projects}/></section></div>}</Projects></Gate>,
+})
 const projectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/sessions',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} sessions/>}</Projects></Gate>})
 const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/runs/$runId',component:()=> <Gate><Projects>{projects=><ProjectRunScreen projects={projects}/>}</Projects></Gate>})
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const projectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/archives',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} archives/>}</Projects></Gate>})
 const newProjectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/new',component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><div className="project-content"><CreateProjectForm/></div></div>}</Projects></Gate>})
-const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="database" login={<Login/>}/></Gate></AdministrationShell>})
+const administrationRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration',component:()=> <AdministrationShell><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>Administration</h1></div></div><BinaryCounters/></section></AdministrationShell>})
+const administrationBinariesRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/administration/binaries',
+  validateSearch:(search:Record<string,unknown>):{status?:BinaryStatus}=>search.status==='active'||search.status==='inactive'?{status:search.status}:{},
+  component:()=> <AdministrationShell><Gate><BinaryList status={administrationBinariesRoute.useSearch().status??'active'} login={<Login/>}/></Gate></AdministrationShell>,
+})
 const agentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/agents',component:()=> <Gate><ConfigurationAccess section="agents" login={<Login/>}/></Gate>})
 const agentPages=([['codex','codex_desktop'],['codex-cli','codex'],['opencode','opencode']] as const).map(([path,agent])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${path}`,component:()=> <Gate><ConfigurationAccess section="agents" selectedAgent={agent} login={<Login/>}/></Gate>}))
-const legacyAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <Navigate to="/agents" replace/>})
+const agentCatalogueRoutes=agentCatalogPages.map(([catalog])=>createRoute({getParentRoute:()=>rootRoute,path:`/agents/${catalog}` as const,component:()=> <Gate><ConfigurationAccess section="agents" catalog={catalog} login={<Login/>}/></Gate>}))
+const administrationAgentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/agents',component:()=> <AdministrationShell><Gate><ConfigurationAccess section="agent-administration" login={<Login/>}/></Gate></AdministrationShell>})
 const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/git',component:()=> <AdministrationShell><Gate><GitMonitorSettings/></Gate></AdministrationShell>})
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,projectDetailRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,agentsRoute,...agentPages,legacyAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

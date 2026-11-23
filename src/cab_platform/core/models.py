@@ -11,6 +11,95 @@ class Agent(models.Model):
     mcp_versions=models.JSONField(default=list)
     class Meta:db_table='agents'
 
+class AgentProvider(models.Model):
+    name = models.CharField(max_length=160, unique=True)
+    models_url = models.URLField(max_length=2048, blank=True)
+    api_url = models.URLField(max_length=2048)
+    refresh_after = models.DateTimeField(null=True, db_index=True)
+    refreshed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = 'agent_providers'
+
+
+class AgentCatalogFile(models.Model):
+    id = models.CharField(max_length=40, primary_key=True)
+    provider = models.OneToOneField(AgentProvider, null=True, on_delete=models.CASCADE)
+    url = models.URLField(max_length=2048, blank=True)
+    sha256 = models.CharField(max_length=64, blank=True, default='')
+    valid = models.BooleanField(default=False)
+    adjusting = models.BooleanField(default=False)
+    state = models.CharField(max_length=16, default='idle')
+    error = models.CharField(max_length=80, blank=True, default='')
+    refreshed_at = models.DateTimeField(null=True)
+    refresh_after = models.DateTimeField(null=True)
+    generation = models.PositiveBigIntegerField(default=1)
+    scan_requested = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'agent_catalog_files'
+
+
+class AgentCatalogProjection(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    kind = models.CharField(max_length=16, db_index=True)
+    data = models.JSONField()
+
+    class Meta:
+        db_table = 'agent_catalog_projection'
+
+
+class AgentApiKey(models.Model):
+    id = models.UUIDField(primary_key=True, editable=False)
+    provider = models.ForeignKey(AgentProvider, on_delete=models.PROTECT)
+    ciphertext = models.TextField(editable=False)
+
+    class Meta:
+        db_table = 'agent_api_keys'
+
+
+class AgentModel(models.Model):
+    provider = models.ForeignKey(AgentProvider, on_delete=models.CASCADE, related_name='catalog')
+    identifier = models.CharField(max_length=255)
+    source = models.JSONField()
+    details = models.JSONField()
+
+    class Meta:
+        db_table = 'agent_models'
+        constraints = [models.UniqueConstraint(fields=['provider', 'identifier'], name='agent_model_identity')]
+
+
+class AgentModelPolicy(models.Model):
+    class SortColumn(models.TextChoices):
+        INPUT = 'input_cost', 'Coût entrée / M'
+        OUTPUT = 'output_cost', 'Coût sortie / M'
+        CACHE_READ = 'cache_read_cost', 'Lecture cache / M'
+        CACHE_WRITE = 'cache_write_cost', 'Écriture cache / M'
+
+    name = models.CharField(max_length=120)
+    model_filter = models.CharField(max_length=2048, blank=True, default='')
+    provider_ids = models.JSONField(null=True, blank=True, default=None)
+    include_free = models.BooleanField(default=True)
+    include_paid = models.BooleanField(default=True)
+    context_min = models.PositiveIntegerField(default=0)
+    output_min = models.PositiveIntegerField(default=0)
+    input_price_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    input_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    output_price_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    output_price_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_read_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_read_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_write_min = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+    cache_write_max = models.DecimalField(max_digits=24, decimal_places=12, default=0)
+
+    sort_column = models.CharField(max_length=20, choices=SortColumn, default=SortColumn.INPUT)
+    sort_descending = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'agent_model_policies'
+        constraints = [models.UniqueConstraint(models.functions.Lower('name'), name='agent_model_policy_name')]
+
+
 class AgentUser(models.Model):
     agent=models.ForeignKey(Agent,on_delete=models.PROTECT,related_name='users')
     uid=models.PositiveBigIntegerField()
@@ -57,6 +146,59 @@ class Project(models.Model):
     created=models.DateTimeField(auto_now_add=True)
     class Meta:
         db_table='projects'
+
+class ProjectArtifact(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    kind=models.CharField(max_length=12)
+    artifact_key=models.CharField(max_length=200)
+    generated_at=models.DateTimeField()
+    metadata=models.JSONField(default=dict)
+
+    class Meta:
+        db_table='project_artifacts'
+        constraints=[models.UniqueConstraint(fields=['project','kind','artifact_key'],name='project_latest_artifact')]
+
+
+class ProjectForgeArtifact(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    forge=models.CharField(max_length=12)
+    source=models.JSONField(default=list)
+    artifacts=models.JSONField(default=dict)
+
+    class Meta:
+        db_table='project_forge_artifacts'
+        constraints=[models.UniqueConstraint(fields=['project','forge'],name='project_forge_artifact_snapshot')]
+
+
+class ProjectForgeArtifactPublication(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    forge=models.CharField(max_length=12)
+    state=models.CharField(max_length=16,default='PENDING')
+    plan=models.JSONField(default=dict)
+    executor=models.JSONField(default=dict)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table='project_forge_artifact_publications'
+        constraints=[models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN']),name='project_forge_one_active_publication')]
+
+
+class ProjectArtifactBuild(models.Model):
+    id=models.CharField(primary_key=True,max_length=200)
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    kind=models.CharField(max_length=12)
+    version=models.CharField(max_length=100)
+    state=models.CharField(max_length=16,default='PENDING')
+    executor=models.JSONField(default=dict)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table='project_artifact_builds'
+        constraints=[models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN']),name='project_artifact_one_active_build')]
+
 
 class GitProject(models.Model):
     project=models.OneToOneField(Project,on_delete=models.CASCADE,primary_key=True)
@@ -116,6 +258,7 @@ class McpConnector(models.Model):
     agent=models.CharField(max_length=24)
     process=models.JSONField()
     worker=models.JSONField(default=dict)
+    recovery_anchor=models.JSONField(default=dict)
     loaded_version=models.CharField(max_length=100,blank=True)
     catalog_version=models.CharField(max_length=100,blank=True)
     relay_version=models.CharField(max_length=100,blank=True)
@@ -137,6 +280,55 @@ class McpConnectorProjection(models.Model):
     state=models.CharField(max_length=40)
     connected=models.BooleanField(default=False)
     class Meta:db_table='mcp_connector_projection'
+
+
+class McpDisconnectRecovery(models.Model):
+    connector=models.ForeignKey(McpConnector,on_delete=models.PROTECT)
+    project=models.ForeignKey(Project,null=True,on_delete=models.SET_NULL)
+    anchor=models.JSONField(default=dict)
+    baseline=models.JSONField(default=list)
+    purpose=models.CharField(max_length=16,default='loss')
+    state=models.CharField(max_length=24,default='QUEUED')
+    native_request=models.CharField(max_length=200,blank=True)
+    report=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    finished=models.DateTimeField(null=True)
+
+    class Meta:
+        db_table='mcp_disconnect_recoveries'
+        constraints=[models.UniqueConstraint(fields=['connector'],condition=models.Q(finished__isnull=True),name='mcp_disconnect_one_active')]
+
+
+class McpConvergence(models.Model):
+    scope=models.CharField(primary_key=True,max_length=100)
+    incident=models.JSONField(default=dict)
+
+    class Meta:db_table='mcp_convergence'
+
+
+class ObservedBinary(models.Model):
+    id=models.CharField(primary_key=True,max_length=64)
+    pid=models.PositiveIntegerField()
+    uid=models.PositiveIntegerField()
+    username=models.CharField(max_length=256)
+    executable=models.TextField()
+    role=models.CharField(max_length=40)
+    process=models.JSONField()
+    active=models.BooleanField(default=True)
+    first_seen=models.DateTimeField(auto_now_add=True)
+    last_seen=models.DateTimeField(auto_now=True)
+    stopped=models.DateTimeField(null=True)
+
+    class Meta:db_table='cab_observed_binaries'
+
+
+class BinaryCounts(models.Model):
+    id=models.PositiveSmallIntegerField(primary_key=True,default=1)
+    inactive=models.PositiveIntegerField(default=0)
+    active=models.PositiveIntegerField(default=0)
+
+    class Meta:db_table='cab_binary_counts'
+
 
 class McpStopAttempt(models.Model):
     id=models.CharField(primary_key=True,max_length=64)
@@ -196,6 +388,106 @@ class Change(models.Model):
         db_table='changes'
         constraints=[models.UniqueConstraint(fields=['project','identifier'],name='cab_change_identity')]
 
+class GitChange(models.Model):
+    change=models.OneToOneField(Change,on_delete=models.PROTECT,primary_key=True,related_name='git_snapshot')
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    initial_run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL)
+    origin=models.JSONField(default=dict,db_default={})
+    baseline=models.JSONField(default=dict)
+    captured_at=models.DateTimeField()
+    class Meta:db_table='git_changes'
+
+
+class GitSessionIndex(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='git_indexes')
+    session=models.ForeignKey(CodingSession,null=True,on_delete=models.SET_NULL,related_name='git_indexes')
+    initial_run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL)
+    origin=models.JSONField(default=dict,db_default={})
+    base_head=models.CharField(max_length=64,blank=True)
+    index_path=models.CharField(max_length=1500)
+    keep_ref=models.CharField(max_length=200,blank=True,default='',db_default='')
+    keep_oid=models.CharField(max_length=64,blank=True,default='',db_default='')
+    state=models.CharField(max_length=24,default='OPEN')
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_session_indexes'
+        constraints=[models.UniqueConstraint(fields=['change','session'],name='git_session_change_unique')]
+
+class GitFileReservation(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT,related_name='reservations')
+    path=models.CharField(max_length=1500)
+    path_digest=models.CharField(max_length=64)
+    active=models.BooleanField(default=True)
+    created=models.DateTimeField(auto_now_add=True)
+    released=models.DateTimeField(null=True)
+    class Meta:
+        db_table='git_file_reservations'
+        constraints=[models.UniqueConstraint(fields=['project','path_digest'],condition=models.Q(active=True),name='git_file_active_unique')]
+
+
+class GitSessionEffect(models.Model):
+    run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL,related_name='git_effects')
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT,related_name='effects')
+    origin=models.JSONField(default=dict,db_default={})
+    request_id=models.CharField(max_length=200)
+    request_digest=models.CharField(max_length=64)
+    state=models.CharField(max_length=24,default='INTENT')
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_session_effects'
+        constraints=[models.UniqueConstraint(fields=['run','request_id'],name='git_session_effect_unique')]
+
+
+class McpRunBinding(models.Model):
+    connector=models.OneToOneField(McpConnector,on_delete=models.CASCADE,primary_key=True,related_name='run_binding')
+    run=models.ForeignKey('Run',on_delete=models.CASCADE)
+    bound_at=models.DateTimeField(auto_now=True)
+    class Meta:db_table='mcp_run_bindings'
+
+class McpThreadBinding(models.Model):
+    connector=models.ForeignKey(McpConnector,on_delete=models.CASCADE)
+    thread=models.CharField(max_length=200)
+    run=models.ForeignKey('Run',on_delete=models.CASCADE)
+
+    class Meta:
+        db_table='mcp_thread_bindings'
+        constraints=[models.UniqueConstraint(fields=['connector','thread'],name='mcp_connector_thread_unique')]
+
+
+class GitDelivery(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='git_deliveries')
+    run=models.ForeignKey('Run',null=True,on_delete=models.SET_NULL,related_name='git_deliveries')
+    git_index=models.ForeignKey(GitSessionIndex,on_delete=models.PROTECT)
+    origin=models.JSONField(default=dict,db_default={})
+    version=models.CharField(max_length=64)
+    state=models.CharField(max_length=24,default='PENDING')
+    executor=models.JSONField(default=dict)
+    plan=models.JSONField(default=dict)
+    commit_oid=models.CharField(max_length=64,blank=True)
+    tag_oid=models.CharField(max_length=64,blank=True)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_deliveries'
+        constraints=[models.UniqueConstraint(fields=['run','version'],name='git_delivery_run_version_unique'),models.UniqueConstraint(fields=['project'],condition=models.Q(state__in=['PENDING','RUNNING','UNKNOWN','PARTIAL']),name='git_delivery_active_project_unique')]
+
+class GitDeliveryStep(models.Model):
+    delivery=models.ForeignKey(GitDelivery,on_delete=models.PROTECT,related_name='steps')
+    key=models.CharField(max_length=100)
+    state=models.CharField(max_length=24,default='PENDING')
+    receipt=models.JSONField(default=dict)
+    stage_iteration=models.ForeignKey('ChangeStageIteration',null=True,on_delete=models.SET_NULL,related_name='delivery_steps')
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table='git_delivery_steps'
+        constraints=[models.UniqueConstraint(fields=['delivery','key'],name='git_delivery_step_unique')]
+
+
 class ChangeTask(models.Model):
     change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='task_records')
     source_id=models.CharField(max_length=128)
@@ -223,6 +515,8 @@ class Run(models.Model):
     coding_session=models.ForeignKey(CodingSession,null=True,on_delete=models.PROTECT,related_name='runs')
     change_record=models.ForeignKey(Change,null=True,on_delete=models.PROTECT,related_name='runs')
     configuration=models.JSONField(default=dict)
+    cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
+    cycle_summary=models.JSONField(default=dict,db_default={})
     stage=models.PositiveSmallIntegerField(null=True,blank=True)
     phase=models.CharField(max_length=32,blank=True)
     state=models.CharField(max_length=32,default='WORKING')
@@ -235,7 +529,84 @@ class Run(models.Model):
     updated=models.DateTimeField(auto_now=True)
     class Meta:
         db_table='runs'
-        constraints=[models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity'),models.CheckConstraint(condition=models.Q(stage__isnull=True)|models.Q(stage__gte=1,stage__lte=11),name='cab_run_stage_valid')]
+        constraints=[
+            models.UniqueConstraint(fields=['project','run_id'],name='cab_run_identity'),
+            models.CheckConstraint(condition=models.Q(cycle_steps__in=(11,12)),name='cab_run_cycle_steps_valid'),
+            models.CheckConstraint(condition=models.Q(stage__isnull=True)|models.Q(stage__gte=1,stage__lte=models.F('cycle_steps')),name='cab_run_stage_valid'),
+        ]
+
+
+class ChangeStage(models.Model):
+    change=models.ForeignKey(Change,on_delete=models.PROTECT,related_name='stages')
+    key=models.CharField(max_length=64)
+    parent=models.ForeignKey('self',null=True,on_delete=models.PROTECT,related_name='children')
+    iteration_count=models.PositiveIntegerField(default=0,db_default=0)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    updated_at=models.DateTimeField(auto_now=True,null=True)
+
+    class Meta:
+        db_table='change_stages'
+        constraints=[
+            models.UniqueConstraint(fields=['change','key'],name='cab_change_stage_identity'),
+        ]
+
+
+class VersionPolicyMigration(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.PROTECT,related_name='version_policy_migrations')
+    preview_id=models.CharField(max_length=64)
+    state=models.CharField(max_length=16,default='PENDING')
+    plan=models.JSONField(default=dict)
+    created_at=models.DateTimeField(auto_now_add=True)
+    updated_at=models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table='version_policy_migrations'
+        constraints=[
+            models.UniqueConstraint(fields=['project','preview_id'],name='cab_version_policy_preview_identity'),
+            models.UniqueConstraint(fields=['project'],condition=models.Q(state='PENDING'),name='cab_one_version_policy_migration'),
+        ]
+
+
+class RunCycleIteration(models.Model):
+    run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='cycle_iterations')
+    number=models.PositiveIntegerField()
+    started_at=models.DateTimeField()
+    ended_at=models.DateTimeField(null=True)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    visited=models.JSONField(default=list)
+    complete=models.BooleanField(default=False)
+    time_projection=models.JSONField(default=dict,db_default={})
+    class Meta:
+        db_table='run_cycle_iterations'
+        constraints=[models.UniqueConstraint(fields=['run','number'],name='cab_cycle_iteration_identity')]
+
+
+class ChangeStageIteration(models.Model):
+    stage=models.ForeignKey(ChangeStage,on_delete=models.PROTECT,related_name='iterations')
+    run=models.ForeignKey(Run,null=True,on_delete=models.SET_NULL,related_name='stage_iterations')
+    parent=models.ForeignKey('self',null=True,on_delete=models.PROTECT,related_name='children')
+    cycle=models.ForeignKey(RunCycleIteration,null=True,on_delete=models.PROTECT,related_name='stage_iterations')
+    reference=models.CharField(max_length=200,blank=True,default='',db_default='')
+    state=models.CharField(max_length=16,blank=True,default='',db_default='')
+    asynchronous=models.BooleanField(default=False,db_default=False)
+    receipt=models.JSONField(default=dict,db_default={})
+    iteration_number=models.PositiveIntegerField(null=True)
+    duration_seconds=models.DecimalField(max_digits=20,decimal_places=6,null=True)
+    started_at=models.DateTimeField(null=True)
+    ended_at=models.DateTimeField(null=True)
+    end_reason=models.CharField(max_length=32,blank=True)
+    description=models.TextField(blank=True)
+    description_source=models.CharField(max_length=12,blank=True)
+    time_projection=models.JSONField(default=dict,db_default={})
+
+    class Meta:
+        db_table='change_stage_iterations'
+        ordering=['started_at','pk']
+        constraints=[
+            models.UniqueConstraint(fields=['run'],condition=models.Q(ended_at__isnull=True,parent__isnull=True,asynchronous=False),name='cab_one_open_stage_per_run'),
+            models.UniqueConstraint(fields=['run','reference'],condition=~models.Q(reference=''),name='cab_stage_effect_reference'),
+            models.CheckConstraint(condition=models.Q(ended_at__isnull=True)|models.Q(ended_at__gte=models.F('started_at')),name='cab_change_stage_iteration_dates'),
+        ]
 
 class Operation(models.Model):
     run=models.ForeignKey(Run,on_delete=models.PROTECT)
@@ -305,6 +676,8 @@ class SessionProjection(models.Model):
     archived=models.BooleanField(default=False)
     change=models.CharField(max_length=200)
     generation=models.PositiveBigIntegerField()
+    cycle_steps=models.PositiveSmallIntegerField(default=11,db_default=11)
+    cycle_profile=models.CharField(max_length=32,blank=True,default='',db_default='')
     stage=models.PositiveSmallIntegerField(null=True)
     phase=models.CharField(max_length=32,blank=True)
     tasks_done=models.PositiveIntegerField(null=True)
@@ -322,6 +695,8 @@ class Incident(models.Model):
     claim=models.JSONField(default=dict)
     resolution=models.JSONField(default=dict)
     created=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='ccab'
 
 class Metric(models.Model):
     run=models.ForeignKey(Run,on_delete=models.PROTECT)
@@ -334,6 +709,26 @@ class Metric(models.Model):
     updated=models.DateTimeField(auto_now=True)
     class Meta:
         constraints=[models.UniqueConstraint(fields=['run','source','stream'],name='cab_metric_stream')]
+
+class CycleTokenUsage(models.Model):
+    project=models.ForeignKey(Project,on_delete=models.CASCADE)
+    change=models.ForeignKey(Change,on_delete=models.CASCADE)
+    session=models.ForeignKey(CodingSession,on_delete=models.CASCADE)
+    run=models.ForeignKey(Run,on_delete=models.CASCADE)
+    stage_passage=models.ForeignKey(ChangeStageIteration,on_delete=models.CASCADE,related_name='+')
+    action=models.ForeignKey(ChangeStageIteration,null=True,on_delete=models.SET_NULL,related_name='+')
+    native_key=models.CharField(max_length=64)
+    observed_at=models.DateTimeField()
+    role=models.CharField(max_length=12,choices=[('coder','Codeur'),('orchestrator','Orchestrateur')])
+    input_tokens=models.PositiveBigIntegerField(null=True)
+    output_tokens=models.PositiveBigIntegerField(null=True)
+    cache_read_tokens=models.PositiveBigIntegerField(null=True)
+    cache_write_tokens=models.PositiveBigIntegerField(null=True)
+
+    class Meta:
+        db_table='cycle_token_usage'
+        constraints=[models.UniqueConstraint(fields=['project','native_key'],name='cab_cycle_token_native_event')]
+
 
 class MeasurementPeriod(models.Model):
     session=models.ForeignKey(CodingSession,on_delete=models.PROTECT,related_name='measurement_periods')
@@ -501,3 +896,69 @@ class Maintenance(models.Model):
     state=models.CharField(max_length=24)
     evidence=models.JSONField(default=dict)
     created=models.DateTimeField(auto_now_add=True)
+
+
+class TerminalGitCommit(models.Model):
+    run=models.OneToOneField(Run,null=True,on_delete=models.SET_NULL,related_name='terminal_git')
+    project=models.ForeignKey(Project,on_delete=models.PROTECT)
+    origin=models.JSONField(default=dict)
+    branch=models.CharField(max_length=16)
+    state=models.CharField(max_length=24,default='INTENT')
+    executor=models.JSONField(default=dict)
+    index_path=models.CharField(max_length=1500,blank=True)
+    base_head=models.CharField(max_length=64,blank=True)
+    commit_oid=models.CharField(max_length=64,blank=True)
+    snapshot=models.JSONField(default=dict)
+    remote_plan=models.JSONField(default=list)
+    receipt=models.JSONField(default=dict)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='terminal_git_commits'
+
+
+class Notification(models.Model):
+    id=models.UUIDField(primary_key=True,editable=False)
+    project=models.ForeignKey(Project,null=True,on_delete=models.SET_NULL)
+    sender=models.CharField(max_length=300)
+    title=models.CharField(max_length=300)
+    body=models.TextField()
+    kind=models.CharField(max_length=16,default='message')
+    choices=models.JSONField(default=list)
+    fingerprint=models.CharField(max_length=64)
+    read_at=models.DateTimeField(null=True)
+    created=models.DateTimeField(auto_now_add=True)
+    updated=models.DateTimeField(auto_now=True)
+    class Meta:db_table='cab_notifications'
+
+
+class NotificationReceipt(models.Model):
+    id=models.UUIDField(primary_key=True,editable=False)
+    state=models.CharField(max_length=16)
+    fingerprint=models.CharField(max_length=64)
+    choice=models.CharField(max_length=100,blank=True)
+    actor=models.ForeignKey(Actor,null=True,on_delete=models.SET_NULL)
+    created=models.DateTimeField(auto_now_add=True)
+    class Meta:db_table='cab_notification_receipts'
+
+
+class ResourceReservation(models.Model):
+    """Baux courants publiables dans Electric."""
+
+    run = models.ForeignKey(Run, on_delete=models.CASCADE)
+    project_id = models.CharField(max_length=64, db_index=True)
+    session_id = models.CharField(max_length=200)
+    change = models.CharField(max_length=200)
+    source = models.CharField(max_length=8)
+    source_id = models.PositiveBigIntegerField()
+    kind = models.CharField(max_length=16)
+    description = models.CharField(max_length=1800)
+    count = models.PositiveBigIntegerField(default=1)
+    started = models.DateTimeField()
+    expires = models.DateTimeField(db_index=True)
+    warned = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'resource_reservations'
+        constraints = [
+            models.UniqueConstraint(fields=('source', 'source_id'), name='cab_reservation_source'),
+        ]

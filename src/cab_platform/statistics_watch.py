@@ -1,5 +1,6 @@
 """Surveillance Linux ciblée : aucun parcours du dépôt hors OpenSpec."""
 import ctypes
+import errno
 import os
 from pathlib import Path
 import struct
@@ -40,7 +41,10 @@ class Watcher:
         for path,info in desired.items():
             if path not in self.paths:
                 wd=self.lib.inotify_add_watch(self.fd,os.fsencode(path),0x8|0x80|0x100|0x200|0x400|0x800|0x02000000|0x01000000)
-                if wd<0:raise OSError(ctypes.get_errno(),'statistics-watch-unavailable')
+                if wd<0:
+                    code=ctypes.get_errno()
+                    if code in (errno.ENOENT,errno.ENOTDIR):continue
+                    raise OSError(code,'statistics-watch-unavailable')
                 self.paths[path]=wd;self.watches[wd]=info
                 if info[1]:self.env_dirty[info[0]]=time.monotonic()
     def tick(self):
@@ -57,6 +61,10 @@ class Watcher:
                     self.next_inventory=0
                 elif wd in self.watches:
                     project_id,is_root=self.watches[wd]
+                    if mask&0x8000:  # IN_IGNORED : le chemin recréé exigera un nouveau watch.
+                        self.watches.pop(wd,None)
+                        self.paths={path:watch for path,watch in self.paths.items() if watch!=wd}
+                        self.next_inventory=0
                     if not is_root or name in ('STATISTICS.md','openspec'):self.dirty[project_id]=now
                     if is_root is True and (name in ('project.env','.git') or mask&(0x400|0x800)):self.env_dirty[project_id]=now
                     if is_root=='config' and (name in ('forgejo.token','github.token','gitlab.token') or mask&(0x400|0x800)):self.env_dirty[project_id]=now

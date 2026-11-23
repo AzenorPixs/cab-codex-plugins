@@ -114,3 +114,29 @@ statistics_project retourne actual_global_sha256, global_in_sync et la validité
 sources du manifeste global (global_sources_current). Les marqueurs réels et ceux
 en base sont distingués. Un fichier manuel ou ancien sans marqueur reste vérifiable
 par ses octets ; aucun marqueur n’est inventé ni inséré pour une simple lecture.
+
+## Sessions canoniques sans dossier de change
+
+Un RUN de livraison cadré sur un fichier canonique `openspec/specs/<capacité>/spec.md`
+peut être finalisé sans créer un faux dossier de change, tâches ou archive. CAB
+publie son maître local dans `statistics/runs/<empreinte-identité>/STATISTICS.md`,
+où l’empreinte couvre projet, RUN, SID, génération et identifiant logique du change.
+Un ancien ChangeSource disparu interdit ce repli.
+
+Le rapport comporte les six sections usuelles et les seules périodes/preuves du
+RUN. Les mesures absentes ou les couvertures tronquées restent N/A. PostgreSQL
+projette le contenu et ses empreintes dans la configuration interne du RUN ;
+les révisions sont auditées par événements. Les blocs manuels restent préservés.
+Le global concatène chaque maître une fois, sans addition de compteurs partagés.
+Si un vrai maître de change devient disponible, il prend sa place dans le global
+sans supprimer le rapport canonique existant.
+
+CAB publie et indexe atomiquement ce rapport, puis le global. Son moteur terminal
+accepte seulement le chemin dérivé du RUN, garde les contrôles des réservations
+et des destinations, déplace le tag de version sans v sur le commit final vérifié
+et ferme le RUN ensuite. Une publication ou un commit UNKNOWN conserve son reçu
+et n’est jamais réémis comme nouvelle livraison.
+
+La consultation expose la phase FINALIZING et ses blocages postérieurs au dossier,
+notamment un rapport indisponible ou une publication indécise ; elle n’annonce
+plus READY sur la seule validité des preuves préalables.
