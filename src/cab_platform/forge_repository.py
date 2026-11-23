@@ -14,8 +14,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, require
 from .core.models import Project, ProjectMetadataProjection
-from .forge_auth import forge_request, verify_tls_for
-from .forge_settings import crypt
+from .forge_auth import forge_request
+from .forge_settings import crypt, forge_client
 from .forge_version import base_for
 
 FORGES = ('FORGEJO', 'GITHUB', 'GITLAB')
@@ -44,10 +44,6 @@ def missing_configuration(project, values, forge):
 
 def configured(project, values, forge):
     return not missing_configuration(project, values, forge)
-
-
-def verify_repository_tls(values, forge):
-    return forge != 'GITLAB' or verify_tls_for(values, forge)
 
 
 def get_json(client, url, *, headers=None, report=None, operation='', max_bytes=1048576, **kwargs):
@@ -102,12 +98,10 @@ def observe(project, values, forge, report=None):
         else:
             api = ('https://api.github.com' if github_public else base + '/api/v3') if forge == 'GITHUB' else base + '/api/v1'
             root = api + '/repos/' + '/'.join(quote(x, safe='') for x in owner.split('/')) + '/' + quote(repo, safe='')
-        verify = verify_repository_tls(values, forge)
         if report:
-            report('Vérification du certificat TLS active.\n' if verify
-                   else 'Vérification du certificat TLS désactivée pour cette forge GitLab.\n')
+            report(f'Vérification du certificat TLS désactivée pour cette forge {forge}.\n')
         read = partial(get_json, report=report)
-        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False, verify=verify, headers=headers) as client:
+        with forge_client(timeout=8, headers=headers) as client:
             info, _ = read(client, root, operation='Lecture des métadonnées du dépôt', params={'statistics': 'true'} if forge == 'GITLAB' else {})
             if not isinstance(info, dict):
                 if report:
@@ -214,7 +208,7 @@ def commit_details(project, forge, commit):
         else:
             api = ('https://api.github.com' if github_public else base + '/api/v3') if forge == 'GITHUB' else base + '/api/v1'
             root = api + '/repos/' + '/'.join(quote(part, safe='') for part in owner.split('/')) + '/' + quote(repo, safe='') + ('/git/commits/' if forge == 'FORGEJO' else '/commits/') + commit
-        with httpx.Client(timeout=8, follow_redirects=False, trust_env=False, headers=headers) as client:
+        with forge_client(timeout=8, headers=headers) as client:
             data, _ = get_json(client, root)
             require(isinstance(data, dict), 'forge-commit-unavailable', 409)
             payload = data if forge == 'GITLAB' else data.get('commit')
@@ -285,7 +279,6 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True, 
         project = Project.objects.get(pk=project_id)
         values = (project.public_metadata or {}).get('values', {})
         signature = identity(project, values, forge)
-        verify = verify_repository_tls(values, forge)
         if report:
             report('Lecture des paramètres enregistrés.\n')
         missing = missing_configuration(project, values, forge)
@@ -297,7 +290,7 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True, 
         with transaction.atomic():
             current = Project.objects.select_for_update().get(pk=project_id)
             current_values = (current.public_metadata or {}).get('values', {})
-            if identity(current, current_values, forge) != signature or verify_repository_tls(current_values, forge) != verify:
+            if identity(current, current_values, forge) != signature:
                 if report:
                     report('La configuration a changé avant le rafraîchissement.\n')
                 return False
@@ -323,7 +316,7 @@ def refresh_one(project_id, forge, *, wait=False, managed=True, automatic=True, 
             project = Project.objects.select_for_update().get(pk=project_id)
             snapshot = dict(project.public_metadata or {})
             latest_values=snapshot.get('values',{})
-            if identity(project, latest_values, forge) != signature or verify_repository_tls(latest_values, forge) != verify:
+            if identity(project, latest_values, forge) != signature:
                 if report:
                     report('La configuration a changé pendant le rafraîchissement. Résultat écarté.\n')
                 return

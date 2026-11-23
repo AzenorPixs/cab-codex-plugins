@@ -9,10 +9,16 @@ import re
 import stat
 import subprocess
 import sys
+import httpx
 from django.db import transaction
 from .core.commands import Refused,require
 from .core.models import Project
 from .project_metadata import FORGES,SUFFIXES,ASSIGNMENT,public_value
+
+
+def forge_client(**kwargs):
+    """Client HTTPS pour les opérations sur une forge de projet configurée."""
+    return httpx.Client(verify=False, follow_redirects=False, trust_env=False, **kwargs)
 
 _IO=r'''import base64,fcntl,hashlib,json,os,secrets,stat,sys
 p=json.load(sys.stdin);root=p['root'];uid=os.getuid();rfd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW);dfd=None

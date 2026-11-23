@@ -95,7 +95,7 @@ def remote_git(project, forge, owner, group, options, env, *args, timeout=30):
     with git_credentials(project, forge, owner, group) as (fd, askpass):
         process_env = {**env, 'GIT_ASKPASS': askpass, 'CAB_FORGE_USER': owner, 'CAB_FORGE_TOKEN_FD': str(fd)}
         try:
-            return subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'credential.helper=', '-c', 'http.extraHeader=', '-c', 'http.proxy=', '-c', 'http.sslVerify=true', '-c', 'http.followRedirects=false', *args], cwd='/', env=process_env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, pass_fds=(fd,), **options)
+            return subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'credential.helper=', '-c', 'http.extraHeader=', '-c', 'http.proxy=', '-c', 'http.sslVerify=false', '-c', 'http.followRedirects=false', *args], cwd='/', env=process_env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, pass_fds=(fd,), **options)
         except (OSError, subprocess.TimeoutExpired):
             raise Refused('forge-push-transport-unknown', 409) from None
 

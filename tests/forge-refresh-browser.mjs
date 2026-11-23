@@ -43,6 +43,11 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(async()=>(await counts()).automatic===3,'Les trois vérifications automatiques ont été demandées');
   check(!find('dialog[open]'),'Une vérification automatique a ouvert une fenêtre');
   for(const [forge,label] of ${JSON.stringify(labels)}){
+    (await wait(()=>find('button[aria-label="Modifier '+label+'"]'),'Éditeur '+label)).click();
+    const editor=await wait(()=>find('dialog[open] form'),'Champs '+label);
+    check(editor.textContent.includes('REMOTE_'+forge+'_BASE_URL')&&!editor.textContent.includes('SSL_VERIFY'),'Champs TLS '+label);
+    Array.from(editor.querySelectorAll('button')).find(control=>control.textContent==='Fermer').click();
+    await wait(()=>!find('dialog[open]'),'Éditeur fermé '+label);
     const button=await wait(()=>find('button[aria-label="Rafraîchir l’état '+label+'"]'),label);
     button.click();
     const dialog=await wait(()=>find('dialog[open][aria-label="Détail du rafraîchissement '+label+'"]'),'Fenêtre '+label);
@@ -86,6 +91,10 @@ try{
       if(route==='/verification')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
       if(route==='/api/v1/health')return json(response,{initialized:true,state:'READY',csrf_token:'fixture'})
       if(route==='/api/v1/projects')return json(response,{projects:[project]})
+      if(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)$/.test(route)){
+        const forge=route.split('/').at(-1)
+        return json(response,{fields:{['REMOTE_'+forge+'_BASE_URL']:'https://example.org',['REMOTE_'+forge+'_SSL_VERIFY']:'1'},token:'',revision:'fixture'})
+      }
       const match=route.match(/^\/api\/v1\/projects\/fixture\/forges\/(GITLAB|FORGEJO|GITHUB)\/refresh$/)
       if(match){
         if(url.searchParams.has('automatic')){

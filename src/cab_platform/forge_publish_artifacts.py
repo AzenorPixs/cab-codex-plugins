@@ -20,7 +20,7 @@ from .core.commands import Refused, identifier, require
 from .core.models import GitDelivery, Maintenance, Project, ProjectArtifactBuild, ProjectForgeArtifactPublication
 from .forge_artifacts import DEB, TAG
 from .forge_repository import FORGES, configured, get_json, identity, refresh_one
-from .forge_settings import crypt
+from .forge_settings import crypt, forge_client
 from .forge_version import base_for
 from .project_artifacts import debian_inventory, docker_inventory, enabled
 from .versioning import VersionError, canonical_version
@@ -82,7 +82,7 @@ def remote(project,values,forge):
     else:
         api=('https://api.github.com' if github_public else base+'/api/v3') if forge=='GITHUB' else base+'/api/v1'
         root=api+'/repos/'+quote(owner,safe='/')+'/'+quote(repo,safe='')
-    with httpx.Client(headers=headers,timeout=30,follow_redirects=False,trust_env=False) as client:
+    with forge_client(headers=headers,timeout=30) as client:
         yield client,base,api,root,owner,repo,token,github_public
 
 

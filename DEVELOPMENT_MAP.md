@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Politique TLS commune aux forges
+
+[unify-cab-project-forge-tls](openspec/changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Les clients API et Git de CAB
+acceptent tout certificat sur les forges configurées. L’éditeur retire le
+réglage historique. Les tests Python, Chromium et Firefox ont passé le
+23 novembre 2026 sur des cibles de test.
+
+```mermaid
+flowchart LR
+    forgeTls["unify-cab-project-forge-tls<br/>code non attribué — archivé"]
+    classDef provisional stroke-dasharray: 4 4
+    class forgeTls provisional
+```
+
 ## Diagnostic du rafraîchissement des forges
 
 [diagnose-forge-repository-refresh](openspec/changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. La fenêtre de

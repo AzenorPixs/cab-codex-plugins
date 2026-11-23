@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Politique TLS commune aux forges — 23 novembre 2026
+
+[unify-cab-project-forge-tls](changes/archive/2026-11-23-unify-cab-project-forge-tls/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Diagnostic du rafraîchissement des forges — 23 novembre 2026
 
 [diagnose-forge-repository-refresh](changes/archive/2026-11-23-diagnose-forge-repository-refresh/), code non attribué. Change archivé. Attribution ultérieure par ACL.

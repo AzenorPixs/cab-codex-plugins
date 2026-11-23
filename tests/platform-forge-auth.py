@@ -1,12 +1,19 @@
-"""Vérification du diagnostic HTTPX d’authentification sans accès réseau."""
+"""Qualification des forges avec des réponses contrôlées et un serveur TLS local."""
 import errno
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
 from pathlib import Path
 import socket
 import ssl
+from subprocess import run
 import sys
 from types import SimpleNamespace
+from tempfile import TemporaryDirectory
+from threading import Thread
 import unittest
 from unittest.mock import Mock, patch
+from urllib.parse import unquote, urlsplit
 
 import django
 from django.conf import settings
@@ -16,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 settings.configure(INSTALLED_APPS=['django.contrib.auth', 'django.contrib.contenttypes', 'cab_platform.core'])
 django.setup()
 
-from cab_platform import forge_auth, forge_repository
+from cab_platform import forge_auth, forge_publish_artifacts, forge_push, forge_repository, forge_settings, forge_sync, forge_version
 
 
 class ForgeAuthTests(unittest.TestCase):
@@ -101,9 +108,8 @@ class ForgeAuthTests(unittest.TestCase):
                 )
 
                 def wrap_socket(context, sock, *, server_hostname):
-                    verify = forge != 'FORGEJO'
-                    self.assertEqual(context.check_hostname, verify)
-                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED if verify else ssl.CERT_NONE)
+                    self.assertFalse(context.check_hostname)
+                    self.assertEqual(context.verify_mode, ssl.CERT_NONE)
                     self.assertEqual(server_hostname, 'forge.example')
                     return tls_socket
 
@@ -116,57 +122,14 @@ class ForgeAuthTests(unittest.TestCase):
                 self.assertIn('HTTP 200', log)
                 self.assertIn('Identité du compte vérifiée', log)
 
-    def test_tls_accepts_unverified_certificate_according_to_forge(self):
-        cases = (
-            (forge, field, setting, forge == 'FORGEJO' or setting in ('0', 'false', 'NO'))
-            for forge, field in (('GITLAB', 'username'), ('FORGEJO', 'login'))
-            for setting in ('', '1', 'malformé', '0', 'false', 'NO')
-        )
-        for forge, field, setting, allow_unverified in cases:
-            with self.subTest(forge=forge, setting=setting):
-                self.messages.clear()
-                body = f'{{"{field}": "alice"}}'.encode()
-                tls_socket = Mock()
-                tls_socket.send.side_effect = len
-                tls_socket.recv.return_value = (
-                    f'HTTP/1.1 200 OK\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode() + body
-                )
-
-                def wrap_socket(context, sock, *, server_hostname):
-                    if not allow_unverified:
-                        self.assertTrue(context.check_hostname)
-                        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
-                        raise ssl.SSLCertVerificationError(self.token)
-                    self.assertFalse(context.check_hostname)
-                    self.assertEqual(context.verify_mode, ssl.CERT_NONE)
-                    return tls_socket
-
-                with patch('socket.create_connection', return_value=Mock()), patch.object(
-                    ssl.SSLContext, 'wrap_socket', autospec=True, side_effect=wrap_socket,
-                ):
-                    self.assertIs(self.observe(forge, tls_setting=setting), True if allow_unverified else None)
-                log = self.journal()
-                if allow_unverified:
-                    self.assertIn('Vérification du certificat TLS désactivée', log)
-                    self.assertIn('Identité du compte vérifiée', log)
-                else:
-                    self.assertIn('TLS — vérification du certificat échouée', log)
-                    self.assertNotIn('Vérification du certificat TLS désactivée', log)
-
-    def test_cache_signature_tracks_effective_policy_per_forge(self):
+    def test_cache_signature_ignores_legacy_tls_settings(self):
         project = SimpleNamespace(configuration={})
-        defaults = {forge: forge_auth.inputs(project, {}, forge)[3] for forge in forge_auth.FORGES}
-        key = 'REMOTE_GITLAB_SSL_VERIFY'
-        disabled = forge_auth.inputs(project, {key: '0'}, 'GITLAB')[3]
-        self.assertNotEqual(disabled, defaults['GITLAB'])
-        self.assertEqual(forge_auth.inputs(project, {key: 'false'}, 'GITLAB')[3], disabled)
-        self.assertEqual(forge_auth.inputs(project, {key: '1'}, 'GITLAB')[3], defaults['GITLAB'])
-        for forge in ('FORGEJO', 'GITHUB'):
-            self.assertEqual(forge_auth.inputs(project, {key: '0'}, forge)[3], defaults[forge])
-        for setting in ('0', '1', 'false', 'true'):
-            values = {'REMOTE_FORGEJO_SSL_VERIFY': setting}
-            for forge in defaults:
-                self.assertEqual(forge_auth.inputs(project, values, forge)[3], defaults[forge])
+        for forge in forge_auth.FORGES:
+            expected = forge_auth.inputs(project, {}, forge)[3]
+            for setting in ('0', '1', 'false', 'true', 'malformé'):
+                with self.subTest(forge=forge, setting=setting):
+                    values = {f'REMOTE_{forge}_SSL_VERIFY': setting}
+                    self.assertEqual(forge_auth.inputs(project, values, forge)[3], expected)
 
     def test_rejected_token_and_background_check(self):
         client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(401)))
@@ -181,7 +144,7 @@ class ForgeAuthTests(unittest.TestCase):
                 client = httpx.Client(transport=httpx.MockTransport(self.repository_response))
                 with patch.object(forge_auth.httpx, 'Client', return_value=client) as connect:
                     self.assertIs(self.observe(forge, tls_setting='1' if forge == 'FORGEJO' else '0'), True)
-                self.assertIs(connect.call_args.kwargs['verify'], forge == 'GITHUB')
+                self.assertIs(connect.call_args.kwargs['verify'], False)
                 log = self.journal()
                 self.assertIn('HTTP 403', log)
                 self.assertIn('HTTP 200', log)
@@ -214,9 +177,8 @@ class ForgeRefreshTests(unittest.TestCase):
         project = SimpleNamespace(configuration={'forge_tokens_tpm': {forge: 'chiffré'}})
         return project, values
 
-    def test_gitlab_repository_refresh_respects_explicit_tls_policy(self):
-        for forge, setting, verify in (('GITLAB', '0', False), ('GITLAB', '1', True),
-                                       ('GITLAB', '', True), ('FORGEJO', '0', True), ('GITHUB', '0', True)):
+    def test_repository_refresh_ignores_legacy_tls_policy(self):
+        for forge, setting in (('GITLAB', '0'), ('GITLAB', '1'), ('GITLAB', ''), ('FORGEJO', '1'), ('GITHUB', '1')):
             with self.subTest(forge=forge, setting=setting):
                 project, values = self.fixture(forge, setting)
                 messages = []
@@ -225,7 +187,7 @@ class ForgeRefreshTests(unittest.TestCase):
                     forge_repository.httpx, 'Client', return_value=client,
                 ) as launch:
                     self.assertIsNone(forge_repository.observe(project, values, forge, report=messages.append))
-                self.assertIs(launch.call_args.kwargs['verify'], verify)
+                self.assertIs(launch.call_args.kwargs['verify'], False)
                 log = ''.join(messages)
                 self.assertIn('Lecture des métadonnées du dépôt', log)
                 self.assertIn('Réponse HTTP 403', log)
@@ -265,6 +227,157 @@ class ForgeRefreshTests(unittest.TestCase):
             self.assertEqual(api.refresh_one_forge(None, 'projet', 'gitlab', automatic=True),
                              {'available': False})
             self.assertNotIn('report', run.call_args.kwargs)
+
+
+class LocalForge(BaseHTTPRequestHandler):
+    sha = 'a' * 40
+
+    def log_message(self, *_):
+        pass
+
+    def do_GET(self):
+        self.respond()
+
+    def do_POST(self):
+        self.respond()
+
+    def respond(self):
+        target = urlsplit(self.path)
+        path = unquote(target.path)
+        if path.startswith('/git/'):
+            if self.headers.get('Authorization') != 'Basic Z3JvdXBlOmpldG9uLWZpY3RpZg==':
+                self.send_response(401)
+                self.send_header('WWW-Authenticate', 'Basic realm="Dépôt de test"')
+                self.end_headers()
+                return
+            size = int(self.headers.get('Content-Length', 0))
+            env = {
+                **self.server.git_env,
+                'GIT_PROJECT_ROOT': str(self.server.repositories),
+                'GIT_HTTP_EXPORT_ALL': '1',
+                'REQUEST_METHOD': self.command,
+                'PATH_INFO': path.removeprefix('/git'),
+                'QUERY_STRING': target.query,
+                'REMOTE_USER': 'groupe',
+                'CONTENT_TYPE': self.headers.get('Content-Type', ''),
+                'CONTENT_LENGTH': str(size),
+            }
+            result = run(['/usr/bin/git','http-backend'], input=self.rfile.read(size), env=env, capture_output=True, check=True)
+            raw_headers, body = result.stdout.split(b'\r\n\r\n', 1)
+            headers = dict(line.decode().split(': ', 1) for line in raw_headers.split(b'\r\n'))
+            self.send_response(int(headers.pop('Status', '200').split()[0]))
+        else:
+            payload = {'default_branch': 'main'}
+            if path.endswith('/user'):
+                payload = {'username': 'groupe', 'login': 'groupe'}
+            elif path.endswith('/versions'):
+                payload = ['2022-11-28']
+            elif path.endswith('/version'):
+                payload = {'version': '1.2.3'}
+            elif path.endswith('/commits'):
+                payload = [{'id': self.sha, 'sha': self.sha, 'commit': {}}]
+            elif path.endswith('/tags') or path.endswith('/diff'):
+                payload = []
+            elif path.endswith('/' + self.sha):
+                payload = {'message': 'Commit de test', 'commit': {'message': 'Commit de test'}}
+            elif path.endswith('/releases') and self.command == 'POST':
+                self.rfile.read(int(self.headers['Content-Length']))
+                payload = {'id': 1, 'tag_name': '1.0.0'}
+            body = json.dumps(payload).encode()
+            headers = {'Content-Type': 'application/json'}
+            self.send_response(200)
+        for key, value in headers.items():
+            if key.lower() != 'content-length':
+                self.send_header(key, value)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class ForgeTLSIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory(dir=os.environ.get('TMPDIR') or '.cab-tests', prefix='forge-tls-')
+        self.addCleanup(temporary.cleanup)
+        self.workspace = Path(temporary.name).resolve()
+        self.git_env = {'PATH': '/usr/bin:/bin', 'HOME': str(self.workspace), 'GIT_CONFIG_NOSYSTEM': '1',
+                        'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0', 'LANG': 'C'}
+        cert, key = self.workspace / 'cert.pem', self.workspace / 'key.pem'
+        run(['/usr/bin/openssl', 'req', '-config', '/dev/null', '-x509', '-newkey', 'rsa:2048', '-noenc', '-days', '1',
+             '-subj', '/CN=forge.fixture.invalid', '-keyout', str(key), '-out', str(cert)], capture_output=True, check=True)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        server = ThreadingHTTPServer(('127.0.0.1', 0), LocalForge)
+        server.repositories = self.workspace
+        server.git_env = self.git_env
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.base = f'https://127.0.0.1:{server.server_port}'
+
+        def close():
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
+        self.addCleanup(close)
+
+    def git(self, directory, *args):
+        return run(['/usr/bin/git','-C',str(directory),*args], env=self.git_env, capture_output=True, check=True).stdout.decode().strip()
+
+    def test_all_forge_api_clients_accept_a_self_signed_certificate(self):
+        with httpx.Client(timeout=4, trust_env=False) as verified:
+            with self.assertRaises(httpx.ConnectError):
+                verified.get(self.base + '/version')
+        for forge in forge_auth.FORGES:
+            with self.subTest(forge=forge):
+                base = self.base + '/' + forge.lower()
+                prefix = f'REMOTE_{forge}_'
+                values = {prefix+'BASE_URL': base, prefix+'OWNER': 'groupe', prefix+'REPOSITORY': 'projet', prefix+'SSL_VERIFY': '1'}
+                project = SimpleNamespace(pk='fixture', configuration={'forge_tokens_tpm': {forge: 'chiffré'}},
+                    public_metadata={'values': values, 'forge_repositories': {forge: {'commit': LocalForge.sha, 'available': True}}})
+                project.configuration['forge_repositories'] = {forge: {'observed_signature': forge_repository.identity(project, values, forge)}}
+                with patch.object(forge_auth, 'crypt', return_value=b'jeton-fictif'), patch.object(
+                    forge_repository, 'crypt', return_value=b'jeton-fictif',
+                ), patch.object(forge_publish_artifacts, 'crypt', return_value=b'jeton-fictif'), patch.object(
+                    forge_settings, 'crypt', return_value=b'jeton-fictif',
+                ), patch.object(forge_repository.Project.objects, 'get', return_value=project):
+                    self.assertIs(forge_auth.observe(project, forge, base, 'groupe', 'chiffré'), True)
+                    self.assertEqual(forge_repository.observe(project, values, forge)['commit'], LocalForge.sha)
+                    self.assertIn('Commit de test', forge_repository.commit_details(project, forge, LocalForge.sha)['content'])
+                    self.assertEqual(forge_version.observe(project, forge, base), '2022-11-28' if forge == 'GITHUB' else '1.2.3')
+                    with forge_publish_artifacts.remote(project, values, forge) as (client, _, _, root, *_):
+                        mark = Mock()
+                        release = forge_publish_artifacts.mutate(client, root+'/releases', mark, json={'tag_name': '1.0.0'})
+                        self.assertEqual(release['tag_name'], '1.0.0')
+                        mark.assert_called_once()
+
+    def test_git_preview_push_and_atomic_sync_over_self_signed_https(self):
+        local = self.workspace / 'local'
+        local.mkdir()
+        self.git(local, 'init', '--initial-branch=main')
+        for message in ('ancien', 'nouveau'):
+            self.git(local, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', message)
+        previous = self.git(local, 'rev-parse', 'HEAD^')
+        head = self.git(local, 'rev-parse', 'HEAD')
+        self.git(local, 'tag', 'fixture')
+        branch, tag = 'refs/heads/main', 'refs/tags/fixture'
+        project = SimpleNamespace(root=str(local), owner_uid=os.getuid(),
+            configuration={'forge_tokens_tpm': {forge: 'chiffré' for forge in forge_auth.FORGES}})
+        for forge in forge_auth.FORGES:
+            with self.subTest(forge=forge), patch.object(forge_push, 'crypt', return_value=b'jeton-fictif'):
+                self.git(self.workspace, 'init', '--bare', '--initial-branch=main', forge+'.git')
+                url = self.base + '/git/' + forge + '.git'
+                context = (project, forge, 'groupe', os.getgid(), {}, self.git_env)
+                self.assertEqual(forge_sync.refs(*context, url, 'main'), ('', {}, {}))
+                push = forge_push.remote_git(*context, 'push','--no-follow-tags',
+                    '--force-with-lease='+branch+':', url, previous+':'+branch)
+                self.assertEqual(push.returncode, 0)
+                self.assertEqual(forge_sync.refs(*context, url, 'main'), (previous, {}, {}))
+                sync = forge_push.remote_git(*context, 'push','--atomic','--no-follow-tags',
+                    '--force-with-lease='+branch+':'+previous,'--force-with-lease='+tag+':', url,
+                    head+':'+branch, tag+':'+tag)
+                self.assertEqual(sync.returncode, 0)
+                self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
 
 
 if __name__ == '__main__':

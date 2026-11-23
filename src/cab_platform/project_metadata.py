@@ -7,7 +7,7 @@ import stat
 from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
-SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH','SSL_VERIFY')
+SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH')
 KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 SCALAR_KEY = re.compile(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=')
@@ -19,7 +19,6 @@ def public_value(key,value):
             url=urlsplit(value)
             return url.scheme in ('http','https') and bool(url.hostname) and url.username is None and url.password is None and not url.query and not url.fragment and url.port!=0 and not any(c.isspace() for c in value)
         except ValueError:return False
-    if key.endswith('_SSL_VERIFY'):return value.lower() in ('0','1','true','false','yes','no')
     if key=='PROJECT_ID':
         from .project_ids import valid
         return valid(value)
@@ -137,7 +136,7 @@ def synchronize(project_id,include_forges=True,include_git=True):
             except Refused:tokens_valid=False
         else:
             values=snapshot.get('values',{})
-            snapshot['values']={**{key:value for key,value in values.items() if not key.startswith('REMOTE_')},**{key:value for key,value in previous.get('values',{}).items() if key.startswith('REMOTE_')}}
+            snapshot['values']={**{key:value for key,value in values.items() if not key.startswith('REMOTE_')},**{key:value for key,value in previous.get('values',{}).items() if key.startswith('REMOTE_') and key in KEYS}}
         if include_git:
             from .project_git import probe
             observed_git=probe(project)

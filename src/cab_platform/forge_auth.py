@@ -12,7 +12,7 @@ import httpx
 from django.db import close_old_connections,transaction
 from .core.models import Project,ProjectMetadataProjection
 from .core.commands import Refused
-from .forge_settings import crypt
+from .forge_settings import crypt, forge_client
 from .project_metadata import FORGES
 
 _pool=ThreadPoolExecutor(max_workers=3,thread_name_prefix='cab-forge-auth')
@@ -75,23 +75,12 @@ def forge_request(client, endpoint, headers, report, operation, *, method='GET',
         raise
 
 
-def verify_tls_for(values, forge):
-    if forge == 'FORGEJO':
-        return False
-    if forge != 'GITLAB':
-        return True
-    setting = values.get('REMOTE_GITLAB_SSL_VERIFY', '')
-    return not (isinstance(setting, str) and setting.lower() in ('0', 'false', 'no'))
-
-
 def inputs(project,values,forge):
     url=values.get('REMOTE_'+forge+'_BASE_URL','')
     owner=values.get('REMOTE_'+forge+'_OWNER','')
     encrypted=(project.configuration or {}).get('forge_tokens_tpm',{}).get(forge,'')
     repository=values.get('REMOTE_'+forge+'_REPOSITORY','')
-    parameters = [url, owner, repository, encrypted]
-    if not verify_tls_for(values, forge):
-        parameters.append(False)
+    parameters = [url, owner, repository, encrypted, False]
     signature=hashlib.sha256(json.dumps(parameters,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
     return url,owner,encrypted,signature
 
@@ -165,11 +154,9 @@ def observe(project,forge,url,owner,encrypted,repository='',report=None):
         headers={'Accept':'application/json','User-Agent':'CAB-forge-auth'}
         if forge=='GITLAB':headers['PRIVATE-TOKEN']=token
         else:headers['Authorization']=('token ' if forge=='FORGEJO' else 'Bearer ')+token
-        verify_tls = verify_tls_for((project.public_metadata or {}).get('values', {}), forge)
         if report:
-            report('Vérification du certificat TLS active.\n' if verify_tls
-                   else f'Vérification du certificat TLS désactivée pour cette forge {forge}.\n')
-        with httpx.Client(timeout=6,follow_redirects=False,trust_env=False,verify=verify_tls) as client:
+            report(f'Vérification du certificat TLS désactivée pour cette forge {forge}.\n')
+        with forge_client(timeout=6) as client:
             with forge_request(client, endpoint, headers, report, f'{forge} — consultation du profil par HTTPS') as response:
                 if report:report(f'Réponse de l’API utilisateur : HTTP {response.status_code}.\n')
                 if response.status_code==403 and forge=='FORGEJO':return repository_access(client,base,owner,repository,headers,report)

@@ -894,8 +894,7 @@ présenté dans le bloc Configuration dans l’ordre de déclaration.
 
 ### Requirement: Cartes et suppression des métadonnées
 Les cartes Forgejo, GitHub et GitLab MUST afficher les variables publiques
-présentes de leur famille REMOTE respective, sauf les valeurs SSL_VERIFY,
-qui restent conservées dans la projection sans être affichées. Un fichier absent, ambigu ou
+présentes de leur famille REMOTE respective. Un fichier absent, ambigu ou
 inaccessible MUST être signalé sans contenu brut. Les variables retirées
 MUST disparaître de l'instantané.
 
@@ -954,7 +953,7 @@ Chaque bloc de forge MUST proposer un bouton de rafraîchissement manuel. Son ic
 #### Scenario: Rafraîchissement GitLab et politique TLS
 
 - **WHEN** CAB consulte le dépôt GitLab
-- **THEN** CAB applique la politique définie par `REMOTE_GITLAB_SSL_VERIFY` pour l’authentification GitLab.
+- **THEN** CAB applique la politique TLS commune des connexions aux forges configurées.
 
 #### Scenario: Échec d’un rafraîchissement manuel
 
@@ -1055,7 +1054,7 @@ CAB MUST NOT exécuter project.env. Seule une édition administrateur explicite 
 - **THEN** elle est refusée et aucun effet n'est exécuté
 
 ### Requirement: Liste publique fermée
-Seuls PROJECT_ID, PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE, PROJECT_DOCKERED, PROJECT_DEBIAN_PACKAGE et les REMOTE_(FORGEJO|GITHUB|GITLAB) aux suffixes BASE_URL, OWNER, REPOSITORY, NAME, BRANCH, SSL_VERIFY MAY être publiés après validation. Les URL avec identifiants, requête ou fragment et les valeurs incertaines MUST être exclues. Electric et la projection publique MUST NOT contenir de secrets en clair. Seul un administrateur MAY consulter les tokens sans cache.
+Seuls PROJECT_ID, PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE, PROJECT_DOCKERED, PROJECT_DEBIAN_PACKAGE et les REMOTE_(FORGEJO|GITHUB|GITLAB) aux suffixes BASE_URL, OWNER, REPOSITORY, NAME, BRANCH MAY être publiés après validation. Les URL avec identifiants, requête ou fragment et les valeurs incertaines MUST être exclues. Electric et la projection publique MUST NOT contenir de secrets en clair. Seul un administrateur MAY consulter les tokens sans cache.
 
 #### Scenario: Secrets
 - **WHEN** le fichier contient un jeton ou une URL authentifiée
@@ -3002,7 +3001,7 @@ CAB SHALL offrir un premier onglet Tous et permettre de créer, éditer et suppr
 
 ### Requirement: Diagnostic de transport de l’authentification des forges
 
-CAB MUST afficher les étapes et les causes identifiables des erreurs de transport lors de l’authentification GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST vérifier le certificat TLS hors exceptions documentées et conserver un résultat indéterminé sans preuve d’authentification ou de refus.
+CAB MUST afficher les étapes et les causes identifiables des erreurs de transport lors de l’authentification GitLab, GitHub et Forgejo. Les messages MUST exclure les jetons, en-têtes, corps HTTP et détails bruts des exceptions. CAB MUST conserver un résultat indéterminé sans preuve d’authentification ou de refus.
 
 #### Scenario: Connexion interrompue avant TLS
 
@@ -3011,7 +3010,7 @@ CAB MUST afficher les étapes et les causes identifiables des erreurs de transpo
 
 #### Scenario: Erreur après ouverture de la connexion
 
-- **WHEN** la vérification du certificat échoue ou que la forge tarde à répondre après TLS
+- **WHEN** la négociation TLS échoue ou que la forge tarde à répondre après TLS
 - **THEN** la console indique l’étape TLS ou HTTP et la cause observable sans exposer de secret.
 
 #### Scenario: Réponse de la forge
@@ -3021,13 +3020,13 @@ CAB MUST afficher les étapes et les causes identifiables des erreurs de transpo
 
 #### Scenario: Vérification TLS GitLab explicitement désactivée
 
-- **WHEN** `REMOTE_GITLAB_SSL_VERIFY` vaut `0`, `false` ou `no`
+- **WHEN** un projet GitLab contient un ancien réglage TLS à `0`, `false` ou `no`
 - **THEN** CAB accepte tout certificat sur les requêtes HTTPS d’authentification GitLab, y compris la vérification du dépôt, et la console signale que le certificat du serveur n’est pas vérifié.
 
 #### Scenario: Changement de la politique TLS GitLab
 
-- **WHEN** le réglage GitLab passe d’une vérification active à désactivée ou de désactivée à active
-- **THEN** CAB invalide l’état mémorisé et écarte les résultats encore en cours qui relèvent de l’ancienne politique.
+- **WHEN** CAB compare les paramètres à un résultat GitLab antérieur à la politique TLS commune
+- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat.
 
 #### Scenario: Certificat TLS de la forge Forgejo
 
@@ -3037,7 +3036,7 @@ CAB MUST afficher les étapes et les causes identifiables des erreurs de transpo
 #### Scenario: Résultat Forgejo associé à la politique TLS
 
 - **WHEN** CAB compare les paramètres à un résultat d’authentification Forgejo mémorisé
-- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat et conserve l’état si seule la valeur de `REMOTE_FORGEJO_SSL_VERIFY` a changé.
+- **THEN** CAB invalide les résultats issus de l’ancienne politique avec vérification du certificat et conserve l’état si seule la valeur de l’ancien réglage a changé.
 
 ### Requirement: Reprise du slot de réplication Electric pendant les mises à jour Debian
 
@@ -3056,3 +3055,22 @@ CAB SHALL configurer les messages PostgreSQL en locale C pour le seul rôle Elec
 #### Scenario: Slot incompatible ou invalidé
 - **WHEN** le slot de même nom est incompatible avec Electric ou invalidé
 - **THEN** CAB bloque la finalisation avec un diagnostic et préserve le slot et le stockage pour examen
+
+### Requirement: Politique TLS des connexions CAB aux forges configurées
+
+CAB MUST accepter tout certificat TLS lors de ses connexions HTTPS directes à GitLab, GitHub et Forgejo. CAB MUST ignorer les anciennes affectations `REMOTE_<FORGE>_SSL_VERIFY`, les exclure de la projection et les retirer du formulaire. Les connexions du démon Docker, le stockage externe et le téléchargement système CABU restent soumis à leurs politiques TLS propres.
+
+#### Scenario: Opérations sur une forge configurée
+
+- **WHEN** CAB vérifie l’authentification, lit le dépôt ou ses commits, prépare ou réalise un envoi Git, une synchronisation ou une publication de projet
+- **THEN** CAB applique la même politique TLS aux requêtes API et Git. Les contrôles de destination, d’autorisation, d’intégrité et de références distantes restent actifs.
+
+#### Scenario: Ancienne variable dans un projet
+
+- **WHEN** un projet contient un ancien réglage de vérification TLS
+- **THEN** sa valeur ne change ni le transport, ni le résultat mémorisé, et CAB conserve la ligne existante du fichier.
+
+#### Scenario: Diagnostic de transport
+
+- **WHEN** la console décrit le transport de la forge configurée
+- **THEN** elle indique que le certificat du serveur n’est pas vérifié.
