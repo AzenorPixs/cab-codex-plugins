@@ -1,4 +1,5 @@
 """Contrôles ciblés des constructeurs natifs et de la projection Fabrique."""
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -33,10 +34,53 @@ from cab_platform import forge_publish_artifacts as publication
 from cab_platform import paths, project_metadata
 from cab_platform.build_workspace import artifact_directory
 from cab_platform.core.commands import Refused
-from cab_platform.core.models import Project, ProjectArtifact, ProjectArtifactBuild, ProjectForgeArtifactPublication
+from cab_platform.core.models import (
+    Change, GitDelivery, GitDeliveryStep, GitSessionIndex,
+    Project, ProjectArtifact, ProjectArtifactBuild, ProjectForgeArtifactPublication,
+)
 
 
 class FactoryTests(unittest.TestCase):
+    def test_latest_build_receipt_includes_native_deliveries_for_each_format(self):
+        before = datetime(2026, 11, 21, tzinfo=timezone.utc)
+        after = before + timedelta(days=2)
+        for kind in ('debian', 'docker'):
+            with self.subTest(kind=kind), TemporaryDirectory(dir=SCRATCH) as directory:
+                project = Project.objects.create(pk=uuid4().hex, root=directory, owner_uid=os.getuid())
+                change = Change.objects.create(pk=uuid4().hex, project=project, identifier='factory-receipts')
+                index = GitSessionIndex.objects.create(change=change, index_path='fixture')
+                delivery = GitDelivery.objects.create(project=project, git_index=index, version='3.28.0',
+                                                      state='COMPLETED')
+                pending_delivery = GitDelivery.objects.create(project=project, git_index=index, version='3.28.1',
+                                                              state='PENDING')
+                manual = ProjectArtifactBuild.objects.create(
+                    pk=uuid4().hex, project=project, kind=kind, version='3.8.1',
+                    state='FAILED', receipt={'error': 'manual-failure'},
+                )
+                native = GitDeliveryStep.objects.create(
+                    delivery=delivery, key=f'build:{kind}', state='COMPLETED',
+                    receipt={'exit_code': 0, 'executed': True, 'internal_field': 'private-fixture'},
+                )
+                GitDeliveryStep.objects.create(delivery=pending_delivery, key=f'build:{kind}', state='PENDING')
+                ProjectArtifactBuild.objects.filter(pk=manual.pk).update(created=before)
+                GitDeliveryStep.objects.filter(pk=native.pk).update(updated=after)
+                self.assertEqual(artifacts.snapshot(project)['builds'][kind], {
+                    'source': 'delivery', 'delivery_id': delivery.pk, 'version': '3.28.0',
+                    'state': 'COMPLETED', 'created': after.isoformat(), 'error': None, 'exit_code': 0,
+                })
+                ProjectArtifactBuild.objects.filter(pk=manual.pk).update(created=after + timedelta(seconds=1))
+                recent = artifacts.snapshot(project)['builds'][kind]
+                self.assertEqual((recent['source'], recent['request_id'], recent['error']),
+                                 ('factory', manual.pk, 'manual-failure'))
+                GitDeliveryStep.objects.filter(pk=native.pk).update(
+                    updated=after + timedelta(seconds=2), state='FAILED', receipt={'error': 'native-failure'},
+                )
+                failed = artifacts.snapshot(project)['builds'][kind]
+                self.assertEqual((failed['source'], failed['state'], failed['error']),
+                                 ('delivery', 'FAILED', 'native-failure'))
+                ProjectArtifactBuild.objects.filter(pk=manual.pk).update(created=before, state='UNKNOWN')
+                self.assertEqual(artifacts.snapshot(project)['builds'][kind]['state'], 'UNKNOWN')
+
     def test_debian_build_and_existing_version(self):
         with TemporaryDirectory(dir=SCRATCH) as directory, TemporaryDirectory(dir=SCRATCH) as state, \
                 patch.object(paths, 'STATE', Path(state)):
