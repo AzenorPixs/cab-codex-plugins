@@ -11,6 +11,7 @@ SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH')
 KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 SCALAR_KEY = re.compile(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=')
+REGISTRY = re.compile(r'[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::[0-9]{1,5})?')
 
 def public_value(key,value):
     if not value or len(value)>500 or any(ord(c)<32 for c in value) or any(c in value for c in '$`\\'):return False
@@ -32,6 +33,8 @@ def public_value(key,value):
         except VersionError:return False
     if key=='PROJECT_VERSION_POLICY':
         return value in tuple('1234567')
+    if key=='REMOTE_GITLAB_REGISTRY':
+        return bool(REGISTRY.fullmatch(value))
     return bool(re.fullmatch(r'[\w./@+-]+',value))
 
 
@@ -68,34 +71,44 @@ def initialize_version_policy(raw: bytes) -> bytes:
     newline = b'' if not raw or raw.endswith(b'\n') else b'\n'
     return raw + newline + f'PROJECT_VERSION_POLICY={policy}\n'.encode('ascii')
 
-def read_metadata(root):
+def read_metadata(root, *, keys=KEYS, diagnostic=False):
+    issues=[]
+    def result(state, values=None):
+        snapshot={'state':state,'values':values or {}}
+        if diagnostic:
+            snapshot['issues']=issues
+        return snapshot
+
     root=Path(root)
-    if not root.is_absolute() or root.resolve()!=root:return {'state':'unsafe','values':{}}
+    if not root.is_absolute() or root.resolve()!=root:return result('unsafe')
     try:
         fd=os.open(root/'project.env',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as stream:
             info=os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>1024*1024:return {'state':'unsafe','values':{}}
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_size>1024*1024:return result('unsafe')
             raw=stream.read(1024*1024+1)
-            if len(raw)>1024*1024:return {'state':'unsafe','values':{}}
-        lines=raw.decode('utf-8').splitlines();values={};seen=set();invalid=False
-        for line in lines:
+            if len(raw)>1024*1024:return result('unsafe')
+        lines=raw.decode('utf-8').splitlines();values={};seen=set()
+        for number,line in enumerate(lines,1):
             key_match=re.match(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=',line)
-            if not key_match or key_match[1] not in KEYS:continue
+            if not key_match or key_match[1] not in keys:continue
             key=key_match[1];match=ASSIGNMENT.fullmatch(line) if len(line)<=4096 else None
             if key in seen or not match:
-                values.pop(key,None);seen.add(key);invalid=True;continue
+                issues.append({'key':key,'line':number,'reason':'duplicate' if key in seen else 'invalid-syntax'})
+                values.pop(key,None);seen.add(key);continue
             seen.add(key);value=next(part for part in match.groups()[1:] if part is not None).strip()
             if not value:continue
             if key=='PROJECT_VERSION':
                 from .versioning import historical_version,VersionError
                 try:value=historical_version(value)
-                except VersionError:invalid=True;continue
+                except VersionError:
+                    issues.append({'key':key,'line':number,'reason':'invalid-version'})
+                    continue
             if public_value(key,value):values[key]=value
-            else:invalid=True
-        return {'state':'partial' if invalid else 'ready','values':values}
-    except FileNotFoundError:return {'state':'missing','values':{}}
-    except (OSError,UnicodeError):return {'state':'unavailable','values':{}}
+            else:issues.append({'key':key,'line':number,'reason':'invalid-value'})
+        return result('partial' if issues else 'ready',values)
+    except FileNotFoundError:return result('missing')
+    except (OSError,UnicodeError):return result('unavailable')
 
 def synchronize(project_id,include_forges=True,include_git=True):
     from django.db import transaction

@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Construction Docker locale et diagnostic Fabrique — 23 novembre 2026
+
+[decouple-docker-factory-and-diagnose-builds](changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/), code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 ## Synchronisation bidirectionnelle des forges — 23 novembre 2026
 
 [allow-fresh-forge-sync-after-divergence](changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué. Change archivé. Attribution ultérieure par ACL.

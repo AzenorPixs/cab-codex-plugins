@@ -643,8 +643,14 @@ def build_project_artifact(request,project_id:str,kind:str,body:ArtifactBuildInp
     project=Project.objects.filter(pk=project_id).first()
     commands.require(project is not None,'project-not-authorized',403)
     commands.scope(actor,project)
-    from cab_platform.project_artifacts import request_build
-    return request_build(project,kind,body.request_id)
+    from cab_platform.project_artifacts import BuildConfigurationRefused, request_build
+    try:
+        return request_build(project,kind,body.request_id)
+    except BuildConfigurationRefused as error:
+        return api.create_response(request, {'error':error.code, 'details':{
+            'phase':'configuration', 'steps':['configuration'],
+            'configuration':error.configuration, 'process_started':False,
+        }}, status=error.status)
 
 
 @api.get('/projects/{project_id}/git/files/{kind}')

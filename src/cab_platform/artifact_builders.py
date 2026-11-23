@@ -235,13 +235,24 @@ def execute(argv, mark, *, options=None, env=None,diagnostic_phase=None):
         with tempfile.TemporaryFile() as output:
             process=subprocess.Popen(argv,env=env or ENV,stdin=subprocess.DEVNULL,stdout=output,stderr=output,start_new_session=True,umask=0o022,**(options or {}))
             from .connector_process import identity
-            mark({'child':identity(process.pid)})
+            mark({'child':identity(process.pid),'build_phase':diagnostic_phase})
             code=process.wait(timeout=3600)
             if code:
                 output.seek(0,2);size=output.tell();output.seek(max(0,size-65536));tail=output.read()
                 known={'package-source-version-mismatch':'prepare-reserved-package-versions','package-payload-version-invalid':'prepare-reserved-package-versions','pinned-electric-image-extraction-required':'restore-pinned-electric-dependency','locked-python-vendor-required':'restore-locked-python-vendor','frontend-build-required':'qualify-frontend-build','source-symlink-refused':'inspect-public-source-links'}
-                reason=next((name for name in known if name.encode() in tail),'payload-source-build-failed')
-                mark({'diagnostic':{'phase':diagnostic_phase,'exit_code':code,'code':reason,'remediation':known.get(reason,'qualify-corrected-sources'),'typescript_codes':sorted(set(s.decode() for s in re.findall(rb'\bTS[0-9]{3,6}\b',tail)))}})
+                if diagnostic_phase=='payload-preparation':
+                    reason=next((name for name in known if name.encode() in tail),'payload-source-build-failed')
+                    diagnostic={'code':reason,'remediation':known.get(reason,'qualify-corrected-sources'),
+                                'typescript_codes':sorted(set(s.decode() for s in re.findall(rb'\bTS[0-9]{3,6}\b',tail)))}
+                else:
+                    indicators={
+                        b'Cannot connect to the Docker daemon':'artifact-docker-daemon-unavailable',
+                        b'pull access denied':'artifact-docker-pull-denied',
+                        b'no space left on device':'artifact-build-storage-full',
+                    }
+                    diagnostic={'code':next((reason for indicator,reason in indicators.items() if indicator in tail),
+                                            'artifact-build-command-failed')}
+                mark({'diagnostic':{**diagnostic,'phase':diagnostic_phase,'exit_code':code}})
             return code
     process = subprocess.Popen(argv, env=env or ENV, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -317,7 +328,8 @@ def _build_debian(project, metadata, mark):
                 write_package_tree(root_fd,tree,data,version)
             filename = f"{data['package']}_{version}_{data['architecture']}.deb"
             archive = tmp_path / filename
-            code = execute(['/usr/bin/dpkg-deb', '--build', '--root-owner-group', str(tree), str(archive)], mark)
+            code = execute(['/usr/bin/dpkg-deb', '--build', '--root-owner-group', str(tree), str(archive)], mark,
+                           diagnostic_phase='debian-build')
             if code == 0:
                 if cab_runtime:
                     with opened(archive) as candidate:
@@ -413,7 +425,7 @@ def _build_docker(project, metadata, mark):
     argv = [*DOCKER, 'build', '--file', str(root / 'dockerfile'), '--tag', temporary or latest]
     if tagged and not temporary:
         argv += ['--tag', tagged]
-    code = execute([*argv, *args, str(root)], mark, options=options, env=env)
+    code = execute([*argv, *args, str(root)], mark, options=options, env=env, diagnostic_phase='docker-build')
     if not temporary:
         return code
     try:
@@ -423,7 +435,8 @@ def _build_docker(project, metadata, mark):
         current = docker_image_details(tagged, options, env)
         require(candidate and current == previous and candidate[1:] == previous[1:],
                 'artifact-docker-version-conflict', 409)
-        return execute([*DOCKER, 'image', 'tag', previous[0], latest], mark, options=options, env=env)
+        return execute([*DOCKER, 'image', 'tag', previous[0], latest], mark, options=options, env=env,
+                       diagnostic_phase='docker-tag')
     finally:
         subprocess.run([*DOCKER, 'image', 'rm', temporary], env=env, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=10, **options)

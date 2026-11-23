@@ -23,10 +23,10 @@ from .forge_repository import FORGES, configured, get_json, identity, refresh_on
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
 from .project_artifacts import debian_inventory, docker_inventory, enabled
+from .project_metadata import REGISTRY
 from .versioning import VersionError, canonical_version
 
 ACTIVE = ('PENDING','RUNNING','UNKNOWN')
-REGISTRY = re.compile(r'[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::[0-9]{1,5})?')
 REPO_PATH = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:/[a-zA-Z0-9][a-zA-Z0-9_.-]*)*')
 logger = logging.getLogger(__name__)
 
@@ -56,10 +56,10 @@ def local_plan(project, values, *, version=None):
         if files:
             result['debian']=files
     if enabled(values,'docker'):
-        observed=docker_inventory(project,values).get('local')
+        tag=version or values.get('PROJECT_VERSION')
+        observed=docker_inventory(project,values,tag=tag).get('local')
         if observed:
             image=observed[1]
-            tag=version or values.get('PROJECT_VERSION')
             if not tag or image['image']+':'+tag in image['tags']:
                 result['docker']={'image_id':image['image_id'],'tag':tag or 'latest'}
     return result
@@ -257,7 +257,8 @@ def request(project,forge,request_id):
     require(ProjectArtifact.objects.filter(project=project,kind__in=[k for k in ('debian','docker') if enabled(values,k)]).exists(),
             'artifact-local-missing',409)
     job=ProjectForgeArtifactPublication.objects.create(pk=request_id,project=project,forge=forge,
-          plan={'signature':identity(project,values,forge),'registry':values.get('REMOTE_GITLAB_REGISTRY','')})
+          plan={'signature':identity(project,values,forge),
+                **({'registry':values.get('REMOTE_GITLAB_REGISTRY','')} if forge=='GITLAB' else {})})
     return public(job)
 
 
@@ -273,10 +274,14 @@ def worker(key):
             ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(receipt={'issued':True})
             issued=True
     try:
-        require(identity(project,values,job.forge)==job.plan['signature'] and values.get('REMOTE_GITLAB_REGISTRY','')==job.plan['registry'],
+        require(identity(project,values,job.forge)==job.plan['signature']
+                and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
                 'artifact-forge-config-changed',409)
         plan=local_plan(project,values)
         require(plan,'artifact-local-missing',409)
+        if 'docker' in plan and job.forge=='GITLAB':
+            require(REGISTRY.fullmatch(values.get('REMOTE_GITLAB_REGISTRY','')),
+                    'artifact-forge-registry-invalid',409)
         PUBLISHERS[job.forge](project,values,plan,mark)
     except (Refused,VersionError,httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
         state='UNKNOWN' if issued else 'FAILED'

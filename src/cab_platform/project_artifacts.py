@@ -21,11 +21,29 @@ from .core.models import GitDelivery, Maintenance, Project, ProjectArtifact, Pro
 from .project_metadata import read_metadata
 
 FLAGS = {'debian': 'PROJECT_DEBIAN_PACKAGE', 'docker': 'PROJECT_DOCKERED'}
+DOCKER_KEYS = frozenset((FLAGS['docker'], 'PROJECT_ID', 'PROJECT_VERSION'))
 BUILDERS = {'debian': build_debian, 'docker': build_docker}
 ACTIVE = ('PENDING', 'RUNNING', 'UNKNOWN')
 DOCKER_FIELDS = ('Id', 'RepoTags', 'Size', 'Os', 'Architecture', 'Created')
 DOCKER_FORMAT = '[' + ','.join('{{json .' + field + '}}' for field in DOCKER_FIELDS) + ']'
 logger = logging.getLogger(__name__)
+
+
+class BuildConfigurationRefused(Refused):
+    def __init__(self, source, kind, expected_version=None):
+        super().__init__('artifact-build-config-changed')
+        self.configuration = {'state': source['state'], 'issues': source['issues']}
+        if expected_version is not None and source['state'] == 'ready':
+            values = source['values']
+            if values.get('PROJECT_VERSION', '') != expected_version:
+                self.configuration['issues'].append({'key': 'PROJECT_VERSION', 'reason': 'changed'})
+            if not enabled(values, kind):
+                self.configuration['issues'].append({'key': FLAGS[kind], 'reason': 'disabled'})
+
+
+def build_metadata(project, kind):
+    options = {'keys': DOCKER_KEYS} if kind == 'docker' else {}
+    return read_metadata(project.root, diagnostic=True, **options)
 
 
 def enabled(metadata, kind):
@@ -76,12 +94,12 @@ def _debian_directory(directory):
     return latest
 
 
-def docker_inventory(project, metadata):
+def docker_inventory(project, metadata, *, tag=None):
     name = metadata.get('PROJECT_ID') or project.identifier or ''
     if not DOCKER_NAME.fullmatch(name):
         return {}
-    refs = [name + ':latest']
-    if version := metadata.get('PROJECT_VERSION'):
+    refs = [name + ':' + tag] if tag else [name + ':latest']
+    if not tag and (version := metadata.get('PROJECT_VERSION')):
         refs.append(name + ':' + version)
     for ref in refs:
         try:
@@ -105,12 +123,10 @@ def docker_inventory(project, metadata):
 
 
 def refresh(project, kind=None):
-    source = read_metadata(project.root)
-    if source['state'] != 'ready':
-        return
-    metadata = source['values']
     for family in (kind,) if kind else FLAGS:
-        if not enabled(metadata, family):
+        source = build_metadata(project, family)
+        metadata = source['values']
+        if source['state'] != 'ready' or not enabled(metadata, family):
             continue
         if family == 'debian':
             observed = debian_inventory(project)
@@ -141,7 +157,12 @@ def sweep():
 def snapshot(project):
     builds = {}
     for row in ProjectArtifactBuild.objects.filter(project=project).order_by('kind', '-created').distinct('kind'):
-        builds[row.kind] = {'state': row.state, 'error': row.receipt.get('error')}
+        public_fields = ('phase', 'steps', 'configuration', 'diagnostic', 'exit_code', 'process_started')
+        builds[row.kind] = {
+            'request_id': row.pk, 'state': row.state, 'version': row.version,
+            'created': row.created.isoformat(), 'error': row.receipt.get('error'),
+            **{key: row.receipt[key] for key in public_fields if key in row.receipt},
+        }
     values = project.public_metadata.get('values', {})
     return {
         'enabled': {kind: enabled(values, kind) for kind in FLAGS},
@@ -178,8 +199,9 @@ def request_build(project, kind, request_id):
     require_available(project)
     require(not GitDelivery.objects.filter(project=project, state__in=('PENDING', 'RUNNING', 'UNKNOWN', 'PARTIAL')).exists(),
             'session-delivery-active', 409)
-    source = read_metadata(project.root)
-    require(source['state'] == 'ready', 'artifact-build-config-changed', 409)
+    source = build_metadata(project, kind)
+    if source['state'] != 'ready':
+        raise BuildConfigurationRefused(source, kind)
     metadata = source['values']
     require(enabled(metadata, kind), 'artifact-build-disabled', 409)
     build = ProjectArtifactBuild.objects.create(pk=request_id, project=project, kind=kind, version=metadata.get('PROJECT_VERSION', ''))
@@ -189,31 +211,47 @@ def request_build(project, kind, request_id):
 def run_build(build_id):
     close_old_connections()
     build = ProjectArtifactBuild.objects.select_related('project').get(pk=build_id)
-    issued = False
+    receipt = {'phase': 'configuration', 'steps': ['configuration'], 'process_started': False}
 
     def mark(payload):
-        nonlocal issued
-        issued = True
-        ProjectArtifactBuild.objects.filter(pk=build.pk, state='RUNNING').update(receipt=payload)
+        phase = payload.get('build_phase') or payload.get('diagnostic', {}).get('phase')
+        if phase and phase != receipt['phase']:
+            receipt['phase'] = phase
+            receipt['steps'].append(phase)
+        for key in ('child', 'diagnostic'):
+            if key in payload:
+                receipt[key] = payload[key]
+        if 'child' in payload:
+            receipt['process_started'] = True
+        ProjectArtifactBuild.objects.filter(pk=build.pk, state='RUNNING').update(receipt=receipt)
 
     try:
-        source = read_metadata(build.project.root)
+        source = build_metadata(build.project, build.kind)
         metadata = source['values']
-        require(source['state'] == 'ready' and enabled(metadata, build.kind)
-                and metadata.get('PROJECT_VERSION', '') == build.version,
-                'artifact-build-config-changed', 409)
+        if (source['state'] != 'ready' or not enabled(metadata, build.kind)
+                or metadata.get('PROJECT_VERSION', '') != build.version):
+            raise BuildConfigurationRefused(source, build.kind, build.version)
+        mark({'build_phase': 'sources'})
         code = BUILDERS[build.kind](build.project, metadata, mark)
+    except BuildConfigurationRefused as error:
+        state = 'FAILED'
+        receipt.update(error=error.code, configuration=error.configuration)
     except Refused as error:
-        state, receipt = 'FAILED', {'error': error.code}
+        state = 'FAILED'
+        receipt['error'] = error.code
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        issued = receipt['process_started']
         state = 'UNKNOWN' if issued else 'FAILED'
-        receipt = {'error': 'artifact-build-unconfirmed' if issued else 'artifact-build-failed'}
+        receipt['error'] = 'artifact-build-unconfirmed' if issued else 'artifact-build-failed'
     else:
-        state, receipt = ('COMPLETED' if code == 0 else 'FAILED'), {'exit_code': code}
+        state = 'COMPLETED' if code == 0 else 'FAILED'
+        receipt['exit_code'] = code
         if code == 0:
+            mark({'build_phase': 'inventory'})
             try:
                 refresh(build.project, build.kind)
             except (Refused, OSError, ValueError):
+                receipt['diagnostic'] = {'phase': 'inventory', 'code': 'artifact-inventory-unavailable'}
                 logger.warning('Artefact construit, inventaire indisponible', extra={'project_id': build.project_id})
     ProjectArtifactBuild.objects.filter(pk=build.pk, state='RUNNING').update(state=state, receipt=receipt)
     close_old_connections()

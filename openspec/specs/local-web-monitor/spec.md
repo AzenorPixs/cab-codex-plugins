@@ -516,9 +516,21 @@ Le détail d’un projet MUST exposer le lien Fabrique et sa page `/projects/<ID
 - **AND THEN** Debian utilise la recette déclarative et Docker le contexte et les arguments publics compatibles avec DIU
 - **AND THEN** une construction manuelle ne remplace pas un artefact existant de même version dont le contenu ou la configuration diffère
 
+#### Scenario: Construction Docker indépendante des forges
+- **WHEN** une configuration locale Docker valide est lue à la mise en file, au lancement ou à l’observation
+- **THEN** un réglage de forge absent, invalide ou modifié ne bloque pas ces opérations
+- **AND THEN** une construction réussie pose `latest` et la version du projet sans préfixe `v` sur la même image locale
+- **AND THEN** la publication versionnée reprend l’identifiant de cette image locale, sans relancer le build, et contrôle le registre de la destination choisie
+
 #### Scenario: Nouvelle observation après succès
 - **WHEN** une construction locale réussit
 - **THEN** CAB observe le résultat et le rend disponible dans la Fabrique sans relancer la construction
+
+#### Scenario: Diagnostic d’une demande ou d’une construction en échec
+- **WHEN** la demande manuelle de construction est refusée ou que la tentative lancée par l’utilisateur échoue
+- **THEN** la Fabrique ouvre automatiquement l’Overview du format concerné et le détail reste réouvrable depuis sa carte
+- **AND THEN** l’Overview indique l’état, l’étape atteinte, les contrôles et causes disponibles et, si observé, le code de sortie
+- **AND THEN** les motifs concernant la configuration publique peuvent identifier la clé et sa ligne sans publier sa valeur, une sortie brute ou des données privées
 
 ### Requirement: Artefacts attestés dans les blocs des forges distantes
 CAB MUST afficher les artefacts Debian et Docker observés dans les blocs Forgejo, GitHub et GitLab seulement pour les types activés. CAB MUST conserver ces observations dans `project_forge_artifacts`, distincte de l’inventaire local, et permettre leur lecture initiale puis leur synchronisation par Electric.

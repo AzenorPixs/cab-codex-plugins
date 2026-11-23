@@ -84,6 +84,17 @@ La publication vérifie la version et les empreintes des contenus Python, Web
 et des archives depuis le descripteur de fichier utilisé pour le transfert.
 CABU effectue son propre contrôle avant APT.
 
+Dans la Fabrique d’un projet, la construction et l’inventaire Docker utilisent
+la configuration locale. Une construction réussie applique à la même image
+`latest` et la version du projet sans préfixe `v`. La publication reprend
+l’identifiant de l’image versionnée et valide les réglages de la forge choisie.
+Le registre GitLab accepte un nom d’hôte avec un port facultatif.
+
+En cas de refus ou d’échec, l’Overview de la Fabrique indique les étapes
+observées, les causes reconnues et le code de sortie lorsqu’il est disponible.
+Les diagnostics de configuration indiquent les clés et lignes concernées
+sans afficher leurs valeurs.
+
 Le parcours de migration majeure est décrit dans [docs/postgresql.md](docs/postgresql.md).
 
 Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et

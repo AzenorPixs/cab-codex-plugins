@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Construction Docker locale et diagnostic Fabrique
+
+[decouple-docker-factory-and-diagnose-builds](openspec/changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/),
+code non attribué. La Fabrique observe les images Docker indépendamment des
+forges et ouvre l’Overview en cas de refus ou d’échec. Le 23 novembre 2026,
+les contrôles Python, Chromium et Firefox vérifient les deux tags, la reprise
+de l’image par le plan de publication et les diagnostics. Les échanges Docker
+et forge sont simulés dans ce banc.
+
 ## Synchronisation bidirectionnelle des forges
 
 [allow-fresh-forge-sync-after-divergence](openspec/changes/archive/2026-11-23-allow-fresh-forge-sync-after-divergence/), code non attribué.

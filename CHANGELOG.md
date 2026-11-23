@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Construire et inventorier les images Docker dans la Fabrique indépendamment des forges, avec les tags `latest` et de version. Ouvrir l’Overview pour les demandes refusées et les constructions échouées.
 - Ajouter le choix du sens de synchronisation pour GitLab, Forgejo et GitHub. Une opération incertaine et divergente peut être close sur confirmation de l’état observé pour préparer un nouvel aperçu.
 - Permettre de vérifier un envoi ou une synchronisation de forge dont le résultat est incertain. CAB débloque l’aperçu si les références distantes correspondent exactement à la cible du reçu.
 - Unifier la politique TLS des connexions CAB à GitLab, GitHub et Forgejo, y compris les envois Git et les publications. Retirer le réglage `REMOTE_<FORGE>_SSL_VERIFY` de l’éditeur et de la projection.
