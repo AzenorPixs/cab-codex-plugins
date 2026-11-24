@@ -27,7 +27,7 @@ async function firefox(){const p=await port();const profile=join(root,'firefox')
 const {createServer:httpServer}=await import('node:http');
 const {readFile}=await import('node:fs/promises');
 const project={id:'fixture',identifier:'fixture',name:'Projet',root:'/fixture',creation_state:'READY'};
-const run={mode:'piloted',session_id:'SID-DEMO',run_id:'RUN',change:'change-demo',state:'CLOSED',suspension:'',monitor:{stage:12,cycle_steps:12,stages:Array.from({length:12},(_,i)=>'Étape '+(i+1)),phase:'PHASE FIXTURE',blocking_runs:[],terminal_gate:{branch:'TERMINÉ'},change_record:{tasks_total:1,tasks_done:1,tasks:[{id:1,label:'Tâche visible',completed:true}],source_state:'open',source_path:'tasks.md'}}};
+const run={mode:'piloted',session_id:'SID-DEMO',run_id:'RUN',change:'change-demo',state:'WORKING',suspension:'',monitor:{stage:12,cycle_steps:12,stages:Array.from({length:12},(_,i)=>'Étape '+(i+1)),phase:'PHASE FIXTURE',blocking_runs:[],terminal_gate:{branch:'TERMINÉ'},change_record:{tasks_total:1,tasks_done:1,tasks:[{id:1,label:'Tâche visible',completed:true}],source_state:'open',source_path:'tasks.md'}}};
 const time='2026-11-22T12:00:00Z';
 const tokenCounts=(input='1250',write='7654')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0',cache_write_tokens:write},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
 const iterations=[1,2,3,4].map(id=>({id,number:id,duration_seconds:[15.8,641.2,3661.2,null][id-1],state:'COMPLETED',started_at:time,ended_at:time,description:'Passage '+id,tokens:tokenCounts()}));
@@ -38,6 +38,9 @@ const metrics={piloted:true,tokens:tokenCounts(),session_tokens:tokenCounts(),cy
 const fixtures={health:{initialized:true,state:'READY',version:'3.9.14',csrf_token:'fixture'},projects:{projects:[project]},run,finalization:{phase:'CLOSED',missing:[],evidence:[{id:1,source:'cab-operation',payload:{rule_id:'preuve visible',kind:'verification',result:'passed'}}]},'projects/fixture/change-stage-metrics':metrics};
 let revision=1;
 let metricsUnavailable=true;
+let terminalEvents=[];
+let terminalOutput='';
+
 const server=httpServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');const path=url.pathname;
  if(path==='/restore-metrics'){
@@ -55,6 +58,22 @@ const server=httpServer(async(req,res)=>{
   const messages=version<revision?[{key:'run-1',headers:{operation:version<0?'insert':'update'},value:{id:'1',cycle_summary:JSON.stringify(metrics.cycle_summary)}}]:[];
   res.writeHead(200,{'content-type':'application/json','electric-handle':'fixture-run','electric-offset':revision+'_0','electric-cursor':String(revision),'electric-schema':JSON.stringify({id:{type:'int4'},cycle_summary:{type:'jsonb'}})});
   res.end(JSON.stringify([...messages,{headers:{control:'up-to-date'}}]));return;
+ }
+ if(path==='/api/v1/projects/fixture/runs/RUN/terminal'){
+  let data='';
+  for await(const chunk of req)data+=chunk;
+  const body=JSON.parse(data);
+  terminalEvents.push(body.action);
+  if(body.action==='open')terminalOutput='atelier# ';
+  if(body.action==='write'){
+   assert.equal(body.text,'id -u\n');
+   terminalOutput+='0\natelier# ';
+  }
+  const output=Buffer.from(terminalOutput);
+  res.writeHead(200,{'content-type':'application/json'});
+  res.end(JSON.stringify({terminal_id:'terminal-fixture',offset:output.length,
+    output:output.subarray(body.offset||0).toString('base64'),truncated:false,closed:body.action==='close'}));
+  return;
  }
  if(path.startsWith('/api/v1/')){
   const key=path.slice(8);
@@ -79,6 +98,7 @@ const url='http://127.0.0.1:'+server.address().port+'/projects/fixture/runs/RUN'
 try{
  for(const factory of [chromium,firefox]){
   metricsUnavailable=true;
+  terminalEvents=[];terminalOutput='';
   metrics.cycle_summary={...metrics.cycle_summary,iteration_count:2,duration_seconds:300,last_duration_seconds:200,tokens:tokenCounts()};metrics.cycles[1].tokens=tokenCounts();revision++;
   const browser=await factory();
   try{
@@ -94,12 +114,35 @@ try{
     const info=block.querySelector('[role=tabpanel]:not([hidden])');
     const forge=document.createElement('h2');header.append(forge);
     const style=getComputedStyle(title);
-    const same=['fontSize','fontWeight','fontFamily'].every(k=>style[k]===getComputedStyle(forge)[k]);
+    const same=['fontWeight','fontFamily'].every(k=>style[k]===getComputedStyle(forge)[k]);
     forge.remove();
     return same && header.tagName==='DIV' && getComputedStyle(header).position==='static' &&
       parseFloat(style.borderInlineStartWidth)>0 && parseFloat(getComputedStyle(header).borderBottomWidth)>0 &&
       card.previousElementSibling.getAttribute('role')==='tablist' && !info.querySelector('.badge') && !info.innerText.includes('PHASE FIXTURE');
    })()`),'titre et informations');
+   assert(await ev(`(()=>{
+     const left=document.querySelector('.run-view-left'),right=document.querySelector('.session-terminal');
+     return right.innerText.includes('Terminal inactif')&&right.getBoundingClientRect().left>left.getBoundingClientRect().left
+       &&parseFloat(getComputedStyle(left).fontSize)<parseFloat(getComputedStyle(document.documentElement).fontSize)
+       &&getComputedStyle(document.querySelector('.run-view')).maxWidth==='none';
+   })()`),'Deux colonnes et terminal inactif');
+   assert.deepEqual(terminalEvents,[]);
+   await ev(`document.querySelector('.session-terminal-header button').click()||true`);
+   await wait(()=>ev(`document.querySelector('.session-terminal pre')?.textContent.includes('atelier#')`),'Ouverture du terminal');
+   await ev(`(()=>{
+     const input=document.querySelector('.session-terminal-command input');
+     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'id -u');
+     input.dispatchEvent(new Event('input',{bubbles:true}));
+     return true;
+   })()`);
+   await ev(`document.querySelector('.session-terminal-command').requestSubmit()||true`);
+   await wait(()=>ev(`document.querySelector('.session-terminal pre')?.textContent.includes('0')`),'Sortie terminal reçue');
+   await ev(`document.querySelector('.session-terminal-header button').click()||true`);
+   await wait(()=>ev(`document.querySelector('.session-terminal p[role="status"]').textContent==='Terminal fermé.'`),'Terminal fermé');
+   assert.equal(terminalEvents[0],'open');
+   assert.equal(terminalEvents.filter(action=>action==='write').length,1);
+   assert.equal(terminalEvents.filter(action=>action==='close').length,1);
+
    assert(await ev(`(()=>{const labels=Array.from(document.querySelectorAll('.run-information dt')).map(x=>x.textContent);return labels[0]==='Mandat courant' && labels[1]==='Étape' && labels.length===16 && labels.slice(8,13).join('|')==='Durée totale des cycles « Attente »|Tokens Entrant total des cycles|Tokens Sortant total des cycles|Tokens lus dans le cache total des cycles|Tokens écrits dans le cache total des cycles' && document.querySelector('.run-information').innerText.includes('5\\u202fmin 0\\u202fs')})()`),'informations et cumul des deux cycles');
    assert(await ev(`Array.from(document.querySelectorAll('.forge-card-content .run-information > div')).length===16 &&
      Array.from(document.querySelectorAll('.run-information > div')).every(row=>row.children.length===2 &&
@@ -138,8 +181,10 @@ try{
    })`),'trois lignes visibles et recherche après Dernier dans les tableaux des actions');
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
+   assert(await ev(`document.querySelector('.session-terminal').getBoundingClientRect().top >=
+     document.querySelector('.run-view-left').getBoundingClientRect().bottom`),'Terminal sous le RUN sur mobile');
    assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().top>=durations.getBoundingClientRect().bottom})()`),'cumuls sous les durées dans le même encadré sur mobile');
-   await browser.screenshot();console.log(browser.name+' '+browser.version+' : synthèse, tokens des deux rôles, actualisation Electric, 12 tableaux d’actions et largeur mobile vérifiés');
+   await browser.screenshot();console.log(browser.name+' '+browser.version+' : synthèse, tokens des deux rôles, actualisation Electric, 12 tableaux d’actions, largeur mobile et terminal vérifiés');
   } finally{await browser.close()}
  }
 }finally{server.close();for(const p of children)if(p.exitCode===null)p.kill('SIGTERM')}

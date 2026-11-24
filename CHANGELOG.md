@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Étendre le détail des sessions sur deux colonnes et ajouter une console root isolée, inactive au chargement.
+
 - Compacter le tableau des modèles avec tarifs sur une ligne, cellules de texte limitées à deux lignes et détail administrateur au clic.
 
 - Ajouter PROJECT_DB et PROJECT_SPECIFICATIONS à l’éditeur et à la carte Configuration, avec OpenSpec par défaut et les icônes PostgreSQL, Electric et OpenSpec.

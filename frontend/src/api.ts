@@ -6,6 +6,17 @@ async function bootstrapCSRF(){
   return csrfBootstrap
 }
 const messages:Record<string,string>={
+  'session-terminal-web-admin-required':'L’ouverture du terminal requiert une session administrateur.',
+  'session-terminal-owner-unavailable':'Le compte de l’atelier ne peut pas lancer le terminal.',
+  'session-terminal-run-inactive':'Le terminal est disponible lorsque le RUN est actif.',
+  'session-terminal-unavailable':'L’atelier n’a pas pu ouvrir le terminal.',
+  'session-terminal-capacity':'Le nombre maximal de consoles ouvertes est atteint.',
+  'session-terminal-not-found':'Le terminal a été fermé ou a expiré.',
+  'session-terminal-closed':'Le terminal est fermé.',
+  'session-terminal-close-pending':'La fermeture du terminal est en cours.',
+  'session-terminal-input-invalid':'La saisie est vide ou trop longue.',
+  'session-terminal-input-interrupted':'La saisie a été interrompue et le terminal va se fermer.',
+
   'agent-provider-name-invalid':'Saisir un nom de fournisseur valide.',
   'agent-provider-duplicate':'Ce fournisseur existe déjà.',
   'agent-provider-not-found':'Ce fournisseur est introuvable.',
@@ -179,10 +190,10 @@ export class ApiError extends Error {
   constructor(readonly code:string,message:string,readonly details?:unknown){super(message)}
 }
 
-export async function api<T>(path:string,body?:unknown,headers:Record<string,string>={}):Promise<T>{
+export async function api<T>(path:string,body?:unknown,headers:Record<string,string>={},keepalive=false):Promise<T>{
   // Une seule première requête établit le cookie avant les GET concurrents.
   if(!csrfCookie()&&!csrf){const initial=await bootstrapCSRF();if(path==='health'&&body===undefined)return initial as T}
-  const response=await fetch('/api/v1/'+path,{credentials:'same-origin',method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrfCookie()||csrf,...headers},body:body===undefined?undefined:JSON.stringify(body)})
+  const response=await fetch('/api/v1/'+path,{credentials:'same-origin',keepalive,method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrfCookie()||csrf,...headers},body:body===undefined?undefined:JSON.stringify(body)})
   let value
   try{value=await response.json()}catch{throw new Error('Le serveur CAB est temporairement indisponible.')}
   if(!response.ok){

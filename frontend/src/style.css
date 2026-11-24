@@ -368,18 +368,23 @@ header .brand {
 .model-policy-provider-list button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .model-policy-sort{display:grid;gap:8px;border:1px solid var(--border)}
 .model-policy-overview .model-policy-sort .model-policy-label{grid-template-columns:minmax(6.5rem,40%) minmax(0,1fr);align-items:center}
-.model-catalog-cell,.model-catalog-link{display:-webkit-box;min-inline-size:0;max-inline-size:100%;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
-.model-catalog-cell{min-block-size:2lh}
-.model-catalog-price .model-catalog-cell{display:block;white-space:nowrap;text-overflow:ellipsis}
+.model-catalog-table tbody td{vertical-align:middle}
+.model-catalog-cell{display:grid;align-content:center;min-block-size:2lh;min-inline-size:0}
+.model-catalog-cell-content,.model-catalog-link{display:-webkit-box;min-inline-size:0;max-inline-size:100%;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+:is(.model-catalog-price,.model-catalog-limit) .model-catalog-cell-content{display:block;white-space:nowrap;text-overflow:ellipsis}
 .model-catalog-link{text-align:start}
 :root:not([data-compact-tables]) .model-catalog-table{table-layout:fixed}
 :root:not([data-compact-tables]) .model-catalog-table th{white-space:nowrap}
 :root:not([data-compact-tables]) .model-catalog-table th button{max-inline-size:100%;overflow:hidden;text-overflow:ellipsis}
 :root:not([data-compact-tables]) .model-catalog-table .model-catalog-number{width:4rem}
-:root:not([data-compact-tables]) .model-catalog-table .model-catalog-name{width:15%}
-:root:not([data-compact-tables]) .model-catalog-table .model-catalog-provider{width:17%}
-:root:not([data-compact-tables]) .model-catalog-table .model-catalog-inputs{width:9%}
+:root:not([data-compact-tables]) .model-catalog-table .model-catalog-name{width:19%}
+:root:not([data-compact-tables]) .model-catalog-table .model-catalog-provider{width:11%}
+:root:not([data-compact-tables]) .model-catalog-table .model-catalog-inputs{width:13%}
 :root:not([data-compact-tables]) .model-catalog-table .model-catalog-outputs{width:12%}
+:root:not([data-compact-tables]) .model-catalog-table .model-catalog-limit{
+  width:max(5.5rem,calc(var(--ui-tables-body-font,20px) * var(--font-scale) * 4.8 + .7rem));
+  padding-inline:min(var(--ui-tables-inline-padding,20px),.35rem);
+}
 :root:not([data-compact-tables]) .model-catalog-table .model-catalog-price{
   width:max(clamp(4.5rem,5vw,6rem),calc(var(--ui-tables-body-font,20px) * var(--font-scale) * 3.25 + 1rem));
   padding-inline:min(var(--ui-tables-inline-padding,20px),.5rem);
@@ -391,6 +396,7 @@ header .brand {
 .agent-administration-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:var(--ui-blocs-gap,24px);align-items:start}
 .agent-administration-grid .agent-card{min-inline-size:0}
 .catalog-provider-actions,.catalog-completion-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.catalog-provider-edit{color:var(--accent-text)}
 .catalog-completion-controls label{flex:1;min-inline-size:12rem}
 .catalog-valid{color:#217647;font-weight:700}
 .catalog-invalid{color:#b33b38;font-weight:700}
@@ -407,3 +413,18 @@ header .brand {
 @media(prefers-reduced-motion:reduce){.catalog-refreshing svg{animation:none}}
 .lifecycle-dialog.catalog-document{width:min(58rem,90vw)}
 .catalog-document pre{overflow:auto;max-block-size:60dvh;white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+.run-view.run-view-terminal{max-width:none}
+.run-view-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:1rem}
+.run-view-left{min-width:0;font-size:.86rem}
+.run-view-left .run-card-title{font-size:1.1rem;overflow-wrap:anywhere}
+.run-view-left h2{font-size:1rem}
+.session-terminal{min-width:0;margin-top:.9rem;padding:.8rem;border:1px solid var(--border);border-radius:.6rem;background:var(--surface)}
+.session-terminal-header,.session-terminal-command{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}
+.session-terminal-header{justify-content:space-between}
+.session-terminal-header h2{margin:0;font-size:1.15rem}
+.session-terminal pre{min-height:clamp(15rem,50dvh,34rem);max-height:55dvh;overflow:auto;
+  padding:.8rem;background:#111b20;color:#f4f8f8;white-space:pre-wrap;overflow-wrap:anywhere;font: .8rem/1.4 monospace}
+.session-terminal-command input{flex:1 1 9rem;min-width:0;margin:0;font-family:monospace}
+@media(max-width:1050px){.run-view-columns{grid-template-columns:minmax(0,1fr)}}

@@ -831,3 +831,16 @@ sources, il rend la main pour leur qualification, avant toute nouvelle tentative
 Un manque de dépendance ou un défaut de source non corrigé reste explicitement
 à traiter. Le moteur n'installe pas de dépendance nouvelle ni ne rejoue UNKNOWN.
 Le suivi natif constate aussi un arrêt du worker, avec reçu conservé.
+
+
+## Terminal du détail de session
+
+Le panneau Terminal reste inactif tant qu’un administrateur ne sélectionne
+pas **Ouvrir le terminal** dans un RUN actif. La console accepte des commandes
+complètes et transmet Ctrl+C et Ctrl+D. Le shell fonctionne en root dans
+l’espace de noms de l’atelier, sous le compte hôte non privilégié du RUN.
+La racine du projet reste consultable en lecture seule. Le shell démarre
+dans un répertoire `console-…` dédié sous le dossier d’atelier du RUN.
+
+La fermeture, la sortie de la page, la fin du RUN ou une absence de lecture
+pendant 30 secondes arrêtent le shell. La sortie récente est bornée à 64 Kio.

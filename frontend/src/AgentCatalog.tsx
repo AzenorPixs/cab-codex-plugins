@@ -83,7 +83,9 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
           const value=column.value?.(row)??null
           const rendered=column.render?column.render(row):value??'—'
           return <td key={column.label} data-label={column.label} className={column.className}>
-            {singleLine?<div className="model-catalog-cell" title={typeof value==='string'?value:undefined}>{rendered}</div>:rendered}
+            {singleLine?<div className="model-catalog-cell" title={typeof value==='string'?value:undefined}>
+              <div className="model-catalog-cell-content">{rendered}</div>
+            </div>:rendered}
           </td>
         })}</tr>)}
       <TableFiller count={displayed.length} columns={columns.length+Number(numbered)}
@@ -96,11 +98,12 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
   </>
 }
 
-function AddOverview({title,children,submit,onClose,onOpen,edit=false,wide=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;onOpen?:()=>void;edit?:boolean;wide?:boolean}){
+function AddOverview({title,children,submit,onClose,onOpen,edit=false,wide=false,editIcon=false}:{title:string;children:ReactNode;submit:(values:FormData)=>Promise<unknown>;onClose?:()=>void;onOpen?:()=>void;edit?:boolean;wide?:boolean;editIcon?:boolean}){
   const dialog=useRef<HTMLDialogElement>(null)
   const form=useRef<HTMLFormElement>(null)
   const [pending,setPending]=useState(false)
   const [error,setError]=useState('')
+  const pencil=edit&&editIcon
   async function save(event:FormEvent<HTMLFormElement>){
     event.preventDefault()
     setPending(true)
@@ -113,7 +116,12 @@ function AddOverview({title,children,submit,onClose,onOpen,edit=false,wide=false
     }finally{setPending(false)}
   }
   return <>
-    <button className={edit?"secondary-button":"add-project"} type="button" aria-label={title} title={title} onClick={()=>{onOpen?.();dialog.current?.showModal()}}>{edit?"Éditer":"+"}</button>
+    <button className={pencil?'lifecycle-icon catalog-provider-edit':edit?'secondary-button':'add-project'}
+      type="button" aria-label={title} title={title} onClick={()=>{onOpen?.();dialog.current?.showModal()}}>
+      {pencil?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M4 20l4-.8L19 8.2 15.8 5 4.8 16zM14.8 6l3.2 3.2M3 21h18"/>
+      </svg>:edit?'Éditer':'+'}
+    </button>
     <dialog ref={dialog} className={wide?"lifecycle-dialog model-policy-overview":"lifecycle-dialog"} onCancel={event=>{if(pending)event.preventDefault()}}
       onClose={()=>{form.current?.reset();setError('');onClose?.()}}>
       <h2>{title}</h2>
@@ -181,7 +189,7 @@ function ProviderOverview({provider}:{provider?:Provider}){
       throw error
     }
   }
-  return <AddOverview edit={!!provider} title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save} onClose={()=>setVisible(false)}>
+  return <AddOverview edit={!!provider} editIcon title={provider?'Éditer le fournisseur':'Ajouter un fournisseur'} submit={save} onClose={()=>setVisible(false)}>
     <label>Fournisseur<input name="name" required maxLength={160} defaultValue={provider?.name}/></label>
     <label>Liste des Modèles (facultatif)<input name="models_url" type="url" maxLength={2048} defaultValue={provider?.models_url}/></label>
     <label>Base URL API<input name="api_url" type="url" maxLength={2048} required defaultValue={provider?.api_url}/></label>
@@ -351,8 +359,8 @@ const columns:Column<ModelRow>[]=[
       title={row.name||row.identifier} label={row.name||row.identifier} className="text-button model-catalog-link"
       loadingLabel="Lecture du modèle…"/>},
   {label:'Fournisseurs',className:'model-catalog-provider',value:row=>row.provider},
-  {label:'Contexte',value:row=>row.context,render:row=>number(row.context)},
-  {label:'Sortie maximale',value:row=>row.output,render:row=>number(row.output)},
+  {label:'Contexte',className:'model-catalog-limit',value:row=>row.context,render:row=>number(row.context)},
+  {label:'Sortie maximale',className:'model-catalog-limit',value:row=>row.output,render:row=>number(row.output)},
   {label:'Entrées',className:'model-catalog-inputs',value:row=>modalities(row.input_modalities)||null},
   {label:'Sorties',className:'model-catalog-outputs',value:row=>modalities(row.output_modalities)||null},
   {label:inputPriceLabel,className:'model-catalog-price',value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},

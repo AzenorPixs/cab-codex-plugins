@@ -1305,6 +1305,25 @@ def session_archives(request,project_id:str='',page:int=1,page_size:int=10,searc
     rows,pagination=archive_page(principal(request),project_id,page,page_size,search)
     return {'sessions':[{**run_data(row.run),'archived_at':row.created.isoformat(),'archive_request_id':row.request_id} for row in rows],**pagination}
 
+class SessionTerminalInput(Schema):
+    action: Literal['open', 'poll', 'write', 'close']
+    terminal_id: str | None = Field(default=None, max_length=64)
+    offset: int = Field(default=0, ge=0, lt=2**53)
+    text: str = Field(default='', max_length=4096)
+
+
+@api.post('/projects/{project_id}/runs/{run_id}/terminal')
+def session_terminal(request, project_id: str, run_id: str, body: SessionTerminalInput):
+    actor = principal(request, admin=True)
+    session_key = request.session.session_key
+    commands.require(actor.agent == 'web' and bool(session_key), 'session-terminal-web-admin-required', 403)
+    run = commands.run_scope(actor, run_id, project_id, owner=False)
+    from cab_platform.session_terminal import access
+    response = JsonResponse(access(run, actor.pk, session_key, **body.model_dump()))
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @api.get('/run')
 def run_status(request,project_id:str,run_id:str):
     actor=principal(request);r=commands.run_scope(actor,run_id,project_id,owner=False)

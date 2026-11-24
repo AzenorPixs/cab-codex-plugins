@@ -6,6 +6,7 @@ import {TabBar} from './InterfaceSettings'
 import {useRunElectric} from './useRunElectric'
 import {StageOverview,CycleIterations,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
 import {api} from './api'
+import {SessionTerminal} from './SessionTerminal'
 import {reasonText,runStateLabel,runProtection} from './SessionLifecycle'
 
 export const cycleStages=['Initialisation','Prévol','Analyse','Cadrage','Spécification','Implémentation','Vérifications','Revue','Archivage','Statistiques','Clôture']
@@ -122,9 +123,11 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
     </>,
     <section className="change-progress"><h2>Avancement du change</h2><p className="tasks-count">{change?.tasks_total!=null?`${change.tasks_done}/${change.tasks_total} tâches`:'Tâches non observées'}</p>{change&&change.tasks_total!=null&&<><ol className="change-tasks">{change.tasks.map(task=><li key={task.id}><span className={task.completed?'task-completed':'task-pending'} aria-label={task.completed?'Réalisée':'À réaliser'}>{task.completed?'✓':'○'}</span><span>{task.label}</span></li>)}</ol><p className="task-provenance">Source : <code>{change.source_path}</code>{change.observed_at&&` · observée le ${new Date(change.observed_at).toLocaleString('fr-FR')}`}</p>{!['open','archived'].includes(change.source_state)&&<p role="status">Source actuellement indisponible ou ambiguë ; dernière observation conservée.</p>}</>}<p className="configuration-help">Les cases cochées proviennent de tasks.md. Elles ne constituent ni une estimation de durée, ni une preuve de validation du RUN.</p></section>
   ]
-  return <article className="run-view">
+  return <article className="run-view run-view-terminal">
     <Link to="/projects/$projectId/sessions" params={{projectId:routeId||projectId}} className="action-link">← Sessions du projet</Link>
     {!live&&<p role="status" className="configuration-help">Synchronisation temps réel…</p>}
+    <div className="run-view-columns">
+      <div className="run-view-left">
     <section className="run-session-block">
       <TabBar items={tabs} selected={selectedTab} select={setSelectedTab} prefix={prefix} label="Vue de la session"/>
       <div className="agent-card forge-card run-session-card">
@@ -140,5 +143,9 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       </div>
       </div>
     </section>
+      </div>
+      <SessionTerminal key={projectId+':'+runId} projectId={projectId} runId={runId}
+        enabled={run.state==='WORKING'&&!run.suspension}/>
+    </div>
   </article>
 }

@@ -149,10 +149,16 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>rows('Modèles').length===1&&row().textContent.includes('Modèle 2'),'Recherche par identifiant sans l’afficher');
   fill(search('Modèles'),'');
   await wait(()=>rows('Modèles').length===10,'Retour à la liste complète');
-  const priceCell=()=>row().querySelector('td[data-label="T out/M"] .model-catalog-cell');
-  const outputs=()=>row().querySelector('td[data-label="Sorties"] .model-catalog-cell');
+  const priceCell=()=>row().querySelector('td[data-label="T out/M"] .model-catalog-cell-content');
+  const outputs=()=>row().querySelector('td[data-label="Sorties"] .model-catalog-cell-content');
   const computed=element=>frame.contentWindow.getComputedStyle(element);
+  const centered=content=>{
+    const box=content.parentElement.getBoundingClientRect();
+    const text=content.getBoundingClientRect();
+    return Math.abs(box.top+box.height/2-text.top-text.height/2)<1;
+  };
   check(priceCell().textContent==='999 $'&&priceCell().scrollWidth===priceCell().clientWidth,'999 $ visible sur fenêtre étroite');
+  check(centered(priceCell()),'Montant centré sur fenêtre étroite');
   frame.width='1660';
   await wait(()=>computed(find('.model-catalog-table')).tableLayout==='fixed','Largeurs fixes en présentation tableau');
   const sizes=headers().slice(6).map(header=>header.getBoundingClientRect().width);
@@ -164,6 +170,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
     &&Math.abs(outputs().clientHeight-2*parseFloat(outputStyle.lineHeight))<2,
     'Sorties tronquées après exactement deux lignes');
   check(computed(priceCell()).whiteSpace==='nowrap','Tarif conservé sur une ligne');
+  check(centered(priceCell())&&centered(outputs()),'Montant et texte centrés verticalement');
   for(const label of ['Modèles','Contexte','T out/M']){
     const cell=row().querySelector('td[data-label="'+label+'"] .model-catalog-cell');
     check(cell.clientHeight>=2*parseFloat(computed(cell).lineHeight)-1,
