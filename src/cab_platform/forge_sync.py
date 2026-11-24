@@ -1,17 +1,25 @@
 """Synchronisation contrôlée d’une branche et de ses tags dans les deux sens."""
 from datetime import timedelta
+from fnmatch import fnmatchcase
 import hashlib
 from pathlib import Path
 import secrets
 from select import select
 import subprocess
 import threading
+from urllib.parse import quote
+import httpx
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, digest, require
 from .core.models import Event, Project
+from .forge_artifacts import pages
 from .forge_push import OID, context, identity, local_git, push_rejection, remote_git, remote_head, require_no_pending_transfer, transfer_receipts
+from .forge_repository import get_json
+from .forge_settings import crypt, forge_client
+from .forge_version import base_for
+from .git_commit_remove import run as local_result
 from .preexisting_git import git_guard
 
 
@@ -40,6 +48,36 @@ def tag_changes(before, after):
          'action': 'supprimer' if ref not in after else 'modifier' if ref in before else 'créer'}
         for ref in sorted(before.keys() | after.keys()) if before.get(ref) != after.get(ref)
     ]
+
+
+def gitlab_sync_preflight(project,values,branch,head,observed,options,env):
+    if not observed or observed==head or not values.get('REMOTE_GITLAB_OWNER') or not values.get('REMOTE_GITLAB_REPOSITORY'):
+        return
+    repository=values['REMOTE_GITLAB_OWNER']+'/'+values['REMOTE_GITLAB_REPOSITORY']
+    root=base_for(values,'GITLAB')+'/api/v4/projects/'+quote(repository,safe='')
+    denied=None
+    try:
+        encrypted=project.configuration['forge_tokens_tpm']['GITLAB']
+        token=crypt(project,'GITLAB',encrypted.encode(),True).decode()
+        with forge_client(timeout=8,headers={'PRIVATE-TOKEN':token,'Accept':'application/json'}) as client:
+            info,_=get_json(client,root+'/repository/branches/'+quote(branch,safe=''))
+            commit=info.get('commit') if isinstance(info,dict) else None
+            if not isinstance(commit,dict) or commit.get('id')!=observed:
+                return
+            if info.get('can_push') is False:
+                denied='forge-sync-gitlab-push-forbidden'
+            elif (info.get('protected') is True
+                  and local_git(project,options,env,'rev-parse','--is-shallow-repository')==b'false\n'
+                  and local_result(project,options,env,'merge-base','--is-ancestor',observed,head).returncode==1):
+                rules=[rule for rule in pages(client,get_json,root+'/protected_branches','GITLAB',exhaustive=True)
+                       if isinstance(rule.get('name'),str) and fnmatchcase(branch,rule['name'])]
+                if rules and all(rule.get('allow_force_push') is False for rule in rules):
+                    denied='forge-sync-gitlab-force-push-forbidden'
+    except (Refused,KeyError,httpx.HTTPError,OSError,ValueError):
+        # Le retour Git reste déterminant si la règle ou l’ascendance ne peuvent être attestées.
+        return
+    if denied:
+        raise Refused(denied,409,details={'branch':branch,'head':head,'remote':observed})
 
 
 def reconcile(project_id, forge, actor, confirmation=None):
@@ -216,6 +254,8 @@ def prepare(project_id, forge, actor, *, source='local'):
         changes = tag_changes(source_tags, remote_tags)
     else:
         changes = tag_changes(remote_tags, source_tags)
+        if forge=='GITLAB':
+            gitlab_sync_preflight(project,values,branch,head,remote,options,env)
     require(len(changes) <= 1000, 'forge-sync-preview-unavailable', 409)
     nonce = secrets.token_urlsafe(24)
     signature = identity(project, values, forge)
@@ -254,6 +294,8 @@ def execute(project_id, forge, actor, nonce):
         reverse = record.get('source') == 'remote'
         if reverse:
             require_local_ready(project, options, env)
+        elif forge=='GITLAB':
+            gitlab_sync_preflight(project,values,branch,head,observed_remote,options,env)
         record['state'] = 'RUNNING'
         records[forge] = record
         config['forge_sync'] = records

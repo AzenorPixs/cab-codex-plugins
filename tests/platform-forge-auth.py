@@ -427,6 +427,49 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                 self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag: head}, {}))
 
 
+class GitLabSyncProtectionTests(unittest.TestCase):
+    head='a'*40
+    before='b'*40
+
+    def check(self,*,ancestor=1,can_push=True,rules=None,observed=None,shallow=False):
+        project=SimpleNamespace(configuration={'forge_tokens_tpm':{'GITLAB':'fixture'}})
+        values={'REMOTE_GITLAB_OWNER':'group','REMOTE_GITLAB_REPOSITORY':'project',
+                'REMOTE_GITLAB_BASE_URL':'https://fixture'}
+        def respond(request):
+            if request.url.path.endswith('/repository/branches/main'):
+                return httpx.Response(200,json={'commit':{'id':observed or self.before},
+                                                'protected':True,'can_push':can_push})
+            self.assertTrue(request.url.path.endswith('/protected_branches'))
+            return httpx.Response(200,json=rules if rules is not None else [
+                {'name':'main','allow_force_push':False}])
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client, \
+             patch.object(forge_sync,'forge_client',return_value=nullcontext(client)), \
+             patch.object(forge_sync,'crypt',return_value=b'fixture'), \
+             patch.object(forge_sync,'local_git',return_value=b'true\n' if shallow else b'false\n'), \
+             patch.object(forge_sync,'local_result',return_value=SimpleNamespace(returncode=ancestor)):
+            forge_sync.gitlab_sync_preflight(project,values,'main',self.head,self.before,{},{})
+
+    def test_protected_divergent_branch_refuses_before_push(self):
+        with self.assertRaisesRegex(forge_sync.Refused,'forge-sync-gitlab-force-push-forbidden') as failure:
+            self.check()
+        self.assertEqual(failure.exception.details,{'branch':'main','head':self.head,'remote':self.before})
+
+    def test_push_permission_and_force_push_are_distinct(self):
+        with self.assertRaisesRegex(forge_sync.Refused,'forge-sync-gitlab-push-forbidden'):
+            self.check(ancestor=0,can_push=False)
+        self.check(ancestor=0)
+        self.check(ancestor=128)
+        self.check(shallow=True)
+        self.check(observed='c'*40)
+
+    def test_applicable_wildcard_can_allow_force_push(self):
+        self.check(rules=[{'name':'main','allow_force_push':False},
+                          {'name':'ma*','allow_force_push':True}])
+        with self.assertRaisesRegex(forge_sync.Refused,'forge-sync-gitlab-force-push-forbidden'):
+            self.check(rules=[{'name':'main','allow_force_push':False},
+                              {'name':'other*','allow_force_push':True}])
+
+
 class ForgeReconciliationTests(unittest.TestCase):
     head = 'a' * 40
     before = 'b' * 40
@@ -513,6 +556,22 @@ class ForgeReconciliationTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, code)
                 self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'], state)
                 self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['diagnostic'], 'forge-push-protected-branch')
+
+    def test_sync_rechecks_gitlab_rule_before_marking_running(self):
+        self.as_sync()
+        record = self.locked.configuration['forge_sync']['GITLAB']
+        record.update(state='READY',local_branch='main',remote_tags={},source='local',
+                      expires=(timezone.now()+timedelta(minutes=5)).isoformat())
+        self.refs.return_value=(self.before,{}, {})
+        self.patch(forge_sync,'local_position',return_value=('main',self.head))
+        self.patch(forge_sync,'local_tags',return_value=self.tags)
+        self.patch(forge_sync,'gitlab_sync_preflight',
+                   side_effect=forge_sync.Refused('forge-sync-gitlab-force-push-forbidden'))
+        push=self.patch(forge_sync,'remote_git')
+        with self.assertRaisesRegex(forge_sync.Refused,'forge-sync-gitlab-force-push-forbidden'):
+            forge_sync.execute('projet','GITLAB','7',record['nonce'])
+        push.assert_not_called()
+        self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'],'READY')
 
     def test_running_remains_protected_without_observation(self):
         self.receipt['state'] = 'RUNNING'

@@ -111,6 +111,8 @@ const messages:Record<string,string>={
   'forge-push-atomic-unsupported':'La forge ne prend pas en charge l’envoi atomique de la branche et des tags.',
   'forge-push-remote-rejected':'La forge a refusé la mise à jour des références Git.',
   'forge-push-protected-branch':'La forge a refusé la mise à jour d’une branche protégée.',
+  'forge-sync-gitlab-push-forbidden':'Le compte GitLab utilisé par CAB ne peut pas pousser sur la branche cible.',
+  'forge-sync-gitlab-force-push-forbidden':'La tête Git locale ne prolonge pas la branche GitLab. Le remplacement exige un force push, interdit par les règles de cette branche.',
   'forge-push-protected-tag':'La forge a refusé la mise à jour d’un tag protégé.',
   'forge-reconcile-running':'Un envoi est encore en cours. La protection reste active.',
   'forge-reconcile-not-pending':'Aucun résultat incertain à vérifier. Fermez la fenêtre pour ouvrir un nouvel aperçu.',
