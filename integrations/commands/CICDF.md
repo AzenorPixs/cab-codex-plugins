@@ -1,6 +1,6 @@
 ---
 description: Livrer tous les changements du projet par CAB
-version: 3.33.5
+version: 3.34.0
 ---
 
 Répondre en français. Charger le skill `cicdf` du plugin `CICDF`.

@@ -8,7 +8,8 @@ import {type Project} from './Projects'
 type Snapshot={fields:Record<string,string>;project_path:string;revision:string}
 type PolicyPreview={preview_id:string;state:string;old_version:string|null;new_version:string|null;local_repository:boolean;moves:Record<string,string>;unchanged_tags:number}
 type PolicyConflict={state:'CONFLICT';tags:string[]}
-const fields=['PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','PROJECT_VERSION']
+const retentionFields=['PROJECT_DEBIAN_RETENTION','PROJECT_DOCKER_RETENTION']
+const fields=['PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','PROJECT_VERSION',...retentionFields]
 
 function VersionPolicyEditor({projectId,current,disabled,onSaved}:{projectId:string;current:string;disabled:boolean;onSaved:()=>void}){
   const [target,setTarget]=useState(current)
@@ -71,5 +72,49 @@ export function ProjectConfigurationEditor({project,metadataRevision,git=false}:
       await client.invalidateQueries({queryKey:['projects']});close()
     }catch(reason){setError(reason instanceof Error?reason.message:'Enregistrement indisponible')}finally{setBusy(false)}
   }
-  return <><button type="button" className="forge-edit" aria-label={editLabel} title={editLabel} onClick={()=>setOpen(true)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 20l4-.8L19 8.2 15.8 5 4.8 16zM14.8 6l3.2 3.2M3 21h18"/></svg></button><dialog ref={dialog} className="lifecycle-dialog forge-editor" aria-label={editLabel} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();if(!busy)close()}} onClose={event=>{if(event.target===event.currentTarget&&open&&!busy)close()}}><form onSubmit={save}><h2>{title}</h2>{!snapshot&&!error&&<p role="status">Chargement…</p>}{snapshot&&editorFields.map(key=><div key={key}><label>{key}<input value={values[key]||''} required={key==='PROJECT_ID'} onChange={event=>{setValues(previous=>({...previous,[key]:event.target.value}));setDirty(true)}} autoComplete="off"/></label>{key==='PROJECT_NAME'&&<div className="project-path-field"><label htmlFor="project-configuration-path">Chemin du projet</label><div className="directory-input"><input id="project-configuration-path" value={projectPath} onChange={event=>{setProjectPath(event.target.value);setDirty(true)}} autoComplete="off"/><DirectoryPicker initialPath={projectPath} onSelect={value=>{setProjectPath(value);setDirty(true)}}/></div></div>}</div>)}{snapshot&&!git&&snapshot.fields.PROJECT_VERSION_POLICY&&<VersionPolicyEditor key={snapshot.fields.PROJECT_VERSION_POLICY} projectId={project.id} current={snapshot.fields.PROJECT_VERSION_POLICY} disabled={dirty||busy} onSaved={()=>{void client.invalidateQueries({queryKey:['projects']});close()}}/>}{error&&<p role="alert">{error}</p>}<div className="form-actions"><button type="submit" disabled={!snapshot||!dirty||busy}>{busy?'Enregistrement…':'Enregistrer'}</button><button type="button" className="secondary-button" onClick={close} disabled={busy}>Fermer</button></div></form></dialog></>
+  return <>
+    <button type="button" className="forge-edit" aria-label={editLabel} title={editLabel} onClick={()=>setOpen(true)}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 20l4-.8L19 8.2 15.8 5 4.8 16zM14.8 6l3.2 3.2M3 21h18"/></svg>
+    </button>
+    <dialog ref={dialog} className={git?'lifecycle-dialog forge-editor':'lifecycle-dialog forge-editor project-configuration-editor'}
+      aria-label={editLabel}
+      onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();if(!busy)close()}}
+      onClose={event=>{if(event.target===event.currentTarget&&open&&!busy)close()}}>
+      <form onSubmit={save}>
+        <h2>{title}</h2>
+        {!snapshot&&!error&&<p role="status">Chargement…</p>}
+        {snapshot&&<div className={git?undefined:'project-configuration-fields'}>
+          {editorFields.map(key=>{
+            const retention=retentionFields.includes(key)
+            return <label key={key}>
+              {key}
+              <input value={values[key]||''} required={key==='PROJECT_ID'}
+                placeholder={retention?'0':undefined}
+                pattern={retention?'(?:[0-9]+(?:,[0-9]+D)?|[0-9]+D)':undefined}
+                aria-describedby={retention?'project-retention-help':undefined}
+                onChange={event=>{setValues(previous=>({...previous,[key]:event.target.value}));setDirty(true)}}
+                autoComplete="off"/>
+            </label>
+          })}
+          {!git&&<div className="project-path-field">
+            <label htmlFor="project-configuration-path">Chemin du projet</label>
+            <div className="directory-input">
+              <input id="project-configuration-path" value={projectPath}
+                onChange={event=>{setProjectPath(event.target.value);setDirty(true)}} autoComplete="off"/>
+              <DirectoryPicker initialPath={projectPath} onSelect={value=>{setProjectPath(value);setDirty(true)}}/>
+            </div>
+          </div>}
+          {!git&&<p id="project-retention-help">0 conserve tout. 3 conserve trois versions, 365D fixe une durée en jours. 3,365D cumule les deux.</p>}
+        </div>}
+        {snapshot&&!git&&snapshot.fields.PROJECT_VERSION_POLICY&&<VersionPolicyEditor key={snapshot.fields.PROJECT_VERSION_POLICY}
+          projectId={project.id} current={snapshot.fields.PROJECT_VERSION_POLICY} disabled={dirty||busy}
+          onSaved={()=>{void client.invalidateQueries({queryKey:['projects']});close()}}/>}
+        {error&&<p role="alert">{error}</p>}
+        <div className="form-actions">
+          <button type="submit" disabled={!snapshot||!dirty||busy}>{busy?'Enregistrement…':'Enregistrer'}</button>
+          <button type="button" className="secondary-button" onClick={close} disabled={busy}>Fermer</button>
+        </div>
+      </form>
+    </dialog>
+  </>
 }

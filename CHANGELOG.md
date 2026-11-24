@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Compacter l’éditeur de projet en deux colonnes responsives et ajouter la rétention Debian et Docker par nombre de versions et durée, cumulables pour les publications manuelles et automatiques.
+
 - Ouvrir une fiche pleine largeur depuis l’identifiant d’un change et afficher une icône animée pendant l’actualisation dans les deux onglets.
 
 - Ajouter au menu de chaque projet la page Changes et ses onglets Ouverts et Archivés. Le catalogue se met à jour via Electric, au changement des fichiers OpenSpec surveillés et lors d’une vérification quotidienne. Chaque ligne peut aussi être actualisée à la demande.

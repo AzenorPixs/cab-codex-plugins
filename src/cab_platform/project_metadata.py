@@ -7,11 +7,24 @@ import stat
 from urllib.parse import urlsplit
 
 FORGES=('FORGEJO','GITHUB','GITLAB')
+DEBIAN_RETENTION = 'PROJECT_DEBIAN_RETENTION'
+DOCKER_RETENTION = 'PROJECT_DOCKER_RETENTION'
+RETENTION = re.compile(r'(?:(?P<count>[0-9]+)(?:,(?P<days>[0-9]+)D)?|(?P<duration>[0-9]+)D)')
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH')
-KEYS={'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 SCALAR_KEY = re.compile(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=')
 REGISTRY = re.compile(r'[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::[0-9]{1,5})?')
+
+def artifact_retention(value: str) -> tuple[int, int | None]:
+    if not value:
+        return 0, None
+    match = RETENTION.fullmatch(value)
+    if not match or len(value)>500:
+        raise ValueError('project-artifact-retention-invalid')
+    days = match['days'] or match['duration']
+    return int(match['count'] or 0), int(days) if days is not None else None
+
 
 def public_value(key,value):
     if not value or len(value)>500 or any(ord(c)<32 for c in value) or any(c in value for c in '$`\\'):return False
@@ -20,6 +33,7 @@ def public_value(key,value):
             url=urlsplit(value)
             return url.scheme in ('http','https') and bool(url.hostname) and url.username is None and url.password is None and not url.query and not url.fragment and url.port!=0 and not any(c.isspace() for c in value)
         except ValueError:return False
+    if key in (DEBIAN_RETENTION,DOCKER_RETENTION):return RETENTION.fullmatch(value) is not None
     if key=='PROJECT_ID':
         from .project_ids import valid
         return valid(value)

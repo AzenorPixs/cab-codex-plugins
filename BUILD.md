@@ -95,15 +95,22 @@ la configuration locale. Une construction réussie applique à la même image
 l’identifiant de l’image versionnée et valide les réglages de la forge choisie.
 Le registre GitLab accepte un nom d’hôte avec un port facultatif.
 Forgejo, GitHub et GitLab acceptent la republication sous un tag existant.
-Après avoir confirmé la version Docker publiée et son alias `latest`, CAB
-retire les anciennes versions de cette image. GitHub supprime un manifeste
-entier. Si un ancien alias partage le manifeste conservé, le reçu le signale.
+L’éditeur de configuration du projet expose deux politiques indépendantes.
+`PROJECT_DEBIAN_RETENTION` s’applique par nom de paquet et architecture.
+`PROJECT_DOCKER_RETENTION` s’applique à l’image publiée dans le registre.
+Ces règles s’exécutent après confirmation sur la forge, pour les publications
+manuelles et natives de livraison.
 
-Après une publication Debian confirmée, CAB conserve sept versions par nom
-de paquet et par architecture sur chaque forge, publication courante incluse.
-Il utilise la date de publication de la release, puis le numéro de version
-pour départager les releases de même date ou sans date. Seules les pièces
-jointes Debian de la série publiée sont retirées. Les releases et tags Git
+`0` (ou une valeur absente) conserve tout. `3` conserve trois versions,
+publication courante comprise. `365D` conserve les versions âgées d’au plus
+365 jours. `3,365D` conserve toutes les versions couvertes par l’une ou
+l’autre garantie et `0,700D` applique seulement la durée. Une durée protège
+aussi les artefacts dont la date est inconnue. CAB conserve toujours la
+publication courante et son alias Docker `latest`.
+
+Sur GitHub, un manifeste peut porter plusieurs alias. CAB protège le manifeste
+dès qu’un alias doit rester. La rétention Debian retire les pièces jointes de
+la série ou leurs liens sur GitLab. Les autres artefacts, releases et tags Git
 restent disponibles.
 
 En cas de refus ou d’échec, l’Overview de la Fabrique indique les étapes

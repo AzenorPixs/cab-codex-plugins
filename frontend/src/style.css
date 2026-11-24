@@ -63,6 +63,15 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 .forge-card dt{margin:0;font-size:calc(19px * var(--font-scale));font-weight:700;color:var(--muted)}.forge-card dd{font-size:calc(19px * var(--font-scale));font-weight:400;color:#fff}.forge-card dd a{color:inherit}:root[data-theme=light] .forge-card dd{color:var(--text)}
 
 .forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading :is(h2,.run-card-title){margin:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
+.project-configuration-editor{width:min(48rem,90vw);font-size:.875rem}
+.project-configuration-editor :is(input,select,button){font-size:inherit}
+.project-configuration-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem 1rem}
+.project-configuration-fields label{margin:0;overflow-wrap:anywhere}
+.project-configuration-fields input{min-width:0;margin-top:.25rem}
+.project-configuration-fields :is(.project-path-field,#project-retention-help){grid-column:1/-1}
+#project-retention-help{margin:0;color:var(--muted)}
+@media(max-width:560px){.project-configuration-fields{grid-template-columns:minmax(0,1fr)}}
+
 
 .forge-token-field{display:flex;align-items:center;gap:6px}.forge-editor .forge-token-field input{flex:1;min-width:0}.forge-token-eye{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:4px}.forge-token-eye svg{width:21px;height:21px}
 

@@ -26,12 +26,11 @@ from .forge_repository import FORGES, configured, get_json, identity, missing_co
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
 from .project_artifacts import debian_inventory, docker_inventory, enabled, require_available, require_artifact_delivery_available
-from .project_metadata import REGISTRY
+from .project_metadata import DEBIAN_RETENTION, DOCKER_RETENTION, REGISTRY, artifact_retention
 from .versioning import VersionError, canonical_version, historical_version
 
 REPO_PATH = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:/[a-zA-Z0-9][a-zA-Z0-9_.-]*)*')
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
-DEBIAN_KEEP = 7
 logger = logging.getLogger(__name__)
 
 
@@ -222,7 +221,25 @@ def debian_series(name,tag):
     return (fields[0],fields[2]) if len(fields)==3 and fields[1]==tag else None
 
 
-def prune_debian(client,root,forge,packages,mark):
+def publication_date(value):
+    try:
+        date = parse_datetime(value) if isinstance(value,str) else None
+    except ValueError:
+        return None
+    return date if date and timezone.is_aware(date) else None
+
+
+def obsolete_versions(versions, policy, now, rank):
+    count, days = policy
+    ordered = sorted(versions, key=lambda key: (
+        versions[key] if versions[key] is not None else float('-inf'), rank(key)), reverse=True)
+    return ordered[max(0, count):] if days is None else [
+        key for key in ordered[max(0, count):]
+        if versions[key] is not None and now - versions[key] > days * 86400
+    ]
+
+
+def prune_debian(client,root,forge,packages,mark,policy):
     current={}
     for package in packages:
         tag=canonical_version(package['version'])
@@ -231,6 +248,8 @@ def prune_debian(client,root,forge,packages,mark):
             current.setdefault(series,set()).add(tag)
     if not current:
         return
+
+    now = timezone.now().timestamp()
 
     def candidates():
         result={series:{} for series in current}
@@ -243,10 +262,9 @@ def prune_debian(client,root,forge,packages,mark):
             except ValueError:
                 continue
             timestamp=release.get('released_at' if forge=='GITLAB' else 'published_at')
-            date=parse_datetime(timestamp) if isinstance(timestamp,str) else None
-            if date and date.utcoffset() is None:
-                date=None
-            if date and date>timezone.now():
+            observed = publication_date(timestamp)
+            date = observed.timestamp() if observed else None
+            if date is not None and date > now:
                 continue
             for asset in release_assets(release,forge):
                 name=asset.get('name') if isinstance(asset,dict) else None
@@ -262,11 +280,9 @@ def prune_debian(client,root,forge,packages,mark):
     try:
         obsolete={}
         for series,versions in candidates().items():
-            ordered=sorted(versions,key=lambda tag: (
-                versions[tag][0].timestamp() if versions[tag][0] else float('-inf'),tag_rank(tag)),
-                reverse=True)
-            limit=max(0,DEBIAN_KEEP-len(current[series]))
-            for tag in ordered[limit:]:
+            count, days = policy
+            dates = {tag: date for tag,(date,_) in versions.items()}
+            for tag in obsolete_versions(dates, (count-len(current[series]), days), now, tag_rank):
                 obsolete[series,tag]=[debian_asset_url(root,forge,release,asset)
                                       for release,asset in versions[tag][1]]
         for urls in obsolete.values():
@@ -282,7 +298,7 @@ def prune_debian(client,root,forge,packages,mark):
         raise Refused('artifact-forge-debian-cleanup-unconfirmed',409,details=details) from error
 
 
-def release_debian(project,client,base,root,forge,public_github,packages,mark,progress=None):
+def release_debian(project,client,base,root,forge,public_github,packages,mark,progress=None,*,policy=(0,None)):
     with track(progress,'debian-tag'):
         for package in packages:
             name,tag=package['name'],canonical_version(package['version'])
@@ -359,11 +375,14 @@ def release_debian(project,client,base,root,forge,public_github,packages,mark,pr
                     and (forge!='GITHUB' or x.get('digest') in (None,expected_digest))
                     for x in release_assets(confirmed,forge)),
                     'artifact-forge-publication-unconfirmed',409)
-    with track(progress,'debian-retention'):
-        prune_debian(client,root,forge,packages,mark)
+    if policy != (0,None):
+        with track(progress,'debian-retention'):
+            prune_debian(client,root,forge,packages,mark,policy)
+    elif progress is not None:
+        progress.set('debian-retention','SKIPPED')
 
 
-def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False):
+def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False,dates=False):
     def read_inventory(client,url,**kwargs):
         try:
             return get_json(client,url,**kwargs)
@@ -390,7 +409,12 @@ def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False):
             digest=None
         require(all(isinstance(tag,str) and TAG.fullmatch(tag) for tag in tags)
                 and key not in inventory,'artifact-forge-response-invalid',409)
-        inventory[key]=(frozenset(tags),digest)
+        date = publication_date(row.get('created_at')) if dates else None
+        if dates and forge=='GITLAB' and date is None and key!='latest':
+            details = existing(client,endpoint+'/'+quote(key,safe=''))
+            if isinstance(details,dict) and details.get('name')==key:
+                date = publication_date(details.get('created_at'))
+        inventory[key]=(frozenset(tags),digest,date.timestamp() if date else None)
     return endpoint,inventory
 
 
@@ -456,7 +480,7 @@ def confirm_docker(args,remote_name,labels,image_id):
     return references
 
 
-def prune_docker(client,inventory,forge,labels,references,previous,mark):
+def prune_docker(client,inventory,forge,labels,references,previous,mark,policy):
     keep=frozenset(label.casefold() for label in labels) if forge=='FORGEJO' else frozenset(labels)
 
     def comparable(tags):
@@ -464,23 +488,30 @@ def prune_docker(client,inventory,forge,labels,references,previous,mark):
 
     details={'phase':'registry-cleanup','publication_confirmed':True}
     try:
-        endpoint,rows=inventory()
-        observed=set().union(*(comparable(tags) for tags,_ in rows.values()))
+        endpoint,rows=inventory(dates=True)
+        observed=set().union(*(comparable(tags) for tags,_,_ in rows.values()))
         require(endpoint and keep<=observed,'artifact-forge-registry-cleanup-unconfirmed',409,details=details)
-        candidates=set()
-        for key,(tags,digest) in rows.items():
+        dates = {}
+        for key,(tags,digest,date) in rows.items():
             if comparable(tags)&keep or digest in references:
                 continue
             if tags or key in previous:
-                candidates.add(key)
+                dates[key] = date
+        count, days = policy
+        candidates = set(obsolete_versions(
+            dates, (count-1, days), timezone.now().timestamp(),
+            lambda key: max(map(tag_rank, rows[key][0] or previous[key])),
+        ))
         for key in sorted(candidates):
             remove(client,endpoint+'/'+quote(str(key),safe=''),mark)
         _,remaining=inventory()
-        observed=set().union(*(comparable(tags) for tags,_ in remaining.values()))
-        require(keep<=observed and not candidates.intersection(remaining),
+        observed=set().union(*(comparable(tags) for tags,_,_ in remaining.values()))
+        require(keep<=observed and not candidates.intersection(remaining)
+                and (rows.keys()-candidates)<=remaining.keys(),
                 'artifact-forge-registry-cleanup-unconfirmed',409,details=details)
-        require(not observed-keep,'artifact-forge-registry-obsolete-tags-retained',409,
-                details={**details,'remaining_count':len(observed-keep)})
+        if policy == (1,None):
+            require(not observed-keep,'artifact-forge-registry-obsolete-tags-retained',409,
+                    details={**details,'remaining_count':len(observed-keep)})
     except (httpx.HTTPError,ValueError,OSError) as error:
         if isinstance(error,httpx.HTTPStatusError):
             details['http_status']=error.response.status_code
@@ -506,12 +537,14 @@ def registry_login(registry,owner,token):
 
 
 def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark,progress=None):
+    policy = artifact_retention(metadata.get(DOCKER_RETENTION,''))
     with track(progress,'docker-prepare'):
         registry=docker_registry(base,forge,github_public,metadata)
         if forge=='GITHUB':
             require(not token.startswith('github_pat_'),'artifact-github-packages-classic-token-required',409,
                     details={'phase':'registry-configuration',
-                             'required_scopes':['write:packages','delete:packages']})
+                             'required_scopes':['write:packages'] + (
+                                 ['delete:packages'] if policy != (0,None) else [])})
         tag=image['tag']
         require(TAG.fullmatch(tag) and DIGEST.fullmatch(image['image_id']),
                 'artifact-local-changed',409)
@@ -522,11 +555,12 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
                     'artifact-forge-tag-missing',409,details={'phase':'remote-tag','tag':tag})
         remote_name=registry+'/'+(owner+'/'+repo).lower()
         labels=tuple(dict.fromkeys([tag,'latest']))
-        def inventory(*,allow_missing=False):
-            return registry_rows(client,api,root,forge,owner,repo,info,allow_missing=allow_missing)
+        def inventory(*,allow_missing=False,dates=False):
+            return registry_rows(client,api,root,forge,owner,repo,info,
+                                 allow_missing=allow_missing,dates=dates)
 
         try:
-            _,rows=inventory(allow_missing=True)
+            _,rows=inventory(allow_missing=True) if policy != (0,None) else (None,{})
         except httpx.HTTPStatusError as error:
             status=error.response.status_code
             if status not in (401,403):
@@ -535,7 +569,7 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
                 'phase':'registry-inventory','http_status':status,
                 'required_scopes':[REGISTRY_INVENTORY_SCOPES[forge]],
             }) from error
-        previous={key for key,(tags,_) in rows.items() if tags}
+        previous={key:tags for key,(tags,_,_) in rows.items() if tags}
 
     with ExitStack() as stack:
         with track(progress,'docker-login'):
@@ -552,8 +586,11 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
                         details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
         with track(progress,'docker-confirm'):
             references=confirm_docker(args,remote_name,labels,image['image_id'])
-        with track(progress,'docker-retention'):
-            prune_docker(client,inventory,forge,labels,references,previous,mark)
+        if policy != (0,None):
+            with track(progress,'docker-retention'):
+                prune_docker(client,inventory,forge,labels,references,previous,mark,policy)
+        elif progress is not None:
+            progress.set('docker-retention','SKIPPED')
 
 
 @transaction.atomic
@@ -683,11 +720,12 @@ def release_gitlab(project,values,plan,mark,progress=None):
 
 
 def publish(project,values,forge,plan,mark,progress=None):
+    debian_policy = artifact_retention(values.get(DEBIAN_RETENTION,'')) if plan.get('debian') else None
     with ExitStack() as stack:
         with track(progress,'connection'):
             client,base,api,root,owner,repo,token,public_github=stack.enter_context(remote(project,values,forge))
         if plan.get('debian'):
-            release_debian(project,client,base,root,forge,public_github,plan['debian'],mark,progress)
+            release_debian(project,client,base,root,forge,public_github,plan['debian'],mark,progress,policy=debian_policy)
         if plan.get('docker'):
             release_docker(client,base,api,root,forge,owner,repo,token,public_github,values,plan['docker'],mark,progress)
 

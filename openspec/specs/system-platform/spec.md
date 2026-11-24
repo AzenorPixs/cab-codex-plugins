@@ -3235,7 +3235,7 @@ CAB MUST permettre de republier un artefact Docker ou Debian sous un tag de vers
 
 - **WHEN** CAB publie une image Docker sur Forgejo, GitHub ou GitLab
 - **THEN** CAB peut remplacer le contenu de la version et de `latest`
-- **AND THEN** CAB confirme les tags publiés avant de retirer les anciennes versions de la seule image ciblée et vérifie le résultat du nettoyage
+- **AND THEN** CAB confirme les tags publiés avant d’appliquer la politique de rétention à la seule image ciblée et vérifie le résultat du nettoyage
 
 #### Scenario: Publication Docker incomplète
 
@@ -3254,9 +3254,24 @@ CAB MUST permettre de republier un artefact Docker ou Debian sous un tag de vers
 
 #### Scenario: Rétention des sept publications Debian
 
-- **WHEN** CAB confirme une publication Debian sur une forge prise en charge
-- **THEN** CAB garde la version publiée et les six précédentes pour le même paquet et la même architecture
-- **AND THEN** CAB retire les pièces jointes ou liens Debian en excédent, vérifie le résultat et conserve les autres artefacts, les releases et les tags Git
+- **WHEN** CAB confirme une publication Debian avec `PROJECT_DEBIAN_RETENTION=7`
+- **THEN** CAB garde la version publiée et les six précédentes du même paquet et de la même architecture
+- **AND THEN** CAB retire les pièces jointes ou liens Debian en excédent et vérifie le résultat
+
+#### Scenario: Politique de rétention par format
+
+- **WHEN** CAB confirme une publication manuelle ou automatique
+- **THEN** CAB applique `PROJECT_DEBIAN_RETENTION` par nom de paquet et architecture et `PROJECT_DOCKER_RETENTION` par image, sur la forge de publication
+- **AND** une valeur absente, vide ou égale à `0` désactive le nettoyage
+- **AND** CAB conserve les releases, tags Git et artefacts d’autres séries
+- **AND** la version publiée est toujours conservée et l’alias Docker `latest` ne compte pas comme une version supplémentaire
+
+#### Scenario: Garanties de nombre et de durée cumulées
+
+- **WHEN** la politique vaut `N`, `JD` ou `N,JD` pour des entiers non négatifs
+- **THEN** CAB conserve l’union des N versions les plus récentes, publication courante comprise, et des versions âgées d’au plus J jours selon les composantes présentes
+- **AND** `0,700D` applique uniquement la garantie de 700 jours
+- **AND** les artefacts à date inconnue sont conservés lorsqu’une durée est appliquée
 
 ### Requirement: Détail de la dernière construction d’artefact
 
@@ -3445,3 +3460,15 @@ CAB MUST distinguer un envoi interdit sur GitLab d’un remplacement non fast-fo
 
 - **WHEN** CAB ne peut pas attester la règle ou l’ascendance
 - **THEN** GitLab reste l’autorité au moment de l’envoi et CAB conserve le diagnostic de retour existant.
+
+### Requirement: Présentation des réglages dans l’éditeur de projet
+
+L’éditeur de projet MUST afficher les réglages dans une grille compacte à deux
+colonnes de même largeur sur écran large, et une seule colonne sur écran étroit.
+Chaque nom de variable MUST rester accolé à son champ.
+
+#### Scenario: Édition des politiques de rétention
+
+- **WHEN** un administrateur ouvre l’éditeur d’un projet
+- **THEN** les deux champs de rétention sont disponibles avec un défaut de `0`
+- **AND** une politique invalide est refusée à l’enregistrement

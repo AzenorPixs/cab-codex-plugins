@@ -23,6 +23,7 @@ from cab_platform.forge_artifacts import observe, merge
 from cab_platform.forge_repository import get_json
 from cab_platform import forge_publish_artifacts
 from cab_platform import project_artifacts
+from cab_platform.project_metadata import DEBIAN_RETENTION, DOCKER_RETENTION, artifact_retention, public_value
 from cab_platform.core.models import ProjectForgeArtifactPublication
 from cab_platform.core.commands import Refused
 from cab_platform.forge_publish_artifacts import release_debian, release_docker
@@ -125,7 +126,7 @@ class ForgeArtifactsTests(unittest.TestCase):
         empty={'available':True,'items':[]}
         self.assertEqual(merge(old,flags,{'debian':empty}),{'debian':empty})
 
-    def test_debian_replaces_the_matching_asset_and_retains_seven_versions(self):
+    def verify_debian_retention(self, policy, retained):
         data=b'package fixture'
         name='sample_2.0.0_all.deb'
         with TemporaryDirectory() as directory:
@@ -139,7 +140,9 @@ class ForgeArtifactsTests(unittest.TestCase):
                     releases={}
                     for index in range(1,10):
                         tag='2.0.0' if index==9 else f'1.0.{index}'
-                        releases[tag]={'tag_name':tag,'id':index,
+                        recent = (datetime.now(timezone.utc)-timedelta(days=9-index)).isoformat()
+                        date = recent if index >= 7 else '2000-01-01T00:00:00Z'
+                        releases[tag]={'tag_name':tag,'id':index,'published_at':date,'released_at':date,
                             'upload_url':'https://uploads.github.com/repositories/12/releases/9/assets{?name}',
                             'assets':[{'name':f'sample_{tag}_all.deb','id':index},
                                       {'name':f'another_{tag}_all.deb','id':100+index}]}
@@ -175,23 +178,37 @@ class ForgeArtifactsTests(unittest.TestCase):
                         return httpx.Response(201,json={'id':1})
                     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
                         release_debian(project,client,'https://fixture','https://fixture/project',
-                                       forge,True,plan,lambda:marks.append(True))
-                    self.assertEqual(len(marks),4)
+                                       forge,True,plan,lambda:marks.append(True),policy=policy)
+                    self.assertEqual(len(marks),2+8-len(retained))
                     self.assertEqual(set(releases),{'2.0.0',*(f'1.0.{i}' for i in range(1,9))})
                     self.assertEqual(
                         [tag for tag,release in releases.items()
                          if any(asset['name'].startswith('sample_') for asset in release['assets'])],
-                        [*(f'1.0.{i}' for i in range(3,9)),'2.0.0'])
+                        [*(f'1.0.{i}' for i in retained),'2.0.0'])
                     self.assertTrue(all(any(asset['name'].startswith('another_') for asset in release['assets'])
                                         for release in releases.values()))
-                    first_cleanup=next(index for index,(method,path) in enumerate(requests)
-                                       if method=='DELETE' and path.endswith('/1'))
-                    self.assertTrue(any(method=='GET' and path.endswith('/2.0.0')
-                                        for method,path in requests[:first_cleanup]))
-                    self.assertEqual(requests[-1][0],'GET')
+                    cleanup=[index for index,(method,path) in enumerate(requests)
+                             if method=='DELETE' and not path.endswith('/9')]
+                    if policy == (0,None):
+                        self.assertNotIn(('GET','/project/releases'),requests)
+                        self.assertFalse(cleanup)
+                    else:
+                        self.assertTrue(cleanup)
+                        self.assertTrue(any(method=='GET' and path.endswith('/2.0.0')
+                                            for method,path in requests[:cleanup[0]]))
+                        self.assertEqual(requests[-1][0],'GET')
+
+    def test_debian_replaces_the_matching_asset_and_retains_configured_versions(self):
+        self.verify_debian_retention((7,None),range(3,9))
+
+    def test_debian_default_keeps_all_publications(self):
+        self.verify_debian_retention((0,None),range(1,9))
+
+    def test_debian_keeps_recent_publications_with_cumulative_policy(self):
+        self.verify_debian_retention((2,365),(7,8))
 
     def publish_docker_fixture(self,forge,*,failure=None,alias=False,progress=None,
-                               github_owner=False,inventory_status=200,token='token-fixture'):
+                               github_owner=False,inventory_status=200,token='token-fixture',retention='1'):
         calls,marks=[],[]
         old={f'old-{index}' for index in range(68)}
         tags=old|{'2.0.0','latest'}
@@ -216,6 +233,12 @@ class ForgeArtifactsTests(unittest.TestCase):
                 calls.append(('inspect',args[-1]))
             return SimpleNamespace(returncode=0,stdout=json.dumps({'config':{'digest':image_id}}).encode())
 
+        def tag_date(tag):
+            if tag in ('old-0','old-1'):
+                age = 1 if tag=='old-0' else 2
+                return (datetime.now(timezone.utc)-timedelta(days=age)).isoformat()
+            return '2000-01-01T00:00:00Z'
+
         def handle(request):
             path=request.url.path
             if path=='/api/user':
@@ -230,15 +253,20 @@ class ForgeArtifactsTests(unittest.TestCase):
                 else:
                     tags.remove(key)
                 return httpx.Response(204)
+            if forge=='GITLAB' and path.startswith(endpoint+'/'):
+                tag=path.rsplit('/',1)[-1]
+                return httpx.Response(200,json={'name':tag,'created_at':tag_date(tag)})
             self.assertEqual(path,endpoint)
             if inventory_status!=200:
                 return httpx.Response(inventory_status,json={'message':'Inventaire interdit'})
             page=int(request.url.params['page'])
             if forge=='GITHUB':
                 rows=[{'id':key,'name':'sha256:'+f'{key:064x}',
+                       'created_at':tag_date(labels[0]) if labels else '2000-01-01T00:00:00Z',
                        'metadata':{'container':{'tags':labels}}} for key,labels in sorted(versions.items())]
             elif forge=='FORGEJO':
-                rows=[{'name':'sample','type':'container','version':tag} for tag in sorted(tags)]
+                rows=[{'name':'sample','type':'container','version':tag,'created_at':tag_date(tag)}
+                      for tag in sorted(tags)]
                 rows.append({'name':'sample','type':'container','version':'sha256:'+'b'*64})
                 rows.append({'name':'other','type':'container','version':'other-tag'})
             else:
@@ -247,11 +275,12 @@ class ForgeArtifactsTests(unittest.TestCase):
 
         error=None
         with httpx.Client(transport=httpx.MockTransport(handle)) as client, \
-             patch('cab_platform.forge_publish_artifacts.existing',return_value={}), \
+             patch('cab_platform.forge_publish_artifacts.existing',
+                   side_effect=lambda client,url: get_json(client,url)[0] if '/registry/repositories/5/tags/' in url else {}), \
              patch('cab_platform.forge_publish_artifacts.subprocess.run',side_effect=command):
             try:
                 release_docker(client,'https://fixture','https://fixture/api','https://fixture/project',forge,
-                               'owner','sample',token,True,{'REMOTE_GITLAB_REGISTRY':'registry.fixture:5050'},
+                               'owner','sample',token,True,{'REMOTE_GITLAB_REGISTRY':'registry.fixture:5050',DOCKER_RETENTION:retention},
                                {'image_id':image_id,'tag':'2.0.0'},lambda:marks.append(True),progress)
             except Refused as exc:
                 error=exc
@@ -269,6 +298,44 @@ class ForgeArtifactsTests(unittest.TestCase):
                 self.assertEqual(len(calls[4:]),69 if forge=='GITHUB' else 68)
                 self.assertEqual(len(marks),len(calls)-2)
                 self.assertTrue(all('other' not in path and '/4/tags/' not in path for _,path in calls[4:]))
+
+    def test_artifact_retention_values(self):
+        for value,expected in (('0',(0,None)),('3',(3,None)),('365D',(0,365)),
+                               ('3,365D',(3,365)),('0,700D',(0,700)),('0D',(0,0))):
+            with self.subTest(value=value):
+                self.assertEqual(artifact_retention(value),expected)
+                self.assertTrue(public_value(DEBIAN_RETENTION,value))
+                self.assertTrue(public_value(DOCKER_RETENTION,value))
+        for value in ('-3','10d','3,','3,4','3D,10','3,365D,8D'):
+            self.assertFalse(public_value(DEBIAN_RETENTION,value))
+            with self.assertRaises(ValueError):
+                artifact_retention(value)
+
+    def test_obsolete_versions_preserves_each_guarantee_and_unknown_dates(self):
+        now = datetime(2026,11,24,tzinfo=timezone.utc).timestamp()
+        dates = {'recent':now-86400,'boundary':now-10*86400,'old':now-20*86400,'unknown':None}
+        obsolete = forge_publish_artifacts.obsolete_versions
+        self.assertEqual(obsolete(dates,(1,10),now,str),['old'])
+        self.assertEqual(obsolete(dates,(3,10),now,str),[])
+        self.assertEqual(obsolete(dates,(2,None),now,str),['old','unknown'])
+
+    def test_docker_default_does_not_read_retention_inventory_or_delete(self):
+        for forge in ('FORGEJO','GITHUB','GITLAB'):
+            with self.subTest(forge=forge):
+                progress=forge_publish_artifacts.PublicationProgress(['docker'])
+                calls,_,error=self.publish_docker_fixture(forge,retention='0',inventory_status=403,progress=progress)
+                self.assertIsNone(error)
+                self.assertEqual([action for action,_ in calls],['push','push','inspect','inspect'])
+                self.assertEqual(progress.steps['docker-retention']['state'],'SKIPPED')
+
+    def test_docker_keeps_recent_versions_with_cumulative_policy(self):
+        for forge in ('FORGEJO','GITHUB','GITLAB'):
+            with self.subTest(forge=forge):
+                calls,_,error=self.publish_docker_fixture(forge,retention='2,365D')
+                self.assertIsNone(error)
+                deletions=[path.rsplit('/',1)[-1] for action,path in calls if action=='delete']
+                self.assertEqual(len(deletions),67 if forge=='GITHUB' else 66)
+                self.assertFalse(set(deletions)&({'10','11'} if forge=='GITHUB' else {'old-0','old-1'}))
 
     def test_incomplete_docker_publication_does_not_delete_previous_versions(self):
         for forge in ('FORGEJO','GITHUB','GITLAB'):

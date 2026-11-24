@@ -1,6 +1,6 @@
 {
   "name": "CICDF",
-  "version": "3.33.5",
+  "version": "3.34.0",
   "description": "Livrer par CAB tous les fichiers admissibles modifiés ou indexés du projet.",
   "author": {
     "name": "CAB"

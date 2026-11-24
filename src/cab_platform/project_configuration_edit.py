@@ -12,9 +12,9 @@ from .core.models import Project,Run,Operation,Lease,StatisticsJob,VersionPolicy
 from .core.commands import TERMINAL
 from .paths import config
 from .forge_settings import file_operation
-from .project_metadata import ASSIGNMENT,initialize_version_policy,public_value,synchronize
+from .project_metadata import ASSIGNMENT,DEBIAN_RETENTION,DOCKER_RETENTION,initialize_version_policy,public_value,synchronize
 
-FIELDS=('PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
+FIELDS=('PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE',DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
 
 
 def edit(project_id,fields,digest,project_path=None):
