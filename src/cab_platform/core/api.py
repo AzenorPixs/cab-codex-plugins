@@ -646,6 +646,21 @@ class ArtifactBuildInput(Schema):
     request_id: str
 
 
+class ArtifactReconciliationInput(ArtifactBuildInput):
+    tag: str
+    image_id: str
+
+
+@api.post('/projects/{project_id}/published-artifacts/reconcile')
+def reconcile_project_artifacts(request,project_id:str,body:ArtifactReconciliationInput):
+    actor=principal(request,admin=True)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from cab_platform.forge_publish_artifacts import reconcile_docker
+    return reconcile_docker(project,body.request_id,body.tag,body.image_id)
+
+
 @api.post('/projects/{project_id}/published-artifacts/{forge}')
 def publish_project_artifacts(request,project_id:str,forge:str,body:ArtifactBuildInput):
     actor=principal(request,admin=True)

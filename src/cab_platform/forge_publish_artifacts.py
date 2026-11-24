@@ -327,6 +327,21 @@ def inspect_manifest(args,remote_name,reference):
     return manifest
 
 
+def registry_digest(args,remote_name,label):
+    result=subprocess.run([*args,'buildx','imagetools','inspect','--format','{{json .Manifest}}',
+                           remote_name+':'+label],env=ENV,capture_output=True,timeout=30)
+    details={'phase':'registry-confirmation','tag':label,'exit_code':result.returncode}
+    require(result.returncode==0,'artifact-forge-publication-unconfirmed',409,details=details)
+    try:
+        descriptor=json.loads(result.stdout)
+    except (ValueError,UnicodeError) as error:
+        raise Refused('artifact-forge-publication-unconfirmed',409,details=details) from error
+    digest=descriptor.get('digest') if isinstance(descriptor,dict) else None
+    require(isinstance(digest,str) and DIGEST.fullmatch(digest),
+            'artifact-forge-publication-unconfirmed',409,details=details)
+    return digest
+
+
 def confirm_docker(args,remote_name,labels,image_id):
     manifests=[inspect_manifest(args,remote_name,label) for label in labels]
     require(all(manifest==manifests[0] for manifest in manifests),
@@ -350,7 +365,13 @@ def confirm_docker(args,remote_name,labels,image_id):
             if digest not in references:
                 references.add(digest)
                 pending.append(inspect_manifest(args,remote_name,digest))
-    require(found,'artifact-forge-publication-unconfirmed',409,details={'phase':'registry-confirmation'})
+    if not found:
+        # Le magasin containerd peut utiliser le descripteur OCI comme identifiant local.
+        for label in labels:
+            require(registry_digest(args,remote_name,label)==image_id,
+                    'artifact-forge-publication-unconfirmed',409,
+                    details={'phase':'registry-confirmation','tag':label})
+        references.add(image_id)
     return references
 
 
@@ -385,10 +406,26 @@ def prune_docker(client,inventory,forge,labels,references,previous,mark):
         raise Refused('artifact-forge-registry-cleanup-unconfirmed',409,details=details) from error
 
 
-def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark):
+def docker_registry(base,forge,github_public,metadata):
     registry='ghcr.io' if forge=='GITHUB' else metadata.get('REMOTE_GITLAB_REGISTRY','') if forge=='GITLAB' else urlsplit(base).netloc
     require(REGISTRY.fullmatch(registry) and (forge!='GITHUB' or github_public),'artifact-forge-registry-invalid',409,
             details={'phase':'registry-configuration'})
+    return registry
+
+
+@contextmanager
+def registry_login(registry,owner,token):
+    with tempfile.TemporaryDirectory(prefix='cab-registry-') as config:
+        args=[*DOCKER,'--config',config]
+        result=subprocess.run([*args,'login',registry,'--username',owner.rsplit('/',1)[-1],'--password-stdin'],
+                              input=token.encode(),env=ENV,capture_output=True,timeout=30)
+        require(result.returncode==0,'artifact-forge-registry-auth-failed',409,
+                details={'phase':'registry-login','exit_code':result.returncode})
+        yield args,{**ENV,'DOCKER_CONFIG':config}
+
+
+def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark):
+    registry=docker_registry(base,forge,github_public,metadata)
     tag=image['tag']
     require(TAG.fullmatch(tag) and DIGEST.fullmatch(image['image_id']),
             'artifact-local-changed',409)
@@ -403,19 +440,13 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
     def inventory(*,allow_missing=False):
         return registry_rows(client,api,root,forge,owner,repo,info,allow_missing=allow_missing)
 
-    with tempfile.TemporaryDirectory(prefix='cab-registry-') as config:
-        args=[*DOCKER,'--config',config]
-        result=subprocess.run([*args,'login',registry,'--username',owner.rsplit('/',1)[-1],'--password-stdin'],
-                              input=token.encode(),env=ENV,capture_output=True,timeout=30)
-        require(result.returncode==0,'artifact-forge-registry-auth-failed',409,
-                details={'phase':'registry-login','exit_code':result.returncode})
+    with registry_login(registry,owner,token) as (args,env):
         previous=set()
         if forge=='GITHUB':
             _,rows=inventory(allow_missing=True)
             previous={key for key,(tags,_) in rows.items() if tags}
         for label in labels:
             target=remote_name+':'+label
-            env={**ENV,'DOCKER_CONFIG':config}
             tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
             require(tagged.returncode==0,'artifact-local-changed',409,
                     details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
@@ -425,6 +456,46 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
                     details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
         references=confirm_docker(args,remote_name,labels,image['image_id'])
         prune_docker(client,inventory,forge,labels,references,previous,mark)
+
+
+@transaction.atomic
+def reconcile_docker(project,request_id,tag,image_id):
+    identifier(request_id)
+    require(isinstance(tag,str) and TAG.fullmatch(tag) and isinstance(image_id,str)
+            and DIGEST.fullmatch(image_id),'artifact-reconciliation-invalid',400)
+    project=Project.objects.select_for_update(no_key=True).get(pk=project.pk)
+    job=ProjectForgeArtifactPublication.objects.select_for_update().filter(
+        pk=request_id,project=project).first()
+    require(job is not None,'artifact-reconciliation-ineligible',409)
+    evidence={'tag':tag,'image_id':image_id}
+    if job.state=='COMPLETED' and job.receipt.get('reconciliation')==evidence:
+        return public(job)
+    require(job.state=='UNKNOWN' and job.receipt.get('issued') is True
+            and job.receipt.get('error')=='artifact-forge-publication-unconfirmed'
+            and job.receipt.get('details',{}).get('phase')=='registry-confirmation',
+            'artifact-reconciliation-ineligible',409)
+    values=project.public_metadata.get('values',{})
+    require(values.get('PROJECT_VERSION')==tag and identity(project,values,job.forge)==job.plan['signature']
+            and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
+            'artifact-forge-config-changed',409)
+    observed=docker_inventory(project,values,tag=tag).get('local')
+    require(observed and observed[1]['image_id']==image_id,'artifact-local-changed',409)
+    try:
+        with remote(project,values,job.forge) as (_,base,_,_,owner,repo,token,github_public):
+            registry=docker_registry(base,job.forge,github_public,values)
+            labels=tuple(dict.fromkeys([tag,'latest']))
+            with registry_login(registry,owner,token) as (args,_):
+                confirm_docker(args,registry+'/'+(owner+'/'+repo).lower(),labels,image_id)
+    except (httpx.HTTPError,OSError,subprocess.SubprocessError) as error:
+        raise Refused('artifact-forge-publication-unconfirmed',409,
+                      details={'phase':'registry-confirmation'}) from error
+    job.receipt={'issued':True,'previous':{'state':job.state,**job.receipt},
+                 'reconciliation':evidence,
+                 'details':{'phase':'registry-confirmation','publication_confirmed':True,
+                            'cleanup_performed':False}}
+    job.state='COMPLETED'
+    job.save(update_fields=['state','receipt'])
+    return public(job)
 
 
 def release_forgejo(project,values,plan,mark):

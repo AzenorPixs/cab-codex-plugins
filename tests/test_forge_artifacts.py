@@ -230,10 +230,65 @@ class ForgeArtifactsTests(unittest.TestCase):
 
     def test_remote_tag_confirmation_requires_the_pushed_image(self):
         with patch.object(forge_publish_artifacts,'inspect_manifest',return_value={
-                'config':{'digest':'sha256:'+'b'*64}}):
+                'config':{'digest':'sha256:'+'b'*64}}), \
+             patch.object(forge_publish_artifacts,'registry_digest',return_value='sha256:'+'c'*64):
             with self.assertRaisesRegex(Refused,'artifact-forge-publication-unconfirmed'):
                 forge_publish_artifacts.confirm_docker(
                     [],'fixture/owner/sample',('2.0.0','latest'),'sha256:'+'a'*64)
+
+    def test_oci_index_digest_must_match_each_published_tag(self):
+        image_id='sha256:'+'a'*64
+        child='sha256:'+'b'*64
+        config='sha256:'+'c'*64
+        index={'manifests':[{'digest':child}]}
+        args,remote,labels=[],'fixture/owner/sample',('2.0.0','latest')
+        for latest in (image_id,'sha256:'+'d'*64):
+            with self.subTest(latest=latest), \
+                 patch.object(forge_publish_artifacts,'inspect_manifest',
+                              side_effect=[index,index,{'config':{'digest':config}}]), \
+                 patch.object(forge_publish_artifacts,'registry_digest',side_effect=[image_id,latest]):
+                if latest==image_id:
+                    self.assertEqual(forge_publish_artifacts.confirm_docker(args,remote,labels,image_id),
+                                     {image_id,child})
+                else:
+                    with self.assertRaisesRegex(Refused,'artifact-forge-publication-unconfirmed'):
+                        forge_publish_artifacts.confirm_docker(args,remote,labels,image_id)
+
+    def test_reconciliation_preserves_receipt_until_tags_are_verified(self):
+        tag,image_id='2.0.0','sha256:'+'a'*64
+        initial={'issued':True,'error':'artifact-forge-publication-unconfirmed',
+                 'details':{'phase':'registry-confirmation'}}
+        job=SimpleNamespace(pk='receipt',forge='FORGEJO',state='UNKNOWN',
+                            receipt=initial,plan={'signature':'signature'},save=Mock())
+        project=SimpleNamespace(pk='project',public_metadata={'values':{'PROJECT_VERSION':tag}})
+        configured=(None,'https://fixture',None,None,'owner','sample','token',False)
+        publication=forge_publish_artifacts
+        with patch.object(publication.ProjectForgeArtifactPublication,'objects') as jobs, \
+             patch.object(publication.Project,'objects') as projects, \
+             patch.object(publication,'identity',return_value='signature'), \
+             patch.object(publication,'docker_inventory',return_value={'local':(None,{'image_id':image_id})}), \
+             patch.object(publication,'remote') as remote, patch.object(publication,'registry_login') as login, \
+             patch.object(publication,'confirm_docker') as confirm:
+            jobs.select_for_update.return_value.filter.return_value.first.return_value=job
+            projects.select_for_update.return_value.get.return_value=project
+            remote.return_value.__enter__.return_value=configured
+            login.return_value.__enter__.return_value=([],{})
+            confirm.side_effect=Refused('artifact-forge-publication-unconfirmed',409)
+            reconcile=publication.reconcile_docker.__wrapped__
+            with self.assertRaises(Refused):
+                reconcile(project,job.pk,tag,image_id)
+            self.assertEqual(job.state,'UNKNOWN')
+            job.save.assert_not_called()
+
+            confirm.side_effect=None
+            result=reconcile(project,job.pk,tag,image_id)
+            self.assertEqual(result['state'],'COMPLETED')
+            self.assertTrue(result['details']['publication_confirmed'])
+            self.assertFalse(result['details']['cleanup_performed'])
+            self.assertEqual(job.receipt['previous'],{'state':'UNKNOWN',**initial})
+            confirm.assert_called_with([],'fixture/owner/sample',(tag,'latest'),image_id)
+            self.assertEqual(reconcile(project,job.pk,tag,image_id),result)
+            job.save.assert_called_once()
 
     def test_github_never_deletes_a_version_sharing_a_kept_tag(self):
         calls,_,error=self.publish_docker_fixture('GITHUB',alias=True)
