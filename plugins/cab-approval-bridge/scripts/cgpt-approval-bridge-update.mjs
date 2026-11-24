@@ -109,8 +109,10 @@ async function syntax(path, work) {
       { timeout: 15000, maxBuffer: 4096, env: { ...process.env, PYTHONPYCACHEPREFIX: join(work, 'pycache') } });
   } catch { throw error('update-syntax-invalid'); }
 }
-export async function authority(path) {
-  const child = spawn('python3', [fileURLToPath(new URL('./cgpt-approval-bridge-registry-lock.py', import.meta.url)), path],
+export async function authority(path, { readOnly = false } = {}) {
+  const helper = fileURLToPath(new URL('./cgpt-approval-bridge-registry-lock.py', import.meta.url));
+  const args = readOnly ? [helper, '--read-only', path] : [helper, path];
+  const child = spawn('python3', args,
     { stdio: ['pipe', 'pipe', 'ignore'] });
   child.stdin.on('error', () => {});
   try {
@@ -122,7 +124,7 @@ export async function authority(path) {
       };
       const timer = setTimeout(() => finish(error('update-lock-unavailable')), 5000);
       child.once('error', () => finish(error('update-lock-unavailable')));
-      child.once('exit', () => finish(error('update-already-running')));
+      child.once('exit', code => finish(error(code === 2 ? 'update-lock-unavailable' : 'update-already-running')));
       child.stdout.on('data', (chunk) => {
         if (settled) return;
         output += chunk;

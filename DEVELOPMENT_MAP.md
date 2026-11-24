@@ -405,9 +405,9 @@ rapport individuel validés. CI/CD, correctif DIU et CABU à vérifier séparém
 
 [simplify-terminal-cleanup](openspec/changes/simplify-terminal-cleanup/) : code non attribué, coordination et premiers adaptateurs testés ; raccordement des autres briques et validation finale à poursuivre.
 
-## Diagnostic du reçu propriétaire — en cours
+## Diagnostic du reçu propriétaire — archivé
 
-[diagnose-frozen-owner-erasure](openspec/changes/diagnose-frozen-owner-erasure/) : diagnostic et correction qualifiés en fixture ; reprise réelle et incidents CCAB associés à vérifier. Les preuves restent à leur emplacement tant que les incidents les référencent.
+[diagnose-frozen-owner-erasure](openspec/changes/archive/2026-11-24-diagnose-frozen-owner-erasure/) : diagnostic sans mutation et reprise du même reçu qualifiés en fixture. La [qualification du 24 novembre 2026](openspec/changes/archive/2026-11-24-diagnose-frozen-owner-erasure/QUALIFICATION.md) documente aussi le dernier état historique retrouvé du reçu réel.
 
 ## Retrait SGS des changes clos — SCM 2.4.38
 

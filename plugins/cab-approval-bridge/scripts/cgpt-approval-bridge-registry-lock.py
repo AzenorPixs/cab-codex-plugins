@@ -11,13 +11,24 @@ VERSION = "2.7.4"
 
 def main():
     descriptors = []
+    paths = sys.argv[1:]
+    read_only = paths[:1] == ["--read-only"]
+    if read_only:
+        paths = paths[1:]
     try:
-        for index, path in enumerate(sys.argv[1:]):
-            try:
-                fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_NONBLOCK, 0o770)
-                os.fchmod(fd,0o770)
-            except FileExistsError:
-                fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+        for path in paths:
+            flags = os.O_NOFOLLOW | os.O_NONBLOCK
+            if read_only:
+                try:
+                    fd = os.open(path, os.O_RDONLY | flags)
+                except FileNotFoundError:
+                    return 2
+            else:
+                try:
+                    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | flags, 0o770)
+                    os.fchmod(fd,0o770)
+                except FileExistsError:
+                    fd = os.open(path, os.O_RDWR | flags)
             descriptors.append(fd)
             info = os.fstat(fd)
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:

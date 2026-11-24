@@ -3,7 +3,7 @@ import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
 export const VERSION='2.7.4';
 
 // Serveur temporaire exclusivement diagnostique : aucune route de commit.
-export async function startDiagnosticOwnerProxy(manager) {
+export async function startDiagnosticOwnerProxy(manager, {groupId=process.getgid()} = {}) {
   let proxy,issued=null,completed=false;
   const server=createServer(async(req,res)=>{
     try {
@@ -24,7 +24,7 @@ export async function startDiagnosticOwnerProxy(manager) {
     }catch{res.writeHead(409,{'content-type':'application/json'}).end(JSON.stringify({error:'erasure-owner-diagnostic-refused'}));}
   });
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
-  try{proxy=await startOwnerProxy('http://127.0.0.1:'+server.address().port);}
+  try{proxy=await startOwnerProxy('http://127.0.0.1:'+server.address().port,{groupId});}
   catch(error){await new Promise(resolve=>server.close(resolve));throw error;}
   return {identity:proxy.identity,async stop(){await proxy.stop();await new Promise(resolve=>server.close(resolve));}};
 }

@@ -72,7 +72,7 @@ vérifiées, rapport individuel vérifié ; livraison distincte à constater. [T
 
 [simplify-terminal-cleanup](changes/simplify-terminal-cleanup/), code non attribué : en cours ; raccordements et validation finale à poursuivre.
 
-[diagnose-frozen-owner-erasure](changes/diagnose-frozen-owner-erasure/), code non attribué : en cours ; reprise réelle et incidents CCAB à vérifier.
+[diagnose-frozen-owner-erasure](changes/archive/2026-11-24-diagnose-frozen-owner-erasure/), code non attribué, archivé le 24 novembre 2026 après qualification en fixture.
 
 [remove-released-open-report-snapshots](changes/archive/2026-11-08-remove-released-open-report-snapshots/), code non attribué : archivé et testé ; publication, activation et nettoyage réel restent distincts.
 

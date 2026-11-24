@@ -14,7 +14,8 @@ const exec=promisify(execFile);
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export async function diagnoseFrozenOwner({workspace,transactionId}) {
   if(typeof workspace!=='string'||resolve(workspace)!==workspace||!/^erasure-[a-f0-9-]{36}$/.test(transactionId||''))fail('erasure-owner-diagnostic-input-invalid');
-  const lock=await authority(join(homedir(),'.local/state/cab-approval-bridge-update/update.lock'));
+  const lockPath=join(homedir(),'.local/state/cab-approval-bridge-update/update.lock');
+  const lock=await authority(lockPath,{readOnly:true});
   let proxy;
   try{
     const manager=new ChangeErasureManager({workspace,stateDirectory:runtimeStateDirectory(workspace),brokerIdentity:processOwnerIdentity});
@@ -23,7 +24,12 @@ export async function diagnoseFrozenOwner({workspace,transactionId}) {
     try{process.kill(prepared.pid,0);fail('erasure-previous-broker-still-present');}catch(error){if(error.code!=='ESRCH')throw error;}
     const passwd=(await exec('/usr/bin/getent',['passwd',String(prepared.uid)],{timeout:5000,maxBuffer:4096})).stdout.trim().split(':');
     if(Number(passwd[2])!==prepared.uid||!passwd[5]?.startsWith('/')||resolve(passwd[5])!==passwd[5])fail('erasure-owner-diagnostic-identity-invalid');
-    proxy=await startDiagnosticOwnerProxy(manager);
+    const {stdout}=await exec('/usr/bin/id',['-G','--',passwd[0]],{timeout:5000,maxBuffer:4096});
+    const ownerGroups=stdout.trim().split(/\s+/).filter(group=>/^\d+$/.test(group)).map(Number);
+    const groupId=process.getuid()===0?Number(passwd[3]):
+      [process.getgid(),...process.getgroups()].find(group=>ownerGroups.includes(group));
+    if(!Number.isSafeInteger(groupId)||!ownerGroups.includes(groupId))fail('erasure-owner-diagnostic-group-unavailable');
+    proxy=await startDiagnosticOwnerProxy(manager,{groupId});
     const executable=resolve(dirname(fileURLToPath(import.meta.url)),'../broker/cgpt_approval_bridge_owner_diagnostic.py');
     const child=spawn('/usr/bin/sudo',['-n','-u','#'+prepared.uid,'env','HOME='+passwd[5],'/usr/bin/python3','-B',executable],{stdio:['pipe','pipe','pipe']});
     let out='',err='';child.stdout.on('data',b=>{out+=b;if(out.length>8192)child.kill()});child.stderr.on('data',b=>{err+=b;if(err.length>8192)child.kill()});
@@ -33,9 +39,16 @@ export async function diagnoseFrozenOwner({workspace,transactionId}) {
     const result=JSON.parse(out);
     if(result.transactionId!==transactionId||!['PREPARED','APPLYING','APPLIED'].includes(result.ownerPhase)||!result.diagnostic)fail('erasure-owner-diagnostic-result-invalid');
     return {...result,coverage:'owner-default-paths-unverified'};
-  }finally{if(proxy)await proxy.stop();await lock.close();}
+  }finally{
+    try{if(proxy)await proxy.stop();}
+    finally{await lock.close();}
+  }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{if(process.argv.length!==4)fail('erasure-owner-diagnostic-input-invalid');console.log(JSON.stringify(await diagnoseFrozenOwner({workspace:process.argv[2],transactionId:process.argv[3]})));}
-  catch(error){console.error(JSON.stringify({error:/^erasure-[a-z0-9-]+$/.test(error.code||'')?error.code:'erasure-owner-diagnostic-failed'}));process.exitCode=1;}
+  catch(error){
+    const code=error.code==='update-lock-unavailable'?'erasure-owner-diagnostic-lock-unavailable':error.code;
+    console.error(JSON.stringify({error:/^erasure-[a-z0-9-]+$/.test(code||'')?code:'erasure-owner-diagnostic-failed'}));
+    process.exitCode=1;
+  }
 }

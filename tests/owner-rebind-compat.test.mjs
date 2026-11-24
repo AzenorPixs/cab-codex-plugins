@@ -8,12 +8,28 @@ import {request} from 'node:http';
 import {spawn,spawnSync} from 'node:child_process';
 import {processOwnerIdentity} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 import {fileURLToPath} from 'node:url';
-import {mkdtempSync,chmodSync,mkdirSync,readFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,chmodSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+import {authority} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs';
 
 const now=Date.parse('2026-11-08T12:00:00Z');
+function diagnosticPeer(){
+ const rows=spawnSync('getent',['passwd'],{encoding:'utf8'}).stdout.trim().split('\n').map(row=>row.split(':'));
+ const groups=[process.getgid(),...process.getgroups()];
+ for(const [name,,rawUid,rawGid] of rows){
+   const uid=Number(rawUid),gid=Number(rawGid);
+   if(!Number.isSafeInteger(uid)||uid<=0||uid===process.getuid())continue;
+   const result=spawnSync('id',['-G','--',name],{encoding:'utf8'});
+   if(result.status!==0)continue;
+   const ownerGroups=result.stdout.trim().split(/\s+/).map(Number);
+   const groupId=process.getuid()===0?gid:groups.find(group=>ownerGroups.includes(group));
+   if(groupId===undefined)continue;
+   if(spawnSync('sudo',['-n','-u','#'+uid,'test','-x',process.execPath]).status===0)return {uid,gid,groupId};
+ }
+}
+
 function fixture(){
  const value={phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:111,
   scope:{closureAuthority:'authoritative-retired-run-batch-v1',runIds:['target'],protectedRunIds:['peer']},
@@ -48,15 +64,43 @@ test('diagnostic propriétaire : commande bornée à l’identité noyau sans mu
  assert.equal(JSON.stringify(value),before);
 });
 
+test('diagnostic propriétaire : le verrou absent ne laisse aucun fichier',t=>{
+ const home=mkdtempSync(join(tmpdir(),'cab-diagnostic-lock-'));
+ t.after(()=>rmSync(home,{recursive:true,force:true}));
+ const directory=join(home,'.local/state/cab-approval-bridge-update');
+ mkdirSync(directory,{recursive:true});
+ const diagnostic=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-owner-diagnostic.mjs',import.meta.url));
+ const result=spawnSync(process.execPath,[diagnostic,home,'erasure-11111111-1111-4111-8111-111111111111'],
+   {env:{...process.env,HOME:home},encoding:'utf8',timeout:10000});
+ assert.equal(result.status,1,result.stderr);
+ assert.deepEqual(JSON.parse(result.stderr),{error:'erasure-owner-diagnostic-lock-unavailable'});
+ assert.equal(existsSync(join(directory,'update.lock')),false);
+});
+
+test('diagnostic propriétaire : le verrou ouvert en lecture seule reste exclusif',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'cab-diagnostic-lock-'));
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const path=join(root,'update.lock');
+ writeFileSync(path,'fixture');
+ const lock=await authority(path,{readOnly:true});
+ try{
+   await assert.rejects(authority(path),/update-already-running/);
+ }finally{
+   await lock.close();
+ }
+ const next=await authority(path);
+ await next.close();
+ assert.equal(readFileSync(path,'utf8'),'fixture');
+});
+
 test('transport diagnostique : deux UID réels et identité noyau',async t=>{
  if(spawnSync('sudo',['-n','true']).status!==0){t.skip('sudo indisponible');return;}
- const rows=spawnSync('getent',['passwd'],{encoding:'utf8'}).stdout.trim().split('\n').map(row=>row.split(':'));
- const candidate=rows.find(row=>Number(row[2])>0&&Number(row[2])!==process.getuid()&&spawnSync('sudo',['-n','-u','#'+row[2],'test','-x',process.execPath]).status===0);
- if(!candidate){t.skip('UID distinct indisponible');return;}
- const uid=Number(candidate[2]),{value}=fixture();delete value.ownerReceipts.commit;value.ownerReceipts.prepare.uid=uid;value.transactionId='erasure-11111111-1111-4111-8111-111111111111';
+ const peer=diagnosticPeer();
+ if(!peer){t.skip('UID distinct sans groupe autorisé pour le canal');return;}
+ const {uid,groupId}=peer,{value}=fixture();delete value.ownerReceipts.commit;value.ownerReceipts.prepare.uid=uid;value.transactionId='erasure-11111111-1111-4111-8111-111111111111';
  const manager=new ChangeErasureManager({workspace:'/fixture',stateDirectory:'/fixture',brokerIdentity:processOwnerIdentity});
  manager.pending=()=>value;manager.transaction=()=>({seal:command=>({...command,signature:'fixture'}),verify:command=>{const {signature,...rest}=command;if(signature!=='fixture')throw new Error('signature');return rest;}});
- const proxy=await startDiagnosticOwnerProxy(manager);t.after(()=>proxy.stop());
+ const proxy=await startDiagnosticOwnerProxy(manager,{groupId});t.after(()=>proxy.stop());
  const continuity=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs',import.meta.url));
  const code=`import {request} from 'node:http'; import {canonicalContinuityDigest} from ${JSON.stringify(continuity)};
  const post=(path,input)=>new Promise((resolve,reject)=>{const body=JSON.stringify(input),r=request({socketPath:${JSON.stringify(proxy.identity.path)},path,method:'POST',headers:{'content-length':Buffer.byteLength(body)}},res=>{let x='';res.on('data',c=>x+=c);res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(x)}));});r.on('error',reject);r.end(body);});
@@ -69,12 +113,11 @@ test('transport diagnostique : deux UID réels et identité noyau',async t=>{
 
 test('diagnostic complet : deux UID, reçu propriétaire et données inchangés',async t=>{
  if(spawnSync('sudo',['-n','true']).status!==0){t.skip('sudo indisponible');return;}
- const rows=spawnSync('getent',['passwd'],{encoding:'utf8'}).stdout.trim().split('\n').map(row=>row.split(':'));
- const user=rows.find(row=>Number(row[2])>0&&Number(row[2])!==process.getuid()&&spawnSync('sudo',['-n','-u','#'+row[2],'test','-x',process.execPath]).status===0);
- if(!user){t.skip('UID distinct indisponible');return;}
- const uid=Number(user[2]),gid=user[3],root=mkdtempSync(join(tmpdir(),'cab-diag-cross-'));chmodSync(root,0o755);
+ const peer=diagnosticPeer();
+ if(!peer){t.skip('UID distinct sans groupe autorisé pour le canal');return;}
+ const {uid,gid,groupId}=peer,root=mkdtempSync(join(tmpdir(),'cab-diag-cross-'));chmodSync(root,0o755);
  const home=join(root,'home'),workspace=join(root,'project');
- for(const path of [home,workspace])assert.equal(spawnSync('sudo',['-n','install','-d','-m','0700','-o',String(uid),'-g',gid,path]).status,0);
+ for(const path of [home,workspace])assert.equal(spawnSync('sudo',['-n','install','-d','-m','0700','-o',String(uid),'-g',String(gid),path]).status,0);
  t.after(()=>spawnSync('sudo',['-n','rm','-rf','--',root]));
  const source=fileURLToPath(new URL('../plugins/cab-approval-bridge/broker/',import.meta.url)),store=join(home,'approvals.json');
  const setup=spawnSync('sudo',['-n','-u','#'+uid,'python3','-B','-c','import json,sys;open(sys.argv[1],"w").write(json.dumps({"schema_version":2,"approvals":{}}))',store]);assert.equal(setup.status,0);
@@ -84,7 +127,7 @@ test('diagnostic complet : deux UID, reçu propriétaire et données inchangés'
  const value={protocol:'cab-change-erasure-v1',transactionId:txid,phase:'FREEZING',scope,brokerTransport:'owner-local-v1',ownerReceipts:{prepare:{state:'PREPARED',uid,instanceId:'old',scopeDigest:canonicalContinuityDigest(scope)}}};
  const master=join(root,'master');mkdirSync(master,{mode:0o700});const tx=new ErasureTransaction(master);tx.save(value);const before=readFileSync(tx.path);
  const manager=new ChangeErasureManager({workspace,stateDirectory:master,brokerIdentity:processOwnerIdentity});
- const proxy=await startDiagnosticOwnerProxy(manager);t.after(()=>proxy.stop());
+ const proxy=await startDiagnosticOwnerProxy(manager,{groupId});t.after(()=>proxy.stop());
  const child=spawn('sudo',['-n','-u','#'+uid,'env','HOME='+home,'CGPT_APPROVAL_STORE='+store,'CGPT_APPROVAL_JOURNAL='+join(home,'events.ndjson'),'CGPT_JOURNAL_CHECKPOINT_PATH='+join(home,'checkpoint.json'),'python3','-B',join(source,'cgpt_approval_bridge_owner_diagnostic.py')],{stdio:['pipe','pipe','pipe']});
  let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.stdin.end(JSON.stringify(proxy.identity)+'\n');
  const exit=await new Promise(resolve=>child.on('exit',resolve));assert.equal(exit,0,err);assert.equal(JSON.parse(out).diagnostic.status,'PLAN_VALID');

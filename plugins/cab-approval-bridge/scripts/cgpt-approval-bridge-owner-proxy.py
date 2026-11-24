@@ -18,7 +18,8 @@ VERSION = '2.7.4'
 
 def serve(config):
     parent = os.getppid()
-    directory = tempfile.mkdtemp(prefix='cab-owner-ipc-')
+    # Le lanceur et le broker valident le chemin de la socket sous /tmp.
+    directory = tempfile.mkdtemp(prefix='cab-owner-ipc-', dir='/tmp')
     os.chown(directory,-1,config['groupId'])
     os.chmod(directory, 0o770)
     path = os.path.join(directory, 'owner.sock')

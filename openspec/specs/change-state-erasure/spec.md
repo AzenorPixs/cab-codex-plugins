@@ -584,3 +584,57 @@ Après projection ciblée, CAB MUST vérifier que les anciennes données ne subs
 #### Scenario: Lecteur concurrent
 - **WHEN** un lecteur empêche la troncature sûre du journal
 - **THEN** la cible reste en nettoyage incomplet et le même reçu peut être réessayé
+
+### Requirement: Diagnostic sans effet d'un reçu propriétaire figé
+
+CAB MUST pouvoir diagnostiquer un reçu propriétaire figé à partir de son
+périmètre authentifié sans appliquer ni répéter le commit. Le diagnostic MUST
+préserver les données et restituer seulement une catégorie de contrôle et des
+preuves non sensibles. Un reçu, un propriétaire ou un périmètre non vérifié
+MUST être refusé.
+
+#### Scenario: Verrou d'autorité absent
+- **WHEN** le verrou d'autorité requis pour sérialiser le diagnostic est absent
+- **THEN** le diagnostic refuse sans créer le fichier de verrou ni modifier le reçu
+
+#### Scenario: Canal entre comptes distincts
+- **WHEN** le processus de diagnostic et le propriétaire vérifié ont des UID différents
+- **THEN** le canal est limité à un groupe auquel le propriétaire appartient et que le lanceur peut attribuer
+- **AND** le diagnostic refuse si aucun groupe admissible ne permet ce canal
+
+#### Scenario: Référence étrangère
+- **WHEN** un reçu figé échoue sur une référence étrangère
+- **THEN** le diagnostic distingue la catégorie de contrôle sans divulguer de contenu privé ni modifier le reçu
+
+#### Scenario: Transaction différente
+- **WHEN** l’identité de transaction ou son périmètre ne correspondent pas
+- **THEN** le diagnostic refuse sans effet
+
+### Requirement: Conservation des approbations non attribuées au RUN ciblé
+
+Lors de la reprise d'un lot historique, CAB MUST étendre les identités à partir
+des objets attribués au projet ou au RUN ciblé. Une approbation dont le
+répertoire est relatif et qui ne contient aucune identité du périmètre initial
+MUST rester conservée ; son seul nom de change ne prouve pas son appartenance.
+Une identité initiale ou un RUN cible effectivement référencé dans un objet
+étranger MUST conserver la protection contre l'effacement de cet objet.
+
+#### Scenario: Objet non attribué de même change
+- **WHEN** une approbation à répertoire relatif partage le nom du change mais aucune identité initiale du RUN
+- **THEN** CAB conserve cette approbation sans empêcher l'effacement des objets attribués à la cible
+
+#### Scenario: Identité initiale liée à un objet étranger
+- **WHEN** un objet étranger référence une identité initiale du RUN cible
+- **THEN** CAB préserve cet objet et refuse une projection qui le modifierait
+
+### Requirement: Reprise propriétaire bornée avec helper corrigé
+
+Le profil historique helper et broker 2.4.38 avec services 2.4.35 était limité
+à la reprise du même reçu propriétaire de lot déjà figé et préparé.
+Une reprise d'un reçu lié à ce profil MUST suivre le profil de compatibilité
+applicable à sa phase, vérifier les identités, la portée et les RUN protégés,
+puis aligner les briques par CABU.
+
+#### Scenario: Reprise compatible
+- **WHEN** le propriétaire confirme le même reçu préparé et que les autres preuves concordent
+- **THEN** le helper compatible peut poursuivre ce reçu sans créer une autre transaction

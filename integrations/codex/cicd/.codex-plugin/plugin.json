@@ -1,6 +1,6 @@
 {
   "name": "CICD",
-  "version": "3.38.1",
+  "version": "3.38.2",
   "description": "Livrer par CAB avec une version choisie par le codeur direct ou son orchestrateur, puis suivre le même reçu.",
   "author": {
     "name": "CAB"

@@ -26,6 +26,8 @@ test('reprise VERIFYING : accepte uniquement le broker vérifié du reçu couran
 });
 async function fixture(t,branch,{multiOwner=false,legacy=false,runtimeVersion=VERSION}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
+  // Le groupe de l'atelier ne doit pas se transmettre à la clé du journal de test.
+  chmodSync(root,0o700);
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
   for(const path of [workspace,state,monitor,brokerRoot,update])mkdirSync(path,{mode:0o700});
   chmodSync(brokerRoot,0o775);

@@ -8,6 +8,15 @@ préserver les données et restituer seulement une catégorie de contrôle et de
 preuves non sensibles. Un reçu, un propriétaire ou un périmètre non vérifié
 MUST être refusé.
 
+#### Scenario: Verrou d'autorité absent
+- **WHEN** le verrou d'autorité requis pour sérialiser le diagnostic est absent
+- **THEN** le diagnostic refuse sans créer le fichier de verrou ni modifier le reçu
+
+#### Scenario: Canal entre comptes distincts
+- **WHEN** le processus de diagnostic et le propriétaire vérifié ont des UID différents
+- **THEN** le canal est limité à un groupe auquel le propriétaire appartient et que le lanceur peut attribuer
+- **AND** le diagnostic refuse si aucun groupe admissible ne permet ce canal
+
 #### Scenario: Référence étrangère
 - **WHEN** un reçu figé échoue sur une référence étrangère
 - **THEN** le diagnostic distingue la catégorie de contrôle sans divulguer de contenu privé ni modifier le reçu
@@ -35,11 +44,12 @@ Une identité initiale ou un RUN cible effectivement référencé dans un objet
 
 ### Requirement: Reprise propriétaire bornée avec helper corrigé
 
-CAB MAY utiliser le helper et le broker 2.4.38 avec les services 2.4.35
-uniquement pour reprendre le même reçu propriétaire de lot déjà figé et
-préparé. Les identités, la portée et les RUN protégés MUST être vérifiés ;
-la version complète des briques MUST être alignée ensuite par CABU.
+Le profil historique helper et broker 2.4.38 avec services 2.4.35 était limité
+à la reprise du même reçu propriétaire de lot déjà figé et préparé.
+Une reprise d'un reçu lié à ce profil MUST suivre le profil de compatibilité
+applicable à sa phase, vérifier les identités, la portée et les RUN protégés,
+puis aligner les briques par CABU.
 
 #### Scenario: Reprise compatible
 - **WHEN** le propriétaire confirme le même reçu préparé et que les autres preuves concordent
-- **THEN** le helper corrigé peut poursuivre ce reçu sans créer une autre transaction
+- **THEN** le helper compatible peut poursuivre ce reçu sans créer une autre transaction
