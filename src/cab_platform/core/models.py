@@ -395,6 +395,8 @@ class Change(models.Model):
     tasks_total=models.PositiveIntegerField(null=True)
     tasks_sha256=models.CharField(max_length=64,blank=True)
     observed_at=models.DateTimeField(null=True)
+    catalogue=models.JSONField(default=list)
+    catalogue_hashes=models.JSONField(default=dict)
     class Meta:
         db_table='changes'
         constraints=[models.UniqueConstraint(fields=['project','identifier'],name='cab_change_identity')]
@@ -821,6 +823,7 @@ class ProjectStatistics(models.Model):
     coverage_complete=models.BooleanField(default=False)
     next_full_sync=models.DateTimeField(null=True)
     last_full_sync=models.DateTimeField(null=True)
+    next_catalogue_sync=models.DateTimeField(null=True)
     updated=models.DateTimeField(auto_now=True)
     error=models.CharField(max_length=200,blank=True)
     class Meta:db_table='project_statistics'

@@ -27,6 +27,8 @@ def sync_project_sessions(request):return sync_projection(request,'cab_core_sess
 
 def sync_project_archives(request):return sync_projection(request,'cab_core_sessionprojection',all_projects=True,archived=True)
 
+def sync_project_changes(request):return sync_projection(request,'changes')
+
 def sync_project(request):return sync_projection(request,'project_metadata_projection')
 
 def sync_forge_artifacts(request):return sync_projection(request,'project_forge_artifacts')
@@ -123,6 +125,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
         where=("id" if table=='project_metadata_projection' else 'project_id')+" = '"+identity+"'"
     params.update(table=table,where=where,secret=cfg['electric_secret'])
     if table=='resource_reservations':params['columns']='id,project_id,session_id,change,kind,description,count,started,expires'
+    if table=='changes':params['columns']='id,project_id,catalogue'
     if table=='project_metadata_projection':params['columns']='id,public_metadata'
     if table=='project_forge_artifacts':params['columns']='id,project_id,forge,source,artifacts'
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'

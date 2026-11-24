@@ -82,6 +82,9 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   fill(search('Clés API'),'témoin');
   await wait(()=>readRows('Clés API')[0]?.includes('Fournisseur témoin'),'Clé associée créée avec le fournisseur');
   check(!find('table[aria-label="Clés API"]').textContent.includes('fixture-provider-key'),'Secret exclu de la liste');
+  for(const label of ['Quota Jour','Quota Semaine','Quota Mois','Crédits']){
+    check(rows('Clés API')[0].querySelector('td[data-label="'+label+'"]').textContent==='N/A','Valeur absente '+label);
+  }
   await click('button[aria-label="État de la clé API de Fournisseur témoin · En attente"]');
   check(find('dialog[open]').textContent.includes('Indisponible'),'Mesures inconnues lisibles');
   Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();

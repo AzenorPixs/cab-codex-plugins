@@ -1,5 +1,11 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Catalogue OpenSpec des projets
+
+La page Changes expose les changes ouverts et archivés du projet autorisé.
+Les déclarations OpenSpec locales font foi. CAB en projette les données utiles
+dans PostgreSQL pour la consultation et les mises à jour Electric.
+
 ## Réservations de ressources
 
 Les sessions réservent les fichiers et ressources avant leur usage, prorogent

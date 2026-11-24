@@ -35,7 +35,10 @@ class Watcher:
             config_dir=root/'config'
             if config_dir.is_dir() and not config_dir.is_symlink() and config_dir.resolve()==config_dir:desired[str(config_dir)]=(project.pk,'config')
             state=ProjectStatistics.objects.filter(project=project).first()
-            if state is None or state.next_full_sync is None or state.next_full_sync<=timezone.now():self.dirty[project.pk]=time.monotonic()
+            now=timezone.now()
+            if (state is None or state.next_full_sync is None or state.next_full_sync<=now
+                    or state.next_catalogue_sync is None or state.next_catalogue_sync<=now):
+                self.dirty.setdefault(project.pk,time.monotonic())
         for path,wd in list(self.paths.items()):
             if path not in desired:self.lib.inotify_rm_watch(self.fd,wd);self.watches.pop(wd,None);del self.paths[path]
         for path,info in desired.items():
@@ -79,6 +82,12 @@ class Watcher:
         return [key for key,at in self.dirty.items() if now-at>=.3]
 
 def synchronize(project_id):
+    from .change_catalogue import refresh
+
     project=Project.objects.get(pk=project_id);state=ProjectStatistics.objects.filter(project=project).first()
     due=state is None or state.next_full_sync is None or state.next_full_sync<=timezone.now()
-    return sync(project,full=due,automatic=True)
+    try:
+        refresh(project_id)
+    finally:
+        result=sync(project,full=due,automatic=True)
+    return result

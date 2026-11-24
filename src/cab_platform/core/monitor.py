@@ -46,6 +46,19 @@ def task_source(change):
     return path,state
 
 
+def parse_tasks(raw):
+    tasks=[];fence=None
+    for number,line in enumerate(raw.decode('utf-8').splitlines(),1):
+        marker=re.match(r'^\s*(```+|~~~+)',line)
+        if marker:
+            token=marker.group(1)[0];fence=None if fence==token else token if fence is None else fence
+            continue
+        if fence:continue
+        match=re.match(r'^\s*[-*+]\s+\[([ xX])\]\s+(.+)$',line)
+        if match:tasks.append({'label':redact(match.group(2),limit=2000),'completed':match.group(1).lower()=='x','line':number})
+    return tasks
+
+
 def observe_tasks(change):
     try:
         path,state=task_source(change)
@@ -56,15 +69,7 @@ def observe_tasks(change):
             if not stat.S_ISREG(before.st_mode) or before.st_nlink!=1 or before.st_size>1024*1024:raise ValueError('change-tasks-unsafe')
             raw=stream.read(1024*1024+1);after=os.fstat(stream.fileno())
             if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError('change-tasks-changed')
-        tasks=[];fence=None
-        for number,line in enumerate(raw.decode('utf-8').splitlines(),1):
-            marker=re.match(r'^\s*(```+|~~~+)',line)
-            if marker:
-                token=marker.group(1)[0];fence=None if fence==token else token if fence is None else fence
-                continue
-            if fence:continue
-            match=re.match(r'^\s*[-*+]\s+\[([ xX])\]\s+(.+)$',line)
-            if match:tasks.append({'label':redact(match.group(2),limit=2000),'completed':match.group(1).lower()=='x','line':number})
+        tasks=parse_tasks(raw)
         return {'source_path':str(path.relative_to(change.project.root)),'source_state':state,'tasks':tasks,'tasks_done':sum(task['completed'] for task in tasks),'tasks_total':len(tasks),'tasks_sha256':hashlib.sha256(raw).hexdigest()}
     except (OSError,ValueError,UnicodeError):return {'source_state':'unavailable'}
 

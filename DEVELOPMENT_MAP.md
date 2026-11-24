@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Catalogue OpenSpec des projets
+
+[add-project-openspec-changes](openspec/changes/archive/2026-11-24-add-project-openspec-changes/),
+code non attribué. Les recettes PostgreSQL, Electric, Chromium et Firefox
+ont qualifié la page Changes et la synchronisation des sources OpenSpec.
+La livraison et l’activation sont vérifiées sur les reçus CAB.
+
 ## Actualisation des clés et des catalogues fournisseurs
 
 [refresh-provider-api-key-health](openspec/changes/archive/2026-11-23-refresh-provider-api-key-health/),

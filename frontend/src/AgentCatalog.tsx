@@ -301,7 +301,7 @@ function KeyCatalog({catalog}:{catalog:Catalog}){
   const quotaColumns=[['day','Quota Jour'],['week','Quota Semaine'],['month','Quota Mois'],['credits','Crédits']] as const
   const columns:Column<KeyRow>[]=[
     {label:'Fournisseurs',value:row=>row.provider},
-    ...quotaColumns.map(([field,label])=>({label,value:(row:KeyRow)=>row[field],render:(row:KeyRow)=>metric(row[field],row.metrics?.kind==='go'?' %':row.metrics?.kind==='router'?' $':'')})),
+    ...quotaColumns.map(([field,label])=>({label,value:(row:KeyRow)=>row[field],render:(row:KeyRow)=>row[field]==null?'N/A':metric(row[field],row.metrics?.kind==='go'?' %':row.metrics?.kind==='router'?' $':'')})),
     {label:'État',value:row=>keyStatus(row),render:row=><KeyStatus row={row}/>},
     {label:'Dernière actualisation réussie',value:row=>row.refreshed_at??null,
       render:row=>catalogDate(row.refreshed_at)},

@@ -46,7 +46,7 @@ def read_source(root: Path,path: Path,limit: int=MAX_REPORT):
     raw.decode('utf-8')
     return raw,before
 
-def catalogue(root: Path):
+def catalogue(root: Path, *, identifier=None, projection=False):
     parent=root/'openspec/changes';result=[]
     if not parent.exists():return []
     if parent.resolve()!=parent:raise ValueError('statistics-catalogue-unsafe')
@@ -64,17 +64,31 @@ def catalogue(root: Path):
                 except ValueError:continue
                 slug=match[2]
             if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}',slug):continue
+            if identifier is not None and identifier!=slug:continue
             directory_info=path.stat();manifest={'_directory':{'device':directory_info.st_dev,'inode':directory_info.st_ino}}
-            names={p.name for p in path.glob('*.md') if p.name!='STATISTICS.md'}|{'.openspec.yaml'}
+            names=({'proposal.md','design.md','tasks.md','STATISTICS.md'} if projection else
+                   {p.name for p in path.glob('*.md') if p.name!='STATISTICS.md'})|{'.openspec.yaml'}
+            metadata={}
             for name in sorted(names):
                 p=path/name
                 if p.exists():
                     raw,info=read_source(root,p,2*1024*1024);manifest[name]={'sha256':sha(raw),'mtime':info.st_mtime_ns}
+                    if projection and name=='proposal.md':
+                        title=re.search(r'^#\s+([^\n]+)',raw.decode('utf-8'),re.MULTILINE)
+                        if title:metadata['title']=title[1].strip()
+                    if projection and name=='tasks.md':
+                        from .core.monitor import parse_tasks
+                        tasks=parse_tasks(raw)
+                        metadata.update(tasks_done=sum(task['completed'] for task in tasks),tasks_total=len(tasks))
             specs=path/'specs'
             if specs.exists() and specs.resolve()==specs:
                 for p in sorted(specs.glob('*/spec.md')):
                     raw,info=read_source(root,p,2*1024*1024);manifest[str(p.relative_to(path))]={'sha256':sha(raw),'mtime':info.st_mtime_ns}
-            result.append({'identifier':slug,'path':str(path.relative_to(root)),'archived':archived,'manifest':manifest})
+            item={'identifier':slug,'path':str(path.relative_to(root)),'archived':archived,'manifest':manifest}
+            if projection:
+                item.update(metadata=metadata,directory_mtime=directory_info.st_mtime_ns,
+                            archived_at=path.name[:10] if archived else None)
+            result.append(item)
     return result
 
 def managed(text):

@@ -1052,6 +1052,33 @@ def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,
     items=list(changes.order_by('identifier','pk').values('id','identifier')[offset:offset+51])
     return {'changes':items[:50],'has_more':len(items)>50}
 
+@api.get('/projects/{project_id}/changes')
+def project_changes(request,project_id:str):
+    from .models import Change
+
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    rows=Change.objects.filter(project=project).exclude(catalogue=[]).values('id','catalogue')
+    return {'changes':list(rows)}
+
+
+@api.post('/projects/{project_id}/changes/{change_id}/refresh')
+def refresh_project_change(request,project_id:str,change_id:str):
+    from cab_platform.change_catalogue import refresh
+    from .models import Change
+
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    change=Change.objects.filter(project=project,pk=change_id).first()
+    commands.require(change is not None,'change-not-found',404)
+    refresh(project.pk,identifier=change.identifier)
+    return {'refreshed':True}
+
+
 @api.post('/projects/{project_id}/forges/authenticate')
 def forge_authenticate(request,project_id:str):
     actor=principal(request)

@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[add-project-openspec-changes](changes/archive/2026-11-24-add-project-openspec-changes/),
+code non attribué. Attribution ultérieure par ACL.
+
 ## Construction Docker locale et diagnostic Fabrique — 23 novembre 2026
 
 [decouple-docker-factory-and-diagnose-builds](changes/archive/2026-11-23-decouple-docker-factory-and-diagnose-builds/), code non attribué. Change archivé. Attribution ultérieure par ACL.

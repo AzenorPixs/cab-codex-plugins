@@ -33,7 +33,7 @@ def installed():
         return {'state':'BOOTSTRAP_ONLY'}
     if cfg.get('initialized'):
         from .postgresql import ensure as ensure_postgresql
-        from .bootstrap import ELECTRIC_MESSAGES_SQL,STAGE_ELECTRIC_SQL,_psql
+        from .bootstrap import CHANGE_CATALOGUE_ELECTRIC_SQL,ELECTRIC_MESSAGES_SQL,STAGE_ELECTRIC_SQL,_psql
         ensure_postgresql();cfg=config()
         if _psql(cfg['database_port'],INCOMPATIBLE_ELECTRIC_SLOT_SQL,cfg['database']) == 't':
             raise ClientError('electric-replication-slot-incompatible')
@@ -86,7 +86,7 @@ def installed():
             IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries') THEN
                 ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries;
             END IF;
-        END $$;"""+STAGE_ELECTRIC_SQL,cfg['database'])
+        END $$;"""+STAGE_ELECTRIC_SQL+CHANGE_CATALOGUE_ELECTRIC_SQL,cfg['database'])
     cfg['version']=__version__;atomic_json(CONFIG,cfg)
     return {'state':'CONFIGURED' if cfg.get('initialized') else 'BOOTSTRAP_ONLY'}
 

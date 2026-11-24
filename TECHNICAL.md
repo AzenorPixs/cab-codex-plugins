@@ -81,6 +81,12 @@ aléatoire12–24h. Rapports individuels/globaux générés par le service, sans
 verrou fichier. Contrat et champs : docs/sgs-schema.md. Les descriptions2.x des
 moteurs SGS autonomes ci-dessous sont historiques et ne sont plus applicables.
 
+Le catalogue Changes utilise dans `changes` une ligne par identité OpenSpec
+et des entrées séparées pour ses sources locales ouvertes ou archivées.
+Les hashes par fichier incluent `STATISTICS.md` lorsqu’il existe. Seules les
+données publiques sont transmises par Electric, dans la portée du projet.
+La veille inotify et un créneau aléatoire par jour UTC réconcilient le catalogue.
+
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
 contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions

@@ -59,6 +59,11 @@ aléatoire12–24h. Rapports individuels/globaux générés par le service, sans
 verrou fichier. Contrat et champs : docs/sgs-schema.md. Les descriptions2.x des
 moteurs SGS autonomes ci-dessous sont historiques et ne sont plus applicables.
 
+L’installation applique la migration additive du catalogue Changes. Le proxy
+Electric limite les Shapes aux colonnes publiques de `changes`. La migration peut être
+inversée après retrait de la publication de cette table. Les déclarations
+OpenSpec locales permettent de reconstruire le catalogue.
+
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un
 contexte actif par SID, bascule autonome, agrégation multi-RUN/multi-sessions

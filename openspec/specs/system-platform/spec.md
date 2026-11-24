@@ -2085,15 +2085,32 @@ les pages qui utilisent cette barre latérale.
 
 ### Requirement: Tableau global des sessions de projets
 CAB MUST proposer Sessions dans le menu de /projects et exposer la page
-/projects/sessions. Cette page MUST reprendre le tableau des sessions par projet
-avec une colonne Projets contenant son identifiant cliquable vers son accueil.
+/projects/sessions. Cette page MUST proposer les onglets Ouvertes puis Archivées
+avec la présentation des onglets de la page Binaires. Ouvertes MUST être
+l’onglet par défaut et reprendre le tableau des sessions par projet avec une
+colonne Projets contenant son identifiant cliquable vers son accueil. Archivées
+MUST afficher le même tableau global que /projects/archives.
 
 #### Scenario: Sessions de plusieurs projets
 - **WHEN** le développeur ouvre /projects/sessions
 - **THEN** les sessions non archivées des projets accessibles apparaissent dans le tableau
 - **AND** la colonne Projets mène à l'accueil de chaque projet
 - **AND** les liens RUN et actions restent rattachés au bon projet
-- **AND** les pages de sessions par projet conservent leur présentation
+
+#### Scenario: Affichage des sessions archivées
+- **WHEN** le développeur sélectionne Archivées sur la page Sessions
+- **THEN** les archives des projets accessibles apparaissent dans le tableau de la page Sessions
+- **AND** le développeur peut revenir au tableau des sessions ouvertes en sélectionnant Ouvertes
+
+### Requirement: Onglets des sessions d’un projet
+La page /projects/{projectId}/sessions MUST proposer les onglets Ouvertes puis
+Archivées avec la même présentation que la page globale des sessions. Les deux
+onglets MUST réutiliser les tableaux du projet sélectionné.
+
+#### Scenario: Sessions d’un projet sélectionné
+- **WHEN** le développeur ouvre la page Sessions d’un projet
+- **THEN** Ouvertes est sélectionné et affiche les sessions ouvertes du projet
+- **AND** Archivées affiche les sessions archivées de ce même projet
 
 ### Requirement: Portée et actualisation des sessions globales
 Le flux Electric global MUST être authentifié et calculer sa portée côté

@@ -16,6 +16,18 @@ class BootstrapError(Exception):pass
 # Electric 1.8.1 recognizes an existing slot by PostgreSQL's English message.
 ELECTRIC_MESSAGES_SQL = "ALTER ROLE cab_electric IN DATABASE cab SET lc_messages TO 'C';"
 
+CHANGE_CATALOGUE_ELECTRIC_SQL = """
+GRANT SELECT (id, project_id, catalogue) ON changes TO cab_electric;
+ALTER TABLE changes REPLICA IDENTITY FULL;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
+        WHERE pubname='electric_publication_default' AND schemaname='public'
+          AND tablename='changes') THEN
+        ALTER PUBLICATION electric_publication_default ADD TABLE changes;
+    END IF;
+END $$;
+"""
+
 STAGE_ELECTRIC_SQL = """
 DO $$
 DECLARE table_name text;
@@ -174,6 +186,7 @@ def initialize(data,token):
                     cursor.execute("SELECT 1 FROM pg_publication_tables WHERE pubname='electric_publication_default' AND tablename='cab_observed_binaries'")
                     if not cursor.fetchone():cursor.execute('ALTER PUBLICATION electric_publication_default ADD TABLE cab_observed_binaries')
                     cursor.execute(STAGE_ELECTRIC_SQL)
+                    cursor.execute(CHANGE_CATALOGUE_ELECTRIC_SQL)
                     cursor.execute('ALTER PUBLICATION electric_publication_default OWNER TO cab_electric')
                     cursor.execute('REVOKE CREATE ON DATABASE cab FROM cab_electric')
             finally:db_admin.close()

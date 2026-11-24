@@ -254,15 +254,15 @@ header .brand {
   box-shadow: inset var(--ui-menus-side-marker, 0px) 0 0 currentColor;
 }
 
-:is(.project-tabs, .binary-tabs, .interface-tabs) > :is(a, button) {
+:is(.project-tabs, .table-tabs, .interface-tabs) > :is(a, button) {
   min-block-size: var(--ui-menus-tabs-height, auto);
 }
 
-:is(.project-tabs, .binary-tabs, .interface-tabs) > :is(a, button):not([aria-current="page"], [aria-selected="true"]) {
+:is(.project-tabs, .table-tabs, .interface-tabs) > :is(a, button):not([aria-current="page"], [aria-selected="true"]) {
   font-weight: var(--ui-menus-tabs-normal-weight, 400);
 }
 
-:root[data-custom-tabs-hover] :is(.project-tabs, .binary-tabs, .interface-tabs) > :is(a, button):hover {
+:root[data-custom-tabs-hover] :is(.project-tabs, .table-tabs, .interface-tabs) > :is(a, button):hover {
   color: var(--ui-menus-tabs-hover);
 }
 
@@ -272,7 +272,7 @@ header .brand {
   box-shadow: inset 0 calc(0px - var(--ui-menus-tabs-marker, 0px)) 0 currentColor;
 }
 
-:root[data-custom-tabs-font] :is(.project-tabs, .binary-tabs > a) {
+:root[data-custom-tabs-font] :is(.project-tabs, .table-tabs > a) {
   font-size: calc(var(--ui-menus-tabs-font) * var(--font-scale));
 }
 

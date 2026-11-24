@@ -14,6 +14,7 @@ import {BinaryList,type BinaryStatus} from './BinaryList'
 import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
 import {ProjectForges} from './ProjectForges'
+import {ProjectChanges} from './ProjectChanges'
 import {ProjectFactory} from './ProjectFactory'
 import {ProjectIncidents} from './ProjectIncidents'
 import {ProjectReservations} from './ProjectReservations'
@@ -95,19 +96,53 @@ function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]
     <TableNavigation {...navigation} label="Pagination des sessions" searchLabel="Rechercher dans les sessions"
       current={current} pages={pages} total={matching.length}/></>
 }
-function AllProjectSessions({projects,archives=false}:{projects:Project[];archives?:boolean}){
-  return <div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><section className="project-home project-forges-page"><div className="section-heading"><div className="project-identity"><h1>{archives?'Archives':'Sessions'}</h1></div></div></section>{archives?<SessionArchives projects={projects}/>:<SessionList projects={projects}/>}</section></div>
+type SessionStatus='open'|'archived'
+
+function SessionTabs({status,project,projects}:{
+  status:SessionStatus;project?:Project;projects?:Project[]
+}){
+  const archived=status==='archived'
+  const routeId=project?.identifier||project?.id
+  const target=routeId
+    ? {to:'/projects/$projectId/sessions' as const,params:{projectId:routeId}}
+    : {to:'/projects/sessions' as const}
+  const [visited,setVisited]=useState<SessionStatus[]>([status])
+  useEffect(()=>{
+    setVisited(previous=>previous.includes(status)?previous:[...previous,status])
+  },[status])
+  return <>
+    <nav className="table-tabs" aria-label="État des sessions">
+      <Link {...target} search={{status:'open'}} aria-current={!archived?'page':undefined}>Ouvertes</Link>
+      <Link {...target} search={{status:'archived'}} aria-current={archived?'page':undefined}>Archivées</Link>
+    </nav>
+    {(!archived||visited.includes('open'))&&<div hidden={archived}><SessionList project={project} projects={projects}/></div>}
+    {(archived||visited.includes('archived'))&&<div hidden={!archived}><SessionArchives projectId={project?.id} routeId={routeId} projects={projects}/></div>}
+  </>
+}
+function AllProjectSessions({projects,status='open',standaloneArchives=false}:{
+  projects:Project[];status?:SessionStatus;standaloneArchives?:boolean
+}){
+  return <div className="projects-layout">
+    <ProjectSidebar projects={projects}/>
+    <section className="project-content">
+      <ProjectsNavigation/>
+      <section className="project-home project-forges-page">
+        <div className="section-heading"><div className="project-identity"><h1>{standaloneArchives?'Archives':'Sessions'}</h1></div></div>
+      </section>
+      {standaloneArchives?<SessionArchives projects={projects}/>:<SessionTabs status={status} projects={projects}/>}
+    </section>
+  </div>
 }
 function ProjectRunScreen({projects}:{projects:Project[]}){
   const params=useParams({strict:false});const navigate=useNavigate();const project=projects.find(item=>item.id===params.projectId||item.identifier===params.projectId)
   useEffect(()=>{if(project?.identifier&&params.projectId===project.id&&params.runId)navigate({to:'/projects/$projectId/runs/$runId',params:{projectId:project.identifier,runId:params.runId},replace:true})},[project?.identifier,params.projectId,params.runId])
   return <div className="projects-layout"><ProjectSidebar projects={projects} selected={project?.id}/><section className="project-content">{project&&params.runId?<RunView projectId={project.id} routeId={project.identifier||project.id} runId={params.runId}/>:<h1>Projet introuvable</h1>}</section></div>
 }
-function ProjectScreen({projects,incidents=false,archives=false,sessions=false,forges=false,factory=false}:{projects:Project[];incidents?:boolean;archives?:boolean;sessions?:boolean;forges?:boolean;factory?:boolean}){
+function ProjectScreen({projects,incidents=false,archives=false,sessions,changes,forges=false,factory=false}:{projects:Project[];incidents?:boolean;archives?:boolean;sessions?:SessionStatus;changes?:SessionStatus;forges?:boolean;factory?:boolean}){
   const search=useSearch({strict:false});const params=useParams({strict:false});const requested=params.projectId||search.project;const selected=requested?projects.find(p=>p.id===requested||p.identifier===requested):incidents?projects[0]:undefined
   const navigate=useNavigate()
-  useEffect(()=>{if(selected?.identifier&&params.projectId===selected.id)navigate({to:factory?'/projects/$projectId/factory':forges?'/projects/$projectId/forges':archives?'/projects/$projectId/archives':incidents?'/projects/$projectId/incidents':sessions?'/projects/$projectId/sessions':'/projects/$projectId',params:{projectId:selected.identifier},replace:true})},[selected?.identifier,params.projectId,incidents,archives,sessions,forges,factory])
-  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={selected?.id}/><section className="project-content">{selected?<ProjectNavigation projectId={selected.identifier||selected.id}/>:!requested?<ProjectsNavigation/>:null}{!selected?<section className="project-home project-forges-page">{requested&&<div className="section-heading"><div className="project-identity"><h1>Projet introuvable</h1></div></div>}<p>{requested?'Ce projet est introuvable ou ne fait pas partie de vos projets accessibles.':projects.length?'Sélectionnez un projet dans la colonne de gauche pour ouvrir sa page.':'Aucun projet enregistré. Utilisez le bouton + pour créer votre premier projet.'}</p></section>:selected.creation_state!=='READY'?<section><h1>{selected.name}</h1><p role="alert">La création de ce projet nécessite une vérification. Aucun dossier ne sera recréé automatiquement.</p></section>:factory?<><ProjectPageTitle project={selected} title="Fabrique"/><ProjectFactory project={selected}/></>:forges?<><ProjectPageTitle project={selected} title="Forges"/><ProjectForges project={selected}/></>:archives?<><ProjectPageTitle project={selected} title="Archives"/><SessionArchives projectId={selected.id} routeId={selected.identifier||selected.id}/></>:incidents?<><ProjectPageTitle project={selected} title="Incidents"/><ProjectIncidents project={selected}/></>:sessions?<><ProjectPageTitle project={selected} title="Sessions"/><SessionList project={selected}/></>:<ProjectHome project={selected}/>}</section></div>
+  useEffect(()=>{if(selected?.identifier&&params.projectId===selected.id)navigate({to:factory?'/projects/$projectId/factory':forges?'/projects/$projectId/forges':archives?'/projects/$projectId/archives':incidents?'/projects/$projectId/incidents':sessions?'/projects/$projectId/sessions':changes?'/projects/$projectId/changes':'/projects/$projectId',params:{projectId:selected.identifier},search:sessions==='archived'||changes==='archived'?{status:'archived'}:{},replace:true})},[selected?.identifier,params.projectId,incidents,archives,sessions,changes,forges,factory])
+  return <div className="projects-layout"><ProjectSidebar projects={projects} selected={selected?.id}/><section className="project-content">{selected?<ProjectNavigation projectId={selected.identifier||selected.id}/>:!requested?<ProjectsNavigation/>:null}{!selected?<section className="project-home project-forges-page">{requested&&<div className="section-heading"><div className="project-identity"><h1>Projet introuvable</h1></div></div>}<p>{requested?'Ce projet est introuvable ou ne fait pas partie de vos projets accessibles.':projects.length?'Sélectionnez un projet dans la colonne de gauche pour ouvrir sa page.':'Aucun projet enregistré. Utilisez le bouton + pour créer votre premier projet.'}</p></section>:selected.creation_state!=='READY'?<section><h1>{selected.name}</h1><p role="alert">La création de ce projet nécessite une vérification. Aucun dossier ne sera recréé automatiquement.</p></section>:factory?<><ProjectPageTitle project={selected} title="Fabrique"/><ProjectFactory project={selected}/></>:forges?<><ProjectPageTitle project={selected} title="Forges"/><ProjectForges project={selected}/></>:archives?<><ProjectPageTitle project={selected} title="Archives"/><SessionArchives projectId={selected.id} routeId={selected.identifier||selected.id}/></>:incidents?<><ProjectPageTitle project={selected} title="Incidents"/><ProjectIncidents project={selected}/></>:sessions?<><ProjectPageTitle project={selected} title="Sessions"/><SessionTabs key={selected.id} status={sessions} project={selected}/></>:changes?<><ProjectPageTitle project={selected} title="Changes"/><ProjectChanges key={selected.id} projectId={selected.id} routeId={selected.identifier||selected.id} status={changes}/></>:<ProjectHome project={selected}/>}</section></div>
 }
 function ProjectPageTitle({project,title}:{project:Project;title:string}){
   const client=useQueryClient()
@@ -121,21 +156,50 @@ function ProjectPageTitle({project,title}:{project:Project;title:string}){
 }
 const rootRoute=createRootRoute({component:Layout})
 function ProjectsNavigation(){return <nav className="project-tabs" aria-label="Projets"><Link to="/projects" activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil des projets" title="Accueil des projets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/archives">Archives</Link><Link to="/projects/sessions">Sessions</Link><Link to="/projects/reservations">Réservations</Link></nav>}
-function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link><Link to="/projects/$projectId/factory" params={{projectId}}>Fabrique</Link><Link to="/projects/$projectId/forges" params={{projectId}}>Forges</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link></nav>}
+function ProjectNavigation({projectId}:{projectId:string}){return <nav className="project-tabs" aria-label="Projet"><Link to="/projects/$projectId" params={{projectId}} activeOptions={{exact:true}} className="project-home-link" aria-label="Accueil du projet" title="Accueil du projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 11 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></Link><Link to="/projects/$projectId/archives" params={{projectId}}>Archives</Link><Link to="/projects/$projectId/changes" params={{projectId}}>Changes</Link><Link to="/projects/$projectId/factory" params={{projectId}}>Fabrique</Link><Link to="/projects/$projectId/forges" params={{projectId}}>Forges</Link><Link to="/projects/$projectId/incidents" params={{projectId}}>Incidents</Link><Link to="/projects/$projectId/sessions" params={{projectId}}>Sessions</Link></nav>}
+const sessionSearch=(search:Record<string,unknown>):{status?:SessionStatus}=>search.status==='open'||search.status==='archived'?{status:search.status}:{}
 const projectSearch=(search:Record<string,unknown>):{project?:string}=>typeof search.project==='string'?{project:search.project}:{}
 const indexRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:HomeVersionCheck})
 const projectRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectDetailRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects}/>}</Projects></Gate>})
 const projectFactoryRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/factory',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} factory/>}</Projects></Gate>})
 const projectForgesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/forges',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} forges/>}</Projects></Gate>})
-const allProjectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/archives',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects} archives/>}</Projects></Gate>})
-const allProjectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/sessions',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects}/>}</Projects></Gate>})
+const allProjectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/archives',component:()=> <Gate><Projects>{projects=><AllProjectSessions projects={projects} standaloneArchives/>}</Projects></Gate>})
+const allProjectSessionsRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/sessions',
+  validateSearch:sessionSearch,
+  component:AllProjectSessionsPage,
+})
+function AllProjectSessionsPage(){
+  const {status}=allProjectSessionsRoute.useSearch()
+  return <Gate><Projects>{projects=><AllProjectSessions projects={projects} status={status}/>}</Projects></Gate>
+}
 const projectReservationsRoute=createRoute({
   getParentRoute:()=>rootRoute,
   path:'/projects/reservations',
   component:()=> <Gate><Projects>{projects=><div className="projects-layout"><ProjectSidebar projects={projects}/><section className="project-content"><ProjectsNavigation/><ProjectReservations projects={projects}/></section></div>}</Projects></Gate>,
 })
-const projectSessionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/sessions',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} sessions/>}</Projects></Gate>})
+const projectSessionsRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/$projectId/sessions',
+  validateSearch:sessionSearch,
+  component:ProjectSessionsPage,
+})
+function ProjectSessionsPage(){
+  const {status='open'}=projectSessionsRoute.useSearch()
+  return <Gate><Projects>{projects=><ProjectScreen projects={projects} sessions={status}/>}</Projects></Gate>
+}
+const projectChangesRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/$projectId/changes',
+  validateSearch:sessionSearch,
+  component:ProjectChangesPage,
+})
+function ProjectChangesPage(){
+  const {status='open'}=projectChangesRoute.useSearch()
+  return <Gate><Projects>{projects=><ProjectScreen projects={projects} changes={status}/>}</Projects></Gate>
+}
 const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/runs/$runId',component:()=> <Gate><Projects>{projects=><ProjectRunScreen projects={projects}/>}</Projects></Gate>})
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const projectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/archives',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} archives/>}</Projects></Gate>})
@@ -155,6 +219,6 @@ const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/ad
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectChangesRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

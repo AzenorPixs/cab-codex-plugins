@@ -118,7 +118,7 @@ export function BinaryList({status,login}:{status:BinaryStatus;login:ReactNode})
   const active=status==='active'
   return <section className="project-home project-forges-page binary-list">
     <div className="section-heading"><div className="project-identity"><h1>Binaires</h1></div></div>
-    <nav className="binary-tabs" aria-label="État des binaires">
+    <nav className="table-tabs" aria-label="État des binaires">
       <Link to="/administration/binaries" search={{status:'active'}} aria-current={active?'page':undefined}>Actifs</Link>
       <Link to="/administration/binaries" search={{status:'inactive'}} aria-current={!active?'page':undefined}>Inactifs</Link>
     </nav>

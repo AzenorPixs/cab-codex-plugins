@@ -60,7 +60,7 @@
   color: var(--danger);
 }
 
-.binary-tabs {
+.table-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: var(--ui-menus-tabs-gap, .5rem);
@@ -68,12 +68,12 @@
   border-bottom: 1px solid var(--border);
 }
 
-.binary-tabs a {
+.table-tabs a {
   padding: var(--ui-menus-tabs-padding, .6rem) var(--ui-menus-tabs-padding, .9rem);
   border-bottom: var(--ui-menus-tabs-marker, 2px) solid transparent;
 }
 
-.binary-tabs a[aria-current="page"] {
+.table-tabs a[aria-current="page"] {
   color: var(--ui-menus-tabs-active, var(--accent-text));
   border-color: currentColor;
   font-weight: var(--ui-menus-tabs-weight, 700);
