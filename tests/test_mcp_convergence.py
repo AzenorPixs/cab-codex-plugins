@@ -59,11 +59,55 @@ class ConvergenceTests(unittest.TestCase):
             row.state='READY'
             row.catalog_version=__version__
             m.inspect(self.scope,[row],row.seen)
+            self.assertEqual(notify.call_count,1)
+            row.seen+=m.FRESH
             m.inspect(self.scope,[row],row.seen)
         self.assertEqual(notify.call_count,2)
         self.assertTrue(McpConvergence.objects.get(pk=self.scope).incident['finished'])
         self.assertTrue(notify.call_args_list[0].args[0].endswith(':start'))
         self.assertTrue(notify.call_args_list[1].args[0].endswith(':end'))
+
+    def test_catalog_flaps_do_not_rearm_topology(self):
+        rows=[self.connector, McpConnector.objects.create(
+            pk=uuid4().hex, actor=self.actor, agent='codex', process={'pid':15}, worker={'pid':16},
+        )]
+        for row in rows:
+            row.state='READY'
+            row.relay_version=row.loaded_version=row.catalog_version=__version__
+
+        def observe(seconds, observed):
+            now=self.now+timedelta(seconds=seconds)
+            for row in observed:
+                row.seen=now
+            m.inspect(self.scope,observed,now)
+
+        def request_topology(scope, observed, incident, now, crowded):
+            incident['topology_request']='MCP-TOPOLOGY-fixture'
+
+        with patch.object(m,'alive',return_value=True), \
+             patch.object(m,'update_in_progress',return_value=False), \
+             patch.object(m,'try_topology',side_effect=request_topology) as attempt, \
+             patch.object(m,'publish') as notify:
+            observe(0,rows)
+            rows[1].state='CATALOG_PENDING'
+            observe(10,rows)
+            rows[1].state='READY'
+            observe(15,rows)
+            observe(29,rows)
+            attempt.assert_not_called()
+            observe(30,rows)
+            attempt.assert_called_once()
+            observe(35,rows[:1])
+            observe(40,[])
+            observe(45,rows[:1])
+            self.assertEqual(notify.call_count,1)
+            observe(50,rows)
+            observe(65,rows)
+            observe(80,rows)
+            attempt.assert_called_once()
+            observe(85,rows[:1])
+            observe(100,rows[:1])
+            self.assertEqual(notify.call_count,2)
 
 
 if __name__=='__main__':

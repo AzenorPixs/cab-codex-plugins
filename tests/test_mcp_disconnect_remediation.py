@@ -126,6 +126,39 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(record.state,'FAILED')
         self.assertIn('échouée',Notification.objects.get(pk=identifier(f'mcp-disconnect-recovery:{record.pk}')).title)
 
+    def test_overlapping_losses_share_one_control_and_one_notice(self):
+        first=self.lose()
+        other=McpConnector.objects.create(pk=uuid4().hex, actor=self.actor, agent='codex',
+                                           state='DISCONNECTED', process={**self.process,'pid':987655},
+                                           recovery_anchor=self.anchor)
+        recovery.enqueue(other)
+        duplicate=McpDisconnectRecovery.objects.get(connector=other)
+        McpDisconnectRecovery.objects.filter(pk=duplicate.pk).update(created=first.created+timedelta(seconds=1))
+        with patch.object(native_control,'request',return_value={'request_id':'FIXTURE-NATIVE'}) as request:
+            recovery.advance(first.pk,self.actor.pk)
+            recovery.advance(duplicate.pk,self.actor.pk)
+            request.assert_called_once()
+        duplicate.refresh_from_db()
+        self.assertEqual((duplicate.state,duplicate.report['reason']),('SKIPPED','overlapping-loss'))
+        McpDisconnectRecovery.objects.filter(pk=first.pk).update(created=timezone.now()-timedelta(seconds=100))
+        recovery.advance(first.pk,self.actor.pk)
+        keys=[identifier(f'mcp-disconnect-recovery:{item.pk}') for item in (first,duplicate)]
+        self.assertEqual(list(Notification.objects.filter(pk__in=keys).values_list('pk',flat=True)),keys[:1])
+
+    def test_multiple_healthy_relays_do_not_trigger_a_loss_control(self):
+        for pid in (987653,987654):
+            McpConnector.objects.create(
+                pk=uuid4().hex, actor=self.actor, agent='codex', state='READY', process={'pid':pid},
+                worker={'pid':pid+10}, recovery_anchor=self.anchor, relay_version=__version__,
+                loaded_version=__version__, catalog_version=__version__,
+            )
+        record=self.lose()
+        with patch.object(native_control,'request') as request:
+            recovery.advance(record.pk,self.actor.pk)
+            request.assert_not_called()
+        record.refresh_from_db()
+        self.assertEqual(record.report['reason'],'healthy-replacement-already-present')
+
     def test_uncertain_connector_never_dispatches(self):
         record=self.lose()
         self.connector.uncertain=True
@@ -144,6 +177,7 @@ class RecoveryTests(unittest.TestCase):
         with patch.object(native_control,'request') as request:
             recovery.advance(record.pk,self.actor.pk)
             request.assert_not_called()
+        self.assertFalse(recovery.admit_native(SimpleNamespace(result={'disconnect_recovery':record.pk})))
 
 
 if __name__=='__main__':

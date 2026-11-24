@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import __version__
@@ -81,8 +82,23 @@ def healthy_replacement(record, now):
         state__in=['READY', 'BUSY'], uncertain=False,
         relay_version=__version__, loaded_version=__version__, catalog_version=__version__,
     ).exclude(pk=record.connector_id)
-    healthy = [row for row in siblings if alive(row.process) and alive(row.worker)]
-    return healthy[0] if len(healthy)==1 else None
+    return next((row for row in siblings.order_by('pk') if alive(row.process) and alive(row.worker)), None)
+
+
+def overlapping_loss(record):
+    if record.purpose != 'loss' or not record.anchor:
+        return False
+    return (McpDisconnectRecovery.objects.filter(
+        connector__actor_id=record.connector.actor_id, anchor=record.anchor, purpose='loss',
+    ).filter(Q(created__lt=record.created) | Q(created=record.created, pk__lt=record.pk))
+      .filter(Q(finished__isnull=True) | Q(finished__gte=record.created))
+      .exclude(report__contains={'reason':'overlapping-loss'}).exists())
+
+
+def awaiting_catalog(connector, now):
+    # Le client doit lire le catalogue du moteur déjà renouvelé.
+    return (connector.state == 'CATALOG_PENDING' and connector.seen >= now-FRESH
+            and alive(connector.process) and alive(connector.worker))
 
 
 def proved_connector(record, now):
@@ -158,6 +174,14 @@ def advance(key, actor_id):
     if native and native.state in ('UNKNOWN','AUTO_OC_UNKNOWN'):
         finish(record, 'FAILED', 'effect-uncertain')
         return
+    duplicate = overlapping_loss(record)
+    native_issued = record.state == 'NATIVE' and (
+        native is None or native.result.get('mutation_dispatched') is True
+        or native.state not in ('QUEUED', 'CANCELLED', 'UNAVAILABLE')
+    )
+    if duplicate and record.state != 'DISPATCHED' and not native_issued:
+        finish(record, 'SKIPPED', 'overlapping-loss', notify=False)
+        return
     replacement = healthy_replacement(record, now)
     if replacement:
         if native is None or native.state not in ('DISPATCHED','AUTO_OC_DISPATCHED','AUTO_OC_WAITING'):
@@ -165,19 +189,18 @@ def advance(key, actor_id):
         return
     restored = proved_connector(record, now)
     if restored:
-        finish(record, 'SUCCEEDED', 'heartbeat-confirmed', restored)
+        finish(record, 'SUCCEEDED', 'heartbeat-confirmed', restored, notify=not duplicate)
         return
     if now >= record.created + DEADLINE:
-        finish(record, 'FAILED', 'not-confirmed-before-deadline')
+        finish(record, 'FAILED', 'not-confirmed-before-deadline', notify=not duplicate)
+        return
+    if duplicate:
         return
     if update_in_progress():
         return
     if record.connector.pending or record.connector.uncertain:
         return
-    # Le relais a déjà renouvelé son moteur ; tenter une nouvelle relance
-    # effacerait l'attente du catalogue du client sans ajouter de preuve.
-    if (record.connector.state=='CATALOG_PENDING' and record.connector.seen>=now-FRESH
-            and alive(record.connector.process) and alive(record.connector.worker)):
+    if awaiting_catalog(record.connector, now):
         return
     if record.state != 'QUEUED':
         if native and native.state=='UNAVAILABLE' and native.result.get('mutation_dispatched') is False:
@@ -209,7 +232,8 @@ def admit_native(native):
     now = timezone.now()
     return bool(record and not record.connector.pending and not record.connector.uncertain
                 and not update_in_progress() and active_owner(recovery_owner(record), record.connector.agent)
-                and not healthy_replacement(record, now) and not proved_connector(record, now))
+                and not overlapping_loss(record) and not healthy_replacement(record, now)
+                and not awaiting_catalog(record.connector, now) and not proved_connector(record, now))
 
 
 @transaction.atomic
@@ -231,8 +255,8 @@ def claim(actor, data, peer):
     owner = recovery_owner(record)
     now = timezone.now()
     if (connector.pending or connector.uncertain or now >= record.created + DEADLINE or update_in_progress()
-            or not active_owner(owner, actor.agent) or healthy_replacement(record, now)
-            or proved_connector(record, now)):
+            or not active_owner(owner, actor.agent) or overlapping_loss(record) or healthy_replacement(record, now)
+            or awaiting_catalog(connector, now) or proved_connector(record, now)):
         return {'reload': False}
     if NativeReload.objects.filter(actor=actor,state__in=native_control.PENDING).exists():
         return {'reload': False}

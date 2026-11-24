@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from . import __version__
 from .connector_process import alive
@@ -16,14 +17,38 @@ from .notifications import publish
 RETRY = timedelta(seconds=60)
 
 
-def verified(row, now):
+def catalog_ready(row, now):
     return (row.seen>=now-FRESH and row.state in ('READY','BUSY') and not row.uncertain
-            and row.relay_version==row.loaded_version==row.catalog_version==__version__ and alive(row.worker))
+            and bool(row.loaded_version) and row.loaded_version==row.catalog_version and alive(row.worker))
+
+
+def verified(row, now):
+    return row.relay_version==row.loaded_version==__version__ and catalog_ready(row,now)
 
 
 def conditions(rows, now):
     outdated=[row for row in rows if not verified(row,now)]
     return outdated,len(rows)>1
+
+
+def topology_signature(rows, now):
+    if not rows or not all(catalog_ready(row,now) for row in rows):
+        return []
+    return sorted([row.pk,row.generation,row.relay_version,row.catalog_version] for row in rows)
+
+
+def stable_topology(incident, signature, now):
+    if not signature:
+        incident.pop('observation',None)
+        return False
+    observation=incident.get('observation',{})
+    when=now.isoformat()
+    if (observation.get('signature')!=signature
+            or now-parse_datetime(observation['seen'])>FRESH):
+        observation={'signature':signature,'since':when}
+    observation['seen']=when
+    incident['observation']=observation
+    return now-parse_datetime(observation['since'])>=FRESH
 
 
 def try_version(rows, now):
@@ -93,31 +118,39 @@ def admit_topology(native):
         return False
     rows=[row for row in watched_rows().filter(agent=actor.agent)
           if alive(row.process)]
-    return conditions(rows,timezone.now())[1]
+    incident=McpConvergence.objects.filter(pk=scope).values_list('incident',flat=True).first() or {}
+    now=timezone.now()
+    signature=topology_signature(rows,now)
+    return (len(rows)>1 and bool(signature) and incident.get('crowded_attempt')==native.pk
+            and incident.get('observation',{}).get('signature')==signature)
 
 
 @transaction.atomic
 def inspect(scope, rows, now):
     current=McpConvergence.objects.select_for_update().filter(pk=scope).first()
-    if not rows:
-        # L'absence de preuve n'annonce pas une reconnexion.
-        return
-    outdated,crowded=conditions(rows,now)
     incident=dict(current.incident) if current else {}
-    if not outdated and not crowded:
-        if incident and not incident.get('finished'):
-            incident['finished']=now.isoformat()
+    if not rows:
+        if incident.pop('observation',None) is not None:
             current.incident=incident
             current.save(update_fields=['incident'])
-            publish(f"mcp-convergence:{incident['id']}:end",title='MCP : état attendu confirmé',
-                    body=f"Agent : {rows[0].agent}\nFin : {incident['finished']}\n"
-                         f"Une liaison vérifiée ; relais, moteur et catalogue {__version__}.")
+        return
+    outdated,crowded=conditions(rows,now)
+    if not outdated and not crowded:
+        if incident and not incident.get('finished'):
+            if stable_topology(incident,topology_signature(rows,now),now):
+                incident['finished']=now.isoformat()
+                publish(f"mcp-convergence:{incident['id']}:end",title='MCP : état attendu confirmé',
+                        body=f"Agent : {rows[0].agent}\nFin : {incident['finished']}\n"
+                             f"Une liaison vérifiée ; relais, moteur et catalogue {__version__}.")
+            current.incident=incident
+            current.save(update_fields=['incident'])
         return
     new=not incident or bool(incident.get('finished'))
     if new:
         incident={'id':uuid4().hex,'started':now.isoformat()}
     before=dict(incident)
     incident.update(count=len(rows),outdated=[row.pk for row in outdated],too_many=crowded)
+    topology_stable=stable_topology(incident,topology_signature(rows,now) if crowded else [],now)
     if new:
         details=[]
         if outdated:
@@ -127,7 +160,12 @@ def inspect(scope, rows, now):
         publish(f"mcp-convergence:{incident['id']}:start",title='MCP : début de remédiation',
                 body=f"Agent : {rows[0].agent}\nDébut : {incident['started']}\n"+'\n'.join(details))
     if not update_in_progress():
-        if crowded or any(row.relay_version!=__version__ for row in outdated):
+        if crowded and topology_stable and not incident.get('crowded_attempt'):
+            previous=incident.get('topology_request')
+            try_topology(scope,rows,incident,now,True)
+            if incident.get('topology_request')!=previous:
+                incident['crowded_attempt']=incident['topology_request']
+        elif not crowded and any(row.relay_version!=__version__ for row in outdated):
             try_topology(scope,rows,incident,now,crowded)
         if not update_in_progress():
             try_version(outdated,now)
@@ -146,5 +184,6 @@ def sweep():
     for row in watched_rows().iterator():
         if alive(row.process):
             groups[row.agent].append(row)
-    for scope,rows in groups.items():
-        inspect(scope,rows,now)
+    open_scopes=McpConvergence.objects.exclude(incident__has_key='finished').values_list('scope',flat=True)
+    for scope in sorted(set(groups).union(open_scopes)):
+        inspect(scope,groups.get(scope,[]),now)
