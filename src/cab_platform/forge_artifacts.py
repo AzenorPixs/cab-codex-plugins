@@ -1,13 +1,16 @@
 """Artefacts attestés par les releases et registres des forges."""
 from itertools import count
+import hashlib
+import json
 import re
 from urllib.parse import quote
 
 import httpx
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .core.models import ProjectForgeArtifact
+from .core.models import Project, ProjectForgeArtifact
 from .project_artifacts import FLAGS, enabled
 from .versioning import historical_version
 
@@ -35,27 +38,75 @@ def pages(client, read, endpoint, forge, *, exhaustive=False, **query):
         previous=result
 
 
-def debian(client, read, root, forge):
-    for release in pages(client,read,root+'/releases',forge):
+def publication_date(value):
+    try:
+        date=parse_datetime(value) if isinstance(value,str) else None
+    except ValueError:
+        return None
+    return date if date and timezone.is_aware(date) else None
+
+
+def upload_key(root,tag,asset):
+    url=asset.get('url')
+    if isinstance(url,str) and url and type(asset.get('id')) is int:
+        return hashlib.sha256(json.dumps([root,tag,asset['id'],asset['name'],url]).encode()).hexdigest()
+    return None
+
+
+@transaction.atomic
+def remember_gitlab_debian(project,root,tag,asset):
+    key=upload_key(root,tag,asset)
+    if key is None:
+        return
+    current=Project.objects.select_for_update().get(pk=project.pk)
+    configuration=dict(current.configuration or {})
+    dates=dict(configuration.get('gitlab_debian_publications') or {})
+    dates[key]=timezone.now().isoformat()
+    configuration['gitlab_debian_publications']=dates
+    current.configuration=configuration
+    current.save(update_fields=['configuration'])
+
+
+def chronology(items,candidates):
+    complete=all(date is not None for date,_ in candidates)
+    latest=None
+    if complete and candidates:
+        date,item=max(candidates,key=lambda entry:(entry[0],entry[1]['name'],entry[1]['tags'][0]))
+        latest={**item,'published_at':date.isoformat()}
+    return {'available':True,'items':items,'latest':latest,
+            **({} if complete else {'chronology_unverified':True})}
+
+
+def debian(client, read, root, forge, known=None):
+    items,candidates=[],[]
+    now=timezone.now()
+    for release in pages(client,read,root+'/releases',forge,exhaustive=True):
         tag=release.get('tag_name')
         if release.get('draft') or release.get('upcoming_release') or not isinstance(tag,str) or not TAG.fullmatch(tag):
             continue
-        if forge=='GITLAB' and isinstance(release.get('released_at'),str):
-            released=parse_datetime(release['released_at'])
-            if released and timezone.is_aware(released) and released>timezone.now():
-                continue
+        released=publication_date(release.get('released_at' if forge=='GITLAB' else 'published_at'))
+        if released and released>now:
+            continue
         assets=release.get('assets')
         if forge=='GITLAB':
             assets=assets.get('links') if isinstance(assets,dict) else None
         if not isinstance(assets,list):
             continue
-        files={item['name'] for item in assets if isinstance(item,dict)
-               and isinstance(item.get('name'),str) and DEB.fullmatch(item['name'])
-               and item.get('state','uploaded')=='uploaded'}
-        if files:
-            return [{'name':name,'tags':[tag]} for name in sorted(files)]
-    return []
-
+        files=set()
+        for asset in assets:
+            name=asset.get('name') if isinstance(asset,dict) else None
+            if not isinstance(name,str) or not DEB.fullmatch(name) or asset.get('state','uploaded')!='uploaded':
+                continue
+            files.add(name)
+            raw=asset.get('published_at') or asset.get('created_at')
+            if forge=='GITLAB' and not raw:
+                raw=(known or {}).get(upload_key(root,tag,asset))
+            uploaded=publication_date(raw)
+            date=max(released or uploaded,uploaded) if uploaded and uploaded<=now else None
+            candidates.append((date,{'name':name,'tags':[tag]}))
+        if files and not items:
+            items=[{'name':name,'tags':[tag]} for name in sorted(files)]
+    return chronology(items,candidates)
 
 def tag_rank(tag):
     try:
@@ -106,25 +157,82 @@ def github_version_tags(version):
     return tags if isinstance(tags,list) else None
 
 
+GITLAB_TAG_DATES = """query TagDates($id: ContainerRepositoryID!, $after: String) {
+  containerRepository(id: $id) {
+    tags(first: 100, after: $after) {
+      nodes { name digest publishedAt }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}"""
+
+
+def gitlab_tag_dates(client,read,api,endpoint):
+    token=client.headers.get('private-token')
+    headers={'Authorization':'Bearer '+token} if token else None
+    identifier='gid://gitlab/ContainerRepository/'+endpoint.rsplit('/',2)[-2]
+    cursor=None
+    seen=set()
+    dates={}
+    while True:
+        envelope,_=read(client,api.removesuffix('/v4')+'/graphql',method='POST',headers=headers,
+                        json={'query':GITLAB_TAG_DATES,'variables':{'id':identifier,'after':cursor}})
+        if envelope.get('errors'):
+            raise ValueError('gitlab-registry-publication-dates-unavailable')
+        tags=envelope['data']['containerRepository']['tags']
+        for row in tags['nodes']:
+            if row['name'] in dates:
+                raise ValueError('gitlab-registry-publication-changed')
+            dates[row['name']]=row
+        info=tags['pageInfo']
+        if not info['hasNextPage']:
+            return dates
+        cursor=info.get('endCursor')
+        if not isinstance(cursor,str) or not cursor or cursor in seen:
+            raise ValueError('gitlab-registry-pagination-invalid')
+        seen.add(cursor)
+
+
 def docker(client,read,root,api,forge,owner,repo,info):
-    _,rows=docker_versions(client,read,root,api,forge,owner,repo,info)
-    if forge=='GITHUB':
-        tags=(tag for version in rows for tag in (github_version_tags(version) or ()))
-    else:
-        key='version' if forge=='FORGEJO' else 'name'
-        tags=(row.get(key) for row in rows)
-    confirmed=sorted({tag for tag in tags if isinstance(tag,str) and TAG.fullmatch(tag)},key=tag_rank,reverse=True)
-    return [{'name':repo,'tags':confirmed[:8]}] if confirmed else []
+    endpoint,rows=docker_versions(client,read,root,api,forge,owner,repo,info,exhaustive=True)
+    dates={}
+    dated=[]
+    historical=set()
+    for row in rows:
+        if forge=='GITHUB':
+            tags=github_version_tags(row) or []
+        else:
+            tag=row.get('version' if forge=='FORGEJO' else 'name')
+            tags=[tag]
+        tags={tag for tag in tags if isinstance(tag,str) and TAG.fullmatch(tag)}
+        if not tags:
+            continue
+        historical.update(tags)
+        date=publication_date(row.get('published_at') or (None if forge=='GITLAB' else row.get('created_at')))
+        tag=max(tags,key=tag_rank)
+        dated.append((date,tag))
+    if forge=='GITLAB' and historical:
+        try:
+            dates=gitlab_tag_dates(client,read,api,endpoint)
+        except (httpx.HTTPError,ValueError,KeyError,TypeError,AttributeError):
+            dates={}
+        if not dates or {tag for tag in dates if TAG.fullmatch(tag)}!=historical:
+            dates={}
+        dated=[(date or publication_date(dates.get(tag,{}).get('publishedAt')),tag) for date,tag in dated]
+    tags=sorted(historical,key=tag_rank,reverse=True)
+    items=[{'name':repo,'tags':tags[:8]}] if tags else []
+    now=timezone.now()
+    candidates=[(date if date and date<=now else None,{'name':repo,'tags':[tag]}) for date,tag in dated]
+    return chronology(items,candidates)
 
 
-def observe(client,read,values,root,api,forge,owner,repo,info):
+def observe(client,read,values,root,api,forge,owner,repo,info,*,known_debian=None):
     result={}
     for kind in FLAGS:
         if not enabled(values,kind):
             continue
         try:
-            items=debian(client,read,root,forge) if kind=='debian' else docker(client,read,root,api,forge,owner,repo,info)
-            result[kind]={'available':True,'items':items}
+            result[kind]=debian(client,read,root,forge,known_debian) if kind=='debian' else docker(client,read,root,api,forge,owner,repo,info)
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             result[kind]={'available':False}
     return result
@@ -139,7 +247,7 @@ def merge(previous,values,observed):
         if current.get('available') is True:
             result[kind]=current
         else:
-            result[kind]={'available':False,'items':previous.get(kind,{}).get('items',[])}
+            result[kind]={**previous.get(kind,{'items':[]}),'available':False}
     return result
 
 

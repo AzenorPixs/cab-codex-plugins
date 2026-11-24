@@ -19,7 +19,7 @@ django.setup()
 
 import hashlib
 import httpx
-from cab_platform.forge_artifacts import observe, merge
+from cab_platform.forge_artifacts import observe, merge, upload_key
 from cab_platform.forge_repository import get_json
 from cab_platform import forge_publish_artifacts
 from cab_platform import project_artifacts
@@ -118,6 +118,57 @@ class ForgeArtifactsTests(unittest.TestCase):
                                              forge,'owner','sample',{}),{})
                     self.assertEqual(seen,[])
 
+    def test_publication_date_selects_republished_older_version_on_all_forges(self):
+        root,api='https://fixture/project','https://fixture/api/v4'
+        old,new='2025-12-01T12:00:00+00:00','2026-01-31T12:00:00+00:00'
+        flags={'PROJECT_DOCKERED':'Yes','PROJECT_DEBIAN_PACKAGE':'Yes'}
+        for forge in ('FORGEJO','GITHUB','GITLAB'):
+            with self.subTest(forge=forge):
+                assets=[{'id':index,'name':f'sample_{tag}_all.deb','url':f'https://fixture/upload/{tag}'}
+                        for index,tag in enumerate(('2.0.0','1.0.0'),1)]
+                if forge!='GITLAB':
+                    for asset,date in zip(assets,(old,new)):
+                        asset['created_at']=date
+                known={upload_key(root,tag,asset):date
+                       for tag,asset,date in zip(('2.0.0','1.0.0'),assets,(old,new))}
+                tags=[('2.0.0',old),('1.0.0',new)]
+                def response(request):
+                    path=request.url.path
+                    if path=='/project/releases':
+                        return httpx.Response(200,json=[
+                            {'tag_name':tag,'published_at':old,'released_at':old,
+                             'assets':{'links':[asset]} if forge=='GITLAB' else [asset]}
+                            for (tag,_),asset in zip(tags,assets)])
+                    if path=='/project/registry/repositories':
+                        return httpx.Response(200,json=[{'path':'owner/sample','id':5}])
+                    if path.endswith('/graphql'):
+                        self.assertEqual(request.method,'POST')
+                        page=json.loads(request.read())['variables']['after']
+                        tag,date=tags[1 if page else 0]
+                        return httpx.Response(200,json={'data':{'containerRepository':{'tags':{
+                            'nodes':[{'name':tag,'publishedAt':date}],
+                            'pageInfo':{'hasNextPage':page is None,'endCursor':'suite'}}}}})
+                    if path.endswith('/tags'):
+                        return httpx.Response(200,json=[{'name':tag} for tag,_ in tags])
+                    if path.endswith('/packages/owner'):
+                        return httpx.Response(200,json=[{'type':'container','name':'sample','version':tag,'created_at':date}
+                                                        for tag,date in tags])
+                    if path.endswith('/versions'):
+                        return httpx.Response(200,json=[{'created_at':date,'metadata':{'container':{
+                            'tags':[tag,'latest']}}} for tag,date in tags])
+                    return httpx.Response(404)
+                with httpx.Client(transport=httpx.MockTransport(response)) as client:
+                    observed=observe(client,get_json,flags,root,api,forge,'owner','sample',{},known_debian=known)
+                    self.assertEqual(observed['docker']['latest'],
+                                     {'name':'sample','tags':['1.0.0'],'published_at':new})
+                    self.assertEqual(observed['debian']['latest'],
+                                     {'name':'sample_1.0.0_all.deb','tags':['1.0.0'],'published_at':new})
+                    if forge=='GITLAB':
+                        assets[1]['url']='https://fixture/another-upload'
+                        received=observe(client,get_json,flags,root,api,forge,'owner','sample',{},known_debian=known)
+                        self.assertTrue(received['debian']['chronology_unverified'])
+                        self.assertIsNone(received['debian']['latest'])
+
     def test_refresh_failure_keeps_known_rows_only_for_active_kind(self):
         flags={'PROJECT_DEBIAN_PACKAGE':'Yes'}
         old={key:{'items':[{'name':key,'tags':['1.0.0']}]} for key in ('debian','docker')}
@@ -176,9 +227,13 @@ class ForgeArtifactsTests(unittest.TestCase):
                         assets[:]=[asset for asset in assets if asset['name']!=name]
                         assets.append({**body,'id':99})
                         return httpx.Response(201,json={'id':1})
-                    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+                    with httpx.Client(transport=httpx.MockTransport(handle)) as client, \
+                         patch.object(forge_publish_artifacts,'remember_gitlab_debian') as remember:
                         release_debian(project,client,'https://fixture','https://fixture/project',
                                        forge,True,plan,lambda:marks.append(True),policy=policy)
+                    if forge=='GITLAB':
+                        remember.assert_called_once()
+                        self.assertEqual(remember.call_args.args[-1]['id'],99)
                     self.assertEqual(len(marks),2+8-len(retained))
                     self.assertEqual(set(releases),{'2.0.0',*(f'1.0.{i}' for i in range(1,9))})
                     self.assertEqual(

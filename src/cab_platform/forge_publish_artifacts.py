@@ -21,7 +21,7 @@ from .artifact_builders import DOCKER, DOCKER_NAME, ENV, opened, regular
 from .connector_process import alive, identity as process_identity
 from .core.commands import Refused, identifier, require
 from .core.models import Maintenance, Project, ProjectForgeArtifactPublication
-from .forge_artifacts import DEB, TAG, docker_versions, github_version_tags, pages, tag_rank
+from .forge_artifacts import DEB, TAG, docker_versions, github_version_tags, pages, tag_rank, publication_date, remember_gitlab_debian
 from .forge_repository import FORGES, configured, get_json, identity, missing_configuration, refresh_one
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
@@ -221,14 +221,6 @@ def debian_series(name,tag):
     return (fields[0],fields[2]) if len(fields)==3 and fields[1]==tag else None
 
 
-def publication_date(value):
-    try:
-        date = parse_datetime(value) if isinstance(value,str) else None
-    except ValueError:
-        return None
-    return date if date and timezone.is_aware(date) else None
-
-
 def obsolete_versions(versions, policy, now, rank):
     count, days = policy
     ordered = sorted(versions, key=lambda key: (
@@ -370,11 +362,13 @@ def release_debian(project,client,base,root,forge,public_github,packages,mark,pr
                                method='PUT' if link_id is not None else 'POST',
                                json={'name':name,'url':url,'link_type':'package'})
             confirmed=existing(client,release_path)
-            require(confirmed and any(isinstance(x,dict) and x.get('name')==name
-                    and (forge!='GITLAB' or x.get('url')==expected_url)
-                    and (forge!='GITHUB' or x.get('digest') in (None,expected_digest))
-                    for x in release_assets(confirmed,forge)),
-                    'artifact-forge-publication-unconfirmed',409)
+            asset=next((x for x in release_assets(confirmed,forge)
+                        if isinstance(x,dict) and x.get('name')==name
+                        and (forge!='GITLAB' or x.get('url')==expected_url)
+                        and (forge!='GITHUB' or x.get('digest') in (None,expected_digest))),None) if confirmed else None
+            require(asset,'artifact-forge-publication-unconfirmed',409)
+            if forge=='GITLAB':
+                remember_gitlab_debian(project,root,tag,asset)
     if policy != (0,None):
         with track(progress,'debian-retention'):
             prune_debian(client,root,forge,packages,mark,policy)

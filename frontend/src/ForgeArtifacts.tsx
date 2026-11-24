@@ -7,8 +7,8 @@ import {newRequestId} from './requestId'
 
 const formats=[['debian','PROJECT_DEBIAN_PACKAGE','Artefact Debian'],['docker','PROJECT_DOCKERED','Artefact Docker']] as const
 type Format=typeof formats[number][0]
-type Artifact={name:string;tags:string[]}
-type Observation={available:boolean;items:Artifact[]}
+type Artifact={name:string;tags:string[];published_at?:string}
+type Observation={available:boolean;items:Artifact[];latest?:Artifact|null;chronology_unverified?:boolean}
 type Row={forge:string;source:string[];artifacts:Partial<Record<Format,Observation>>}
 export type PublicationDiagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number;required_scopes?:string[]}
 type Step={key:string;state:string;error?:string;details?:PublicationDiagnostic}
@@ -66,12 +66,13 @@ export function PublishedArtifactRows({state,forge,values}:{state:State;forge:st
   const row=state.rows.find(row=>row.forge===forge&&row.source.every((part,index)=>part===source[index]))
   return <>{formats.filter(([,flag])=>on(values[flag])).map(([kind,,label])=>{
     const observed=row?.artifacts[kind]
-    const item=observed?.items[0]
+    const item=observed?.latest
     const tag=item?.tags[0]
     return <div key={kind}><dt>{label}</dt>
       <dd style={{overflowWrap:'anywhere'}}>{item?<>
-        {item.name}{tag&&<> · {tag}</>}{!observed?.available&&<small> · Dernière observation</small>}
-      </>:observed?.available?'Aucun observé':'Non vérifié'}</dd>
+        {item.name}{tag&&<> · {tag}</>}{item.published_at&&<> · <time dateTime={item.published_at}>
+          {new Date(item.published_at).toLocaleString('fr-FR')}</time></>}{!observed?.available&&<small> · Dernière observation</small>}
+      </>:observed?.available&&observed.items.length===0?'Aucun observé':observed?.chronology_unverified||observed?.items.length?'Date de publication non vérifiée':'Non vérifié'}</dd>
     </div>
   })}</>
 }

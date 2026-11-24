@@ -47,11 +47,11 @@ const check=(value,label)=>{if(!value)throw Error(label)}
 async function verify(frame){
   const doc=frame.contentDocument
   const get=selector=>doc.querySelector(selector)
-  await wait(()=>get('#published-forgejo')?.textContent.includes('pfd · 1.0.2'),'Artefacts de forge absents')
+  await wait(()=>get('#published-forgejo')?.textContent.includes('pfd · 1.0.1'),'Artefacts de forge absents')
   const forgejo=[...get('#published-forgejo').querySelectorAll('dd')].map(row=>row.textContent)
-  check(forgejo.length===2&&forgejo[0]==='pfd_1.0.2_amd64.deb · 1.0.2'&&forgejo[1]==='pfd · 1.0.2',
+  check(forgejo.length===2&&forgejo[0].startsWith('pfd_1.0.1_amd64.deb · 1.0.1')&&forgejo[1].startsWith('pfd · 1.0.1')&&!forgejo.join('').includes('1.0.2'),
     'Versions ou artefacts multiples affichés sur la même forge')
-  check(get('#published-github').textContent.includes('pfd · latest · Dernière observation'),
+  check(get('#published-github').textContent.includes('Dernière observation'),
     'Dernière observation Docker seule perdue')
   const bell=await wait(()=>get('.notification-bell'),'Cloche absente')
   const size=()=>{
@@ -190,11 +190,11 @@ const server=createServer(async(request,response)=>{
     if(path.pathname.includes('/receipts/'))return response.writeHead(404,{'Content-Type':'application/json'}).end(JSON.stringify({error:'artifact-publication-receipt-missing'}))
     return reply({rows:[
       {forge:'FORGEJO',source:['https://example.test','fixture','project'],artifacts:{
-        debian:{available:true,items:[{name:'pfd_1.0.2_amd64.deb',tags:['1.0.2']},{name:'pfd_1.0.2_arm64.deb',tags:['1.0.2']}]},
-        docker:{available:true,items:[{name:'pfd',tags:['1.0.2','1.0.1','latest']}]},
+        debian:{available:true,items:[{name:'pfd_1.0.2_amd64.deb',tags:['1.0.2']},{name:'pfd_1.0.2_arm64.deb',tags:['1.0.2']}],latest:{name:'pfd_1.0.1_amd64.deb',tags:['1.0.1'],published_at:'2026-11-24T11:00:00Z'}},
+        docker:{available:true,items:[{name:'pfd',tags:['1.0.2','1.0.1','latest']}],latest:{name:'pfd',tags:['1.0.1'],published_at:'2026-11-24T11:00:00Z'}},
       }},
       {forge:'GITHUB',source:['https://example.test','fixture','project'],artifacts:{
-        docker:{available:false,items:[{name:'pfd',tags:['latest']}]},
+        docker:{available:false,items:[{name:'pfd',tags:['latest']}],latest:{name:'pfd',tags:['latest'],published_at:'2026-11-24T11:00:00Z'}},
       }},
     ],jobs:{FORGEJO:historical}})
   }

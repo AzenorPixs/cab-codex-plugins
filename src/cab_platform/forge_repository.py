@@ -172,7 +172,8 @@ def observe(project, values, forge, report=None):
             if report and tags is None:
                 report('Tags associés au commit indisponibles.\n')
             from .forge_artifacts import observe as observe_artifacts
-            artifacts = observe_artifacts(client,partial(read,operation='Lecture des artefacts publiés'),values,root,api,forge,owner,repo,info)
+            artifacts = observe_artifacts(client,partial(read,operation='Lecture des artefacts publiés'),values,root,api,forge,owner,repo,info,
+                                         known_debian=(project.configuration or {}).get('gitlab_debian_publications'))
             return {'available': True, 'branch': branch, 'commit': sha, 'commit_time': date, 'commit_count': count, 'repository_size': size, 'versions': tags, 'published_artifacts': artifacts}
     except (httpx.RequestError, httpx.HTTPStatusError):
         return None
