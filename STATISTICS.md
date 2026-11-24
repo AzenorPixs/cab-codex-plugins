@@ -18086,14 +18086,14 @@ Change : `bound-mcp-remediation-notifications` · état local : `archived`. Les 
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | 488.526841 | Bornes serveur et union des périodes fermées. |
-| Durée hors pauses et attentes | 488.526841 | Bornes serveur et union des périodes fermées. |
-| Tokens d’entrée | 7234937 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de sortie | 15498 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de raisonnement | 3803 | Périodes CAB : bornes et empreintes de l’export. |
-| Tokens de cache lus | 7171584 | Périodes CAB : bornes et empreintes de l’export. |
+| Durée globale | 570.086040 | Bornes serveur et union des périodes fermées. |
+| Durée hors pauses et attentes | 570.086040 | Bornes serveur et union des périodes fermées. |
+| Tokens d’entrée | 9171529 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de sortie | 17887 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de raisonnement | 4340 | Périodes CAB : bornes et empreintes de l’export. |
+| Tokens de cache lus | 9101696 | Périodes CAB : bornes et empreintes de l’export. |
 | Tokens de cache écrits | 0 | Périodes CAB : bornes et empreintes de l’export. |
-| Total natif des tokens | 7250435 | Périodes CAB : bornes et empreintes de l’export. |
+| Total natif des tokens | 9189416 | Périodes CAB : bornes et empreintes de l’export. |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -18107,7 +18107,7 @@ Change : `bound-mcp-remediation-notifications` · état local : `archived`. Les 
 | coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:fe7550d1b894cf7c3b5256d6481b0fd3b792f539e460352779fd584ac6211d04
+Provenance : change-periods:bff8be5ff0916e682457811543a9b3f2abb0e0d3ce928befdf8b1720ed277449
 
 ## 2. Messages et outils
 
@@ -18137,8 +18137,8 @@ Provenance : change-periods:fe7550d1b894cf7c3b5256d6481b0fd3b792f539e460352779fd
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 24 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 24 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 36 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 36 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -18170,7 +18170,7 @@ Provenance : change-periods:fe7550d1b894cf7c3b5256d6481b0fd3b792f539e460352779fd
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f63f41cc9169a0b1758aee8d57047ededdf0f39989a4746b8edfcbf0c81088b9", "generated_at": "2026-11-24T08:46:18.877662+00:00", "revision": "f63f41cc9169a0b1758aee8d57047ededdf0f39989a4746b8edfcbf0c81088b9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "3c400c7b778db1589e4d5e46718e9edabe69160cec2aea27b5f623e5247e34a5", "generated_at": "2026-11-24T08:50:29.339689+00:00", "revision": "3c400c7b778db1589e4d5e46718e9edabe69160cec2aea27b5f623e5247e34a5", "scope": "change"} -->
 
 
 ## Change `bound-mcp-stop-escalation-and-live-versions` — openspec/changes/archive/2026-11-13-bound-mcp-stop-escalation-and-live-versions/STATISTICS.md
@@ -80525,4 +80525,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "bf82ae86c73653d4c373ab2c881d1cacfbbfce813082cc59e134692ef2c79f8d", "generated_at": "2026-11-24T08:46:20.459179+00:00", "revision": "bf82ae86c73653d4c373ab2c881d1cacfbbfce813082cc59e134692ef2c79f8d", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "118ca178f3a78b489fa6464c7b9997245ffee8675290be09022d06b8082c8aad", "generated_at": "2026-11-24T08:50:31.609606+00:00", "revision": "118ca178f3a78b489fa6464c7b9997245ffee8675290be09022d06b8082c8aad", "scope": "project"} -->
