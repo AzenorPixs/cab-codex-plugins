@@ -305,6 +305,9 @@ def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False):
                     'artifact-forge-response-invalid',409)
         else:
             key=row.get('version' if forge=='FORGEJO' else 'name')
+            if forge=='FORGEJO' and isinstance(key,str) and DIGEST.fullmatch(key):
+                # Forgejo expose aussi les manifestes enfants comme versions de package.
+                continue
             tags=[key]
             digest=None
         require(all(isinstance(tag,str) and TAG.fullmatch(tag) for tag in tags)
@@ -470,11 +473,19 @@ def reconcile_docker(project,request_id,tag,image_id):
     evidence={'tag':tag,'image_id':image_id}
     if job.state=='COMPLETED' and job.receipt.get('reconciliation')==evidence:
         return public(job)
-    require(job.state=='UNKNOWN' and job.receipt.get('issued') is True
-            and job.receipt.get('error')=='artifact-forge-publication-unconfirmed'
-            and job.receipt.get('details',{}).get('phase')=='registry-confirmation',
-            'artifact-reconciliation-ineligible',409)
     values=project.public_metadata.get('values',{})
+    error=job.receipt.get('error')
+    details=job.receipt.get('details')
+    confirmation_error=(error=='artifact-forge-publication-unconfirmed'
+                        and isinstance(details,dict) and details.get('phase')=='registry-confirmation')
+    # Sur Forgejo, dans un plan Docker seul, cette erreur après l'envoi
+    # provenait de l'inventaire des versions demandé après la confirmation.
+    legacy_inventory_error=(job.forge=='FORGEJO' and details is None
+                            and error=='artifact-forge-response-invalid'
+                            and enabled(values,'docker') and not enabled(values,'debian'))
+    require(job.state=='UNKNOWN' and job.receipt.get('issued') is True
+            and (confirmation_error or legacy_inventory_error),
+            'artifact-reconciliation-ineligible',409)
     require(values.get('PROJECT_VERSION')==tag and identity(project,values,job.forge)==job.plan['signature']
             and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
             'artifact-forge-config-changed',409)

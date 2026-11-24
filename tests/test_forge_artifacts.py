@@ -191,6 +191,7 @@ class ForgeArtifactsTests(unittest.TestCase):
                        'metadata':{'container':{'tags':labels}}} for key,labels in sorted(versions.items())]
             elif forge=='FORGEJO':
                 rows=[{'name':'sample','type':'container','version':tag} for tag in sorted(tags)]
+                rows.append({'name':'sample','type':'container','version':'sha256:'+'b'*64})
                 rows.append({'name':'other','type':'container','version':'other-tag'})
             else:
                 rows=[{'name':tag} for tag in sorted(tags)]
@@ -289,6 +290,18 @@ class ForgeArtifactsTests(unittest.TestCase):
             confirm.assert_called_with([],'fixture/owner/sample',(tag,'latest'),image_id)
             self.assertEqual(reconcile(project,job.pk,tag,image_id),result)
             job.save.assert_called_once()
+
+            legacy={'issued':True,'error':'artifact-forge-response-invalid'}
+            job.state,job.receipt='UNKNOWN',legacy
+            values=project.public_metadata['values']
+            values.update(PROJECT_DOCKERED='Yes',PROJECT_DEBIAN_PACKAGE='Yes')
+            with self.assertRaisesRegex(Refused,'artifact-reconciliation-ineligible'):
+                reconcile(project,job.pk,tag,image_id)
+            self.assertEqual(job.receipt,legacy)
+            values['PROJECT_DEBIAN_PACKAGE']='No'
+            result=reconcile(project,job.pk,tag,image_id)
+            self.assertEqual(result['state'],'COMPLETED')
+            self.assertEqual(job.receipt['previous'],{'state':'UNKNOWN',**legacy})
 
     def test_github_never_deletes_a_version_sharing_a_kept_tag(self):
         calls,_,error=self.publish_docker_fixture('GITHUB',alias=True)
