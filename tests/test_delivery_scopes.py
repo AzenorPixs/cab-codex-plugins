@@ -1,4 +1,5 @@
 """Contrôles de périmètre et de constructeur sans publier de référence distante."""
+from contextlib import ExitStack, nullcontext
 import hashlib
 import os
 from pathlib import Path
@@ -11,7 +12,10 @@ from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cab_platform.settings')
+from django.conf import settings
+if not settings.configured:
+    settings.configure(SECRET_KEY='fixture', INSTALLED_APPS=['cab_platform.core'],
+                       DATABASES={'default': {'ENGINE': 'django.db.backends.dummy'}}, USE_TZ=True)
 import django
 django.setup()
 
@@ -20,6 +24,86 @@ from cab_platform.core.commands import Refused
 
 
 class DeliveryScopeTests(unittest.TestCase):
+    def test_late_connector_refusal_preserves_version_for_same_delivery(self):
+        from cab_platform.core import models
+
+        actor = object()
+        project = SimpleNamespace(pk='project', root='/fixture', owner_uid=os.getuid())
+        run = SimpleNamespace(project=project, project_id=project.pk, run_id='run', session_id='sid',
+                              change_record_id='change', coding_session_id='sid', cycle_steps=12,
+                              configuration={'cycle_profile': 'publication-12-v1'})
+        requirement = {'kind': 'publication', 'producer': 'producer'}
+        plan = {'forges': [], 'debian': False, 'docker': False, 'env_sha256': 'config'}
+        row = models.GitDelivery(pk=19)
+        row.refresh_from_db = lambda: None
+
+        with ExitStack() as stack:
+            def mocked(name, **kwargs):
+                return stack.enter_context(patch(name, **kwargs))
+
+            managers = {model: stack.enter_context(patch.object(model, 'objects')) for model in (
+                models.EvidenceProducer, models.FinalizationPlan, models.GitDelivery, models.GitDeliveryStep,
+                models.GitFileReservation, models.GitSessionIndex, models.Operation, models.Project, models.Event)}
+            managers[models.GitDelivery].filter.return_value.first.return_value = None
+            managers[models.GitDelivery].get_or_create.return_value = row, True
+            managers[models.Project].get.return_value = project
+            managers[models.FinalizationPlan].filter.return_value.first.return_value = SimpleNamespace(
+                policy={'nature': 'delivery', 'requirements': [requirement]})
+            managers[models.GitFileReservation].filter.return_value.values_list.return_value = ['code.py']
+            managers[models.Operation].filter.return_value.order_by.return_value = [
+                SimpleNamespace(receipt={'exit_code': 0}, request={'phase': 'test'})]
+            index = SimpleNamespace(pk=2, state='OPEN', index_path='/fixture/index', effects=MagicMock())
+            index.effects.filter.return_value.exists.return_value = False
+            managers[models.GitSessionIndex].filter.return_value.first.return_value = index
+            managers[models.GitSessionIndex].select_for_update.return_value.get.return_value = index
+            managers[models.Event].filter.return_value.order_by.return_value.first.return_value = None
+            managers[models.EvidenceProducer].filter.return_value.exists.return_value = True
+            mocked('django.db.transaction.atomic', side_effect=nullcontext)
+            on_commit = mocked('django.db.transaction.on_commit')
+            mocked('cab_platform.preexisting_git.git_guard', side_effect=nullcontext)
+            mocked('cab_platform.core.commands.run_scope', return_value=run)
+            mocked('cab_platform.core.commands.working')
+            mocked('cab_platform.core.commands.no_pending', return_value=True)
+            mocked('cab_platform.core.commands.revision', return_value='source')
+            mocked('cab_platform.connector_process.identity', return_value={'pid': 42})
+            mocked('cab_platform.project_metadata.synchronize')
+            mocked('cab_platform.package_versions.require_aligned')
+            mocked('cab_platform.version_skill.require_acknowledged')
+            mocked('cab_platform.stage_protocol.enabled', return_value=True)
+            mocked('cab_platform.session_delivery.version_policy',
+                   return_value={'current_version': '1.0.0', 'numeric_components': 3})
+            mocked('cab_platform.session_delivery.delivery_version_selection',
+                   return_value={'previous_version': '1.0.0', 'policy': 3})
+            mocked('cab_platform.session_delivery.ensure_delivery_producer', return_value='producer')
+            mocked('cab_platform.session_delivery.delivery_preflight', side_effect=lambda *args, **kwargs: plan.copy())
+            mocked('cab_platform.session_delivery.preflight_commit', return_value={'index_digest': 'index'})
+            mocked('cab_platform.session_delivery._index_digest', return_value='index')
+            mocked('cab_platform.session_delivery._publish_delivery')
+            mocked('cab_platform.session_delivery._delivery_view', return_value={'state': 'PENDING'})
+            write_version = mocked('cab_platform.session_delivery.update_version')
+            prepare = mocked('cab_platform.publication_boundary.prepare',
+                             return_value={'preparation': {}, 'statistics_job': 'stats', 'publication_ref': 'phase'})
+            connector = mocked('cab_platform.core.connectors.lock_worker_binding',
+                               side_effect=Refused('session-connector-unbound', 409))
+
+            with self.assertRaisesRegex(Refused, 'session-connector-unbound'):
+                session_delivery.start_delivery(actor, run, '1.0.1', 'connector', stage_authorized=True)
+            write_version.assert_not_called()
+            prepare.assert_not_called()
+            managers[models.GitDelivery].get_or_create.assert_not_called()
+            on_commit.assert_not_called()
+
+            connector.side_effect = None
+            result = session_delivery.start_delivery(actor, run, '1.0.1', 'connector', stage_authorized=True)
+            self.assertEqual(result, {'state': 'PENDING'})
+            write_version.assert_not_called()
+            prepare.assert_called_once_with(run, commit_reports=True)
+            managers[models.GitDelivery].get_or_create.assert_called_once()
+            steps = managers[models.GitDeliveryStep].bulk_create.call_args.args[0]
+            self.assertEqual([(step.key, step.state) for step in steps[:2]],
+                             [('version', 'PENDING'), ('version-projection', 'PENDING')])
+            on_commit.assert_called_once()
+
     def test_two_scopes_and_frozen_project_tree(self):
         with TemporaryDirectory(dir=ROOT / '.cab-tests' / 'DCAB') as directory:
             root = Path(directory)

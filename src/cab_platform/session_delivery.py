@@ -1,5 +1,6 @@
 """Livraison d'une session : version locale et orchestration CAB."""
 import base64
+from contextlib import nullcontext
 import hashlib
 import re
 from .core.commands import Refused, require
@@ -1097,6 +1098,7 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     from .core.commands import no_pending,revision,run_scope,working
     from .core.models import FinalizationPlan,GitDelivery,GitDeliveryStep,GitFileReservation,GitSessionIndex,Operation,Project
     from .project_metadata import synchronize
+    from .preexisting_git import git_guard
 
     version_tuple(version)
     from .stage_protocol import enabled
@@ -1125,7 +1127,6 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     require(reservations,'session-git-reservation-required',409)
     modern=run.configuration.get('cycle_profile')=='publication-12-v1'
     if complete:
-        from .preexisting_git import git_guard
         with git_guard():
             git_plan=preflight_commit(run.project,index,version,reservations,complete=True,separate_reports=modern)
     else:
@@ -1149,18 +1150,10 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     plan['source_revision']=current_revision
     plan['git']=git_plan
     plan['scope']='project' if complete else 'change'
-    if modern:
-        from .publication_boundary import prepare
-        def prepublication():
-            receipt=update_version(project,version,plan['env_sha256'])
-            synchronize(project.pk,include_forges=False,include_git=False)
-            return {'version':receipt,'version-projection':{'verified':True}}
-        boundary=prepare(run,commit_reports=True,before_freeze=prepublication)
-        plan['prepublication']=boundary['preparation'];plan['statistics_job']=boundary['statistics_job'];plan['separate_reports']=True;plan['publication_ref']=boundary['publication_ref']
     executor=process_identity(os.getpid())
     require(executor is not None,'session-delivery-worker-unavailable',409)
     try:
-        with transaction.atomic():
+        with (git_guard() if modern else nullcontext()), transaction.atomic():
             Project.objects.select_for_update(no_key=True).get(pk=run.project_id)
             from .project_artifacts import require_available
             if plan['debian'] or plan['docker']:
@@ -1172,11 +1165,17 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
             require(locked_index.state=='OPEN' and not locked_index.effects.filter(state__in=['INTENT','RUNNING','UNKNOWN']).exists(),'session-git-effect-unresolved',409)
             require(_index_digest(locked_index.index_path,current.project.owner_uid)==git_plan['index_digest'],'session-delivery-index-changed',409)
             require(revision(current)==current_revision,'session-delivery-source-changed',409)
+            if modern:
+                from .publication_boundary import prepare
+                boundary=prepare(current,commit_reports=True)
+                plan['statistics_job']=boundary['statistics_job']
+                plan['separate_reports']=True
+                plan['publication_ref']=boundary['publication_ref']
             delivery,created=GitDelivery.objects.get_or_create(project_id=current.project_id,run=current,version=version,defaults={'git_index':locked_index,'state':'PENDING','executor':executor,'plan':plan,'origin':{'run_id':current.run_id,'session_id':current.session_id}})
             if not created:
                 return _delivery_view(delivery)
             keys=_delivery_keys(plan)
-            GitDeliveryStep.objects.bulk_create([GitDeliveryStep(delivery=delivery,key=key,state='COMPLETED' if key in plan.get('prepublication',{}) else 'PENDING',receipt=plan.get('prepublication',{}).get(key,{})) for key in keys])
+            GitDeliveryStep.objects.bulk_create([GitDeliveryStep(delivery=delivery,key=key,state='PENDING') for key in keys])
             transaction.on_commit(lambda:_launch_delivery(delivery.pk))
     except IntegrityError as error:
         raise Refused('session-delivery-active',409) from error

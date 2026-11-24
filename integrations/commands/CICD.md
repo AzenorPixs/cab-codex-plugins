@@ -1,6 +1,6 @@
 ---
 description: Déclencher et suivre la CI/CD du projet par CAB
-version: 3.39.0
+version: 3.39.1
 ---
 
 Répondre en français. Charger le skill `cicd` distribué avec le plugin `CICD`.
