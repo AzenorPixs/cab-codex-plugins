@@ -15,9 +15,16 @@ const html=`<!doctype html><meta charset="utf-8"><div id="root"></div>
 <script type="module">
 import {createElement} from 'react'
 import {createRoot} from 'react-dom/client'
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query'
 import {Notifications} from '/src/Notifications.tsx'
+import {PublishForgeArtifacts,useForgeArtifacts} from '/src/ForgeArtifacts.tsx'
 import '/src/style.css'
-createRoot(document.querySelector('#root')).render(createElement(Notifications))
+function Fixture(){
+  const state=useForgeArtifacts('fixture')
+  return createElement('div',null,createElement(Notifications),
+    createElement(PublishForgeArtifacts,{state,forge:'FORGEJO',label:'Forgejo',values:{PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes'}}))
+}
+createRoot(document.querySelector('#root')).render(createElement(QueryClientProvider,{client:new QueryClient()},createElement(Fixture)))
 </script>`
 const suite=`<!doctype html><meta charset="utf-8">
 <iframe width="960" height="720" src="/fixture?id=desktop"></iframe>
@@ -45,6 +52,12 @@ async function verify(frame){
   await wait(()=>get('dialog[open]'),'Dialogue fermé')
   const dimensions=size()
   await wait(()=>title()==='Message court','Message court')
+  check(get('.publication-results').querySelectorAll('.publication-logo').length===2,'Logos des deux artefacts')
+  check(get('.publication-results .publication-completed')?.textContent==='✓','Coche de réussite absente')
+  const details=get('.publication-results .publication-failure')
+  check(!details.open&&details.querySelector('.publication-unknown')?.textContent==='✕','Croix d’erreur absente')
+  details.querySelector('summary').click()
+  check(details.open&&details.textContent.includes('Statut HTTP')&&details.textContent.includes('403'),'Diagnostic dans la notification')
   check(size()===dimensions,'Dimensions après chargement')
   const next=get('[aria-label="Notification suivante"]')
   const clear=next.nextElementSibling
@@ -67,6 +80,22 @@ async function verify(frame){
   bell.click()
   await wait(()=>content.textContent.includes('Aucune notification.'),'État vide après réouverture')
   check(size()===dimensions&&clear.disabled,'Dimensions ou état vide')
+  get('[aria-label="Fermer les notifications"]').click()
+  check(!get('.agent-config-link'),'Lien historique présent')
+  get('[aria-label="Publier les artefacts vers Forgejo"]').click()
+  const overview=await wait(()=>get('[aria-label="Overview de publication Forgejo"][open]'),'Overview immédiat absent')
+  check(overview.textContent.includes('Demande de publication en cours'),'Overview ouvert après la demande : '+overview.textContent)
+  await wait(()=>overview.querySelector('.publication-running'),'Étape active absente')
+  const affected=doc.defaultView.location.search.includes('mobile')
+  if(affected){
+    const failed=await wait(()=>overview.querySelector('.publication-failure'),'Étape en échec absente')
+    failed.querySelector('summary').click()
+    check(failed.open&&failed.textContent.includes('403'),'Diagnostic dans l’overview')
+    check(overview.querySelector('.publication-completed')?.textContent==='✓','Étapes réussies perdues')
+  }else{
+    await wait(()=>overview.querySelector('[role="status"]').textContent==='Réussie','Publication réussie non mise à jour')
+    check(!overview.querySelector('.publication-failure'),'Erreur d’un autre reçu affichée')
+  }
 }
 Promise.all([...document.querySelectorAll('iframe')].map(async frame=>{
   if(frame.contentDocument.readyState!=='complete'||frame.contentWindow.location.pathname!=='/fixture'){
@@ -81,6 +110,11 @@ const makeNotice=(id,title,body,kind='message')=>({
   id,sender:'CAB',title,body,kind,choices:kind==='question'?choices:[],
   read_at:null,created:'2026-11-23T10:00:00Z',updated:'2026-11-23T10:00:00Z',
 })
+const published=[
+  {kind:'debian',forge:'FORGEJO',state:'COMPLETED',at:'2026-11-23T10:00:00Z'},
+  {kind:'docker',forge:'FORGEJO',state:'UNKNOWN',error:'artifact-forge-publication-unconfirmed',
+    step:'docker-push',details:{http_status:403}},
+]
 const scenarios=new Map()
 let observe
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms))
@@ -96,10 +130,34 @@ const server=createServer(async(request,response)=>{
     return response.writeHead(204).end()
   }
   if(path.pathname==='/api/v1/health')return reply({csrf_token:'fixture'})
-  if(path.pathname==='/api/v1/sync/notifications'){
+  if(['/api/v1/sync/notifications','/api/v1/sync/forge-artifacts'].includes(path.pathname)){
     await delay(100)
     return reply([{headers:{control:'up-to-date'}}],{'electric-handle':'fixture','electric-offset':'0_0',
       'electric-schema':'{}','electric-cursor':'0'})
+  }
+  if(path.pathname.startsWith('/api/v1/projects/fixture/published-artifacts')){
+    const id=new URL(request.headers.referer).searchParams.get('id')
+    const state=scenarios.get(id)
+    if(request.method==='POST'){
+      let body=''
+      for await(const chunk of request)body+=chunk
+      state.receipt=JSON.parse(body).request_id
+      await delay(750)
+      return reply({id:state.receipt,forge:'FORGEJO',state:'PENDING'})
+    }
+    if(path.pathname.endsWith('/receipts/'+state.receipt)){
+      state.polls++
+      const active=state.polls===1
+      const failure=!active&&id==='mobile'
+      return reply({id:state.receipt,forge:'FORGEJO',state:active?'RUNNING':failure?'UNKNOWN':'COMPLETED',
+        progress:{kinds:['debian','docker'],steps:[
+          {key:'debian-release',state:'COMPLETED'},
+          {key:'docker-push',state:active?'RUNNING':failure?'FAILED':'COMPLETED',
+            ...(failure?{error:'artifact-forge-publication-unconfirmed',details:{http_status:403}}:{})},
+        ]}})
+    }
+    if(path.pathname.includes('/receipts/'))return response.writeHead(404,{'Content-Type':'application/json'}).end(JSON.stringify({error:'artifact-publication-receipt-missing'}))
+    return reply({rows:[],jobs:{FORGEJO:{id:'ancien-recu',forge:'FORGEJO',state:'FAILED'}}})
   }
   if(path.pathname.startsWith('/api/v1/notifications')){
     const source=new URL(request.headers.referer)
@@ -131,8 +189,8 @@ try{
   await once(server,'listening')
   const url='http://127.0.0.1:'+server.address().port+'/verification'
   for(const browser of ['chromium','firefox']){
-    for(const id of ['desktop','mobile'])scenarios.set(id,{calls:0,rows:[
-      makeNotice('short','Message court','Texte court'),
+    for(const id of ['desktop','mobile'])scenarios.set(id,{calls:0,polls:0,rows:[
+      {...makeNotice('short','Message court','Texte court'),artifacts:JSON.stringify(published)},
       makeNotice('long','Message long','Ligne longue de notification.\n'.repeat(250)),
       makeNotice('unseen','Message non affiché','À effacer'),
       makeNotice('question','Question','Voulez-vous continuer ?','question'),
@@ -149,7 +207,7 @@ try{
         new Promise(resolve=>{timeout=setTimeout(()=>resolve({error:'Aucun résultat navigateur'}),25000)})])
       assert.equal(proof.passed,true,browser+' : '+proof.error)
       assert([...scenarios.values()].every(state=>state.calls===1))
-      console.log(browser+' : dimensions et purge vérifiées sur ordinateur et mobile')
+      console.log(browser+' : notifications et suivi de publication vérifiés sur ordinateur et mobile')
     }finally{
       clearTimeout(timeout)
       if(child.exitCode===null){child.kill('SIGTERM');await exited}

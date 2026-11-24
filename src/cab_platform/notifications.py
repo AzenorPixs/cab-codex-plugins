@@ -35,7 +35,7 @@ def identifier(key):
 
 
 def serialize(row):
-    return {'id':str(row.pk),'project_id':row.project_id,'sender':row.sender,'title':row.title,'body':row.body,'kind':row.kind,'choices':row.choices,'read_at':row.read_at.isoformat() if row.read_at else None,'created':row.created.isoformat(),'updated':row.updated.isoformat()}
+    return {'id':str(row.pk),'project_id':row.project_id,'sender':row.sender,'title':row.title,'body':row.body,'kind':row.kind,'choices':row.choices,'artifacts':row.artifacts,'read_at':row.read_at.isoformat() if row.read_at else None,'created':row.created.isoformat(),'updated':row.updated.isoformat()}
 
 
 def receipt_view(receipt):
@@ -43,9 +43,12 @@ def receipt_view(receipt):
 
 
 @transaction.atomic
-def publish(key,*,title,body,project=None,kind='message',choices=None):
+def publish(key,*,title,body,project=None,kind='message',choices=None,artifacts=None):
     choices=[] if choices is None else choices
     fingerprint=validated(title,body,kind,choices);pk=identifier(key)
+    artifacts=[] if artifacts is None else artifacts
+    if artifacts:
+        fingerprint=hashlib.sha256(json.dumps([fingerprint,artifacts],sort_keys=True).encode()).hexdigest()
     # Sérialise publication/lecture/réponse du même message sans verrou fichier.
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_xact_lock(%s)',[int.from_bytes(pk.bytes[:8],'big',signed=True)])
     row=Notification.objects.select_for_update().filter(pk=pk).first()
@@ -58,10 +61,11 @@ def publish(key,*,title,body,project=None,kind='message',choices=None):
         require(row.project_id==(project.pk if project else None) and row.kind==kind,'notification-identity-conflict',409)
         require(kind!='question' or row.fingerprint==fingerprint,'notification-question-conflict',409)
         if row.fingerprint!=fingerprint:
-            row.title=title;row.body=body;row.fingerprint=fingerprint;row.save(update_fields=['title','body','fingerprint','updated'])
+            row.title=title;row.body=body;row.artifacts=artifacts;row.fingerprint=fingerprint
+            row.save(update_fields=['title','body','artifacts','fingerprint','updated'])
     else:
         sender=(project.name or (project.public_metadata or {}).get('values',{}).get('PROJECT_NAME') or project.identifier or 'Projet') if project else 'CAB'
-        row=Notification.objects.create(id=pk,project=project,sender=sender,title=title,body=body,kind=kind,choices=choices,fingerprint=fingerprint)
+        row=Notification.objects.create(id=pk,project=project,sender=sender,title=title,body=body,kind=kind,choices=choices,artifacts=artifacts,fingerprint=fingerprint)
     return serialize(row)
 
 
@@ -121,6 +125,41 @@ def create(actor,data):
     return publish('api:'+str(actor.pk)+':'+data['request_id'],project=project,title=data['title'],body=data['body'],kind=data.get('kind','message'),choices=data.get('choices'))
 
 
+PUBLICATION_LABELS = {'COMPLETED':'Publication confirmée','FAILED':'Publication échouée',
+                      'UNKNOWN':'Résultat de publication indéterminé','SKIPPED':'Publication non exécutée'}
+
+
+def artifact_results(forge,state,receipt,kinds=(),at=None):
+    from .forge_publish_artifacts import PUBLICATION_STEPS
+    progress=receipt.get('progress') or {}
+    steps=progress.get('steps',[])
+    common=next((s for s in steps if s['state'] in ('FAILED','UNKNOWN')
+                 and s['key'] in ('configuration','inventory','connection')),None)
+    rows=[]
+    for kind in progress.get('kinds',kinds):
+        stages=[s for s in steps if s['key'] in PUBLICATION_STEPS[kind]]
+        failure=next((s for s in stages if s['state'] in ('FAILED','UNKNOWN')),common)
+        if stages and all(s['state']=='COMPLETED' for s in stages):
+            outcome,last='COMPLETED',stages[-1]
+        elif failure:
+            outcome,last=('UNKNOWN' if state=='UNKNOWN' else 'FAILED'),failure
+        elif any(s['state']!='PENDING' for s in stages) or not steps:
+            outcome,last=('SKIPPED' if stages and all(s['state']=='SKIPPED' for s in stages) else state),{}
+        else:
+            outcome,last='SKIPPED',{}
+        result={'kind':kind,'forge':forge,'state':outcome,'at':last.get('at',at)}
+        if outcome in ('FAILED','UNKNOWN'):
+            result.update(error=last.get('error',receipt.get('error')),details=last.get('details',receipt.get('details')),
+                          step=last.get('key'))
+        rows.append(result)
+    return rows
+
+
+def artifact_notification(key,project,forge,state,receipt,kinds=()):
+    return publish(key,project=project,title=f'Publication {forge}',body=PUBLICATION_LABELS[state],
+                   artifacts=artifact_results(forge,state,receipt,kinds))
+
+
 def delivery_notification(delivery,view):
     if view['state'] not in ('COMPLETED','FAILED','PARTIAL','UNKNOWN'):
         return None
@@ -130,11 +169,22 @@ def delivery_notification(delivery,view):
         if key.startswith('verify:'):return 'Vérification '+key.split(':',1)[1]
         if key.startswith('release:'):return 'Release '+key.split(':',1)[1]
         return {'version':'Version du projet','version-projection':'Version en base','commit':'Commit et tag locaux','build:debian':'Construction Debian','build:docker':'Construction Docker','retire':'Finalisation Git'}.get(key,key)
+    plan=getattr(delivery,'plan',{})
+    kinds=[kind for kind in ('debian','docker') if plan.get(kind)]
+    at=delivery.updated.isoformat() if kinds else None
+    artifacts=[]
     lines=[states.get(view['state'],view['state'])]
     for step in view['steps']:
+        if step['key'].startswith('release:') and kinds and step['state']!='SKIPPED':
+            state='SKIPPED' if step['state']=='PENDING' else 'UNKNOWN' if step['state']=='RUNNING' else step['state']
+            artifacts.extend(artifact_results(step['key'].split(':',1)[1],state,step['receipt'],kinds,at))
+            continue
         line=label(step['key'])+' : '+states.get(step['state'],step['state'])
         if step['receipt'].get('reason')=='developer-deferred':line+=' (report demandé)'
         error=step['receipt'].get('error')
         if isinstance(error,str):line+=' · '+error
         lines.append(line)
-    return publish('delivery:'+str(delivery.pk)+':'+view['state'],project=delivery.project,title='Livraison '+delivery.version,body='\n'.join(lines))
+    key='delivery:'+str(delivery.pk)
+    # Les clés historiques restent valables pour les livraisons sans suivi d’artefacts.
+    return publish(key if kinds else key+':'+view['state'],project=delivery.project,
+                   title='Livraison '+delivery.version,body='\n'.join(lines),artifacts=artifacts)

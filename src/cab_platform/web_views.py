@@ -129,7 +129,7 @@ def sync_projection(request,table,*,all_projects=False,archived=False):
     if table=='project_metadata_projection':params['columns']='id,public_metadata'
     if table=='project_forge_artifacts':params['columns']='id,project_id,forge,source,artifacts'
     if table=='mcp_connector_projection':params['columns']='connector_id,agent,uid,loaded_version,catalog_version,relay_version,state,connected'
-    if table=='cab_notifications':params['columns']='id,project_id,sender,title,body,kind,choices,read_at,created,updated'
+    if table=='cab_notifications':params['columns']='id,project_id,sender,title,body,kind,choices,artifacts,read_at,created,updated'
     if table=='cab_binary_counts':params['columns']='id,inactive,active'
     if table=='cab_observed_binaries':params['columns']='id,pid,username,executable,role,active,first_seen,last_seen,stopped'
     if table=='agent_catalog_projection':params['columns']='id,kind,data'

@@ -833,23 +833,12 @@ def execute_native_build(project,kind,version,before_execute,*,reference=None):
 
 
 def execute_native_publication(project,target,version,plan,before_execute):
-    import subprocess
-    import httpx
-    from .forge_publish_artifacts import PUBLISHERS,local_plan
+    from .forge_publish_artifacts import PUBLICATION_ERRORS, PUBLISHERS, PublicationProgress, diagnostic, local_plan
     from .forge_repository import identity,refresh_one
     from .project_metadata import read_metadata
-    source=read_metadata(project.root)
-    values=source['values']
     forge=target['name']
-    require(source['state']=='ready' and values.get('PROJECT_VERSION')==version and
-            identity(project,values,forge)==target['signature'] and
-            (forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==target.get('registry','')),
-            'session-delivery-config-changed',409)
-    selected=local_plan(project,values,version=version)
-    kinds={kind for kind in ('debian','docker') if plan[kind]}
-    require(kinds.issubset(selected),
-            'session-delivery-version-artifact-missing',409)
-    selected={kind:selected[kind] for kind in sorted(kinds)}
+    kinds=[kind for kind in ('debian','docker') if plan[kind]]
+    progress=PublicationProgress(kinds)
     receipt={'publisher':'cab','version':version,'tag':version}
     issued=False
 
@@ -860,17 +849,29 @@ def execute_native_publication(project,target,version,plan,before_execute):
             issued=True
 
     try:
-        PUBLISHERS[forge](project,values,selected,mark)
-    except (Refused,httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
-        if isinstance(error,Refused):
-            raise
-        raise Refused('session-delivery-artifact-publication-unconfirmed' if issued else
-                      'session-delivery-artifact-publication-failed',409) from error
+        with progress.step('configuration'):
+            source=read_metadata(project.root)
+            values=source['values']
+            require(source['state']=='ready' and values.get('PROJECT_VERSION')==version and
+                    identity(project,values,forge)==target['signature'] and
+                    (forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==target.get('registry','')),
+                    'session-delivery-config-changed',409)
+        with progress.step('inventory'):
+            selected=local_plan(project,values,version=version)
+            require(all(kind in selected for kind in kinds),'session-delivery-version-artifact-missing',409)
+        PUBLISHERS[forge](project,values,{kind:selected[kind] for kind in kinds},mark,progress)
+    except PUBLICATION_ERRORS as error:
+        code,details=diagnostic(error)
+        if not isinstance(error,Refused):
+            code=('session-delivery-artifact-publication-unconfirmed' if issued else
+                  'session-delivery-artifact-publication-failed')
+        raise Refused(code,error.status if isinstance(error,Refused) else 409,
+                      details={**details,'progress':progress.snapshot(),'publication_issued':issued}) from error
     try:
         refresh_one(project.pk,forge,wait=True,automatic=False)
     except (OSError,Refused):
         pass
-    return {**receipt,'exit_code':0,'executed':issued}
+    return {**receipt,'exit_code':0,'executed':issued,'progress':progress.snapshot()}
 
 
 def delivery_preflight(project, version, *, defer_releases=False):
@@ -1015,7 +1016,7 @@ def _delivery_keys(plan):
 
 
 def _delivery_view(delivery):
-    public={'error','commit','branch','tag','version','exit_code','verified','reason','source_mode','executed','kind','builder','publisher'}
+    public={'error','commit','branch','tag','version','exit_code','verified','reason','source_mode','executed','kind','builder','publisher','progress','details'}
     return {'version':delivery.version,'state':delivery.state,'scope':delivery.plan.get('scope','change'),'commit':delivery.commit_oid or None,'steps':[{'key':step.key,'state':step.state,'receipt':{key:value for key,value in step.receipt.items() if key in public}} for step in delivery.steps.order_by('pk')]}
 
 
@@ -1429,7 +1430,8 @@ def _continue_after_commit(delivery_id,receipt):
             try:published=execute_native_publication(Project.objects.get(pk=project.pk),target,version,plan,mark_release)
             except Refused as error:
                 state='UNKNOWN' if started else 'FAILED'
-                _set_step(delivery_id,key,state,{'publisher':'cab','error':error.code})
+                _set_step(delivery_id,key,state,{'publisher':'cab','error':error.code,
+                      **({'progress':error.details['progress']} if isinstance(error.details,dict) and 'progress' in error.details else {})})
                 _set_delivery_state(delivery_id,'UNKNOWN' if started else 'PARTIAL');return
             _set_step(delivery_id,key,'COMPLETED',published)
     for target in plan['forges']:

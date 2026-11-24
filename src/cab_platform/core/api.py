@@ -646,6 +646,19 @@ class ArtifactBuildInput(Schema):
     request_id: str
 
 
+@api.get('/projects/{project_id}/published-artifacts/receipts/{request_id}')
+def read_publication_receipt(request,project_id:str,request_id:str):
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    from .models import ProjectForgeArtifactPublication
+    from cab_platform.forge_publish_artifacts import public
+    job=ProjectForgeArtifactPublication.objects.filter(pk=request_id,project=project).first()
+    commands.require(job is not None,'artifact-publication-receipt-missing',404)
+    return public(job)
+
+
 class ArtifactReconciliationInput(ArtifactBuildInput):
     tag: str
     image_id: str

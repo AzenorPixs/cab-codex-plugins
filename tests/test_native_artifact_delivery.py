@@ -24,9 +24,10 @@ class NativeArtifactDeliveryTests(unittest.TestCase):
         values={'PROJECT_VERSION':'2.0.0'}
         target={'name':'GITHUB','signature':'signature'}
         trace=[]
-        def native(project,values,artifacts,mark):
+        def native(project,values,artifacts,mark,progress):
             trace.append(artifacts)
-            mark()
+            with progress.step('debian-release'):
+                mark()
         with patch('cab_platform.project_metadata.read_metadata',return_value={'state':'ready','values':values}), \
                 patch('cab_platform.forge_repository.identity',return_value='signature'), \
                 patch('cab_platform.forge_repository.refresh_one') as refresh, \
@@ -36,7 +37,11 @@ class NativeArtifactDeliveryTests(unittest.TestCase):
             local.assert_called_once_with(project,values,version='2.0.0')
             refresh.assert_called_once_with('project','GITHUB',wait=True,automatic=False)
             self.assertEqual(trace[0],{'debian':[{}]})
-            self.assertEqual(receipt,{'publisher':'cab','version':'2.0.0','tag':'2.0.0','exit_code':0,'executed':True})
+            self.assertEqual({key:value for key,value in receipt.items() if key!='progress'},
+                             {'publisher':'cab','version':'2.0.0','tag':'2.0.0','exit_code':0,'executed':True})
+            self.assertEqual(receipt['progress']['kinds'],['debian'])
+            self.assertIn(('debian-release','COMPLETED'),
+                          [(step['key'],step['state']) for step in receipt['progress']['steps']])
             with self.assertRaisesRegex(Refused,'session-delivery-config-changed'):
                 delivery.execute_native_publication(project,target,'2.0.1',{'debian':True,'docker':False},trace.append)
 

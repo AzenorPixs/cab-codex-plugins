@@ -31,16 +31,23 @@ class ForgeArtifactsTests(unittest.TestCase):
         rows=Mock()
         rows.select_related.return_value.get.return_value=job
         with patch.object(forge_publish_artifacts.ProjectForgeArtifactPublication,'objects',rows), \
+                patch.object(forge_publish_artifacts,'finish_manual') as finish, \
                 patch.object(forge_publish_artifacts,'identity',return_value='configuration'), \
                 patch.object(forge_publish_artifacts,'docker_inventory',
                              side_effect=[{}, {'local':(None,{'tags':['pfd:latest']})}]), \
                 patch.dict(forge_publish_artifacts.PUBLISHERS,{'GITHUB':Mock()}) as publishers:
             forge_publish_artifacts.worker('fixture')
             publishers['GITHUB'].assert_not_called()
-        rows.filter.return_value.update.assert_called_once_with(state='FAILED',receipt={
-            'error':'artifact-local-docker-version-missing','issued':False,
-            'details':{'phase':'inventory','tag':'pfd:1.0.2'},
-        })
+        finished,state,receipt=finish.call_args.args
+        self.assertIs(finished,job)
+        self.assertEqual(state,'FAILED')
+        self.assertEqual(receipt['error'],'artifact-local-docker-version-missing')
+        self.assertFalse(receipt['issued'])
+        self.assertEqual(receipt['details'],{'phase':'inventory','tag':'pfd:1.0.2'})
+        steps=receipt['progress']['steps']
+        self.assertEqual([(s['key'],s['state']) for s in steps[:3]],[
+            ('configuration','COMPLETED'),('inventory','FAILED'),('connection','PENDING')])
+        self.assertEqual(steps[1]['details'],receipt['details'])
 
     def test_release_and_each_registry_are_independent(self):
         flags={'PROJECT_DEBIAN_PACKAGE':'Yes','PROJECT_DOCKERED':'Yes'}
@@ -147,7 +154,7 @@ class ForgeArtifactsTests(unittest.TestCase):
                                         for method,path in requests[:first_cleanup]))
                     self.assertEqual(requests[-1][0],'GET')
 
-    def publish_docker_fixture(self,forge,*,failure=None,alias=False):
+    def publish_docker_fixture(self,forge,*,failure=None,alias=False,progress=None):
         calls,marks=[],[]
         old={f'old-{index}' for index in range(68)}
         tags=old|{'2.0.0','latest'}
@@ -204,7 +211,7 @@ class ForgeArtifactsTests(unittest.TestCase):
             try:
                 release_docker(client,'https://fixture','https://fixture/api','https://fixture/project',forge,
                                'owner','sample','token-fixture',True,{'REMOTE_GITLAB_REGISTRY':'registry.fixture:5050'},
-                               {'image_id':image_id,'tag':'2.0.0'},lambda:marks.append(True))
+                               {'image_id':image_id,'tag':'2.0.0'},lambda:marks.append(True),progress)
             except Refused as exc:
                 error=exc
         return calls,marks,error
@@ -228,6 +235,16 @@ class ForgeArtifactsTests(unittest.TestCase):
                 calls,_,error=self.publish_docker_fixture(forge,failure='latest')
                 self.assertEqual(error.code,'artifact-forge-publication-unconfirmed')
                 self.assertEqual([action for action,_ in calls],['push','push'])
+
+    def test_publication_progress_records_each_observed_step(self):
+        progress=forge_publish_artifacts.PublicationProgress(['docker'])
+        self.publish_docker_fixture('FORGEJO',failure='latest',progress=progress)
+        self.assertEqual(progress.steps['docker-login']['state'],'COMPLETED')
+        failed=progress.steps['docker-push']
+        self.assertEqual(failed['state'],'FAILED')
+        self.assertEqual(failed['details'],{'phase':'registry-push','tag':'latest','exit_code':1})
+        self.assertEqual(progress.steps['docker-confirm']['state'],'PENDING')
+        self.assertEqual(progress.steps['docker-retention']['state'],'PENDING')
 
     def test_remote_tag_confirmation_requires_the_pushed_image(self):
         with patch.object(forge_publish_artifacts,'inspect_manifest',return_value={

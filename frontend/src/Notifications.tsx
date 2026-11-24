@@ -1,9 +1,16 @@
 import {useEffect,useRef,useState} from 'react'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
+import {PublicationFailure,PublicationStatus,type ArtifactPublication} from './ForgeArtifacts'
+import {ArtifactLogo} from './ProjectConfiguration'
 
 type Choice={id:string;label:string}
-type Notice={id:string;sender:string;title:string;body:string;kind:'message'|'question';choices:Choice[];read_at:string|null;created:string;updated:string;answered?:string}
+type Notice={id:string;sender:string;title:string;body:string;kind:'message'|'question';choices:Choice[];artifacts:ArtifactPublication[];read_at:string|null;created:string;updated:string;answered?:string}
+function publishedArtifacts(data:unknown):ArtifactPublication[]{
+  if(typeof data==='string'){try{data=JSON.parse(data)}catch{return []}}
+  return Array.isArray(data)?data.filter((item):item is ArtifactPublication=>
+    item&&(item.kind==='debian'||item.kind==='docker')&&typeof item.forge==='string'&&typeof item.state==='string'):[]
+}
 function notice(value:unknown):Notice|null{
   if(!value||typeof value!=='object')return null
   const row=value as Record<string,unknown>
@@ -11,7 +18,7 @@ function notice(value:unknown):Notice|null{
   let choices:unknown=row.choices
   if(typeof choices==='string'){try{choices=JSON.parse(choices)}catch{return null}}
   if(!Array.isArray(choices)||!choices.every(item=>item&&typeof item.id==='string'&&typeof item.label==='string'))return null
-  return {id:String(row.id),sender:String(row.sender),title:String(row.title),body:String(row.body),kind:row.kind as Notice['kind'],choices,read_at:typeof row.read_at==='string'?row.read_at:null,created:String(row.created),updated:String(row.updated)}
+  return {id:String(row.id),sender:String(row.sender),title:String(row.title),body:String(row.body),kind:row.kind as Notice['kind'],choices,artifacts:publishedArtifacts(row.artifacts),read_at:typeof row.read_at==='string'?row.read_at:null,created:String(row.created),updated:String(row.updated)}
 }
 export function Notifications(){
   const dialog=useRef<HTMLDialogElement>(null)
@@ -86,6 +93,20 @@ export function Notifications(){
           <p className="notification-sender">{current.sender}</p>
           <h3>{current.title}</h3>
           <time dateTime={current.created}>{new Date(current.created).toLocaleString('fr-FR')}</time>
+          {current.artifacts.length>0&&<ul className="publication-results" aria-label="Résultats de publication">
+            {current.artifacts.map(artifact=>{
+              const at=artifact.at||current.updated
+              return <li key={artifact.forge+':'+artifact.kind}>
+                <div className="publication-artifact-heading"><ArtifactLogo kind={artifact.kind}/>
+                  <strong>{artifact.kind==='docker'?'Image Docker':'Paquet Debian'}</strong>
+                  <span>{artifact.forge}</span>
+                  <time dateTime={at}>{new Date(at).toLocaleString('fr-FR')}</time>
+                </div>
+                {artifact.state==='FAILED'||artifact.state==='UNKNOWN'?<PublicationFailure {...artifact}/>:
+                  <p><PublicationStatus state={artifact.state}/> {artifact.state==='COMPLETED'?'Publication confirmée':'Publication non exécutée'}</p>}
+              </li>
+            })}
+          </ul>}
           <div className="notification-body">{current.body}</div>
           {current.kind==='question'&&(current.answered?<p role="status">Réponse enregistrée : {current.answered}</p>:<div className="notification-choices">
             {current.choices.map(choice=><button key={choice.id} type="button" disabled={busy} onClick={()=>void answer(choice)}>{choice.label}</button>)}

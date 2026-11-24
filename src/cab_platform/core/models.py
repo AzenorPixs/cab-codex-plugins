@@ -938,6 +938,7 @@ class Notification(models.Model):
     body=models.TextField()
     kind=models.CharField(max_length=16,default='message')
     choices=models.JSONField(default=list)
+    artifacts=models.JSONField(default=list)
     fingerprint=models.CharField(max_length=64)
     read_at=models.DateTimeField(null=True)
     created=models.DateTimeField(auto_now_add=True)

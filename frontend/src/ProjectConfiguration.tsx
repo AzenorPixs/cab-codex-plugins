@@ -16,6 +16,10 @@ const publications:Icon[]=[
   {name:'Debian',url:'https://www.debian.org/',path:paths.debian,color:'#d70a53'},
   {name:'Docker',url:'https://www.docker.com/',path:paths.docker,color:'#2496ed'}
 ]
+export function ArtifactLogo({kind}:{kind:'debian'|'docker'}){
+  const icon=publications[kind==='debian'?0:1]
+  return <svg className="publication-logo" viewBox="0 0 24 24" aria-hidden="true" style={{fill:icon.color}}><path d={icon.path}/></svg>
+}
 function IconLink({icon}:{icon:Icon}){
   return <a href={icon.url} target="_blank" rel="noreferrer" className="project-metadata-icon" aria-label={icon.name+' — site officiel'} title={icon.name}>{icon.image?<img src={icon.image} alt=""/>:<svg viewBox="0 0 24 24" aria-hidden="true" style={{fill:icon.color}}><path d={icon.path}/></svg>}</a>
 }

@@ -4,6 +4,7 @@ import sys
 import types
 import unittest
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -91,6 +92,34 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(terminal.kwargs['body'].splitlines()[0],'Terminé')
         self.assertIs(terminal.kwargs['project'],delivery.project)
         self.assertIn('report demandé',terminal.kwargs['body'])
+
+    def test_publication_manuelle_groupe_succes_et_erreur(self):
+        from cab_platform.forge_publish_artifacts import PublicationProgress, PUBLICATION_STEPS
+        progress=PublicationProgress(['debian','docker'])
+        at='2026-11-24T07:00:00+00:00'
+        for step in PUBLICATION_STEPS['debian']:
+            progress.set(step,'COMPLETED',at=at)
+        progress.set('docker-push','FAILED',error='artifact-forge-publication-unconfirmed',
+                     details={'exit_code':1,'tag':'latest'},at=at)
+        with patch.object(n,'publish') as publish:
+            n.artifact_notification('manual-publication:receipt',object(),'FORGEJO','UNKNOWN',
+                                    {'progress':progress.snapshot()})
+        publish.assert_called_once()
+        rows=publish.call_args.kwargs['artifacts']
+        self.assertEqual([(r['kind'],r['state'],r['at']) for r in rows],
+                         [('debian','COMPLETED',at),('docker','UNKNOWN',at)])
+        self.assertEqual(rows[1]['details'],{'exit_code':1,'tag':'latest'})
+
+    def test_publication_automatique_utilise_la_meme_notification_apres_reprise(self):
+        row=types.SimpleNamespace(pk=23,project=object(),version='3.32.4',
+                                  plan={'docker':True,'debian':True},updated=datetime.now(timezone.utc))
+        with patch.object(n,'publish') as publish:
+            for outcome in ('FAILED','COMPLETED'):
+                n.delivery_notification(row,{'state':outcome,'steps':[
+                    {'key':'release:FORGEJO','state':outcome,'receipt':{'error':'fixture'}}]})
+        self.assertEqual([call.args[0] for call in publish.call_args_list],['delivery:23','delivery:23'])
+        self.assertEqual([(r['kind'],r['state']) for r in publish.call_args.kwargs['artifacts']],
+                         [('debian','COMPLETED'),('docker','COMPLETED')])
 
 
 @unittest.skipIf(LIVE,'La purge globale s’exerce uniquement sur une base isolée')

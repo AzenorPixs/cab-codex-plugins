@@ -328,9 +328,17 @@ def request(actor,data):
         return {'state':'INTENT','request_id':key,'replay':False}
 
 
+@transaction.atomic
 def result(intent,state,payload):
     receipt={'state':state,'request_id':intent.data['request_id'],**payload}
     c.event(intent.run,'session-effect-result',{'intent_id':intent.pk,'receipt':receipt})
+    kind=intent.data.get('request',{}).get('kind','')
+    if kind.startswith('publish:'):
+        from .notifications import artifact_notification
+        plan=intent.data.get('observed',{}).get('publication_plan',{})
+        artifact_notification('requested-publication:'+str(intent.pk),intent.run.project,
+                              kind.split(':',1)[1],state,receipt,
+                              [artifact for artifact in ('debian','docker') if plan.get(artifact)])
     return receipt
 
 
@@ -446,7 +454,9 @@ def execute(intent_id):
         return result(intent,'COMPLETED',receipt)
     except (c.Refused,OSError,ValueError,__import__('subprocess').SubprocessError) as error:
         code=getattr(error,'code',type(error).__name__)
-        uncertain=code in ('session-delivery-artifact-outcome-uncertain','session-delivery-result-unknown','session-git-effect-unresolved','closure-git-push-unconfirmed') or not isinstance(error,c.Refused)
+        details=error.details if isinstance(error,c.Refused) and isinstance(error.details,dict) else {}
+        uncertain=(code in ('session-delivery-artifact-outcome-uncertain','session-delivery-result-unknown','session-git-effect-unresolved','closure-git-push-unconfirmed')
+                   or details.get('publication_issued') is True or not isinstance(error,c.Refused))
         state='UNKNOWN' if dispatched and uncertain else 'FAILED'
         if kind=='resume' or observed.get('commit_recovery'):
             row=GitDelivery.objects.get(pk=request['delivery_id'])
@@ -457,7 +467,8 @@ def execute(intent_id):
         if standalone_ref:
             from .stage_substeps import phase
             phase(run,'publication',standalone_ref,state,{'error':code})
-        return result(intent,state,{'error':code,'replay':False})
+        return result(intent,state,{'error':code,'replay':False,
+                                   **({'progress':details['progress']} if 'progress' in details else {})})
 
 
 def launch(intent_id):

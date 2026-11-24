@@ -1,5 +1,5 @@
 """Publication des artefacts locaux par le service CAB."""
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 import hashlib
 import json
 import logging
@@ -35,9 +35,67 @@ DEBIAN_KEEP = 7
 logger = logging.getLogger(__name__)
 
 
+PUBLICATION_STEPS = {
+    'debian': ('debian-tag','debian-release','debian-retention'),
+    'docker': ('docker-prepare','docker-login','docker-push','docker-confirm','docker-retention'),
+}
+PUBLICATION_ERRORS = (Refused, VersionError, httpx.HTTPError, OSError, ValueError, subprocess.SubprocessError)
+
+
+def diagnostic(error):
+    if isinstance(error, Refused):
+        details = error.details if isinstance(error.details,dict) else {}
+        return error.code, {key:details[key] for key in (
+            'phase','tag','missing','exit_code','http_status','publication_confirmed','remaining_count'
+        ) if key in details}
+    if isinstance(error,httpx.HTTPStatusError):
+        return 'artifact-forge-publication-failed', {'http_status':error.response.status_code}
+    return 'artifact-forge-publication-failed', {}
+
+
+class PublicationProgress:
+    def __init__(self,kinds,save=None):
+        self.kinds = [kind for kind in PUBLICATION_STEPS if kind in kinds]
+        self.steps = {key:{'key':key,'state':'PENDING'} for key in (
+            'configuration','inventory','connection',
+            *(key for kind in self.kinds for key in PUBLICATION_STEPS[kind]),
+        )}
+        self.save = save
+
+    def set(self,key,state,**details):
+        self.steps[key] = {'key':key,'state':state,**details}
+        if self.save is not None:
+            self.save(self.snapshot())
+
+    @contextmanager
+    def step(self,key):
+        self.set(key,'RUNNING')
+        try:
+            yield
+        except PUBLICATION_ERRORS as error:
+            code,details = diagnostic(error)
+            self.set(key,'FAILED',error=code,details=details,at=timezone.now().isoformat())
+            raise
+        else:
+            self.set(key,'COMPLETED',at=timezone.now().isoformat())
+
+    def skip_missing(self,plan):
+        for kind in self.kinds:
+            if kind not in plan:
+                for key in PUBLICATION_STEPS[kind]:
+                    self.set(key,'SKIPPED')
+
+    def snapshot(self):
+        return {'kinds':self.kinds,'steps':list(self.steps.values())}
+
+
+def track(progress,key):
+    return progress.step(key) if progress is not None else nullcontext()
+
+
 def public(job):
     return {'id':job.pk,'forge':job.forge,'state':job.state,'error':job.receipt.get('error'),
-            'details':job.receipt.get('details')}
+            'details':job.receipt.get('details'),'progress':job.receipt.get('progress')}
 
 
 def active(project):
@@ -209,80 +267,85 @@ def prune_debian(client,root,forge,packages,mark):
         raise Refused('artifact-forge-debian-cleanup-unconfirmed',409,details=details) from error
 
 
-def release_debian(project,client,base,root,forge,public_github,packages,mark):
-    from .artifact_builders import cab_runtime_recipe,recipe,verify_cab_debian
-    try:
-        with opened(Path(project.root),directory=True) as root_fd:
-            cab_runtime=cab_runtime_recipe(recipe(root_fd))
-    except FileNotFoundError:
-        cab_runtime=False
-    for package in packages:
-        name,tag=package['name'],canonical_version(package['version'])
-        require(DEB.fullmatch(name),'artifact-local-changed',409)
-        release_path=root+'/releases'+('/' if forge=='GITLAB' else '/tags/')+quote(tag,safe='')
-        git_tag=root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')
-        require(existing(client,git_tag) is not None,'artifact-forge-tag-missing',409)
-        expected_url=None
-        expected_digest='sha256:'+package['sha256']
-        with opened(Path(package.get('storage',str(Path(project.root)/'dist'))),directory=True) as folder,opened(name,parent=folder) as fd:
-            info=regular(fd)
-            with os.fdopen(os.dup(fd),'rb') as stream:
-                require(info.st_size==package['size'] and hashlib.file_digest(stream,'sha256').hexdigest()==package['sha256'],
-                        'artifact-local-changed',409)
-                if cab_runtime:
-                    verify_cab_debian(fd,tag)
-                stream.seek(0)
-                release=existing(client,release_path)
-                if release is None:
-                    release=mutate(client,root+'/releases',mark,json={'tag_name':tag,'name':tag})
-                require(release.get('tag_name')==tag and not release.get('draft'),'artifact-forge-release-invalid',409)
-                prior=next((x for x in release_assets(release,forge) if isinstance(x,dict) and x.get('name')==name),None)
-                if prior and forge=='GITHUB' and prior.get('digest')==expected_digest and prior.get('state')=='uploaded':
-                    continue
-                if forge=='GITHUB':
-                    url=str(release.get('upload_url','')).split('{',1)[0]
-                    target,expected=urlsplit(url),urlsplit('https://uploads.github.com' if public_github else base)
-                    require((target.scheme,target.netloc)==(expected.scheme,expected.netloc) and
-                            not target.username and not target.password and not target.query and not target.fragment and
-                            type(release.get('id')) is int and target.path.endswith(f'/releases/{release["id"]}/assets'),
-                            'artifact-forge-upload-url-invalid',409)
-                    if prior:
-                        remove(client,debian_asset_url(root,forge,release,prior),mark)
-                    mutate(client,url,mark,params={'name':name},content=iter(lambda:stream.read(1024*1024),b''),
-                           headers={'Content-Type':'application/octet-stream','Content-Length':str(info.st_size)})
-                elif forge=='FORGEJO':
-                    release_id=release.get('id')
-                    require(type(release_id) is int and release_id>0,'artifact-forge-release-invalid',409)
-                    assets=f'{root}/releases/{release_id}/assets'
-                    if prior:
-                        remove(client,debian_asset_url(root,forge,release,prior),mark)
-                    mutate(client,assets,mark,params={'name':name},
-                           files={'attachment':(name,stream,'application/vnd.debian.binary-package')})
-                else:
-                    link_id=item_id(prior) if prior else None
-                    uploaded=mutate(client,root+'/uploads',mark,
-                                    files={'file':(name,stream,'application/vnd.debian.binary-package')})
-                    path=uploaded.get('url')
-                    require(isinstance(path,str) and re.fullmatch(r'/uploads/[0-9a-fA-F]+/'+re.escape(name),path),
-                            'artifact-forge-upload-url-invalid',409)
-                    project_path='/'+quote(unquote(root.rsplit('/',1)[-1]),safe='/')
-                    full=uploaded.get('full_path')
-                    if isinstance(full,str) and re.fullmatch(r'/-/project/[0-9]+'+re.escape(path),full):
-                        url=urljoin(base+'/',full)
+def release_debian(project,client,base,root,forge,public_github,packages,mark,progress=None):
+    with track(progress,'debian-tag'):
+        for package in packages:
+            name,tag=package['name'],canonical_version(package['version'])
+            require(DEB.fullmatch(name),'artifact-local-changed',409)
+            git_tag=root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')
+            require(existing(client,git_tag) is not None,'artifact-forge-tag-missing',409)
+    with track(progress,'debian-release'):
+        from .artifact_builders import cab_runtime_recipe,recipe,verify_cab_debian
+        try:
+            with opened(Path(project.root),directory=True) as root_fd:
+                cab_runtime=cab_runtime_recipe(recipe(root_fd))
+        except FileNotFoundError:
+            cab_runtime=False
+        for package in packages:
+            name,tag=package['name'],canonical_version(package['version'])
+            release_path=root+'/releases'+('/' if forge=='GITLAB' else '/tags/')+quote(tag,safe='')
+            expected_url=None
+            expected_digest='sha256:'+package['sha256']
+            with opened(Path(package.get('storage',str(Path(project.root)/'dist'))),directory=True) as folder,opened(name,parent=folder) as fd:
+                info=regular(fd)
+                with os.fdopen(os.dup(fd),'rb') as stream:
+                    require(info.st_size==package['size'] and hashlib.file_digest(stream,'sha256').hexdigest()==package['sha256'],
+                            'artifact-local-changed',409)
+                    if cab_runtime:
+                        verify_cab_debian(fd,tag)
+                    stream.seek(0)
+                    release=existing(client,release_path)
+                    if release is None:
+                        release=mutate(client,root+'/releases',mark,json={'tag_name':tag,'name':tag})
+                    require(release.get('tag_name')==tag and not release.get('draft'),'artifact-forge-release-invalid',409)
+                    prior=next((x for x in release_assets(release,forge) if isinstance(x,dict) and x.get('name')==name),None)
+                    if prior and forge=='GITHUB' and prior.get('digest')==expected_digest and prior.get('state')=='uploaded':
+                        continue
+                    if forge=='GITHUB':
+                        url=str(release.get('upload_url','')).split('{',1)[0]
+                        target,expected=urlsplit(url),urlsplit('https://uploads.github.com' if public_github else base)
+                        require((target.scheme,target.netloc)==(expected.scheme,expected.netloc) and
+                                not target.username and not target.password and not target.query and not target.fragment and
+                                type(release.get('id')) is int and target.path.endswith(f'/releases/{release["id"]}/assets'),
+                                'artifact-forge-upload-url-invalid',409)
+                        if prior:
+                            remove(client,debian_asset_url(root,forge,release,prior),mark)
+                        mutate(client,url,mark,params={'name':name},content=iter(lambda:stream.read(1024*1024),b''),
+                               headers={'Content-Type':'application/octet-stream','Content-Length':str(info.st_size)})
+                    elif forge=='FORGEJO':
+                        release_id=release.get('id')
+                        require(type(release_id) is int and release_id>0,'artifact-forge-release-invalid',409)
+                        assets=f'{root}/releases/{release_id}/assets'
+                        if prior:
+                            remove(client,debian_asset_url(root,forge,release,prior),mark)
+                        mutate(client,assets,mark,params={'name':name},
+                               files={'attachment':(name,stream,'application/vnd.debian.binary-package')})
                     else:
-                        url=base+project_path+path
-                    expected_url=url
-                    links=release_path+'/assets/links'
-                    mutate(client,f'{links}/{link_id}' if link_id is not None else links,mark,
-                           method='PUT' if link_id is not None else 'POST',
-                           json={'name':name,'url':url,'link_type':'package'})
-        confirmed=existing(client,release_path)
-        require(confirmed and any(isinstance(x,dict) and x.get('name')==name
-                and (forge!='GITLAB' or x.get('url')==expected_url)
-                and (forge!='GITHUB' or x.get('digest') in (None,expected_digest))
-                for x in release_assets(confirmed,forge)),
-                'artifact-forge-publication-unconfirmed',409)
-    prune_debian(client,root,forge,packages,mark)
+                        link_id=item_id(prior) if prior else None
+                        uploaded=mutate(client,root+'/uploads',mark,
+                                        files={'file':(name,stream,'application/vnd.debian.binary-package')})
+                        path=uploaded.get('url')
+                        require(isinstance(path,str) and re.fullmatch(r'/uploads/[0-9a-fA-F]+/'+re.escape(name),path),
+                                'artifact-forge-upload-url-invalid',409)
+                        project_path='/'+quote(unquote(root.rsplit('/',1)[-1]),safe='/')
+                        full=uploaded.get('full_path')
+                        if isinstance(full,str) and re.fullmatch(r'/-/project/[0-9]+'+re.escape(path),full):
+                            url=urljoin(base+'/',full)
+                        else:
+                            url=base+project_path+path
+                        expected_url=url
+                        links=release_path+'/assets/links'
+                        mutate(client,f'{links}/{link_id}' if link_id is not None else links,mark,
+                               method='PUT' if link_id is not None else 'POST',
+                               json={'name':name,'url':url,'link_type':'package'})
+            confirmed=existing(client,release_path)
+            require(confirmed and any(isinstance(x,dict) and x.get('name')==name
+                    and (forge!='GITLAB' or x.get('url')==expected_url)
+                    and (forge!='GITHUB' or x.get('digest') in (None,expected_digest))
+                    for x in release_assets(confirmed,forge)),
+                    'artifact-forge-publication-unconfirmed',409)
+    with track(progress,'debian-retention'):
+        prune_debian(client,root,forge,packages,mark)
 
 
 def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False):
@@ -427,38 +490,44 @@ def registry_login(registry,owner,token):
         yield args,{**ENV,'DOCKER_CONFIG':config}
 
 
-def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark):
-    registry=docker_registry(base,forge,github_public,metadata)
-    tag=image['tag']
-    require(TAG.fullmatch(tag) and DIGEST.fullmatch(image['image_id']),
-            'artifact-local-changed',409)
-    info=existing(client,root)
-    require(info is not None,'artifact-forge-unconfigured',409,details={'phase':'repository'})
-    if tag!='latest':
-        require(existing(client,root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')) is not None,
-                'artifact-forge-tag-missing',409,details={'phase':'remote-tag','tag':tag})
-    remote_name=registry+'/'+(owner+'/'+repo).lower()
-    labels=tuple(dict.fromkeys([tag,'latest']))
+def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark,progress=None):
+    with track(progress,'docker-prepare'):
+        registry=docker_registry(base,forge,github_public,metadata)
+        tag=image['tag']
+        require(TAG.fullmatch(tag) and DIGEST.fullmatch(image['image_id']),
+                'artifact-local-changed',409)
+        info=existing(client,root)
+        require(info is not None,'artifact-forge-unconfigured',409,details={'phase':'repository'})
+        if tag!='latest':
+            require(existing(client,root+('/repository/tags/' if forge=='GITLAB' else '/git/ref/tags/' if forge=='GITHUB' else '/tags/')+quote(tag,safe='')) is not None,
+                    'artifact-forge-tag-missing',409,details={'phase':'remote-tag','tag':tag})
+        remote_name=registry+'/'+(owner+'/'+repo).lower()
+        labels=tuple(dict.fromkeys([tag,'latest']))
 
     def inventory(*,allow_missing=False):
         return registry_rows(client,api,root,forge,owner,repo,info,allow_missing=allow_missing)
 
-    with registry_login(registry,owner,token) as (args,env):
-        previous=set()
-        if forge=='GITHUB':
-            _,rows=inventory(allow_missing=True)
-            previous={key for key,(tags,_) in rows.items() if tags}
-        for label in labels:
-            target=remote_name+':'+label
-            tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
-            require(tagged.returncode==0,'artifact-local-changed',409,
-                    details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
-            mark()
-            pushed=subprocess.run([*args,'push','--quiet',target],env=env,capture_output=True,timeout=1800)
-            require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409,
-                    details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
-        references=confirm_docker(args,remote_name,labels,image['image_id'])
-        prune_docker(client,inventory,forge,labels,references,previous,mark)
+    with ExitStack() as stack:
+        with track(progress,'docker-login'):
+            args,env=stack.enter_context(registry_login(registry,owner,token))
+        with track(progress,'docker-push'):
+            previous=set()
+            if forge=='GITHUB':
+                _,rows=inventory(allow_missing=True)
+                previous={key for key,(tags,_) in rows.items() if tags}
+            for label in labels:
+                target=remote_name+':'+label
+                tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
+                require(tagged.returncode==0,'artifact-local-changed',409,
+                        details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
+                mark()
+                pushed=subprocess.run([*args,'push','--quiet',target],env=env,capture_output=True,timeout=1800)
+                require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409,
+                        details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
+        with track(progress,'docker-confirm'):
+            references=confirm_docker(args,remote_name,labels,image['image_id'])
+        with track(progress,'docker-retention'):
+            prune_docker(client,inventory,forge,labels,references,previous,mark)
 
 
 @transaction.atomic
@@ -509,24 +578,26 @@ def reconcile_docker(project,request_id,tag,image_id):
     return public(job)
 
 
-def release_forgejo(project,values,plan,mark):
-    publish(project,values,'FORGEJO',plan,mark)
+def release_forgejo(project,values,plan,mark,progress=None):
+    publish(project,values,'FORGEJO',plan,mark,progress)
 
 
-def release_github(project,values,plan,mark):
-    publish(project,values,'GITHUB',plan,mark)
+def release_github(project,values,plan,mark,progress=None):
+    publish(project,values,'GITHUB',plan,mark,progress)
 
 
-def release_gitlab(project,values,plan,mark):
-    publish(project,values,'GITLAB',plan,mark)
+def release_gitlab(project,values,plan,mark,progress=None):
+    publish(project,values,'GITLAB',plan,mark,progress)
 
 
-def publish(project,values,forge,plan,mark):
-    with remote(project,values,forge) as (client,base,api,root,owner,repo,token,public_github):
+def publish(project,values,forge,plan,mark,progress=None):
+    with ExitStack() as stack:
+        with track(progress,'connection'):
+            client,base,api,root,owner,repo,token,public_github=stack.enter_context(remote(project,values,forge))
         if plan.get('debian'):
-            release_debian(project,client,base,root,forge,public_github,plan['debian'],mark)
+            release_debian(project,client,base,root,forge,public_github,plan['debian'],mark,progress)
         if plan.get('docker'):
-            release_docker(client,base,api,root,forge,owner,repo,token,public_github,values,plan['docker'],mark)
+            release_docker(client,base,api,root,forge,owner,repo,token,public_github,values,plan['docker'],mark,progress)
 
 
 PUBLISHERS={'FORGEJO':release_forgejo,'GITHUB':release_github,'GITLAB':release_gitlab}
@@ -548,16 +619,21 @@ def request(project,forge,request_id):
             and not GitDelivery.objects.filter(project=project,state__in=(*ACTIVE,'PARTIAL')).exists(),
             'artifact-build-active',409)
     values=project.public_metadata.get('values',{})
-    missing=missing_configuration(project,values,forge)
-    require(not missing,'artifact-forge-unconfigured',409,
-            details={'phase':'configuration','missing':missing})
-    from .core.models import ProjectArtifact
-    require(ProjectArtifact.objects.filter(project=project,kind__in=[k for k in ('debian','docker') if enabled(values,k)]).exists(),
-            'artifact-local-missing',409,details={'phase':'inventory'})
+    kinds=[kind for kind in PUBLICATION_STEPS if enabled(values,kind)]
     job=ProjectForgeArtifactPublication.objects.create(pk=request_id,project=project,forge=forge,
-          plan={'signature':identity(project,values,forge),
-                **({'registry':values.get('REMOTE_GITLAB_REGISTRY','')} if forge=='GITLAB' else {})})
+          plan={'signature':identity(project,values,forge),'kinds':kinds,
+                **({'registry':values.get('REMOTE_GITLAB_REGISTRY','')} if forge=='GITLAB' else {})},
+          receipt={'progress':PublicationProgress(kinds).snapshot()})
     return public(job)
+
+
+@transaction.atomic
+def finish_manual(job,state,result):
+    from .notifications import artifact_notification
+    changed=ProjectForgeArtifactPublication.objects.filter(pk=job.pk,state='RUNNING').update(
+        state=state,receipt=result)
+    if changed:
+        artifact_notification('manual-publication:'+job.pk,job.project,job.forge,state,result)
 
 
 def worker(key):
@@ -566,37 +642,49 @@ def worker(key):
     project=job.project
     values=project.public_metadata.get('values',{})
     issued=False
+    def save(progress):
+        ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(
+            receipt={'issued':issued,'progress':progress})
+
+    kinds=job.plan.get('kinds',[kind for kind in PUBLICATION_STEPS if enabled(values,kind)])
+    progress=PublicationProgress(kinds,save)
+
     def mark():
         nonlocal issued
         if not issued:
-            ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(receipt={'issued':True})
             issued=True
+            save(progress.snapshot())
+
     try:
-        require(identity(project,values,job.forge)==job.plan['signature']
-                and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
-                'artifact-forge-config-changed',409)
-        plan=local_plan(project,values)
-        if not plan and enabled(values,'docker') and (tag:=values.get('PROJECT_VERSION')):
-            name=values.get('PROJECT_ID') or project.identifier or ''
-            observed=docker_inventory(project,values)
-            if observed and DOCKER_NAME.fullmatch(name) and TAG.fullmatch(tag):
-                raise Refused('artifact-local-docker-version-missing',
-                              details={'phase':'inventory','tag':name+':'+tag})
-        require(plan,'artifact-local-missing',409,details={'phase':'inventory'})
-        if 'docker' in plan and job.forge=='GITLAB':
-            require(REGISTRY.fullmatch(values.get('REMOTE_GITLAB_REGISTRY','')),
-                    'artifact-forge-registry-invalid',409,details={'phase':'registry-configuration'})
-        PUBLISHERS[job.forge](project,values,plan,mark)
-    except (Refused,VersionError,httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
+        with progress.step('configuration'):
+            require(identity(project,values,job.forge)==job.plan['signature']
+                    and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
+                    'artifact-forge-config-changed',409)
+            if 'kinds' in job.plan:
+                missing=missing_configuration(project,values,job.forge)
+                require(not missing,'artifact-forge-unconfigured',409,
+                        details={'phase':'configuration','missing':missing})
+        with progress.step('inventory'):
+            plan={kind:artifact for kind,artifact in local_plan(project,values).items() if kind in kinds}
+            if not plan and 'docker' in kinds and (tag:=values.get('PROJECT_VERSION')):
+                name=values.get('PROJECT_ID') or project.identifier or ''
+                observed=docker_inventory(project,values)
+                if observed and DOCKER_NAME.fullmatch(name) and TAG.fullmatch(tag):
+                    raise Refused('artifact-local-docker-version-missing',
+                                  details={'phase':'inventory','tag':name+':'+tag})
+            require(plan,'artifact-local-missing',409,details={'phase':'inventory'})
+            progress.skip_missing(plan)
+        if 'docker' in plan and job.forge=='GITLAB' and not REGISTRY.fullmatch(values.get('REMOTE_GITLAB_REGISTRY','')):
+            with progress.step('docker-prepare'):
+                raise Refused('artifact-forge-registry-invalid',409,details={'phase':'registry-configuration'})
+        PUBLISHERS[job.forge](project,values,plan,mark,progress)
+    except PUBLICATION_ERRORS as error:
         state='UNKNOWN' if issued else 'FAILED'
-        result={'error':getattr(error,'code','artifact-forge-publication-failed'),'issued':issued}
-        if isinstance(error,Refused) and error.details:
-            result['details']=error.details
-        if isinstance(error,httpx.HTTPStatusError):
-            result['details']={'phase':'forge-api','http_status':error.response.status_code}
+        code,details=diagnostic(error)
+        result={'error':code,'issued':issued,**({'details':details} if details else {})}
     else:
         state,result='COMPLETED',{'issued':issued}
-    ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(state=state,receipt=result)
+    finish_manual(job,state,{**result,'progress':progress.snapshot()})
     if issued or state=='COMPLETED':
         try:
             refresh_one(project.pk,job.forge,wait=True,automatic=False)
@@ -615,9 +703,13 @@ def dispatch():
     if running:
         if alive(running.executor):
             return
-        running.state='UNKNOWN'
-        running.receipt={**running.receipt,'error':'artifact-forge-publication-unconfirmed'}
-        running.save(update_fields=['state','receipt'])
+        result={**running.receipt,'error':'artifact-forge-publication-unconfirmed'}
+        progress=result.get('progress')
+        if progress:
+            result['progress']={**progress,'steps':[
+                {**step,'state':'UNKNOWN','error':result['error'],'at':timezone.now().isoformat()}
+                if step['state']=='RUNNING' else step for step in progress['steps']]}
+        finish_manual(running,'UNKNOWN',result)
     job=ProjectForgeArtifactPublication.objects.select_for_update().filter(state='PENDING').order_by('created').first()
     if not job:
         return
