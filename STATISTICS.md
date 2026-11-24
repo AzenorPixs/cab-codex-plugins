@@ -21876,9 +21876,10 @@ Change : `confirm-oci-artifact-publication` · état local : `archived`. Les val
 
 | Rôle | Agent | Modèle | Raisonnement |
 | --- | --- | --- | --- |
+| coder | codex | N/A | N/A |
 
 
-Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+Provenance : change-periods:3961676a1de7869458a11a02b496b5687ec1066fa14d9e2235254b9845a00f4e
 
 ## 2. Messages et outils
 
@@ -21908,8 +21909,8 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 20 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 30 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 30 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -21941,7 +21942,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "865e31f1352864ef7ba0c46d16cd6c8f2aec71ad3030a6b9644ac5b2f8090d56", "generated_at": "2026-11-24T07:25:52.937649+00:00", "revision": "865e31f1352864ef7ba0c46d16cd6c8f2aec71ad3030a6b9644ac5b2f8090d56", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "d8fc9b58a195d7648a6edf5585fdf0189331400351df7a01b707f553d0de2dec", "generated_at": "2026-11-24T07:29:36.702058+00:00", "revision": "d8fc9b58a195d7648a6edf5585fdf0189331400351df7a01b707f553d0de2dec", "scope": "change"} -->
 
 
 ## Change `confirm-stopped-mcp-relay` — openspec/changes/archive/2026-11-16-confirm-stopped-mcp-relay/STATISTICS.md
@@ -80224,4 +80225,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "c4d7e3e99588d3b9303a3a4f38009200c6b40b8b2c3c9e9892a8cdb6d4579492", "generated_at": "2026-11-24T07:25:54.840395+00:00", "revision": "c4d7e3e99588d3b9303a3a4f38009200c6b40b8b2c3c9e9892a8cdb6d4579492", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "cf2bd76a8a83fdaee834cfe48bd27483d7fe0547de2a0ad468afff8fac148764", "generated_at": "2026-11-24T07:29:38.335293+00:00", "revision": "cf2bd76a8a83fdaee834cfe48bd27483d7fe0547de2a0ad468afff8fac148764", "scope": "project"} -->
