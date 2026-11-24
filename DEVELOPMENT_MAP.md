@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Détail des sessions de codage
+
+[remove-session-terminal-panel](openspec/changes/archive/2026-11-24-remove-session-terminal-panel/),
+code non attribué. La recette CAB du 24 novembre 2026 a vérifié le détail
+pleine largeur sans panneau Terminal dans Chromium et Firefox, sur ordinateur
+et mobile. Attribution ultérieure par ACL.
+
 ## Fiche des changes OpenSpec
 
 [add-project-change-detail](openspec/changes/archive/2026-11-24-add-project-change-detail/),

@@ -415,11 +415,10 @@ header .brand {
 .catalog-document pre{overflow:auto;max-block-size:60dvh;white-space:pre-wrap;overflow-wrap:anywhere}
 
 
-.run-view.run-view-terminal{max-width:none}
-.run-view-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:1rem}
-.run-view-left{min-width:0;font-size:.86rem}
-.run-view-left .run-card-title{font-size:1.1rem;overflow-wrap:anywhere}
-.run-view-left h2{font-size:1rem}
+.run-view.run-view-detail{max-width:none}
+.run-session-block{min-width:0;font-size:.86rem}
+.run-session-block .run-card-title{font-size:1.1rem;overflow-wrap:anywhere}
+.run-session-block h2{font-size:1rem}
 .session-terminal{min-width:0;margin-top:.9rem;padding:.8rem;border:1px solid var(--border);border-radius:.6rem;background:var(--surface)}
 .session-terminal-header,.session-terminal-command{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}
 .session-terminal-header{justify-content:space-between}
@@ -427,4 +426,3 @@ header .brand {
 .session-terminal pre{min-height:clamp(15rem,50dvh,34rem);max-height:55dvh;overflow:auto;
   padding:.8rem;background:#111b20;color:#f4f8f8;white-space:pre-wrap;overflow-wrap:anywhere;font: .8rem/1.4 monospace}
 .session-terminal-command input{flex:1 1 9rem;min-width:0;margin:0;font-family:monospace}
-@media(max-width:1050px){.run-view-columns{grid-template-columns:minmax(0,1fr)}}

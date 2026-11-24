@@ -2,7 +2,7 @@
 
 ## Non publié
 
-- Étendre le détail des sessions sur deux colonnes et ajouter une console root isolée, inactive au chargement.
+- Afficher le détail des sessions de codage sur toute la largeur disponible, sans panneau Terminal. L’API de la console isolée reste disponible.
 
 - Compacter le tableau des modèles avec tarifs sur une ligne, cellules de texte limitées à deux lignes et détail administrateur au clic.
 

@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[remove-session-terminal-panel](changes/archive/2026-11-24-remove-session-terminal-panel/),
+code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 [add-project-change-detail](changes/archive/2026-11-24-add-project-change-detail/),
 code non attribué. Change archivé. Attribution ultérieure par ACL.
 
