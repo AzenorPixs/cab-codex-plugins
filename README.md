@@ -82,7 +82,8 @@ Serveur Web. Le catalogue PostgreSQL crée les dossiers sous l’identité POSIX
 configurée. Les réglages privés et origines Web sont propres à chaque hôte.
 Dans chaque projet, **Changes** réunit les changes OpenSpec ouverts et archivés,
 classés par dernière modification. Les données se mettent à jour sans recharger
-la page et chaque ligne propose une action d’actualisation.
+la page. Chaque ligne propose une icône d’actualisation et son identifiant
+ouvre une fiche pleine largeur.
 Après archivage d’un change direct, `run.reconcile_archive` relocalise son
 mandat à frontière sûre sans modifier ses identités, son gel ni ses reçus.
 

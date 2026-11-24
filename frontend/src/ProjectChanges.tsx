@@ -5,7 +5,7 @@ import {Shape,ShapeStream} from '@electric-sql/client'
 import {api,ApiError} from './api'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,tablePageLimit,useTableSearch} from './TableNavigation'
 
-type ChangeRow={
+export type ChangeRow={
   source:string
   identifier:string
   title:string|null
@@ -37,8 +37,8 @@ function rowsFrom(records:RecordRow[]):ListedChange[]{
   })
 }
 
-function ChangeTable({rows,archived,projectId,reload}:{
-  rows:ListedChange[];archived:boolean;projectId:string;reload:()=>Promise<unknown>
+function ChangeTable({rows,archived,projectId,routeId,reload}:{
+  rows:ListedChange[];archived:boolean;projectId:string;routeId:string;reload:()=>Promise<unknown>
 }){
   const navigation=useTableSearch()
   const [pending,setPending]=useState<Set<string>>(new Set())
@@ -51,12 +51,17 @@ function ChangeTable({rows,archived,projectId,reload}:{
     try{
       await api('projects/'+encodeURIComponent(projectId)+'/changes/'+encodeURIComponent(row.id)+'/refresh',{})
       setMessage('Change actualisé.')
-      await reload()
     }catch(error){
       const unavailable=error instanceof ApiError&&error.code==='change-catalogue-unavailable'
       setMessage(unavailable||!(error instanceof Error)?'Lecture des fichiers OpenSpec temporairement indisponible.':error.message)
+      return
     }finally{
       setPending(previous=>{const next=new Set(previous);next.delete(row.id);return next})
+    }
+    try{
+      await reload()
+    }catch{
+      setMessage('Change actualisé. La liste est temporairement indisponible.')
     }
   }
   return <>
@@ -70,13 +75,25 @@ function ChangeTable({rows,archived,projectId,reload}:{
         <th scope="col"><span>Actions</span></th>
       </tr></thead>
       <tbody>{visible.map(row=><tr key={row.source}>
-        <td data-label="Identifiant">{row.identifier}</td>
+        <td data-label="Identifiant">
+          <Link className="text-button" to="/projects/$projectId/changes/$changeId"
+            params={{projectId:routeId,changeId:row.identifier}} search={archived?{source:row.source}:{}}>
+            {row.identifier}
+          </Link>
+        </td>
         <td data-label="Titre">{row.title||'—'}</td>
         <td data-label="Tâches">{row.tasks_done===null||row.tasks_total===null?'—':row.tasks_done+'/'+row.tasks_total}</td>
         <td data-label="Dernière modification"><time dateTime={row.changed_at}>{new Date(row.changed_at).toLocaleString('fr-FR')}</time></td>
         {archived&&<td data-label="Archivage">{row.archived_at?<time dateTime={row.archived_at}>{new Date(row.archived_at).toLocaleDateString('fr-FR',{timeZone:'UTC'})}</time>:'—'}</td>}
-        <td data-label="Actions"><button type="button" className="text-button" disabled={pending.has(row.id)}
-          aria-label={'Actualiser '+row.identifier} onClick={()=>void refresh(row)}>Actualiser</button></td>
+        <td data-label="Actions"><button type="button"
+          className={'lifecycle-icon catalog-refresh'+(pending.has(row.id)?' catalog-refreshing':'')}
+          disabled={pending.has(row.id)} aria-busy={pending.has(row.id)}
+          aria-label={'Actualiser '+row.identifier} title={pending.has(row.id)?'Actualisation en cours':'Actualiser '+row.identifier}
+          onClick={()=>void refresh(row)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M20 10a8 8 0 1 0-2 7M20 4v6h-6"/>
+          </svg>
+        </button></td>
       </tr>)}
       <TableFiller columns={archived?6:5} count={visible.length} empty={navigation.query.trim()?'Aucun résultat.':archived?'Aucun change archivé.':'Aucun change ouvert.'}/>
       </tbody>
@@ -95,6 +112,7 @@ export function ProjectChanges({projectId,routeId,status}:{
   const [warning,setWarning]=useState('')
   const query=useQuery({
     queryKey:['project-changes',projectId],
+    networkMode:'always',
     queryFn:()=>api<{changes:RecordRow[]}>('projects/'+encodeURIComponent(projectId)+'/changes'),
   })
   useEffect(()=>{
@@ -132,7 +150,7 @@ export function ProjectChanges({projectId,routeId,status}:{
       <Link to="/projects/$projectId/changes" params={{projectId:routeId}} search={{status:'archived'}} aria-current={archived?'page':undefined}>Archivés</Link>
     </nav>
     {warning&&<p role="status">{warning}</p>}
-    {rows?<ChangeTable key={status} rows={rows} archived={archived} projectId={projectId} reload={query.refetch}/>:
+    {rows?<ChangeTable key={status} rows={rows} archived={archived} projectId={projectId} routeId={routeId} reload={query.refetch}/>:
       query.error?<p role="alert">{query.error.message}</p>:<p role="status">Chargement des changes…</p>}
   </>
 }

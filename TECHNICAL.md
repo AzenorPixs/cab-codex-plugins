@@ -86,6 +86,8 @@ et des entrées séparées pour ses sources locales ouvertes ou archivées.
 Les hashes par fichier incluent `STATISTICS.md` lorsqu’il existe. Seules les
 données publiques sont transmises par Electric, dans la portée du projet.
 La veille inotify et un créneau aléatoire par jour UTC réconcilient le catalogue.
+La fiche récupère les données publiques du change depuis PostgreSQL. La route
+peut préciser une des sources observées pour distinguer les archives homonymes.
 
 
 Les statistiques du change utilisent des périodes début/fin par RUN/SID : un

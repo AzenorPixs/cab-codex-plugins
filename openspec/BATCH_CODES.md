@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[add-project-change-detail](changes/archive/2026-11-24-add-project-change-detail/),
+code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 [add-project-openspec-changes](changes/archive/2026-11-24-add-project-openspec-changes/),
 code non attribué. Attribution ultérieure par ACL.
 

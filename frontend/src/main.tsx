@@ -15,6 +15,7 @@ import {ProjectSidebar,CreateProjectForm,type Project} from './Projects'
 import {ProjectHome} from './ProjectHome'
 import {ProjectForges} from './ProjectForges'
 import {ProjectChanges} from './ProjectChanges'
+import {ProjectChangeDetail} from './ProjectChangeDetail'
 import {ProjectFactory} from './ProjectFactory'
 import {ProjectIncidents} from './ProjectIncidents'
 import {ProjectReservations} from './ProjectReservations'
@@ -39,7 +40,7 @@ function Layout(){
 }
 
 function Gate({children}:{children:React.ReactNode}){
-  const health=useQuery({queryKey:['health'],queryFn:()=>api<Health>('health'),refetchInterval:15000})
+  const health=useQuery({queryKey:['health'],queryFn:()=>api<Health>('health'),networkMode:'always',refetchInterval:15000})
   if(health.isPending)return <p role="status">Connexion à CAB…</p>
   if(health.error)return <p role="alert">CAB est indisponible. Les sessions et reçus restent protégés.</p>
   if(!health.data.initialized)return <Initialize/>
@@ -58,7 +59,7 @@ function Login(){const [error,setError]=useState('');const [busy,setBusy]=useSta
   return <section className="setup"><p className="eyebrow">ACCÈS ADMINISTRATEUR</p><h1>Connexion à CAB</h1><form onSubmit={submit}><label>Compte<input name="username" required autoComplete="username"/></label><label>Mot de passe<input name="password" type="password" autoComplete="current-password"/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>Se connecter</button></form></section>
 }
 function Projects({children}:{children:(projects:Project[])=>React.ReactNode}){
-  const query=useQuery({queryKey:['projects'],queryFn:()=>api<{projects:Project[]}>('projects')})
+  const query=useQuery({queryKey:['projects'],queryFn:()=>api<{projects:Project[]}>('projects'),networkMode:'always'})
   if(query.isPending)return <p role="status">Chargement des projets…</p>
   if(query.error)return <Login/>
   return children(query.data.projects)
@@ -200,6 +201,21 @@ function ProjectChangesPage(){
   const {status='open'}=projectChangesRoute.useSearch()
   return <Gate><Projects>{projects=><ProjectScreen projects={projects} changes={status}/>}</Projects></Gate>
 }
+const projectChangeDetailRoute=createRoute({
+  getParentRoute:()=>rootRoute,
+  path:'/projects/$projectId/changes/$changeId',
+  validateSearch:(search:Record<string,unknown>):{source?:string}=>typeof search.source==='string'&&search.source?{source:search.source}:{},
+  component:ProjectChangeDetailPage,
+})
+function ProjectChangeDetailPage(){
+  const {projectId,changeId}=projectChangeDetailRoute.useParams()
+  const {source}=projectChangeDetailRoute.useSearch()
+  return <Gate><Projects>{projects=>{
+    const project=projects.find(item=>item.id===projectId||item.identifier===projectId)
+    return project?<ProjectChangeDetail projectId={project.id} routeId={project.identifier||project.id} changeId={changeId} source={source}/>:
+      <section className="project-content"><h1>Projet introuvable</h1></section>
+  }}</Projects></Gate>
+}
 const projectRunRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/runs/$runId',component:()=> <Gate><Projects>{projects=><ProjectRunScreen projects={projects}/>}</Projects></Gate>})
 const projectIncidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/incidents',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
 const projectArchivesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/projects/$projectId/archives',component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} archives/>}</Projects></Gate>})
@@ -219,6 +235,6 @@ const administrationGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/ad
 const administrationUpdateRoute=createRoute({getParentRoute:()=>rootRoute,path:'/administration/update',component:()=> <AdministrationShell><Gate><SystemUpdatePage login={<Login/>}/></Gate></AdministrationShell>})
 const administrationPages=(['database','interface','projects','web-server'] as const).map(section=>createRoute({getParentRoute:()=>rootRoute,path:`/administration/${section}`,component:()=> <AdministrationShell><Gate><ConfigurationAccess section={section} login={<Login/>}/></Gate></AdministrationShell>}))
 const incidentRoute=createRoute({getParentRoute:()=>rootRoute,path:'/incidents',validateSearch:projectSearch,component:()=> <Gate><Projects>{projects=><ProjectScreen projects={projects} incidents/>}</Projects></Gate>})
-const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectChangesRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
+const router=createRouter({routeTree:rootRoute.addChildren([indexRoute,projectRoute,allProjectArchivesRoute,allProjectSessionsRoute,projectReservationsRoute,projectDetailRoute,projectFactoryRoute,projectForgesRoute,projectSessionsRoute,projectChangesRoute,projectChangeDetailRoute,projectRunRoute,projectIncidentRoute,projectArchivesRoute,newProjectRoute,administrationRoute,administrationBinariesRoute,agentsRoute,...agentPages,...agentCatalogueRoutes,administrationAgentsRoute,administrationGitRoute,administrationUpdateRoute,...administrationPages,incidentRoute])})
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><AppearanceProvider><CabVersionProvider><McpConnectionsProvider><RouterProvider router={router}/></McpConnectionsProvider></CabVersionProvider></AppearanceProvider></QueryClientProvider>)

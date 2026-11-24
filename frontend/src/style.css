@@ -354,6 +354,12 @@ header .brand {
 [data-theme="dark"] .catalog-valid{color:#65d997}
 [data-theme="dark"] .catalog-invalid{color:#ff8680}
 .catalog-refreshing svg{animation:catalog-refresh-spin 1s linear infinite}
+.project-change-detail{max-width:none;overflow-wrap:anywhere}
+.project-change-detail .forge-card-content>section{margin-block-start:1.5rem}
+.change-detail-summary{display:grid;grid-template-columns:minmax(0,12rem) minmax(0,1fr);gap:.45rem 1rem}
+.change-detail-summary>div{display:contents}
+.change-detail-summary dd{margin:0;min-width:0}
+@media(max-width:560px){.change-detail-summary{grid-template-columns:minmax(0,1fr)}.change-detail-summary dd{margin-block-end:.35rem}}
 @keyframes catalog-refresh-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.catalog-refreshing svg{animation:none}}
 .lifecycle-dialog.catalog-document{width:min(58rem,90vw)}

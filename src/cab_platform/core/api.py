@@ -1078,6 +1078,42 @@ def refresh_project_change(request,project_id:str,change_id:str):
     refresh(project.pk,identifier=change.identifier)
     return {'refreshed':True}
 
+@api.get('/projects/{project_id}/changes/{change_id}')
+def project_change_detail(request,project_id:str,change_id:str,source:str|None=None):
+    from .models import Change, Run, StatisticsDocument
+    from cab_platform.change_stage_metrics import LABELS
+
+    actor=principal(request)
+    project=Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None,'project-not-authorized',403)
+    commands.scope(actor,project)
+    changes=Change.objects.filter(project=project).exclude(catalogue=[])
+    change=changes.filter(identifier=change_id).first() or changes.filter(pk=change_id).first()
+    commands.require(change is not None,'change-not-found',404)
+    ordered=sorted(change.catalogue,key=lambda row:(not row['archived'],row.get('archived_at') or '',row['source']),reverse=True)
+    selected=next((row for row in ordered if source is None or row['source']==source),None)
+    commands.require(selected is not None,'change-source-not-found',404)
+    hashes=change.catalogue_hashes.get(selected['source'],{})
+    task_hash=hashes.get('tasks.md')
+    tasks=change.task_records.filter(active=True,source_sha256=task_hash).values('label','completed','position','source_line') if task_hash else []
+    stages=[
+        {**stage,'label':LABELS.get(stage['key'],stage['key'])}
+        for stage in change.stages.order_by('pk').values('key','iteration_count','duration_seconds','updated_at')
+    ]
+    report=StatisticsDocument.objects.filter(source__change=change,source__path=selected['source'],source__present=True).first()
+    statistics=None
+    if report is not None:
+        statistics={
+            'status':report.status,'sha256':report.sha256,'imported_at':report.imported_at,
+            'manual_override':report.manual_override,
+            'metrics':list(report.metrics.order_by('key').values('key','state','value','unit')),
+        }
+    run_ids=Run.objects.filter(project=project,change_record=change).order_by('-updated','run_id').values_list('run_id',flat=True)
+    return {
+        'id':change.pk,'identifier':change.identifier,'selected':selected,'sources':ordered,
+        'hashes':hashes,'tasks':list(tasks),'stages':stages,'statistics':statistics,'run_ids':list(run_ids),
+    }
+
 
 @api.post('/projects/{project_id}/forges/authenticate')
 def forge_authenticate(request,project_id:str):

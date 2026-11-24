@@ -35,14 +35,36 @@ async function report(value){
   await wait(()=>text('.table-tabs [aria-current=page]')==='Ouverts','Onglet Ouverts');
   await wait(()=>text('tbody tr:first-child td')==='recent','Tri initial sur PostgreSQL');
   if(text('tbody tr:nth-child(2) td')!=='moins-recent')throw Error('Deuxième change attendu');
-  find('button[aria-label="Actualiser recent"]').click();
-  await wait(()=>doc().body.innerText.includes('Change actualisé.'),'Actualisation manuelle');
+  async function refresh(name){
+    const selector='button[aria-label="Actualiser '+name+'"]';
+    const button=find(selector);
+    if(!button?.querySelector('svg')||button.textContent.trim())throw Error('Icône seule requise');
+    button.click();
+    await wait(()=>button.disabled&&button.getAttribute('aria-busy')==='true'&&
+      frame.contentWindow.getComputedStyle(button.querySelector('svg')).animationName==='catalog-refresh-spin','Icône animée');
+    await fetch('/release-refresh');
+    await wait(()=>find(selector)?.disabled===false&&doc().body.innerText.includes('Change actualisé.'),'Actualisation manuelle');
+  }
+  await refresh('recent');
+  frame.contentWindow.dispatchEvent(new frame.contentWindow.Event('offline'));
+  find('tbody tr:first-child td a').click();
+  await wait(()=>text('.project-change-detail h1')==='recent'&&doc().body.innerText.includes('Empreintes SHA'),'Fiche du change ouvert');
+  if(find('.project-sidebar')||frame.contentWindow.getComputedStyle(find('.project-change-detail')).maxWidth!=='none')
+    throw Error('La fiche doit utiliser la pleine largeur');
+  if(!frame.contentWindow.location.pathname.endsWith('/changes/recent'))throw Error('Route du change ouvert');
+  frame.contentWindow.dispatchEvent(new frame.contentWindow.Event('online'));
+  find('.project-change-detail > a').click();
+  await wait(()=>text('tbody tr:first-child td')==='recent','Retour aux changes ouverts');
   await fetch('/archive');
   await wait(()=>text('tbody tr:first-child td')==='moins-recent','Mutation Electric dans Ouverts');
   find('.table-tabs a:last-child').click();
   await wait(()=>text('.table-tabs [aria-current=page]')==='Archivés'&&text('tbody tr:first-child td')==='recent','Mutation et tri dans Archivés');
   if(text('tbody tr:nth-child(2) td')!=='archive')throw Error('Archive précédente attendue');
   if(!find('td[data-label="Archivage"] time'))throw Error('Date d’archivage absente');
+  await refresh('archive');
+  find('tbody tr:nth-child(2) td a').click();
+  await wait(()=>text('.project-change-detail h1')==='archive','Fiche du change archivé');
+  if(new URL(frame.contentWindow.location.href).searchParams.get('source')!=='archive')throw Error('Source archivée absente');
   await report({ok:true});
 })().catch(error=>report({error:error.message}));
 </script>`
@@ -55,6 +77,8 @@ let published = false
 let refreshed = []
 let result
 let server
+let releaseRefresh
+let releaseRequested = false
 try {
   execFileSync(process.execPath,['node_modules/vite/bin/vite.js','build','--logLevel','error','--outDir',web],
     {cwd:resolve('frontend'),stdio:'inherit'})
@@ -66,6 +90,11 @@ try {
     const path = url.pathname
     if(path==='/preview')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
     if(path==='/archive'){published=true;return response.writeHead(204).end()}
+    if(path==='/release-refresh'){
+      if(releaseRefresh){releaseRefresh();releaseRefresh=undefined}
+      else releaseRequested=true
+      return response.writeHead(204).end()
+    }
     if(path==='/result'){
       let body=''
       for await(const chunk of request)body+=chunk
@@ -76,7 +105,18 @@ try {
     if(path==='/api/v1/health')return json(response,{initialized:true,state:'READY',version:'fixture',csrf_token:'fixture'})
     if(path==='/api/v1/projects')return json(response,{projects})
     if(path==='/api/v1/projects/alpha/changes')return json(response,{changes:initial})
-    if(path.endsWith('/refresh')){refreshed.push(path);return json(response,{refreshed:true})}
+    if(path.endsWith('/refresh')){
+      refreshed.push(path)
+      if(releaseRequested){releaseRequested=false;return json(response,{refreshed:true})}
+      releaseRefresh=()=>json(response,{refreshed:true})
+      return
+    }
+    if(path.startsWith('/api/v1/projects/alpha/changes/')){
+      const id=path.split('/').at(-1)
+      const selected=initial.find(change=>change.id===id)?.catalogue[0]
+      return json(response,{id,identifier:id,selected,sources:[selected],hashes:{'tasks.md':'fixture'},
+        tasks:[],stages:[],statistics:null,run_ids:['RUN-fixture']})
+    }
     if(path.startsWith('/api/v1/sync/')){
       const target=path.endsWith('/project-changes')&&url.searchParams.get('project_id')==='alpha'
       const live=url.searchParams.get('live')==='true'
@@ -102,6 +142,8 @@ try {
   ]){
     published=false
     refreshed=[]
+    releaseRefresh=undefined
+    releaseRequested=false
     let timer
     const observation=new Promise(resolve=>{
       result=resolve
@@ -111,8 +153,8 @@ try {
     const closed=once(browser,'close')
     try{
       assert.deepEqual(await observation,{ok:true})
-      assert.deepEqual(refreshed,['/api/v1/projects/alpha/changes/recent/refresh'])
-      console.log(name+' : onglets, tri, actualisation ciblée et archivage en direct validés.')
+      assert.deepEqual(refreshed,['/api/v1/projects/alpha/changes/recent/refresh','/api/v1/projects/alpha/changes/archive/refresh'])
+      console.log(name+' : icônes animées, détail pleine largeur, liens et archivage en direct validés.')
     }finally{
       clearTimeout(timer)
       browser.kill()

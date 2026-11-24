@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Fiche des changes OpenSpec
+
+[add-project-change-detail](openspec/changes/archive/2026-11-24-add-project-change-detail/),
+code non attribué. Fiche et icônes qualifiées sur Chromium et Firefox. Attribution ultérieure par ACL.
+
 ## Catalogue OpenSpec des projets
 
 [add-project-openspec-changes](openspec/changes/archive/2026-11-24-add-project-openspec-changes/),

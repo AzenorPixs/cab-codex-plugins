@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Ouvrir une fiche pleine largeur depuis l’identifiant d’un change et afficher une icône animée pendant l’actualisation dans les deux onglets.
+
 - Ajouter au menu de chaque projet la page Changes et ses onglets Ouverts et Archivés. Le catalogue se met à jour via Electric, au changement des fichiers OpenSpec surveillés et lors d’une vérification quotidienne. Chaque ligne peut aussi être actualisée à la demande.
 
 - Rendre les URL fournisseurs cliquables et ouvrir le dernier résultat de catalogue depuis son état. Vérifier les clés API sur demande et toutes les quatre heures à un créneau aléatoire, afficher la dernière réussite et les mesures disponibles, puis choisir aléatoirement parmi les clés valides pour les catalogues authentifiés.
