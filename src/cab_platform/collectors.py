@@ -10,13 +10,21 @@ from .core.models import Actor,Metric,Run
 from .core.commands import event
 log=logging.getLogger('cab.collectors')
 
+def metrics_retired(run):
+    return run.mandate.get('native_frozen_at') or run.mandate.get('terminal_cleanup_statistics')
+
+def locked_metrics_run(run):
+    current = Run.objects.select_for_update().filter(pk=run.pk).first()
+    if current and not metrics_retired(current):
+        return current
+
 def opencode_metrics(actor):
     from .opencode import messages
     from .core.commands import Refused
     import httpx
     from decimal import Decimal,InvalidOperation
     for run in Run.objects.filter(actor=actor):
-        if run.mandate.get('native_frozen_at'):continue
+        if metrics_retired(run):continue
         try:rows=messages(run)
         except (Refused,httpx.HTTPError,OSError,ValueError,KeyError) as error:
             log.debug('native source unavailable',extra={'run_id':run.run_id,'code':type(error).__name__});continue
@@ -37,14 +45,16 @@ def opencode_metrics(actor):
             timestamp=row.get('time',{})
             sequence=max([v for v in timestamp.values() if type(v) is int and v>=0],default=0) if isinstance(timestamp,dict) else timestamp if type(timestamp) is int else 0
             with transaction.atomic():
-                metric,created=Metric.objects.select_for_update().get_or_create(run=run,source='opencode-native',stream=row['id'][:200],defaults={'sequence':sequence})
+                current = locked_metrics_run(run)
+                if not current:break
+                metric,created=Metric.objects.select_for_update().get_or_create(run=current,source='opencode-native',stream=row['id'][:200],defaults={'sequence':sequence})
                 if not created and sequence<metric.sequence:continue
                 metric.sequence=sequence;metric.values=values;metric.coverage={**{k:'native' for k in values},'_scope':'session-wide','_eligible_for_change':False};metric.model={k:str(v)[:160] for k,v in row.get('model',{}).items() if k in ('id','providerID','variant')};metric.save()
 
 def codex_metrics(run):
     actor=run.actor
     source=run.mandate.get('native_source',actor.native)
-    if run.mandate.get('native_frozen_at') or not source.get('source_file'):return
+    if metrics_retired(run) or not source.get('source_file'):return
     path=Path(source['source_file'])
     try:
         fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
@@ -63,7 +73,9 @@ def codex_metrics(run):
         metrics={key:str(last[name]) for name,key in [('input_tokens','tokens_input'),('output_tokens','tokens_output'),('cached_input_tokens','tokens_cache_read'),('cache_write_input_tokens','tokens_cache_write'),('reasoning_output_tokens','tokens_reasoning'),('total_tokens','tokens_total')] if type(last.get(name)) is int and last[name]>=0}
         sequence=info.st_mtime_ns//1000000
         with transaction.atomic():
-            current,created=Metric.objects.select_for_update().get_or_create(run=run,source='codex-native',stream='native-tokens',defaults={'sequence':sequence})
+            locked_run = locked_metrics_run(run)
+            if not locked_run:return
+            current,created=Metric.objects.select_for_update().get_or_create(run=locked_run,source='codex-native',stream='native-tokens',defaults={'sequence':sequence})
             if not created and sequence<=current.sequence:return
             current.sequence=sequence;current.values=metrics;current.coverage={**{k:'native' for k in metrics},'_scope':'session-wide','_eligible_for_change':False};current.save()
     except (OSError,UnicodeError) as error:

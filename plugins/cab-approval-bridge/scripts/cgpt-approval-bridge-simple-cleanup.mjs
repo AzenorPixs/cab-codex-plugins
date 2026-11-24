@@ -1,6 +1,49 @@
 import {createHash} from 'node:crypto';
-import {isAbsolute,resolve} from 'node:path';
+import {isAbsolute,join,resolve} from 'node:path';
+import {ensurePrivateStateDirectory,readRuntimeJson,runtimeStateDirectory,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
+import {authority} from './cgpt-approval-bridge-update.mjs';
 export const VERSION='2.7.4';
+
+const confirmedStatuses = ['REMOVED', 'ABSENT'];
+
+function cleanupError(code, options) {
+  return Object.assign(new Error(code, options), {code});
+}
+
+export function cleanupReceiptStore(directory) {
+  return async (operationId, execute) => {
+    if (!/^cleanup-[a-f0-9]{64}-[a-z]+$/.test(operationId)) {
+      throw cleanupError('cleanup-operation-id-invalid');
+    }
+    const path = join(directory, `${operationId}.json`);
+    ensurePrivateStateDirectory(directory);
+    const lease = await authority(path + '.lock');
+    try {
+      let prior;
+      try {
+        prior = readRuntimeJson(path, {maxBytes: 1024}).value;
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw cleanupError('cleanup-receipt-unreadable', {cause: error});
+        }
+      }
+      if (prior !== undefined) {
+        if (prior?.operationId !== operationId || !confirmedStatuses.includes(prior.status)) {
+          throw cleanupError('cleanup-receipt-invalid');
+        }
+        return {status: prior.status};
+      }
+      const result = await execute();
+      if (!confirmedStatuses.includes(result?.status)) {
+        throw cleanupError('cleanup-component-unconfirmed');
+      }
+      writeRuntimeJson(path, {operationId, status: result.status});
+      return {status: result.status};
+    } finally {
+      await lease.close();
+    }
+  };
+}
 
 export function cleanupInspector({getRuns,getStatistics}) {
   if(typeof getRuns!=='function'||typeof getStatistics!=='function')throw new Error('cleanup-inspector-invalid');
@@ -29,32 +72,37 @@ export function cleanupInspector({getRuns,getStatistics}) {
 }
 
 // Chaque adaptateur vérifie atomiquement les générations et supprime de façon idempotente.
-export async function simpleCleanup(input,{inspect,components}) {
+export async function simpleCleanup(input,{inspect,components,withReceipt}) {
   if(!input||typeof input.project!=='string'||!isAbsolute(input.project)||resolve(input.project)!==input.project||
     !Array.isArray(input.runIds)||!input.runIds.length||!input.runIds.every(id=>typeof id==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(id))||
-    new Set(input.runIds).size!==input.runIds.length||typeof inspect!=='function'||!components||typeof components!=='object')
+    new Set(input.runIds).size!==input.runIds.length||typeof inspect!=='function'||!components||typeof components!=='object'||
+    (withReceipt!==undefined&&typeof withReceipt!=='function'))
     throw Object.assign(new Error('cleanup-scope-invalid'),{code:'cleanup-scope-invalid'});
   const scope={project:input.project,runIds:[...input.runIds].sort()},states=await inspect(scope);
   if(!Array.isArray(states)||states.length!==scope.runIds.length||scope.runIds.some(id=>states.filter(row=>row.runId===id).length!==1)||
     states.some(row=>!['DELIVERED','ABANDONED','RELEASED'].includes(row.state)||
       !(Number.isSafeInteger(row.generation)&&row.generation>=1||typeof row.generation==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(row.generation))))
     throw Object.assign(new Error('cleanup-target-active-or-unknown'),{code:'cleanup-target-active-or-unknown'});
-  const generations=states.map(row=>({runId:row.runId,generation:row.generation})).sort((a,b)=>a.runId.localeCompare(b.runId));
+  const generationByRun = new Map(states.map(row => [row.runId, row.generation]));
+  const generations = scope.runIds.map(runId => ({runId, generation: generationByRun.get(runId)}));
   const digest=createHash('sha256').update(JSON.stringify({scope,generations})).digest('hex'),results=[];
+  const runWithReceipt = withReceipt ?? cleanupReceiptStore(join(runtimeStateDirectory(scope.project), 'simple-cleanup-receipts'));
   const required=['controller','broker','supervisor','monitor','sgs','ccab','archives'];
   for(const name of required){
     const adapter=components[name];
-    if(adapter===undefined){results.push({component:name,status:'PENDING',code:'cleanup-adapter-unavailable'});continue;}
-    if(!/^[a-z][a-z0-9-]{0,49}$/.test(name)||typeof adapter!=='function')throw new Error('cleanup-adapter-invalid');
+    const operationId = 'cleanup-' + digest + '-' + name;
     try{
-      const value=await adapter(scope,{operationId:'cleanup-'+digest+'-'+name,generations});
-      if(!value||!['REMOVED','ABSENT'].includes(value.status))throw Object.assign(new Error('cleanup-component-unconfirmed'),{code:'cleanup-component-unconfirmed'});
+      const value = await runWithReceipt(operationId, async () => {
+        if (adapter === undefined) throw cleanupError('cleanup-adapter-unavailable');
+        if (typeof adapter !== 'function') throw cleanupError('cleanup-adapter-invalid');
+        return adapter(scope, {operationId, generations});
+      });
+      if(!confirmedStatuses.includes(value?.status))throw cleanupError('cleanup-component-unconfirmed');
       results.push({component:name,status:value.status});
     }catch(error){
       const supplied=error?.code||(Number.isInteger(error?.status)?error?.message:undefined);
       const code=['ECONNREFUSED','ECONNRESET','ETIMEDOUT','EPIPE','ENOENT'].includes(supplied)?'cleanup-component-unavailable':supplied;
-      if(!/^[a-z][a-z0-9-]{0,99}$/.test(code||''))throw error;
-      results.push({component:name,status:'PENDING',code});
+      results.push({component:name,status:'PENDING',code:/^[a-z][a-z0-9-]{0,99}$/.test(code||'')?code:'cleanup-component-unconfirmed'});
     }
   }
   return {status:results.some(row=>row.status==='PENDING')?'PARTIAL':'COMPLETE',scope,components:results};

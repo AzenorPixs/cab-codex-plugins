@@ -1,8 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {simpleCleanup,cleanupInspector,sgsCleanupAdapter,ccabCleanupAdapter,archiveCleanupAdapter} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-simple-cleanup.mjs';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {simpleCleanup as runCleanup,cleanupReceiptStore,cleanupInspector,sgsCleanupAdapter,ccabCleanupAdapter,archiveCleanupAdapter} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-simple-cleanup.mjs';
 
 const scope={project:'/fixture',runIds:['closed-run']};
+const simpleCleanup = (target, dependencies) => runCleanup(target, {
+  withReceipt: (_id, execute) => execute(), ...dependencies,
+});
+
+function receiptDirectory(context) {
+  const directory = mkdtempSync(join(tmpdir(), 'cab-simple-cleanup-'));
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+  return directory;
+}
+
 test('inventaire simple : retrouve une session directe close et refuse une liaison active',async()=>{
  const session={binding:'codex-binding',project:'/fixture',change:'change-direct',run:'closed-run',mode:'direct',cab_direct:true,ended_at:'2026-11-08T10:00:00Z'};
  let active=[];const inspector=cleanupInspector({getRuns:async()=>({project:'/fixture',runs:[]}),
@@ -11,14 +24,44 @@ test('inventaire simple : retrouve une session directe close et refuse une liais
  assert.equal(await inspector.changeForRun('/fixture','closed-run'),'change-direct');
  active=[{run:'closed-run'}];assert.equal((await inspector.inspect(scope))[0].state,'RESERVED');
 });
-test('nettoyage simple : poursuite indépendante et reprise de même identité',async()=>{
+test('nettoyage simple : seules les briques en attente reprennent avec la même identité',async context=>{
+ const directory=receiptDirectory(context);
  let unavailable=true;const calls=[];
  const deps={inspect:async()=>[{runId:'closed-run',state:'ABANDONED',generation:1}],components:{
   controller:async(_s,o)=>{calls.push(o.operationId);return {status:'REMOVED'}},broker:async()=>({status:'ABSENT'}),supervisor:async()=>({status:'ABSENT'}),monitor:async()=>({status:'ABSENT'}),
   sgs:async(_s,o)=>{calls.push(o.operationId);if(unavailable)throw Object.assign(new Error('offline'),{code:'sgs-unavailable'});return {status:'REMOVED'}},
   ccab:async(_s,o)=>{calls.push(o.operationId);return {status:'ABSENT'}},archives:async()=>({status:'ABSENT'})}};
- const first=await simpleCleanup(scope,deps);assert.equal(first.status,'PARTIAL');assert.equal(first.components.find(x=>x.component==='sgs').status,'PENDING');assert.equal(first.components.find(x=>x.component==='ccab').status,'ABSENT');
- unavailable=false;const second=await simpleCleanup(scope,deps);assert.equal(second.status,'COMPLETE');assert.deepEqual(calls.slice(0,3),calls.slice(3));
+ const first=await runCleanup(scope,{...deps,withReceipt:cleanupReceiptStore(directory)});
+ assert.equal(first.status,'PARTIAL');assert.equal(first.components.find(x=>x.component==='sgs').status,'PENDING');assert.equal(first.components.find(x=>x.component==='ccab').status,'ABSENT');
+ unavailable=false;
+ const second=await runCleanup(scope,{...deps,withReceipt:cleanupReceiptStore(directory)});
+ assert.equal(second.status,'COMPLETE');assert.equal(calls.length,4);assert.equal(calls[1],calls[3]);
+ assert.equal(second.components.find(x=>x.component==='controller').status,'REMOVED');
+});
+test('nettoyage simple : reçu illisible, effet protégé et autre brique reprise', async context => {
+  const directory = receiptDirectory(context);
+  let operationId;
+  let controllerCalls = 0;
+  let brokerAvailable = false;
+  const dependencies = {
+    inspect: async () => [{runId: 'closed-run', state: 'DELIVERED', generation: 1}],
+    withReceipt: cleanupReceiptStore(directory),
+    components: {
+      controller: async (_target, operation) => {
+        operationId = operation.operationId;
+        controllerCalls++;
+        return {status: 'REMOVED'};
+      },
+      broker: async () => brokerAvailable ? {status: 'ABSENT'} : undefined,
+    },
+  };
+  await runCleanup(scope, dependencies);
+  writeFileSync(join(directory, `${operationId}.json`), '{');
+  brokerAvailable = true;
+  const resumed = await runCleanup(scope, dependencies);
+  assert.equal(controllerCalls, 1);
+  assert.deepEqual(resumed.components[0], {component: 'controller', status: 'PENDING', code: 'cleanup-receipt-unreadable'});
+  assert.deepEqual(resumed.components[1], {component: 'broker', status: 'ABSENT'});
 });
 test('nettoyage simple : refus avant tout effet si RUN actif ou inconnu',async()=>{
  let called=false;const components={sgs:async()=>{called=true;return {status:'REMOVED'}}};
@@ -26,10 +69,12 @@ test('nettoyage simple : refus avant tout effet si RUN actif ou inconnu',async()
   await assert.rejects(simpleCleanup(scope,{inspect:async()=>states,components}),/cleanup-target-active-or-unknown/);
  assert.equal(called,false);
 });
-test('nettoyage simple : une nouvelle génération ne réutilise pas le reçu antérieur',async()=>{
+test('nettoyage simple : une nouvelle génération ne réutilise pas le reçu antérieur',async context=>{
+ const withReceipt=cleanupReceiptStore(receiptDirectory(context));
  let generation=1;const ids=[];
- const deps={inspect:async()=>[{runId:'closed-run',state:'DELIVERED',generation}],components:{sgs:async(_s,o)=>{ids.push(o.operationId);return {status:'REMOVED'}}}};
- await simpleCleanup(scope,deps);generation=2;await simpleCleanup(scope,deps);assert.notEqual(ids[0],ids[1]);
+ const deps={withReceipt,inspect:async()=>[{runId:'closed-run',state:'DELIVERED',generation}],components:{sgs:async(_s,o)=>{ids.push(o.operationId);return {status:'REMOVED'}}}};
+ await runCleanup(scope,deps);generation=2;await runCleanup(scope,deps);
+ assert.equal(ids.length,2);assert.notEqual(ids[0],ids[1]);
 });
 test('nettoyage simple : une brique absente ne vaut pas nettoyage complet',async()=>{
  const result=await simpleCleanup(scope,{inspect:async()=>[{runId:'closed-run',state:'DELIVERED',generation:1}],components:{sgs:async()=>({status:'ABSENT'})}});

@@ -1464,6 +1464,9 @@ def command(request,body:Command):
     if name in ('session.delete_preview','session.delete'):
         from .session_cleanup import deletion_preview,delete
         return deletion_preview(actor,data) if name=='session.delete_preview' else delete(actor,data)
+    if name=='session.cleanup':
+        from .session_cleanup import terminal_cleanup
+        return terminal_cleanup(actor,data)
     if name in ('run.reevaluate','session.archive'):
         from . import run_lifecycle
         return run_lifecycle.recheck(actor,data) if name=='run.reevaluate' else run_lifecycle.archive_session(actor,data)
@@ -1733,8 +1736,9 @@ def command(request,body:Command):
         },direct_connection=True)
     if name=='metric.record':
         commands.require(actor.role in ('collector','admin'),'collector-required',403)
-        r=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False)
         with transaction.atomic():
+            r=commands.run_scope(actor,data['run_id'],data['project_id'],owner=False,lock=True)
+            if r.mandate.get('terminal_cleanup_statistics'):return {'status':'retired'}
             m,created=Metric.objects.select_for_update().get_or_create(run=r,source=data['source'],stream=data['stream'],defaults={'sequence':data['sequence']})
             if not created and data['sequence']<m.sequence:return {'status':'stale'}
             values=data['values'];commands.require(all(isinstance(v,str) and len(v)<80 for v in values.values()),'metrics-invalid',400)

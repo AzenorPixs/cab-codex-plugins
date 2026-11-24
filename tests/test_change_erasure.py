@@ -116,6 +116,7 @@ class ChangeErasureTest(unittest.TestCase):
                 bridge.prepare_terminal_erasure(self.authorize_stop())
             self.assertFalse((self.control/'broker-erasure.json').exists())
 
+
     def test_local_key_symlink_refused(self):
         self.events();self.store()
         (self.root/'events.ndjson.hmac.key').symlink_to(self.control/'change-erasure.key')
@@ -174,3 +175,130 @@ class ChangeErasureTest(unittest.TestCase):
             with self.assertRaisesRegex(bridge.ValidationError,'journal-integrity-invalid'):
                 bridge.prepare_terminal_erasure_bundle()
             self.assertFalse((self.control/'broker-erasure.json').exists())
+
+@unittest.skipUnless(os.environ.get('CAB_EFFECTS_FIXTURE') == '1', 'PostgreSQL isolé requis')
+class TerminalCleanupTests(unittest.TestCase):
+    def setUp(self):
+        from test_stage_protocol import ProtocolTests
+
+        self.finish = lambda: ProtocolTests.finish(self)
+        ProtocolTests.setUp(self)
+        self.request = {**self.ids, 'request_id': 'terminal-cleanup', 'confirm_irreversible': True}
+
+    def close(self, run, branch='TERMINÉ'):
+        from cab_platform.core.commands import event
+
+        receipt = {'branch': branch, 'receipt_id': 'terminal-proof'}
+        run.state = 'CLOSED' if branch == 'TERMINÉ' else 'BLOCKED'
+        run.review = {'closure': receipt}
+        run.save(update_fields=['state', 'review'])
+        event(run, 'run-closed', receipt)
+
+    def metric(self, run):
+        from cab_platform.core.models import Metric
+
+        return Metric.objects.create(run=run, source='fixture', stream='native', sequence=1)
+
+    def test_command_resumes_only_pending_components_and_preserves_peer(self):
+        from django.test import RequestFactory
+        from cab_platform.collectors import locked_metrics_run
+        from cab_platform.core import session_cleanup as cleanup
+        from cab_platform.core import api
+        from cab_platform.core.models import Incident, Metric, Run
+
+        self.close(self.run)
+        peer = Run.objects.create(project=self.project, actor=self.actor, run_id='peer',
+                                  session_id=self.run.session_id, change=self.run.change, mode='direct')
+        target_metric, peer_metric = self.metric(self.run), self.metric(peer)
+        incident = Incident.objects.create(incident_id='pending', project=self.project, run=self.run)
+
+        request = RequestFactory().post('/api/v1/command')
+        with patch.object(api, 'principal', return_value=self.actor):
+            partial = api.command(request, api.Command(name='session.cleanup', data=self.request))
+        self.assertEqual(partial['status'], 'PARTIAL')
+        self.assertEqual({item['component']: item['status'] for item in partial['targets'][0]['components']},
+                         {'coordination': 'ABSENT', 'statistics': 'REMOVED', 'ccab': 'PENDING', 'session': 'PENDING'})
+        self.assertFalse(Metric.objects.filter(pk=target_metric.pk).exists())
+        self.assertTrue(Metric.objects.filter(pk=peer_metric.pk).exists())
+        self.assertIsNone(locked_metrics_run(self.run))
+        incident.state = 'RESOLVED'
+        incident.save(update_fields=['state'])
+
+        with patch.object(cleanup, 'cleanup_statistics', side_effect=AssertionError('statistics replay')), \
+             patch.object(cleanup, 'cleanup_coordination', side_effect=AssertionError('coordination replay')):
+            complete = cleanup.terminal_cleanup(self.actor, self.request)
+            self.assertEqual(complete['status'], 'COMPLETE')
+            self.assertEqual(cleanup.terminal_cleanup(self.actor, self.request), complete)
+        self.assertFalse(Run.objects.filter(pk=self.run.pk).exists())
+        self.assertTrue(Run.objects.filter(pk=peer.pk, state='WORKING').exists())
+        self.assertTrue(Metric.objects.filter(pk=peer_metric.pk).exists())
+
+    def test_change_preflight_refuses_active_run_before_any_effect(self):
+        from cab_platform.core.commands import Refused
+        from cab_platform.core.models import Metric, Run
+        from cab_platform.core.session_cleanup import terminal_cleanup
+
+        self.close(self.run)
+        metric = self.metric(self.run)
+        Run.objects.create(project=self.project, actor=self.actor, run_id='active', session_id='active',
+                           change=self.run.change, mode='direct')
+        with self.assertRaisesRegex(Refused, 'session-not-closed'):
+            terminal_cleanup(self.actor, {'project_id': self.project.pk, 'change': self.run.change,
+                                          'request_id': 'change-cleanup', 'confirm_irreversible': True})
+        self.assertTrue(Metric.objects.filter(pk=metric.pk).exists())
+
+    def test_resumption_refuses_a_different_generation(self):
+        from cab_platform.core.models import Incident, Run
+        from cab_platform.core.session_cleanup import terminal_cleanup
+
+        self.close(self.run)
+        incident = Incident.objects.create(incident_id='generation-pending', project=self.project, run=self.run)
+        first = terminal_cleanup(self.actor, self.request)
+        self.assertEqual(first['status'], 'PARTIAL')
+        Run.objects.filter(pk=self.run.pk).update(generation=2)
+        incident.state = 'RESOLVED'
+        incident.save(update_fields=['state'])
+
+        resumed = terminal_cleanup(self.actor, self.request)
+        self.assertEqual(resumed['status'], 'PARTIAL')
+        self.assertEqual(resumed['targets'][0]['components'][2]['code'], 'session-cleanup-identity-divergent')
+        self.assertTrue(Incident.objects.filter(pk=incident.pk, state='RESOLVED').exists())
+
+    def test_blocked_run_keeps_open_change_and_prevents_legacy_reimport(self):
+        import hashlib
+        import sqlite3
+        from unittest.mock import Mock
+        from cab_platform import migration
+        from cab_platform.core.models import Project, Run
+        from cab_platform.core.session_cleanup import terminal_cleanup
+
+        # L'identifiant respecte la dérivation réelle de l'importeur à partir de la racine.
+        root = self.root / 'legacy'
+        root.mkdir()
+        project = Project.objects.create(pk=hashlib.sha256(str(root).encode()).hexdigest(),
+                                         root=str(root), owner_uid=os.getuid())
+        self.actor.projects.add(project)
+        run = Run.objects.create(project=project, actor=self.actor, run_id='retired',
+                                 session_id='retired-sid', change='fixture', mode='direct')
+        self.close(run, branch='BLOQUÉ')
+        source = root / 'openspec' / 'changes' / run.change
+        source.mkdir(parents=True)
+        report = source / 'STATISTICS.md'
+        report.write_text('Rapport conservé\n', encoding='utf-8')
+        self.assertEqual(terminal_cleanup(self.actor, {**self.request, 'project_id': project.pk,
+                                                      'run_id': run.run_id})['status'], 'COMPLETE')
+        self.assertEqual(report.read_text(encoding='utf-8'), 'Rapport conservé\n')
+
+        path = self.root / 'legacy.sqlite3'
+        with sqlite3.connect(path) as database:
+            database.execute('CREATE TABLE bindings (binding TEXT, uid INTEGER, body TEXT)')
+            database.execute('CREATE TABLE binding_closures (binding TEXT)')
+            database.execute('CREATE TABLE telemetry (binding TEXT, event_id TEXT, source TEXT, stream TEXT, sequence INTEGER, body TEXT)')
+            for key, sid in [('retired', 'retired-sid'), ('peer', 'peer-sid')]:
+                body = {'project': str(root), 'change': 'fixture', 'run': key, 'session': sid}
+                database.execute('INSERT INTO bindings VALUES (?,?,?)', (key, os.getuid(), json.dumps(body)))
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        with patch.object(migration, 'cipher', return_value=Mock(encrypt=lambda _raw: b'fixture')):
+            migration.import_runtime_sqlite({'path': str(path), 'sha256': sha})
+        self.assertFalse(Run.objects.filter(project=project, run_id='retired').exists())
+        self.assertTrue(Run.objects.filter(project=project, run_id='peer').exists())

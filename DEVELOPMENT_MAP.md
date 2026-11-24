@@ -401,9 +401,9 @@ rapport individuel validés. CI/CD, correctif DIU et CABU à vérifier séparém
 
 [preserve-retained-approval-journal](openspec/changes/archive/2026-11-08-preserve-retained-approval-journal/) : code non attribué, tests ciblés validés ; publication, activation et reprise C08 restent à vérifier. La provenance des deux événements postérieurs à l’incident demeure non établie.
 
-## Simplification du nettoyage — en cours
+## Simplification du nettoyage — archivé
 
-[simplify-terminal-cleanup](openspec/changes/simplify-terminal-cleanup/) : code non attribué, coordination et premiers adaptateurs testés ; raccordement des autres briques et validation finale à poursuivre.
+[simplify-terminal-cleanup](openspec/changes/archive/2026-11-24-simplify-terminal-cleanup/), code non attribué. La commande `session.cleanup` est qualifiée sur PostgreSQL isolé et la compatibilité du reçu historique sur données de test. La livraison, l’activation et les opérations sur les cibles réelles suivent leurs propres reçus.
 
 ## Diagnostic du reçu propriétaire — archivé
 
