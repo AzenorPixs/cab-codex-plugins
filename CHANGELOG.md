@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Afficher toutes les lignes des tableaux du Résumé et des étapes du cycle dans le détail des sessions, sans pagination ni recherche.
+
 - Afficher le détail des sessions de codage sur toute la largeur disponible, sans panneau Terminal. L’API de la console isolée reste disponible.
 
 - Compacter le tableau des modèles avec tarifs sur une ligne, cellules de texte limitées à deux lignes et détail administrateur au clic.

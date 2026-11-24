@@ -1,2 +1,2 @@
 """Plateforme CAB système ; aucune initialisation métier à l'import."""
-__version__ = '3.40.0'
+__version__ = '3.41.0'

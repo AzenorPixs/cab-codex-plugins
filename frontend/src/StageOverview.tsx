@@ -14,38 +14,39 @@ const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAIL
 function Waiting({time}:{time:Attribution}){
   return <>{stageDuration(time.waiting_seconds)}</>
 }
-function StageTable<Row>({title,items,columns,header,content,render}:{
+function StageTable<Row>({title,items,columns,header,content,render,showAllRows}:{
   title:string;items:Row[];columns:number;header:ReactNode
-  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode
+  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean
 }){
   const navigation=useTableSearch()
-  const matching=filterTableRows(items,navigation.query,content)
-  const {rows,current,pages}=tablePage(matching,navigation.page)
+  const matching=showAllRows?items:filterTableRows(items,navigation.query,content)
+  const pagination=showAllRows?null:tablePage(matching,navigation.page)
+  const rows=pagination?.rows??items
   return <>
     <div className="cycle-table-scroll"><table className="stage-passages monitor-table" aria-label={title}>
       <thead><tr>{header}</tr></thead>
       <tbody>{rows.map(render)}
         <TableFiller count={rows.length} columns={columns}
-          empty={navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'}/>
+          empty={pagination&&navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'}/>
       </tbody>
     </table></div>
-    <TableNavigation {...navigation} label={'Pagination · '+title} searchLabel={'Rechercher · '+title}
-      current={current} pages={pages} total={matching.length}/>
+    {pagination&&<TableNavigation {...navigation} label={'Pagination · '+title} searchLabel={'Rechercher · '+title}
+      current={pagination.current} pages={pagination.pages} total={matching.length}/>}
   </>
 }
 function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
-function Passages({items,piloted}:{items:Passage[];piloted:boolean}){
-  return <StageTable title="Itérations de l’étape" items={items} columns={7+tokenColumnCount(piloted)}
+function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;showAllRows:boolean}){
+  return <StageTable showAllRows={showAllRows} title="Itérations de l’étape" items={items} columns={7+tokenColumnCount(piloted)}
     header={<><th>Itération</th><th>Début</th><th>Fin</th><th>Travail observé par CAB</th><th>Agent(s)</th><th>Attente</th><TokenColumns header piloted={piloted}/><th>État</th></>}
     content={item=>[item.number,date(item.started_at),date(item.ended_at),stageDuration(item.cab_seconds),
       stageDuration(item.agent_seconds),stageDuration(item.waiting_seconds),item.description,item.receipt?.error,
       item.state&&states[item.state],...tokenValues(item.tokens)]}
     render={item=><tr key={item.id}><td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td><td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td><TokenColumns tokens={item.tokens} piloted={piloted}/><td>{item.state?states[item.state]||item.state:''}{item.description&&<p>{item.description}</p>}{typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}</td></tr>}/>
 }
-function ActionTable({title,actions,passage,piloted}:{title:string;actions:Passage[];passage:Passage;piloted:boolean}){
-  return <StageTable title={title} items={actions} columns={6+tokenColumnCount(piloted)}
+function ActionTable({title,actions,passage,piloted,showAllRows}:{title:string;actions:Passage[];passage:Passage;piloted:boolean;showAllRows:boolean}){
+  return <StageTable showAllRows={showAllRows} title={title} items={actions} columns={6+tokenColumnCount(piloted)}
     header={<><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><TokenColumns header piloted={piloted}/><th>État</th></>}
     content={action=>[action.description,action.source,date(action.started_at),date(action.ended_at),
       stageDuration(action.duration_seconds),action.state&&states[action.state],action.receipt?.note,action.receipt?.mandates,
@@ -67,7 +68,7 @@ function ActionTable({title,actions,passage,piloted}:{title:string;actions:Passa
       </tr>
     }}/>
 }
-function StageActions({stage,expanded,piloted}:{stage:StageMetric;expanded:boolean;piloted:boolean}){
+function StageActions({stage,expanded,piloted,showAllRows}:{stage:StageMetric;expanded:boolean;piloted:boolean;showAllRows:boolean}){
   const observed=(stage.children||[]).flatMap(child=>child.iterations)
     .filter(item=>(item.started_at||item.ended_at)&&!['SKIPPED','NOT_REQUESTED'].includes(item.state||''))
     .sort((a,b)=>(a.started_at||a.ended_at||'').localeCompare(b.started_at||b.ended_at||''))
@@ -76,12 +77,12 @@ function StageActions({stage,expanded,piloted}:{stage:StageMetric;expanded:boole
     if(!actions.length)return null
     const suffix=stage.iterations.length>1&&passage.run_id?' · '+passage.run_id:''
     const title='Actions · Itération '+(passage.number??index+1)+suffix
-    const table=<ActionTable title={title} actions={actions} passage={passage} piloted={piloted}/>
+    const table=<ActionTable title={title} actions={actions} passage={passage} piloted={piloted} showAllRows={showAllRows}/>
     return expanded?<section key={passage.id}><h3>{title}</h3>{table}</section>
       :<details key={passage.id} open={stage.iterations.length===1}><summary>{title}</summary>{table}</details>
   })}</>
 }
-export function StageOverview({stage,title,expanded=false,piloted=false}:{stage:StageMetric|undefined;title:string;expanded?:boolean;piloted?:boolean}){
+export function StageOverview({stage,title,expanded=false,piloted=false,showAllRows=false}:{stage:StageMetric|undefined;title:string;expanded?:boolean;piloted?:boolean;showAllRows?:boolean}){
   return <section className="change-progress stage-overview" aria-label="Overview de l’étape"><h2>{title}</h2>{stage?.not_required&&<p>Revue non requise pour ce RUN.</p>}{stage?.observed&&<>
     <div className="run-metadata stage-metadata">
       <dl className="stage-duration-totals">
@@ -93,13 +94,13 @@ export function StageOverview({stage,title,expanded=false,piloted=false}:{stage:
       <div className="stage-token-totals"><TokenSummary tokens={stage.tokens} piloted={piloted}/></div>
     </div>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
-    <Passages items={stage.iterations} piloted={piloted}/>
-    <StageActions stage={stage} expanded={expanded} piloted={piloted}/>
+    <Passages items={stage.iterations} piloted={piloted} showAllRows={showAllRows}/>
+    <StageActions stage={stage} expanded={expanded} piloted={piloted} showAllRows={showAllRows}/>
   </>}</section>
 }
-export function CycleIterations({cycles,piloted=false}:{cycles:CycleMetric[];piloted?:boolean}){
+export function CycleIterations({cycles,piloted=false,showAllRows=false}:{cycles:CycleMetric[];piloted?:boolean;showAllRows?:boolean}){
   return <section className="change-progress"><h2>Itérations du cycle</h2>
-    <StageTable title="Itérations du cycle" items={cycles} columns={8+tokenColumnCount(piloted)}
+    <StageTable showAllRows={showAllRows} title="Itérations du cycle" items={cycles} columns={8+tokenColumnCount(piloted)}
       header={<><th>Itération</th><th>Début</th><th>Fin</th><th>CAB</th><th>Agent(s)</th><th>Attente</th><th>Durée totale</th><TokenColumns header piloted={piloted}/><th>État</th></>}
       content={cycle=>[cycle.number,date(cycle.started_at),date(cycle.ended_at),stageDuration(cycle.cab_seconds),
         stageDuration(cycle.agent_seconds),stageDuration(cycle.waiting_seconds),

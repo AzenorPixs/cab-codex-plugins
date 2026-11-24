@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Tableaux des cycles de session
+
+[show-all-cycle-table-rows](openspec/changes/archive/2026-11-24-show-all-cycle-table-rows/),
+code non attribué. La recette du 24 novembre 2026 a qualifié le Résumé et les
+étapes 1 à 12 sans pagination ni recherche, ainsi que le maintien des contrôles
+sur l’accueil projet. Attribution ultérieure par ACL.
+
 ## Détail des sessions de codage
 
 [remove-session-terminal-panel](openspec/changes/archive/2026-11-24-remove-session-terminal-panel/),
