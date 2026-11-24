@@ -1,5 +1,7 @@
 """Contrôle des observations et publications sans contacter de forge réelle."""
 import json
+from datetime import datetime, timedelta, timezone
+from contextlib import nullcontext
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -20,11 +22,45 @@ import httpx
 from cab_platform.forge_artifacts import observe, merge
 from cab_platform.forge_repository import get_json
 from cab_platform import forge_publish_artifacts
+from cab_platform import project_artifacts
+from cab_platform.core.models import ProjectForgeArtifactPublication
 from cab_platform.core.commands import Refused
 from cab_platform.forge_publish_artifacts import release_debian, release_docker
 
 
 class ForgeArtifactsTests(unittest.TestCase):
+    def test_factory_refusal_names_the_uncertain_publication(self):
+        project=object()
+        created=datetime(2026,11,24,10,1,tzinfo=timezone.utc)
+        blocker=SimpleNamespace(pk='old-publication',forge='GITHUB',state='UNKNOWN',created=created)
+        with patch.object(project_artifacts.ProjectArtifactBuild,'objects') as builds, \
+             patch.object(ProjectForgeArtifactPublication,'objects') as publications:
+            builds.filter.return_value.first.return_value=None
+            publications.filter.return_value.first.return_value=blocker
+            with self.assertRaisesRegex(Refused,'artifact-build-active') as stopped:
+                project_artifacts.require_available(project)
+        self.assertEqual(stopped.exception.details,{
+            'phase':'request','steps':['request'],'process_started':False,
+            'blocking_operation':{'id':'old-publication','source':'publication','state':'UNKNOWN',
+                                  'created':created.isoformat(),'forge':'GITHUB'},
+        })
+
+    def test_worker_launch_failure_is_terminal_before_any_artifact_effect(self):
+        job=SimpleNamespace(pk='publication',plan={'kinds':['docker']})
+        with patch.object(project_artifacts.ProjectArtifactBuild,'objects') as builds, \
+             patch.object(forge_publish_artifacts,'finish_manual') as finish, \
+             patch.object(project_artifacts.threading.Thread,'start',side_effect=RuntimeError):
+            project_artifacts.launch('build')
+            forge_publish_artifacts.launch(job)
+        build=builds.filter.return_value.update.call_args.kwargs
+        self.assertEqual(build['state'],'FAILED')
+        self.assertIs(build['receipt']['process_started'],False)
+        actual,state,receipt=finish.call_args.args
+        self.assertIs(actual,job)
+        self.assertEqual(state,'FAILED')
+        self.assertIs(receipt['issued'],False)
+        self.assertEqual(receipt['progress']['steps'][0]['state'],'FAILED')
+
     def test_existing_latest_without_project_version_reports_missing_docker_tag(self):
         project=SimpleNamespace(identifier='pfd',public_metadata={'values':{'PROJECT_DOCKERED':'Yes','PROJECT_VERSION':'1.0.2'}})
         job=SimpleNamespace(project=project,forge='GITHUB',plan={'signature':'configuration'})
@@ -310,16 +346,20 @@ class ForgeArtifactsTests(unittest.TestCase):
         job=SimpleNamespace(pk='receipt',forge='FORGEJO',state='UNKNOWN',
                             receipt=initial,plan={'signature':'signature'},save=Mock())
         project=SimpleNamespace(pk='project',public_metadata={'values':{'PROJECT_VERSION':tag}})
+        job.project=project
         configured=(None,'https://fixture',None,None,'owner','sample','token',False)
         publication=forge_publish_artifacts
         with patch.object(publication.ProjectForgeArtifactPublication,'objects') as jobs, \
              patch.object(publication.Project,'objects') as projects, \
+             patch.object(publication.Maintenance,'objects') as maintenance, \
+             patch('cab_platform.notifications.artifact_notification'), \
              patch.object(publication,'identity',return_value='signature'), \
              patch.object(publication,'docker_inventory',return_value={'local':(None,{'image_id':image_id})}), \
              patch.object(publication,'remote') as remote, patch.object(publication,'registry_login') as login, \
              patch.object(publication,'confirm_docker') as confirm:
             jobs.select_for_update.return_value.filter.return_value.first.return_value=job
             projects.select_for_update.return_value.get.return_value=project
+            maintenance.filter.return_value.exists.return_value=False
             remote.return_value.__enter__.return_value=configured
             login.return_value.__enter__.return_value=([],{})
             confirm.side_effect=Refused('artifact-forge-publication-unconfirmed',409)
@@ -350,6 +390,41 @@ class ForgeArtifactsTests(unittest.TestCase):
             result=reconcile(project,job.pk,tag,image_id)
             self.assertEqual(result['state'],'COMPLETED')
             self.assertEqual(job.receipt['previous'],{'state':'UNKNOWN',**legacy})
+
+    def test_automatic_reconciliation_requires_recorded_image_and_completed_push(self):
+        now=datetime(2026,11,24,10,3,tzinfo=timezone.utc)
+        docker={'tag':'1.0.2','image_id':'sha256:'+'a'*64}
+        for forge in ('FORGEJO','GITHUB','GITLAB'):
+            with self.subTest(forge=forge):
+                steps=[
+                    {'key':'docker-push','state':'COMPLETED'},
+                    {'key':'docker-confirm','state':'UNKNOWN'},
+                    {'key':'docker-retention','state':'PENDING'},
+                ]
+                job=SimpleNamespace(pk='same-receipt',forge=forge,state='UNKNOWN',
+                                    project=object(),plan={},save=Mock(),
+                                    receipt={'issued':True,'progress':{'steps':steps}})
+                self.assertFalse(forge_publish_artifacts.reconciliation_due(job,now))
+                job.plan['docker']=docker
+                self.assertTrue(forge_publish_artifacts.reconciliation_due(job,now))
+                steps[0]['state']='FAILED'
+                self.assertFalse(forge_publish_artifacts.reconciliation_due(job,now))
+                steps[0]['state']='COMPLETED'
+                with patch.object(forge_publish_artifacts.ProjectForgeArtifactPublication,'objects') as records, \
+                     patch.object(forge_publish_artifacts.transaction,'atomic',side_effect=nullcontext), \
+                     patch.object(forge_publish_artifacts.timezone,'now',return_value=now), \
+                     patch.object(forge_publish_artifacts,'reconcile_docker',side_effect=Refused('artifact-local-changed')) as verify:
+                    locked=records.select_for_update.return_value
+                    locked.get.return_value=job
+                    locked.filter.return_value.first.return_value=job
+                    forge_publish_artifacts.attempt_reconciliation(job.pk)
+                verify.assert_called_once_with(job.project,job.pk,docker['tag'],docker['image_id'])
+                self.assertEqual(job.state,'UNKNOWN')
+                self.assertEqual(job.receipt['automatic_reconciliation']['error'],'artifact-local-changed')
+                self.assertFalse(forge_publish_artifacts.reconciliation_due(job,now+timedelta(seconds=29)))
+                self.assertTrue(forge_publish_artifacts.reconciliation_due(job,now+timedelta(seconds=30)))
+                job.receipt['automatic_reconciliation']['attempts']=3
+                self.assertFalse(forge_publish_artifacts.reconciliation_due(job,now+timedelta(days=1)))
 
     def test_github_never_deletes_a_version_sharing_a_kept_tag(self):
         calls,_,error=self.publish_docker_fixture('GITHUB',alias=True)

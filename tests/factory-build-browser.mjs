@@ -38,6 +38,13 @@ const overview=()=>find('dialog[open][aria-label="Overview de construction Docke
   dialog.querySelector('button').click();
   await wait(()=>!overview()&&!build.disabled,'Demande suivante indisponible');
   build.click();
+  dialog=await wait(()=>overview()?.textContent.includes('Opération bloquante')&&overview(),'Reçu bloquant absent');
+  check(dialog.textContent.includes('Demande refusée')&&dialog.textContent.includes('Processus démarréNon'),'Refus confondu avec un build lancé');
+  check(dialog.textContent.includes('publication-ancienne')&&dialog.textContent.includes('GitHub')&&
+        dialog.textContent.includes('Résultat à vérifier'),'Origine ou état du blocage absent');
+  dialog.querySelector('button').click();
+  await wait(()=>!overview()&&!build.disabled,'Nouvelle demande indisponible après le refus');
+  build.click();
   dialog=await wait(()=>overview()?.textContent.includes('Code de sortie17')&&overview(),'Échec sans code de sortie');
   check(dialog.textContent.includes('Construction Docker')&&dialog.textContent.includes('artifact-docker-pull-denied'),'Diagnostic Docker absent');
   await send({passed:true});
@@ -66,6 +73,11 @@ try {
       if(requests===1)return json(response,{error:'artifact-build-config-changed',details:{
         phase:'configuration',steps:['configuration'],process_started:false,
         configuration:{state:'partial',issues:[{key:'PROJECT_VERSION',line:2,reason:'invalid-version'}]},
+      }},409)
+      if(requests===2)return json(response,{error:'artifact-build-active',details:{
+        phase:'request',steps:['request'],process_started:false,
+        blocking_operation:{id:'publication-ancienne',source:'publication',state:'UNKNOWN',
+          forge:'GitHub',created:'2026-11-24T10:01:44+00:00'},
       }},409)
       const {request_id}=JSON.parse(raw)
       build={request_id,state:'FAILED',phase:'docker-build',steps:['configuration','sources','docker-build'],
@@ -102,7 +114,7 @@ try {
     try{
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
-      assert.equal(requests,2)
+      assert.equal(requests,3)
       console.log(name+' — Overview rouvert, refus et échec vérifiés.')
     }finally{
       clearTimeout(timer)

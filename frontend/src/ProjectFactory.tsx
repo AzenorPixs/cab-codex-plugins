@@ -8,12 +8,14 @@ const types=[['debian','Debian'],['docker','Docker']] as const
 type Kind=typeof types[number][0]
 type Artifact={key:string;kind:Kind;generated_at:string;size:number;filename?:string;package?:string;architecture?:string;version?:string;image?:string;image_id?:string;platform?:string;tags?:string[]}
 type ConfigurationIssue={key:string;line?:number;reason:string}
+type BlockingOperation={id:string;source:'factory'|'publication'|'delivery';state:string;created:string;kind?:Kind;forge?:string;version?:string}
 type Build={
   state:string;request_id?:string;version?:string;created?:string;error?:string|null
   source?:'factory'|'delivery';delivery_id?:number
   phase?:string;steps?:string[];process_started?:boolean;exit_code?:number
   configuration?:{state:string;issues:ConfigurationIssue[]}
   diagnostic?:{phase?:string;code:string;exit_code?:number;paths?:string[];typescript_codes?:string[]}
+  blocking_operation?:BlockingOperation
 }
 type Factory={enabled:Record<Kind,boolean>;artifacts:Artifact[];builds:Partial<Record<Kind,Build>>}
 
@@ -22,6 +24,7 @@ const buildStatus:Record<string,string>={
   RUNNING:'Construction en cours',
   COMPLETED:'Construction terminée',
   FAILED:'Construction échouée',
+  REFUSED:'Demande refusée',
   UNKNOWN:'Résultat à vérifier',
 }
 const buildErrors:Record<string,string>={
@@ -39,9 +42,13 @@ const buildErrors:Record<string,string>={
   'artifact-build-storage-full':'L’espace de stockage est insuffisant.',
   'artifact-build-command-failed':'La commande de construction a échoué.',
   'artifact-build-active':'Une autre opération sur les artefacts est active ou reste à vérifier.',
+  'artifact-build-worker-not-started':'Le worker de construction n’a pas pu démarrer.',
+  'session-delivery-active':'Une livraison du projet est active ou reste à vérifier.',
   'artifact-build-disabled':'Ce format est désactivé dans le projet.',
   'artifact-build-unconfirmed':'Le résultat de la construction reste à vérifier.',
 }
+const blockerSources={factory:'Construction',publication:'Publication',delivery:'Livraison CI/CD'}
+const blockerStates:Record<string,string>={PENDING:'En attente',RUNNING:'En cours',UNKNOWN:'Résultat à vérifier',PARTIAL:'Livraison partielle'}
 const buildPhases:Record<string,string>={
   request:'Demande',configuration:'Configuration',sources:'Préparation des sources',
   'payload-preparation':'Préparation du contenu Debian','debian-build':'Construction Debian',
@@ -76,6 +83,7 @@ function BuildOverview({label,build,close}:{label:string;build:Build;close:()=>v
   const dialog=useRef<HTMLDialogElement>(null)
   useEffect(()=>{if(dialog.current&&!dialog.current.open)dialog.current.showModal()},[])
   const code=build.error||build.diagnostic?.code
+  const blocker=build.blocking_operation
   const exitCode=build.exit_code??build.diagnostic?.exit_code
   return <dialog ref={dialog} aria-label={`Overview de construction ${label}`}
     className="lifecycle-dialog git-commit-console-dialog" onClose={close}>
@@ -92,6 +100,13 @@ function BuildOverview({label,build,close}:{label:string;build:Build;close:()=>v
       {exitCode!==undefined&&<div><dt>Code de sortie</dt><dd>{exitCode}</dd></div>}
     </dl>
     {code&&<p role="alert">{buildErrors[code]||'La construction n’a pas abouti.'} <code>{code}</code></p>}
+    {blocker&&<><h3>Opération bloquante</h3><dl>
+      <div><dt>Origine</dt><dd>{blockerSources[blocker.source]}{blocker.forge&&` · ${blocker.forge}`}{blocker.kind&&` · ${blocker.kind==='docker'?'Docker':'Debian'}`}</dd></div>
+      <div><dt>État</dt><dd>{blockerStates[blocker.state]||blocker.state}</dd></div>
+      <div><dt>Reçu</dt><dd><code>{blocker.id}</code></dd></div>
+      <div><dt>Date</dt><dd><time dateTime={blocker.created}>{new Date(blocker.created).toLocaleString('fr-FR')}</time></dd></div>
+      {blocker.version&&<div><dt>Version</dt><dd>{blocker.version}</dd></div>}
+    </dl></>}
     {Boolean(build.steps?.length)&&<><h3>Étapes observées</h3><ol>{build.steps?.map((phase,index)=>
       <li key={`${phase}-${index}`}>{buildPhases[phase]||phase}</li>)}</ol></>}
     {build.configuration&&<><h3>Configuration du projet</h3><p>{configurationStates[build.configuration.state]}</p>
@@ -125,7 +140,7 @@ export function ProjectFactory({project}:{project:Project}){
       const details=error instanceof ApiError?error.details as Partial<Build>|undefined:undefined
       const refusal:Build={
         phase:'request',steps:['request'],...details,request_id:requestId,created:new Date().toISOString(),
-        state:error instanceof ApiError?'FAILED':'UNKNOWN',
+        state:details?.blocking_operation?'REFUSED':error instanceof ApiError?'FAILED':'UNKNOWN',
         error:error instanceof ApiError?error.code:'artifact-build-unconfirmed',
       }
       setRejected(previous=>({...previous,[kind]:refusal}))

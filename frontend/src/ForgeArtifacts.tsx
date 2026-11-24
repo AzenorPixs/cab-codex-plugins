@@ -13,7 +13,7 @@ type Row={forge:string;source:string[];artifacts:Partial<Record<Format,Observati
 export type PublicationDiagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number;required_scopes?:string[]}
 type Step={key:string;state:string;error?:string;details?:PublicationDiagnostic}
 export type ArtifactPublication={kind:Format;forge:string;state:string;at?:string;error?:string;details?:PublicationDiagnostic;step?:string}
-type Job={id:string;forge:string;state:string;error?:string|null;details?:PublicationDiagnostic|null;progress?:{kinds:Format[];steps:Step[]}|null}
+type Job={id:string;forge:string;state:string;error?:string|null;details?:PublicationDiagnostic|null;progress?:{kinds:Format[];steps:Step[]}|null;reconcilable?:boolean}
 type Snapshot={rows:Row[];jobs:Record<string,Job>}
 
 const busy=(job?:Job)=>job?.state==='PENDING'||job?.state==='RUNNING'
@@ -32,6 +32,17 @@ export function useForgeArtifacts(projectId:string){
     mutationFn:({forge,id}:{forge:string;id:string})=>api<Job>(`${path}/${forge}`,{request_id:id}),
     onSettled:()=>client.invalidateQueries({queryKey}),
   })
+  const reconcile=useMutation({
+    mutationFn:async ({id,tag}:{id:string;tag:string})=>{
+      const inventory=await api<{artifacts:{kind:string;image?:string;image_id?:string;tags?:string[]}[]}>(
+        `projects/${encodeURIComponent(projectId)}/artifacts`)
+      const image=inventory.artifacts.find(item=>item.kind==='docker'&&item.image_id&&item.tags?.includes(`${item.image}:${tag}`))
+      if(!image?.image_id)throw new Error('L’image locale avec le tag de la version doit être disponible pour vérifier la publication.')
+      return api<Job>(`${path}/reconcile`,{request_id:id,tag,image_id:image.image_id})
+    },
+    onSuccess:job=>client.setQueryData(['publication-receipt',path,job.id],job),
+    onSettled:()=>client.invalidateQueries({queryKey}),
+  })
   useEffect(()=>{
     const controller=new AbortController()
     const stream=new ShapeStream({url:new URL('/api/v1/sync/forge-artifacts',location.origin).href,
@@ -46,7 +57,7 @@ export function useForgeArtifacts(projectId:string){
     return ()=>{unsubscribe();controller.abort()}
   },[projectId])
   const rows=live?.projectId===projectId?live.rows:query.data?.rows||[]
-  return {rows,jobs:query.data?.jobs||{},publish,path}
+  return {rows,jobs:query.data?.jobs||{},publish,reconcile,path}
 }
 type State=ReturnType<typeof useForgeArtifacts>
 
@@ -123,12 +134,16 @@ export function PublishForgeArtifacts({state,forge,values,label}:{state:State;fo
   const job=view.data?.id===request?view.data:matched||submitted
   const failed=job?.state==='FAILED'||job?.state==='UNKNOWN'
   const requestError=!job&&current?state.publish.error:null
+  const reconciliationError=state.reconcile.variables?.id===request?state.reconcile.error:null
   if(!formats.some(([,flag])=>on(values[flag])))return null
   const publishing=busy(observed)||(state.publish.isPending&&state.publish.variables?.forge===forge)
-  const disabled=state.publish.isPending||Object.values(state.jobs).some(row=>busy(row)||row.state==='UNKNOWN')
+  const blocker=Object.values(state.jobs).find(row=>busy(row)||row.state==='UNKNOWN')
+  const blocked=blocker&&`Publication ${blocker.forge} · ${jobLabels[blocker.state]} · Reçu ${blocker.id}`
+  const disabled=state.publish.isPending||state.reconcile.isPending||!!blocker
   return <>
-    <button type="button" className={`forge-edit git-commit${publishing?' is-loading':''}`}
+    <span title={blocked}><button type="button" className={`forge-edit git-commit${publishing?' is-loading':''}`}
       title={`Publier les artefacts vers ${label}`} aria-label={`Publier les artefacts vers ${label}`}
+      aria-description={blocked}
       aria-busy={publishing} disabled={disabled} onClick={()=>{
         const id=newRequestId()
         setRequest(id)
@@ -137,7 +152,14 @@ export function PublishForgeArtifacts({state,forge,values,label}:{state:State;fo
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <path d="M12 16V3m-5 5 5-5 5 5M4 14v6h16v-6"/>
       </svg>
-    </button>
+    </button></span>
+    {observed?.reconcilable&&<button type="button" className="forge-edit"
+      title={`Vérifier la publication ${label}`} aria-label={`Vérifier la publication ${label}`}
+      onClick={()=>{state.reconcile.reset();setRequest(observed.id)}}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>
+      </svg>
+    </button>}
     {request&&<ForgeActionOverview title={`Overview de publication ${label}`} close={()=>setRequest(null)}>
       <p role="status">{job?jobLabels[job.state]:requestError?'Demande refusée':'Demande de publication en cours'}</p>
       <p className="publication-reference">Reçu <code>{request}</code></p>
@@ -157,6 +179,15 @@ export function PublishForgeArtifacts({state,forge,values,label}:{state:State;fo
       </ol>}
       {failed&&!job?.progress?.steps.some(step=>step.state==='FAILED'||step.state==='UNKNOWN')&&
         <PublicationFailure state={job.state} error={job.error} details={job.details}/>}
+      {job?.reconcilable&&<div className="form-actions">
+        <button type="button" disabled={state.reconcile.isPending||!values.PROJECT_VERSION}
+          onClick={()=>state.reconcile.mutate({id:job.id,tag:values.PROJECT_VERSION})}>
+          {state.reconcile.isPending?'Vérification en cours…':'Vérifier les tags distants'}
+        </button>
+      </div>}
+      {reconciliationError&&<PublicationFailure state="FAILED" message={reconciliationError.message}
+        error={reconciliationError instanceof ApiError?reconciliationError.code:null}
+        details={reconciliationError instanceof ApiError?reconciliationError.details as PublicationDiagnostic:null}/>}
     </ForgeActionOverview>}
   </>
 }

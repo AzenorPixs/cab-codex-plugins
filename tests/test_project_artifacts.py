@@ -41,6 +41,48 @@ from cab_platform.core.models import (
 
 
 class FactoryTests(unittest.TestCase):
+    def test_automatic_registry_confirmation_unlocks_factory_on_the_same_receipt(self):
+        from cab_platform.core.models import Notification
+        from cab_platform.notifications import artifact_notification, identifier
+
+        tag='1.2.3'
+        image={'tag':tag,'image_id':'sha256:'+'b'*64}
+        steps=[{'key':key,'state':state} for key,state in (
+            ('docker-prepare','COMPLETED'),('docker-login','COMPLETED'),('docker-push','COMPLETED'),
+            ('docker-confirm','FAILED'),('docker-retention','PENDING'),
+        )]
+        original={'issued':True,'error':'artifact-forge-publication-failed',
+                  'progress':{'kinds':['docker'],'steps':steps}}
+        for forge,registry in (('FORGEJO','forgejo.fixture'),('GITHUB','ghcr.io'),('GITLAB','registry.fixture')):
+            with self.subTest(forge=forge), TemporaryDirectory(dir=SCRATCH) as directory:
+                values={'PROJECT_VERSION':tag,'REMOTE_GITLAB_REGISTRY':'registry.fixture'}
+                project=Project.objects.create(pk=uuid4().hex,root=directory,owner_uid=os.getuid(),
+                                               public_metadata={'values':values})
+                job=ProjectForgeArtifactPublication.objects.create(
+                    pk=uuid4().hex,project=project,state='UNKNOWN',forge=forge,
+                    plan={'docker':image,'signature':'fixture','registry':values['REMOTE_GITLAB_REGISTRY']},
+                    receipt=original,
+                )
+                key='manual-publication:'+job.pk
+                artifact_notification(key,project,forge,'UNKNOWN',original)
+                with self.assertRaisesRegex(Refused,'artifact-build-active'):
+                    artifacts.require_available(project)
+                with patch.object(publication,'identity',return_value='fixture'), \
+                     patch.object(publication,'docker_inventory',return_value={'local':(None,image)}), \
+                     patch.object(publication,'remote') as remote, patch.object(publication,'registry_login') as login, \
+                     patch.object(publication,'confirm_docker') as confirm:
+                    remote.return_value.__enter__.return_value=(
+                        None,'https://forgejo.fixture',None,None,'owner','sample','token',forge=='GITHUB')
+                    login.return_value.__enter__.return_value=([],{})
+                    publication.attempt_reconciliation(job.pk)
+                confirm.assert_called_once_with([],registry+'/owner/sample',(tag,'latest'),image['image_id'])
+                job.refresh_from_db()
+                self.assertEqual(job.state,'COMPLETED')
+                self.assertEqual(job.receipt['previous']['state'],'UNKNOWN')
+                self.assertFalse(job.receipt['details']['cleanup_performed'])
+                self.assertEqual(Notification.objects.get(pk=identifier(key)).artifacts[0]['state'],'COMPLETED')
+                artifacts.require_available(project)
+
     def test_latest_build_receipt_includes_native_deliveries_for_each_format(self):
         before = datetime(2026, 11, 21, tzinfo=timezone.utc)
         after = before + timedelta(days=2)

@@ -22,7 +22,7 @@ import '/src/style.css'
 function Fixture(){
   const state=useForgeArtifacts('fixture')
   return createElement('div',null,createElement(Notifications),
-    createElement(PublishForgeArtifacts,{state,forge:'FORGEJO',label:'Forgejo',values:{PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes'}}))
+    createElement(PublishForgeArtifacts,{state,forge:'FORGEJO',label:'Forgejo',values:{PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes',PROJECT_VERSION:'1.0.2'}}))
 }
 createRoot(document.querySelector('#root')).render(createElement(QueryClientProvider,{client:new QueryClient()},createElement(Fixture)))
 </script>`
@@ -82,7 +82,18 @@ async function verify(frame){
   check(size()===dimensions&&clear.disabled,'Dimensions ou état vide')
   get('[aria-label="Fermer les notifications"]').click()
   check(!get('.agent-config-link'),'Lien historique présent')
-  get('[aria-label="Publier les artefacts vers Forgejo"]').click()
+  const publish=get('[aria-label="Publier les artefacts vers Forgejo"]')
+  const verifyButton=await wait(()=>get('[aria-label="Vérifier la publication Forgejo"]'),'Vérification du reçu absente')
+  check(publish.disabled&&publish.parentElement.title.includes('ancien-recu'),'Bouton bloqué sans reçu identifiable')
+  verifyButton.click()
+  const verification=await wait(()=>get('[aria-label="Overview de publication Forgejo"][open]'),'Overview de vérification absent')
+  const verifyTags=[...verification.querySelectorAll('button')].find(button=>button.textContent==='Vérifier les tags distants')
+  check(verifyTags,'Action de vérification absente')
+  verifyTags.click()
+  await wait(()=>verification.querySelector('[role="status"]').textContent==='Réussie','Réconciliation non affichée')
+  ;[...verification.querySelectorAll('button')].find(button=>button.textContent==='Fermer').click()
+  await wait(()=>!publish.disabled,'Publication toujours bloquée')
+  publish.click()
   const overview=await wait(()=>get('[aria-label="Overview de publication Forgejo"][open]'),'Overview immédiat absent')
   check(overview.textContent.includes('Demande de publication en cours'),'Overview ouvert après la demande : '+overview.textContent)
   await wait(()=>overview.querySelector('.publication-running'),'Étape active absente')
@@ -141,7 +152,14 @@ const server=createServer(async(request,response)=>{
     if(request.method==='POST'){
       let body=''
       for await(const chunk of request)body+=chunk
-      state.receipt=JSON.parse(body).request_id
+      const payload=JSON.parse(body)
+      if(path.pathname.endsWith('/reconcile')){
+        assert.deepEqual(payload,{request_id:'ancien-recu',tag:'1.0.2',image_id:'sha256:'+'a'.repeat(64)})
+        state.blocked=false
+        state.reconciliations++
+        return reply({id:'ancien-recu',forge:'FORGEJO',state:'COMPLETED',reconcilable:false})
+      }
+      state.receipt=payload.request_id
       await delay(750)
       return reply({id:state.receipt,forge:'FORGEJO',state:'PENDING'})
     }
@@ -156,9 +174,13 @@ const server=createServer(async(request,response)=>{
             ...(failure?{error:'artifact-forge-publication-unconfirmed',details:{http_status:403}}:{})},
         ]}})
     }
+    const historical={id:'ancien-recu',forge:'FORGEJO',state:state.blocked?'UNKNOWN':'COMPLETED',reconcilable:state.blocked}
+    if(path.pathname.endsWith('/receipts/ancien-recu'))return reply(historical)
     if(path.pathname.includes('/receipts/'))return response.writeHead(404,{'Content-Type':'application/json'}).end(JSON.stringify({error:'artifact-publication-receipt-missing'}))
-    return reply({rows:[],jobs:{FORGEJO:{id:'ancien-recu',forge:'FORGEJO',state:'FAILED'}}})
+    return reply({rows:[],jobs:{FORGEJO:historical}})
   }
+  if(path.pathname==='/api/v1/projects/fixture/artifacts')
+    return reply({artifacts:[{kind:'docker',image:'fixture',image_id:'sha256:'+'a'.repeat(64),tags:['fixture:1.0.2']}]})
   if(path.pathname.startsWith('/api/v1/notifications')){
     const source=new URL(request.headers.referer)
     const state=scenarios.get(source.searchParams.get('id'))
@@ -189,7 +211,7 @@ try{
   await once(server,'listening')
   const url='http://127.0.0.1:'+server.address().port+'/verification'
   for(const browser of ['chromium','firefox']){
-    for(const id of ['desktop','mobile'])scenarios.set(id,{calls:0,polls:0,rows:[
+    for(const id of ['desktop','mobile'])scenarios.set(id,{calls:0,polls:0,blocked:true,reconciliations:0,rows:[
       {...makeNotice('short','Message court','Texte court'),artifacts:JSON.stringify(published)},
       makeNotice('long','Message long','Ligne longue de notification.\n'.repeat(250)),
       makeNotice('unseen','Message non affiché','À effacer'),
@@ -206,7 +228,7 @@ try{
       const proof=await Promise.race([result,exited.then(code=>({error:'Sortie du navigateur '+code})),
         new Promise(resolve=>{timeout=setTimeout(()=>resolve({error:'Aucun résultat navigateur'}),25000)})])
       assert.equal(proof.passed,true,browser+' : '+proof.error)
-      assert([...scenarios.values()].every(state=>state.calls===1))
+      assert([...scenarios.values()].every(state=>state.calls===1&&state.reconciliations===1))
       console.log(browser+' : notifications et suivi de publication vérifiés sur ordinateur et mobile')
     }finally{
       clearTimeout(timeout)

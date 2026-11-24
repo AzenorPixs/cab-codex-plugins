@@ -1,5 +1,6 @@
 """Publication des artefacts locaux par le service CAB."""
 from contextlib import ExitStack, contextmanager, nullcontext
+from datetime import timedelta
 import hashlib
 import json
 import logging
@@ -19,16 +20,15 @@ from django.utils.dateparse import parse_datetime
 from .artifact_builders import DOCKER, DOCKER_NAME, ENV, opened, regular
 from .connector_process import alive, identity as process_identity
 from .core.commands import Refused, identifier, require
-from .core.models import GitDelivery, Maintenance, Project, ProjectArtifactBuild, ProjectForgeArtifactPublication
+from .core.models import Maintenance, Project, ProjectForgeArtifactPublication
 from .forge_artifacts import DEB, TAG, docker_versions, github_version_tags, pages, tag_rank
 from .forge_repository import FORGES, configured, get_json, identity, missing_configuration, refresh_one
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
-from .project_artifacts import debian_inventory, docker_inventory, enabled
+from .project_artifacts import debian_inventory, docker_inventory, enabled, require_available, require_artifact_delivery_available
 from .project_metadata import REGISTRY
 from .versioning import VersionError, canonical_version, historical_version
 
-ACTIVE = ('PENDING','RUNNING','UNKNOWN')
 REPO_PATH = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:/[a-zA-Z0-9][a-zA-Z0-9_.-]*)*')
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}')
 DEBIAN_KEEP = 7
@@ -41,6 +41,8 @@ PUBLICATION_STEPS = {
 }
 PUBLICATION_ERRORS = (Refused, VersionError, httpx.HTTPError, OSError, ValueError, subprocess.SubprocessError)
 REGISTRY_INVENTORY_SCOPES = {'FORGEJO':'read:package','GITHUB':'read:packages','GITLAB':'read_api'}
+RECONCILIATION_DELAYS = (0,30,120)
+_reconciliation_lock = threading.Lock()
 
 
 def diagnostic(error):
@@ -94,13 +96,25 @@ def track(progress,key):
     return progress.step(key) if progress is not None else nullcontext()
 
 
+def docker_confirmation_required(job):
+    receipt=job.receipt
+    if job.state!='UNKNOWN' or receipt.get('issued') is not True:
+        return False
+    details=receipt.get('details')
+    if (receipt.get('error')=='artifact-forge-publication-unconfirmed'
+            and isinstance(details,dict) and details.get('phase')=='registry-confirmation'):
+        return True
+    progress=receipt.get('progress') or {}
+    stages={step['key']:step['state'] for step in progress.get('steps',[])}
+    return (bool(job.plan.get('docker')) and stages.get('docker-push')=='COMPLETED'
+            and stages.get('docker-confirm') in ('FAILED','UNKNOWN')
+            and stages.get('docker-retention')=='PENDING')
+
+
 def public(job):
     return {'id':job.pk,'forge':job.forge,'state':job.state,'error':job.receipt.get('error'),
-            'details':job.receipt.get('details'),'progress':job.receipt.get('progress')}
-
-
-def active(project):
-    return ProjectForgeArtifactPublication.objects.filter(project=project,state__in=ACTIVE).exists()
+            'details':job.receipt.get('details'),'progress':job.receipt.get('progress'),
+            'reconcilable':docker_confirmation_required(job)}
 
 
 def local_plan(project, values, *, version=None):
@@ -554,19 +568,21 @@ def reconcile_docker(project,request_id,tag,image_id):
     evidence={'tag':tag,'image_id':image_id}
     if job.state=='COMPLETED' and job.receipt.get('reconciliation')==evidence:
         return public(job)
+    require(not Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists(),
+            'maintenance-in-progress',503)
     values=project.public_metadata.get('values',{})
     error=job.receipt.get('error')
     details=job.receipt.get('details')
-    confirmation_error=(error=='artifact-forge-publication-unconfirmed'
-                        and isinstance(details,dict) and details.get('phase')=='registry-confirmation')
     # Sur Forgejo, dans un plan Docker seul, cette erreur après l'envoi
     # provenait de l'inventaire des versions demandé après la confirmation.
     legacy_inventory_error=(job.forge=='FORGEJO' and details is None
                             and error=='artifact-forge-response-invalid'
                             and enabled(values,'docker') and not enabled(values,'debian'))
     require(job.state=='UNKNOWN' and job.receipt.get('issued') is True
-            and (confirmation_error or legacy_inventory_error),
+            and (docker_confirmation_required(job) or legacy_inventory_error),
             'artifact-reconciliation-ineligible',409)
+    require('docker' not in job.plan or job.plan['docker']==evidence,
+            'artifact-local-changed',409)
     require(values.get('PROJECT_VERSION')==tag and identity(project,values,job.forge)==job.plan['signature']
             and (job.forge!='GITLAB' or values.get('REMOTE_GITLAB_REGISTRY','')==job.plan.get('registry','')),
             'artifact-forge-config-changed',409)
@@ -581,13 +597,77 @@ def reconcile_docker(project,request_id,tag,image_id):
     except (httpx.HTTPError,OSError,subprocess.SubprocessError) as error:
         raise Refused('artifact-forge-publication-unconfirmed',409,
                       details={'phase':'registry-confirmation'}) from error
+    progress=job.receipt.get('progress')
+    confirmed_at=timezone.now().isoformat()
+    if progress:
+        progress={**progress,'steps':[
+            {'key':'docker-confirm','state':'COMPLETED','at':confirmed_at} if step['key']=='docker-confirm' else
+            {'key':'docker-retention','state':'SKIPPED'} if step['key']=='docker-retention' else step
+            for step in progress['steps']]}
     job.receipt={'issued':True,'previous':{'state':job.state,**job.receipt},
                  'reconciliation':evidence,
+                 **({'progress':progress} if progress else {}),
                  'details':{'phase':'registry-confirmation','publication_confirmed':True,
                             'cleanup_performed':False}}
     job.state='COMPLETED'
     job.save(update_fields=['state','receipt'])
+    from .notifications import artifact_notification
+    artifact_notification('manual-publication:'+job.pk,job.project,job.forge,job.state,job.receipt,['docker'])
     return public(job)
+
+
+def reconciliation_due(job,now):
+    docker=job.plan.get('docker')
+    if not isinstance(docker,dict) or not docker_confirmation_required(job):
+        return False
+    tag,image_id=docker.get('tag'),docker.get('image_id')
+    if not (isinstance(tag,str) and TAG.fullmatch(tag) and isinstance(image_id,str) and DIGEST.fullmatch(image_id)):
+        return False
+    previous=job.receipt.get('automatic_reconciliation') or {}
+    attempts=previous.get('attempts',0)
+    if attempts>=len(RECONCILIATION_DELAYS):
+        return False
+    at=parse_datetime(previous['at']) if attempts else None
+    return at is None or now>=at+timedelta(seconds=RECONCILIATION_DELAYS[attempts])
+
+
+def attempt_reconciliation(key):
+    with transaction.atomic():
+        job=ProjectForgeArtifactPublication.objects.select_for_update().get(pk=key)
+        now=timezone.now()
+        if not reconciliation_due(job,now):
+            return
+        previous=job.receipt.get('automatic_reconciliation') or {}
+        attempt={'attempts':previous.get('attempts',0)+1,'at':now.isoformat()}
+        job.receipt={**job.receipt,'automatic_reconciliation':attempt}
+        job.save(update_fields=['receipt'])
+    docker=job.plan['docker']
+    try:
+        reconcile_docker(job.project,job.pk,docker['tag'],docker['image_id'])
+    except Refused as error:
+        with transaction.atomic():
+            current=ProjectForgeArtifactPublication.objects.select_for_update().filter(pk=key,state='UNKNOWN').first()
+            if current:
+                current.receipt={**current.receipt,'automatic_reconciliation':{**attempt,'error':error.code}}
+                current.save(update_fields=['receipt'])
+
+
+def launch_reconciliation(key):
+    if not _reconciliation_lock.acquire(blocking=False):
+        return
+
+    def run():
+        close_old_connections()
+        try:
+            attempt_reconciliation(key)
+        finally:
+            close_old_connections()
+            _reconciliation_lock.release()
+
+    try:
+        threading.Thread(target=run,name='cab-verify-forge-publication',daemon=True).start()
+    except RuntimeError:
+        _reconciliation_lock.release()
 
 
 def release_forgejo(project,values,plan,mark,progress=None):
@@ -627,9 +707,8 @@ def request(project,forge,request_id):
         require(previous.project_id==project.pk and previous.forge==forge,'artifact-publication-request-conflict',409)
         return public(previous)
     require(not Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists(),'maintenance-in-progress',503)
-    require(not active(project) and not ProjectArtifactBuild.objects.filter(project=project,state__in=ACTIVE).exists()
-            and not GitDelivery.objects.filter(project=project,state__in=(*ACTIVE,'PARTIAL')).exists(),
-            'artifact-build-active',409)
+    require_available(project)
+    require_artifact_delivery_available(project,'artifact-build-active')
     values=project.public_metadata.get('values',{})
     kinds=[kind for kind in PUBLICATION_STEPS if enabled(values,kind)]
     job=ProjectForgeArtifactPublication.objects.create(pk=request_id,project=project,forge=forge,
@@ -685,6 +764,9 @@ def worker(key):
                     raise Refused('artifact-local-docker-version-missing',
                                   details={'phase':'inventory','tag':name+':'+tag})
             require(plan,'artifact-local-missing',409,details={'phase':'inventory'})
+            if 'docker' in plan:
+                ProjectForgeArtifactPublication.objects.filter(pk=key,state='RUNNING').update(
+                    plan={**job.plan,'docker':plan['docker']})
             progress.skip_missing(plan)
         if 'docker' in plan and job.forge=='GITLAB' and not REGISTRY.fullmatch(values.get('REMOTE_GITLAB_REGISTRY','')):
             with progress.step('docker-prepare'):
@@ -705,6 +787,16 @@ def worker(key):
     close_old_connections()
 
 
+def launch(job):
+    try:
+        threading.Thread(target=worker,args=(job.pk,),name='cab-forge-artifacts',daemon=True).start()
+    except RuntimeError:
+        error='artifact-forge-publication-failed'
+        progress=PublicationProgress(job.plan.get('kinds',[]))
+        progress.set('configuration','FAILED',error=error,at=timezone.now().isoformat())
+        finish_manual(job,'FAILED',{'error':error,'issued':False,'progress':progress.snapshot()})
+
+
 @transaction.atomic
 def dispatch():
     with connection.cursor() as cursor:
@@ -722,9 +814,16 @@ def dispatch():
                 {**step,'state':'UNKNOWN','error':result['error'],'at':timezone.now().isoformat()}
                 if step['state']=='RUNNING' else step for step in progress['steps']]}
         finish_manual(running,'UNKNOWN',result)
+    if not _reconciliation_lock.locked():
+        now=timezone.now()
+        candidates=ProjectForgeArtifactPublication.objects.filter(
+            state='UNKNOWN',plan__docker__isnull=False,receipt__issued=True).order_by('created')
+        candidate=next((item for item in candidates.iterator() if reconciliation_due(item,now)),None)
+        if candidate:
+            transaction.on_commit(lambda:launch_reconciliation(candidate.pk))
     job=ProjectForgeArtifactPublication.objects.select_for_update().filter(state='PENDING').order_by('created').first()
     if not job:
         return
     job.state,job.executor='RUNNING',process_identity(os.getpid())
     job.save(update_fields=['state','executor'])
-    transaction.on_commit(lambda: threading.Thread(target=worker,args=(job.pk,),name='cab-forge-artifacts',daemon=True).start())
+    transaction.on_commit(lambda: launch(job))

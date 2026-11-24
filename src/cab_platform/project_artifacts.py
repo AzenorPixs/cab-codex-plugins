@@ -200,10 +200,24 @@ def snapshot(project):
 
 def require_available(project):
     from .core.models import ProjectForgeArtifactPublication
-    require(not ProjectArtifactBuild.objects.filter(project=project, state__in=ACTIVE).exists(),
-            'artifact-build-active', 409)
-    require(not ProjectForgeArtifactPublication.objects.filter(project=project,state__in=ACTIVE).exists(),
-            'artifact-build-active',409)
+    build = ProjectArtifactBuild.objects.filter(project=project, state__in=ACTIVE).first()
+    if build:
+        refuse_blocker(build,'factory','artifact-build-active',kind=build.kind)
+    publication = ProjectForgeArtifactPublication.objects.filter(project=project,state__in=ACTIVE).first()
+    if publication:
+        refuse_blocker(publication,'publication','artifact-build-active',forge=publication.forge)
+
+
+def require_artifact_delivery_available(project,code='session-delivery-active'):
+    delivery = GitDelivery.objects.filter(project=project,state__in=(*ACTIVE,'PARTIAL')).first()
+    if delivery:
+        refuse_blocker(delivery,'delivery',code,version=delivery.version)
+
+
+def refuse_blocker(operation,source,code,**target):
+    raise Refused(code,409,details={'phase':'request','steps':['request'],'process_started':False,
+        'blocking_operation':{'id':str(operation.pk),'source':source,'state':operation.state,
+                              'created':operation.created.isoformat(),**target}})
 
 
 @transaction.atomic
@@ -220,8 +234,7 @@ def request_build(project, kind, request_id):
     require(project.creation_state == 'READY', 'artifact-project-path-invalid', 409)
     require(not Maintenance.objects.filter(state__in=('PREPARED', 'INSTALLING')).exists(), 'maintenance-in-progress', 503)
     require_available(project)
-    require(not GitDelivery.objects.filter(project=project, state__in=('PENDING', 'RUNNING', 'UNKNOWN', 'PARTIAL')).exists(),
-            'session-delivery-active', 409)
+    require_artifact_delivery_available(project)
     source = build_metadata(project, kind)
     if source['state'] != 'ready':
         raise BuildConfigurationRefused(source, kind)
@@ -306,4 +319,5 @@ def launch(build_id):
         threading.Thread(target=run_build, args=(build_id,), name='cab-project-artifact', daemon=True).start()
     except RuntimeError:
         ProjectArtifactBuild.objects.filter(pk=build_id, state='RUNNING').update(
-            state='UNKNOWN', receipt={'error': 'artifact-build-unconfirmed'})
+            state='FAILED', receipt={'error':'artifact-build-worker-not-started',
+                                     'phase':'configuration','steps':['configuration'],'process_started':False})
