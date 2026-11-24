@@ -143,6 +143,8 @@ const messages:Record<string,string>={
   'artifact-forge-tag-missing':'Le tag Git de la version est absent du dépôt distant.',
   'artifact-forge-registry-invalid':'Le registre Docker de la destination est absent, invalide ou non pris en charge.',
   'artifact-forge-registry-auth-failed':'Le registre Docker a refusé la connexion.',
+  'artifact-github-packages-classic-token-required':'GitHub Packages exige un jeton d’accès personnel classique pour cette publication Docker.',
+  'artifact-forge-registry-inventory-forbidden':'La forge a refusé la lecture des versions du registre. Vérifiez les droits du jeton et l’accès du compte au paquet.',
   'artifact-forge-registry-inspect-failed':'Le registre Docker n’a pas permis de vérifier si le tag existe.',
   'artifact-forge-version-conflict':'Le registre contient déjà un artefact pour ce tag de version.',
   'artifact-forge-publication-failed':'La publication a échoué avant de pouvoir être confirmée.',

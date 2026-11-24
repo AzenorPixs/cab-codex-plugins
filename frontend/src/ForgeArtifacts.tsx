@@ -10,7 +10,7 @@ type Format=typeof formats[number][0]
 type Artifact={name:string;tags:string[]}
 type Observation={available:boolean;items:Artifact[]}
 type Row={forge:string;source:string[];artifacts:Partial<Record<Format,Observation>>}
-export type PublicationDiagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number}
+export type PublicationDiagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number;required_scopes?:string[]}
 type Step={key:string;state:string;error?:string;details?:PublicationDiagnostic}
 export type ArtifactPublication={kind:Format;forge:string;state:string;at?:string;error?:string;details?:PublicationDiagnostic;step?:string}
 type Job={id:string;forge:string;state:string;error?:string|null;details?:PublicationDiagnostic|null;progress?:{kinds:Format[];steps:Step[]}|null}
@@ -68,13 +68,14 @@ const steps:Record<string,string>={
   configuration:'Vérification de la configuration',inventory:'Inventaire des artefacts locaux',connection:'Préparation de l’accès à la forge',
   'debian-tag':'Debian · Vérification des tags Git','debian-release':'Debian · Envoi et confirmation des paquets',
   'debian-retention':'Debian · Rétention des anciennes publications',
-  'docker-prepare':'Docker · Vérification du dépôt et du tag Git','docker-login':'Docker · Connexion au registre',
+  'docker-prepare':'Docker · Vérification du dépôt, du tag Git et du registre','docker-login':'Docker · Connexion au registre',
   'docker-push':'Docker · Étiquetage et envoi de l’image','docker-confirm':'Docker · Confirmation des tags distants',
   'docker-retention':'Docker · Rétention des anciens tags',
 }
 const phases:Record<string,string>={
   configuration:'Configuration de la forge',inventory:'Inventaire local',repository:'Lecture du dépôt distant',
   'remote-tag':'Vérification du tag Git distant','registry-configuration':'Configuration du registre Docker',
+  'registry-inventory':'Lecture des versions dans le registre de la forge',
   'registry-login':'Connexion au registre Docker','registry-confirmation':'Confirmation des tags du registre',
   'registry-cleanup':'Rétention du registre Docker','debian-cleanup':'Rétention des paquets Debian',
   'local-tag':'Étiquetage de l’image locale','registry-push':'Envoi de l’image Docker','forge-api':'Appel de l’API de la forge',
@@ -96,6 +97,7 @@ export function PublicationFailure({state,error,details,step,message}:{state:str
       {!!details?.missing?.length&&<div><dt>Éléments manquants</dt><dd>{details.missing.join(', ')}</dd></div>}
       {details?.exit_code!==undefined&&<div><dt>Code de sortie</dt><dd>{details.exit_code}</dd></div>}
       {details?.http_status!==undefined&&<div><dt>Statut HTTP</dt><dd>{details.http_status}</dd></div>}
+      {!!details?.required_scopes?.length&&<div><dt>Habilitations du jeton</dt><dd>{details.required_scopes.join(', ')}</dd></div>}
       {details?.publication_confirmed&&<div><dt>Publication</dt><dd>Confirmée avant la rétention</dd></div>}
       {details?.remaining_count!==undefined&&<div><dt>Tags restants</dt><dd>{details.remaining_count}</dd></div>}
       {!step&&!error&&!details&&<div><dt>Diagnostic</dt><dd>Aucun détail supplémentaire disponible.</dd></div>}

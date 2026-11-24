@@ -40,13 +40,14 @@ PUBLICATION_STEPS = {
     'docker': ('docker-prepare','docker-login','docker-push','docker-confirm','docker-retention'),
 }
 PUBLICATION_ERRORS = (Refused, VersionError, httpx.HTTPError, OSError, ValueError, subprocess.SubprocessError)
+REGISTRY_INVENTORY_SCOPES = {'FORGEJO':'read:package','GITHUB':'read:packages','GITLAB':'read_api'}
 
 
 def diagnostic(error):
     if isinstance(error, Refused):
         details = error.details if isinstance(error.details,dict) else {}
         return error.code, {key:details[key] for key in (
-            'phase','tag','missing','exit_code','http_status','publication_confirmed','remaining_count'
+            'phase','tag','missing','exit_code','http_status','publication_confirmed','remaining_count','required_scopes'
         ) if key in details}
     if isinstance(error,httpx.HTTPStatusError):
         return 'artifact-forge-publication-failed', {'http_status':error.response.status_code}
@@ -493,6 +494,10 @@ def registry_login(registry,owner,token):
 def release_docker(client,base,api,root,forge,owner,repo,token,github_public,metadata,image,mark,progress=None):
     with track(progress,'docker-prepare'):
         registry=docker_registry(base,forge,github_public,metadata)
+        if forge=='GITHUB':
+            require(not token.startswith('github_pat_'),'artifact-github-packages-classic-token-required',409,
+                    details={'phase':'registry-configuration',
+                             'required_scopes':['write:packages','delete:packages']})
         tag=image['tag']
         require(TAG.fullmatch(tag) and DIGEST.fullmatch(image['image_id']),
                 'artifact-local-changed',409)
@@ -503,18 +508,25 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
                     'artifact-forge-tag-missing',409,details={'phase':'remote-tag','tag':tag})
         remote_name=registry+'/'+(owner+'/'+repo).lower()
         labels=tuple(dict.fromkeys([tag,'latest']))
+        def inventory(*,allow_missing=False):
+            return registry_rows(client,api,root,forge,owner,repo,info,allow_missing=allow_missing)
 
-    def inventory(*,allow_missing=False):
-        return registry_rows(client,api,root,forge,owner,repo,info,allow_missing=allow_missing)
+        try:
+            _,rows=inventory(allow_missing=True)
+        except httpx.HTTPStatusError as error:
+            status=error.response.status_code
+            if status not in (401,403):
+                raise
+            raise Refused('artifact-forge-registry-inventory-forbidden',409,details={
+                'phase':'registry-inventory','http_status':status,
+                'required_scopes':[REGISTRY_INVENTORY_SCOPES[forge]],
+            }) from error
+        previous={key for key,(tags,_) in rows.items() if tags}
 
     with ExitStack() as stack:
         with track(progress,'docker-login'):
             args,env=stack.enter_context(registry_login(registry,owner,token))
         with track(progress,'docker-push'):
-            previous=set()
-            if forge=='GITHUB':
-                _,rows=inventory(allow_missing=True)
-                previous={key for key,(tags,_) in rows.items() if tags}
             for label in labels:
                 target=remote_name+':'+label
                 tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)

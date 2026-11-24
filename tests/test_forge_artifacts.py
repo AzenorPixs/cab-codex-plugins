@@ -154,7 +154,8 @@ class ForgeArtifactsTests(unittest.TestCase):
                                         for method,path in requests[:first_cleanup]))
                     self.assertEqual(requests[-1][0],'GET')
 
-    def publish_docker_fixture(self,forge,*,failure=None,alias=False,progress=None):
+    def publish_docker_fixture(self,forge,*,failure=None,alias=False,progress=None,
+                               github_owner=False,inventory_status=200,token='token-fixture'):
         calls,marks=[],[]
         old={f'old-{index}' for index in range(68)}
         tags=old|{'2.0.0','latest'}
@@ -163,11 +164,11 @@ class ForgeArtifactsTests(unittest.TestCase):
         versions.update({1:['2.0.0','latest'],2:['beta'] if alias else []})
         endpoint={
             'FORGEJO':'/api/packages/owner',
-            'GITHUB':'/api/users/owner/packages/container/sample/versions',
+            'GITHUB':('/api/user' if github_owner else '/api/users/owner')+'/packages/container/sample/versions',
             'GITLAB':'/project/registry/repositories/5/tags',
         }[forge]
         def command(args,**kwargs):
-            self.assertNotIn('token-fixture',args)
+            self.assertNotIn(token,args)
             if 'push' in args:
                 tag=args[-1].rsplit(':',1)[-1]
                 calls.append(('push',args[-1]))
@@ -181,6 +182,8 @@ class ForgeArtifactsTests(unittest.TestCase):
 
         def handle(request):
             path=request.url.path
+            if path=='/api/user':
+                return httpx.Response(200,json={'login':'Owner' if github_owner else 'Collaborator'})
             if path=='/project/registry/repositories':
                 return httpx.Response(200,json=[{'path':'owner/other','id':4},{'path':'owner/sample','id':5}])
             if request.method=='DELETE':
@@ -192,6 +195,8 @@ class ForgeArtifactsTests(unittest.TestCase):
                     tags.remove(key)
                 return httpx.Response(204)
             self.assertEqual(path,endpoint)
+            if inventory_status!=200:
+                return httpx.Response(inventory_status,json={'message':'Inventaire interdit'})
             page=int(request.url.params['page'])
             if forge=='GITHUB':
                 rows=[{'id':key,'name':'sha256:'+f'{key:064x}',
@@ -210,7 +215,7 @@ class ForgeArtifactsTests(unittest.TestCase):
              patch('cab_platform.forge_publish_artifacts.subprocess.run',side_effect=command):
             try:
                 release_docker(client,'https://fixture','https://fixture/api','https://fixture/project',forge,
-                               'owner','sample','token-fixture',True,{'REMOTE_GITLAB_REGISTRY':'registry.fixture:5050'},
+                               'owner','sample',token,True,{'REMOTE_GITLAB_REGISTRY':'registry.fixture:5050'},
                                {'image_id':image_id,'tag':'2.0.0'},lambda:marks.append(True),progress)
             except Refused as exc:
                 error=exc
@@ -245,6 +250,32 @@ class ForgeArtifactsTests(unittest.TestCase):
         self.assertEqual(failed['details'],{'phase':'registry-push','tag':'latest','exit_code':1})
         self.assertEqual(progress.steps['docker-confirm']['state'],'PENDING')
         self.assertEqual(progress.steps['docker-retention']['state'],'PENDING')
+
+    def test_admission_refuses_incompatible_token_or_inventory_before_docker(self):
+        for forge,token,status,code,phase,scopes in (
+            ('GITHUB','github_pat_fixture',200,'artifact-github-packages-classic-token-required',
+             'registry-configuration',['write:packages','delete:packages']),
+            ('GITHUB','ghp_fixture',403,'artifact-forge-registry-inventory-forbidden','registry-inventory',['read:packages']),
+            ('FORGEJO','forgejo-fixture',401,'artifact-forge-registry-inventory-forbidden','registry-inventory',['read:package']),
+            ('GITLAB','gitlab-fixture',403,'artifact-forge-registry-inventory-forbidden','registry-inventory',['read_api']),
+        ):
+            with self.subTest(forge=forge,code=code):
+                progress=forge_publish_artifacts.PublicationProgress(['docker'])
+                calls,marks,error=self.publish_docker_fixture(forge,token=token,
+                                                               inventory_status=status,progress=progress)
+                self.assertEqual(error.code,code)
+                self.assertEqual(progress.steps['docker-prepare']['details']['phase'],phase)
+                self.assertEqual(progress.steps['docker-prepare']['details']['required_scopes'],scopes)
+                self.assertEqual(progress.steps['docker-login']['state'],'PENDING')
+                self.assertEqual(progress.steps['docker-push']['state'],'PENDING')
+                self.assertFalse(calls or marks)
+
+    def test_github_retention_uses_authenticated_personal_package_path(self):
+        calls,_,error=self.publish_docker_fixture('GITHUB',github_owner=True)
+        self.assertIsNone(error)
+        deletions=[path for action,path in calls if action=='delete']
+        self.assertEqual(len(deletions),69)
+        self.assertTrue(all(path.startswith('/api/user/packages/container/sample/versions/') for path in deletions))
 
     def test_remote_tag_confirmation_requires_the_pushed_image(self):
         with patch.object(forge_publish_artifacts,'inspect_manifest',return_value={

@@ -83,8 +83,19 @@ def docker_versions(client,read,root,api,forge,owner,repo,info,*,exhaustive=Fals
               and item['name'].casefold()==repo.casefold())
         return endpoint+'/container/'+quote(repo.lower(),safe=''),rows
     account=info.get('owner')
-    namespace='orgs' if isinstance(account,dict) and account.get('type')=='Organization' else 'users'
-    endpoint=f'{api}/{namespace}/{quote(owner,safe="")}/packages/container/{quote(repo.lower(),safe="")}/versions'
+    namespace='orgs/'+quote(owner,safe='') if isinstance(account,dict) and account.get('type')=='Organization' else 'users/'+quote(owner,safe='')
+    if namespace.startswith('users/'):
+        try:
+            authenticated,_=read(client,api+'/user')
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code not in (401,403,404):
+                raise
+        else:
+            login=authenticated.get('login') if isinstance(authenticated,dict) else None
+            if isinstance(login,str) and login.casefold()==owner.casefold():
+                # Le chemin /users/{owner} expose les paquets publics.
+                namespace='user'
+    endpoint=f'{api}/{namespace}/packages/container/{quote(repo.lower(),safe="")}/versions'
     return endpoint,pages(client,read,endpoint,forge,exhaustive=exhaustive)
 
 
