@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Ajouter PROJECT_DB et PROJECT_SPECIFICATIONS à l’éditeur et à la carte Configuration, avec OpenSpec par défaut et les icônes PostgreSQL, Electric et OpenSpec.
+
 - Réorganiser l’éditeur de projet avec aide par variable, valeurs PostgreSQL instantanées et contrôle de fraîcheur avant écriture. Renommer automatiquement PROJECT_TYPE en PROJECT_LANGUAGES et ajouter PROJECT_FRAMEWORKS.
 
 - Compacter l’éditeur de projet en deux colonnes responsives et ajouter la rétention Debian et Docker par nombre de versions et durée, cumulables pour les publications manuelles et automatiques.

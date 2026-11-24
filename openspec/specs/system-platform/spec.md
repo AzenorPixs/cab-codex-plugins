@@ -3480,7 +3480,7 @@ Chaque champ MUST être placé sous son nom cliquable. L’aide MUST s’ouvrir 
 #### Scenario: Ordre des variables
 
 - **WHEN** un administrateur ouvre l’éditeur
-- **THEN** CAB présente successivement PROJECT_ID et PROJECT_NAME, PROJECT_LANGUAGES et PROJECT_FRAMEWORKS, PROJECT_DOCKERED et PROJECT_DOCKER_RETENTION, PROJECT_DEBIAN_PACKAGE et PROJECT_DEBIAN_RETENTION, PROJECT_VERSION et PROJECT_VERSION_POLICY, puis PROJECT_PATH en pleine largeur
+- **THEN** CAB présente successivement PROJECT_ID et PROJECT_NAME, PROJECT_LANGUAGES et PROJECT_FRAMEWORKS, PROJECT_DB et PROJECT_SPECIFICATIONS, PROJECT_DOCKERED et PROJECT_DOCKER_RETENTION, PROJECT_DEBIAN_PACKAGE et PROJECT_DEBIAN_RETENTION, PROJECT_VERSION et PROJECT_VERSION_POLICY, puis PROJECT_PATH en pleine largeur
 
 #### Scenario: Projection et validation avant écriture
 
@@ -3515,3 +3515,21 @@ Pour chaque format activé, CAB MUST afficher une seule ligne dans la carte de l
 
 - **WHEN** l’inventaire d’une forge expose plusieurs paquets Debian d’une publication ou plusieurs tags Docker
 - **THEN** la carte affiche une seule observation par format, avec le premier nom et le premier tag, sans modifier les données d’inventaire.
+
+### Requirement: Métadonnées de base de données et de spécification
+
+CAB MUST écouter, valider et projeter PROJECT_DB et PROJECT_SPECIFICATIONS
+via les métadonnées du projet existantes. Les révisions et la validation de
+la source avant enregistrement MUST s’appliquer aux deux variables.
+
+#### Scenario: Valeurs par défaut
+
+- **WHEN** les clés sont absentes ou vides
+- **THEN** PROJECT_DB est vide et PROJECT_SPECIFICATIONS vaut OpenSpec
+- **AND** CAB affiche OpenSpec et projette la valeur sans écrire la clé à la lecture
+
+#### Scenario: Déclaration d’une base et de ses composants
+
+- **WHEN** PROJECT_DB contient une liste séparée par virgules et PROJECT_SPECIFICATIONS désigne un outil
+- **THEN** CAB affiche les icônes pour les technologies reconnues, dans l’ordre de déclaration pour la base
+- **AND** les noms des technologies inconnues restent lisibles en texte

@@ -65,7 +65,7 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 .forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading :is(h2,.run-card-title){margin:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
 .project-configuration-editor{width:min(48rem,90vw);font-size:.8rem}
 .project-configuration-editor :is(input,select,button){font-size:inherit}
-.project-configuration-editor > form > h2{margin-bottom:2.25rem}
+.lifecycle-dialog.project-configuration-editor > form > h2{margin-bottom:1.25rem;font-size:calc(28px * var(--font-scale))}
 .project-configuration-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem 1rem}
 .project-configuration-fields label{margin:0;overflow-wrap:anywhere}
 .project-configuration-fields input{min-width:0;margin-top:0}

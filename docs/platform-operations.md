@@ -454,6 +454,13 @@ des champs projetés autorise l’enregistrement. Electric actualise les champs
 et CAB protège une saisie en conflit avec une modification externe.
 Le chemin `PROJECT_PATH` est conservé dans PostgreSQL.
 
+`PROJECT_DB` contient les bases et les composants associés, par exemple
+`PostgreSQL, Electric`. Une valeur vide désactive la ligne dans la carte.
+`PROJECT_SPECIFICATIONS` désigne un outil et vaut `OpenSpec` par défaut,
+y compris si la variable est absente de `project.env`. La projection ajoute
+cette valeur par défaut lors de la lecture. La carte affiche les icônes
+connues en conservant l’ordre de la liste des bases et composants.
+
 Les cartes de forge utilisent les valeurs publiques validées de la famille
 correspondante. Les URL authentifiées ou porteuses de requête ou fragment
 sont refusées et les secrets sont exclus de la projection. Le watcher suit

@@ -13,6 +13,8 @@ const help = {
   PROJECT_NAME:'Nom affiché du projet.',
   PROJECT_LANGUAGES:'Langages du projet, séparés par des virgules. Exemple : Python, TypeScript.',
   PROJECT_FRAMEWORKS:'Frameworks du projet, séparés par des virgules. Exemple : Django, React.',
+  PROJECT_DB:'Base de données et composants liés, séparés par des virgules. Exemple : PostgreSQL, Electric. Laissez vide si le projet n’en utilise pas.',
+  PROJECT_SPECIFICATIONS:'Outil utilisé pour les spécifications du projet. Valeur par défaut : OpenSpec.',
   PROJECT_DOCKERED:'Active la construction et la publication Docker. Valeurs : Yes ou No.',
   PROJECT_DOCKER_RETENTION:'Rétention Docker sur la forge après publication. 0 conserve tout. 3 conserve trois versions. 365D conserve les versions âgées d’au plus 365 jours. 3,365D cumule les deux garanties.',
   PROJECT_DEBIAN_PACKAGE:'Active la construction et la publication du paquet Debian. Valeurs : Yes ou No.',
@@ -101,7 +103,11 @@ export function ProjectConfigurationEditor({project,git=false}:{project:Project;
   const navigate=useNavigate()
   const path=`projects/${project.id}/configuration`
   const projected=project.public_metadata?.values||{}
-  const projectedFields={...projected,PROJECT_LANGUAGES:projected.PROJECT_LANGUAGES??projected.PROJECT_TYPE??''}
+  const projectedFields={
+    ...projected,
+    PROJECT_LANGUAGES:projected.PROJECT_LANGUAGES??projected.PROJECT_TYPE??'',
+    PROJECT_SPECIFICATIONS:projected.PROJECT_SPECIFICATIONS||'OpenSpec',
+  }
   const projectedPath=project.public_metadata?.project_root||project.root
   const projectionKey=configurationKey(projectedFields,projectedPath)
   const pendingProjection=checked?.projectionKey===projectionKey?checked.snapshot:null

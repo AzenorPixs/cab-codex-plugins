@@ -175,6 +175,32 @@ class ProjectConfigurationTests(unittest.TestCase):
         self.assertEqual(preview['state'],'PREVIEW')
         self.assertEqual(preview['new_version'],'0.1.2.3')
 
+    def test_technology_defaults_and_updates_are_projected(self):
+        self.file.write_text('PROJECT_ID=existant\nPROJECT_VERSION_POLICY=3\n')
+        initial=self.open_editor()
+        self.assertEqual(initial['fields']['PROJECT_DB'],'')
+        self.assertEqual(initial['fields']['PROJECT_SPECIFICATIONS'],'OpenSpec')
+        self.assertNotIn('PROJECT_SPECIFICATIONS',self.file.read_text())
+        fields={'PROJECT_DB':'PostgreSQL, Electric','PROJECT_SPECIFICATIONS':'Spécification interne'}
+        saved=api.project_configuration_save(None,self.project.pk,api.ProjectConfigurationEdit(
+            fields=fields,revision=initial['revision'],
+        ))
+        self.assertTrue(saved['saved'])
+        observed=self.open_editor()
+        projection=ProjectMetadataProjection.objects.get(pk=self.project.pk).public_metadata['values']
+        for key, value in fields.items():
+            self.assertEqual(observed['fields'][key],value)
+            self.assertEqual(projection[key],value)
+        with self.assertRaisesRegex(Refused,'project-configuration-changed'):
+            api.project_configuration_save(None,self.project.pk,api.ProjectConfigurationEdit(
+                fields={'PROJECT_DB':''},revision=initial['revision'],
+            ))
+        api.project_configuration_save(None,self.project.pk,api.ProjectConfigurationEdit(
+            fields={'PROJECT_DB':'','PROJECT_SPECIFICATIONS':''},revision=observed['revision'],
+        ))
+        defaults=self.open_editor()['fields']
+        self.assertEqual((defaults['PROJECT_DB'],defaults['PROJECT_SPECIFICATIONS']),('','OpenSpec'))
+
     def test_create_project_initializes_and_projects_available_metadata_once(self):
         body = api.NewProject(name='Démonstration CAB', folder='demo-cab', request_id=str(uuid.uuid4()))
         result = api.new_project(None, body)
@@ -187,6 +213,7 @@ class ProjectConfigurationTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
         self.assertEqual(ProjectMetadataProjection.objects.get(pk=result['id']).public_metadata['values'], {
             'PROJECT_ID': 'demo-cab', 'PROJECT_NAME': 'Démonstration CAB', 'PROJECT_VERSION_POLICY': '3',
+            'PROJECT_SPECIFICATIONS': 'OpenSpec',
         })
         self.assertFalse((path.parent / '.git').exists())
         inode = path.stat().st_ino

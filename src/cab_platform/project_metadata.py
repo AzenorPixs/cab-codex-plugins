@@ -13,9 +13,12 @@ DOCKER_RETENTION = 'PROJECT_DOCKER_RETENTION'
 RETENTION = re.compile(r'(?:(?P<count>[0-9]+)(?:,(?P<days>[0-9]+)D)?|(?P<duration>[0-9]+)D)')
 LANGUAGES = 'PROJECT_LANGUAGES'
 FRAMEWORKS = 'PROJECT_FRAMEWORKS'
+DATABASES = 'PROJECT_DB'
+SPECIFICATIONS = 'PROJECT_SPECIFICATIONS'
+DEFAULT_SPECIFICATIONS = 'OpenSpec'
 LEGACY_LANGUAGES = 'PROJECT_TYPE'
 SUFFIXES=('BASE_URL','OWNER','REPOSITORY','NAME','BRANCH')
-KEYS={DEBIAN_RETENTION,DOCKER_RETENTION,LANGUAGES,FRAMEWORKS,'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
+KEYS={DEBIAN_RETENTION,DOCKER_RETENTION,LANGUAGES,FRAMEWORKS,DATABASES,SPECIFICATIONS,'PROJECT_ID','PROJECT_NAME','PROJECT_VERSION','PROJECT_VERSION_POLICY','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE','REMOTE_GITLAB_REGISTRY','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH'}|{f'REMOTE_{forge}_{suffix}' for forge in FORGES for suffix in SUFFIXES}
 ASSIGNMENT=re.compile(r'''\s*([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^'\r\n]*)'|"([^"\r\n]*)"|([^'"\r\n]*?))\s*(?:\s+\#.*)?''')
 SCALAR_KEY = re.compile(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=')
 REGISTRY = re.compile(r'[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::[0-9]{1,5})?')
@@ -45,8 +48,10 @@ def public_value(key,value):
     if key=='PROJECT_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&:/@-]+',value))
     if key=='GIT_USER_NAME':return len(value)<=120 and bool(re.fullmatch(r'[\w .,+()&/@-]+',value))
     if key==LANGUAGES:return bool(re.fullmatch(r'[\w .,+#()/-]+',value))
-    if key==FRAMEWORKS:
+    if key in (FRAMEWORKS,DATABASES):
         return all(re.fullmatch(r'[\w .+#()/-]+',item.strip()) for item in value.split(','))
+    if key==SPECIFICATIONS:
+        return bool(re.fullmatch(r'[\w .+#()/-]+',value))
     if key=='PROJECT_VERSION':
         from .versioning import canonical_version,VersionError
         try:canonical_version(value);return True
@@ -235,6 +240,8 @@ def synchronize(project_id,include_forges=True,include_git=True,verify_source=Fa
             if values.get('PROJECT_VERSION'):
                 try:policy_parts(values['PROJECT_VERSION'],parse_policy(values['PROJECT_VERSION_POLICY']))
                 except VersionError as error:snapshot['version_policy_error']=str(error)
+        if snapshot['state'] in ('ready','partial','missing'):
+            snapshot['values'].setdefault(SPECIFICATIONS,DEFAULT_SPECIFICATIONS)
         source_digest = snapshot.pop('source_digest',None)
         source_issues = snapshot.pop('issues',[])
         snapshot['project_root']=project.root

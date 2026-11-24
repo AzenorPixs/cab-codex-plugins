@@ -13,15 +13,16 @@ from .core.models import Project,Run,Operation,Lease,StatisticsJob,VersionPolicy
 from .core.commands import TERMINAL
 from .paths import config
 from .forge_settings import file_operation
-from .project_metadata import ASSIGNMENT,DEBIAN_RETENTION,DOCKER_RETENTION,FRAMEWORKS,LANGUAGES,initialize_version_policy,public_value,synchronize
+from .project_metadata import ASSIGNMENT,DATABASES,DEBIAN_RETENTION,DEFAULT_SPECIFICATIONS,DOCKER_RETENTION,FRAMEWORKS,LANGUAGES,SPECIFICATIONS,initialize_version_policy,public_value,synchronize
 
-FIELDS=('PROJECT_ID','PROJECT_NAME',LANGUAGES,FRAMEWORKS,'PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE',DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
+FIELDS=('PROJECT_ID','PROJECT_NAME',LANGUAGES,FRAMEWORKS,DATABASES,SPECIFICATIONS,'PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE',DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
 
 
 def configuration_fields(snapshot):
     values = snapshot.get('values',{})
     fields = {key:values.get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')}
     fields[LANGUAGES] = values.get(LANGUAGES,values.get('PROJECT_TYPE',''))
+    fields[SPECIFICATIONS] = values.get(SPECIFICATIONS) or DEFAULT_SPECIFICATIONS
     return fields
 
 

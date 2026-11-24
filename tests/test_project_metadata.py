@@ -29,6 +29,12 @@ class MetadataReaderTests(unittest.TestCase):
             'PROJECT_LANGUAGES':'Python, TypeScript','PROJECT_FRAMEWORKS':'Django, React',
         })
 
+    def test_database_list_and_single_specification_are_literal(self):
+        result=self.read('PROJECT_DB="PostgreSQL, Electric"\nPROJECT_SPECIFICATIONS=OpenSpec\n')
+        self.assertEqual(result['values'],{'PROJECT_DB':'PostgreSQL, Electric','PROJECT_SPECIFICATIONS':'OpenSpec'})
+        result=self.read('PROJECT_DB="PostgreSQL,, Electric"\nPROJECT_SPECIFICATIONS="OpenSpec, Autre"\n')
+        self.assertEqual(result,{'state':'partial','values':{}})
+
     def test_shell_is_never_executed(self):
         marker=self.root/'effect'
         result=self.read(f'PROJECT_NAME=$(touch {marker})\nPROJECT_VERSION=`touch {marker}`\nPROJECT_TYPE="${{PRIVATE}}"\n')
