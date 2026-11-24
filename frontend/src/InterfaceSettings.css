@@ -27,9 +27,28 @@
   gap: .6rem 1rem;
 }
 
-.interface-component-fields label {
-  margin: 0;
+.interface-component-fields > div {
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.interface-field-help-trigger {
+  display: block;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.interface-field-help-trigger:hover,
+.interface-field-help-trigger:focus-visible {
+  text-decoration: underline;
+}
+
+.responsive-profile .interface-field-help-trigger {
+  font-size: calc(15px * var(--font-scale));
 }
 
 .interface-component-fields input[type="color"] {

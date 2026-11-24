@@ -70,6 +70,7 @@ export function applyComponentStyle(root:HTMLElement,style:ComponentStyle,width:
   root.toggleAttribute('data-custom-tabs-padding',style.menus?.tabs_padding!==undefined)
   root.toggleAttribute('data-custom-tabs-font',style.menus?.tabs_font!==undefined)
   root.toggleAttribute('data-custom-tabs-icon',style.menus?.tabs_icon!==undefined)
+  root.toggleAttribute('data-custom-table-icon-size',style.tables?.icon_size!==undefined)
   root.toggleAttribute('data-custom-header-font',style.top_bar?.font!==undefined)
   root.toggleAttribute('data-custom-tabs-hover',style.menus?.tabs_hover!==undefined)
   for(const group of groups){

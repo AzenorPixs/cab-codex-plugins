@@ -84,6 +84,34 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(catalog.models()), 2)
         self.assertEqual(json.loads(files.preview(source.pk)), OPEN_CODE)
 
+    def test_model_overview_reads_only_the_selected_record_as_admin(self):
+        from cab_platform import agent_catalog as catalog
+        from cab_platform.core import api
+        from cab_platform.core.models import AgentModel
+
+        provider = catalog.add_provider('Demo', 'https://example.org', '')
+        source = {'id': 'lab/sample', 'architecture': {'output_modalities': ['text', 'image']}}
+        details = {'summary': {'name': 'Nom lisible', 'cache_write_rates': {'30m': 0.3, '12h': 0.6}},
+                   'metadata': {'family': 'démonstration'}}
+        model = AgentModel.objects.create(provider_id=provider['id'], identifier='lab/sample',
+                                          source=source, details=details)
+        with patch.object(api, 'principal') as authenticate:
+            response = api.agent_model_detail(None, model.pk)
+            authenticate.assert_called_once_with(None, admin=True)
+        self.assertEqual(response['Cache-Control'], 'private, no-store')
+        self.assertEqual(json.loads(response.content), {'model': {
+            'id': model.pk, 'provider_id': provider['id'], 'provider': 'Demo', 'identifier': 'lab/sample',
+            'source': source, 'details': details,
+        }})
+        with patch.object(api, 'principal', side_effect=catalog.Refused('fixture-forbidden', 403)), \
+                patch.object(catalog, 'model_document') as read:
+            with self.assertRaises(catalog.Refused):
+                api.agent_model_detail(None, model.pk)
+            read.assert_not_called()
+        with patch.object(api, 'principal'), self.assertRaises(catalog.Refused) as absent:
+            api.agent_model_detail(None, model.pk + 1)
+        self.assertEqual(absent.exception.code, 'agent-model-not-found')
+
     def test_failed_refresh_keeps_last_valid_catalog(self):
         from cab_platform import agent_catalog as catalog, agent_catalog_files as files
         from cab_platform.core.models import AgentCatalogFile, AgentModel
@@ -548,7 +576,7 @@ if __name__ == '__main__':
         command('pg_ctl', '-D', pgdata, '-l', str(Path(directory) / 'postgres.log'),
                 '-o', f"-k {directory} -c listen_addresses='' -c fsync=off", '-w', 'start')
         try:
-            settings.configure(SECRET_KEY='fixture', INSTALLED_APPS=['cab_platform.core'], DATABASES={
+            settings.configure(SECRET_KEY='fixture', INSTALLED_APPS=['django.contrib.auth', 'django.contrib.contenttypes', 'cab_platform.core'], DATABASES={
                 'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'postgres',
                             'USER': 'catalog', 'HOST': directory}
             })

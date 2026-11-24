@@ -487,6 +487,14 @@ def remove_key(key_id):
     return {'removed': True}
 
 
+def model_document(model_id):
+    model = AgentModel.objects.filter(pk=model_id).values(
+        'id', 'provider_id', 'provider__name', 'identifier', 'source', 'details').first()
+    require(model is not None, 'agent-model-not-found', 404)
+    model['provider'] = model.pop('provider__name')
+    return model
+
+
 def models(policy_id=None):
     from .model_policies import excluded_names, matches, policy_or_error, sort_models
 

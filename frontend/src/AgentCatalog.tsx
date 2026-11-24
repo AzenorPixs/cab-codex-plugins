@@ -34,9 +34,9 @@ type Column<Row>={label:string;className?:string;value?:(row:Row)=>CellValue;ren
 type TableSort={column:number;descending:boolean}
 const collator=new Intl.Collator('fr',{numeric:true,sensitivity:'base'})
 
-function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey,defaultSort,numbered=false}:{
+function CatalogTable<Row extends {id:number|string}>({title,columns,rows,actions,toolbar,paginationActions,pending,error,viewKey,defaultSort,numbered=false,singleLine=false}:{
   title:string;columns:Column<Row>[];rows:Row[];actions?:ReactNode;toolbar?:ReactNode;paginationActions?:ReactNode;
-  pending:boolean;error:Error|null;viewKey?:number|null;defaultSort?:TableSort;numbered?:boolean
+  pending:boolean;error:Error|null;viewKey?:number|null;defaultSort?:TableSort;numbered?:boolean;singleLine?:boolean
 }){
   const navigation=useTableSearch()
   const [manualSort,setSort]=useState<TableSort|undefined>(defaultSort)
@@ -70,16 +70,22 @@ function CatalogTable<Row extends {id:number|string}>({title,columns,rows,action
     {error&&<p role="alert">{error.message}</p>}
     {pending&&<p role="status">Chargement…</p>}
     <div id={viewKey!==undefined?'model-catalog-panel':undefined} role={viewKey!==undefined?'tabpanel':undefined}
-      aria-labelledby={viewKey!==undefined?'model-tab-'+(viewKey??'all'):undefined} className="table-wrap"><table className="monitor-table" aria-label={title}>
-      <thead><tr>{numbered&&<th scope="col"><span>N°</span></th>}{columns.map((column,index)=><th key={column.label} scope="col" className={column.className}
+      aria-labelledby={viewKey!==undefined?'model-tab-'+(viewKey??'all'):undefined} className="table-wrap"><table className={'monitor-table'+(singleLine?' model-catalog-table':'')} aria-label={title}>
+      <thead><tr>{numbered&&<th scope="col" className="model-catalog-number"><span>N°</span></th>}{columns.map((column,index)=><th key={column.label} scope="col" className={column.className}
         aria-sort={sort?.column===index?(sort.descending?'descending':'ascending'):undefined}>
         {column.value&&!numbered?<button className="binary-sort" type="button" onClick={()=>selectSort(index)}>
           {column.label}{sort?.column===index&&<span aria-hidden="true">{sort.descending?'↓':'↑'}</span>}
         </button>:<span>{column.label}</span>}
       </th>)}</tr></thead>
       <tbody>{displayed.map((row,index)=><tr key={row.id}>
-        {numbered&&<td data-label="N°">{(current-1)*tablePageLimit+index+1}</td>}
-        {columns.map(column=><td key={column.label} data-label={column.label} className={column.className}>{column.render?column.render(row):column.value?.(row)??'—'}</td>)}</tr>)}
+        {numbered&&<td data-label="N°"><div className="model-catalog-cell">{(current-1)*tablePageLimit+index+1}</div></td>}
+        {columns.map(column=>{
+          const value=column.value?.(row)??null
+          const rendered=column.render?column.render(row):value??'—'
+          return <td key={column.label} data-label={column.label} className={column.className}>
+            {singleLine?<div className="model-catalog-cell" title={typeof value==='string'?value:undefined}>{rendered}</div>:rendered}
+          </td>
+        })}</tr>)}
       <TableFiller count={displayed.length} columns={columns.length+Number(numbered)}
         empty={!pending&&!error?(navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'):undefined}/></tbody>
     </table></div>
@@ -338,26 +344,23 @@ function PolicyOverview({policy,providerOptions,onSaved}:{policy?:Policy;provide
   </AddOverview>
 }
 
-const inputPriceLabel='Coût entrée / M'
+const inputPriceLabel='T in/M'
 const columns:Column<ModelRow>[]=[
-  {label:'Modèles',value:row=>row.name||row.identifier,search:row=>row.identifier,
-    render:row=><>{row.name||row.identifier}{row.name&&row.name!==row.identifier&&<small>{row.identifier}</small>}</>},
+  {label:'Modèles',className:'model-catalog-name',value:row=>row.name||row.identifier,search:row=>row.identifier,
+    render:row=><CatalogDocument path={'administration/agent-models/detail?id='+row.id}
+      title={row.name||row.identifier} label={row.name||row.identifier} className="text-button model-catalog-link"
+      loadingLabel="Lecture du modèle…"/>},
   {label:'Fournisseurs',className:'model-catalog-provider',value:row=>row.provider},
   {label:'Contexte',value:row=>row.context,render:row=>number(row.context)},
   {label:'Sortie maximale',value:row=>row.output,render:row=>number(row.output)},
-  {label:'Entrées',value:row=>modalities(row.input_modalities)||null},
-  {label:'Sorties',value:row=>modalities(row.output_modalities)||null},
-  {label:inputPriceLabel,value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},
-  {label:'Coût sortie / M',value:row=>priceValue(row.output_cost),render:row=>price(row.output_cost)},
-  {label:'Lecture cache / M',value:row=>priceValue(row.cache_read_cost),render:row=>price(row.cache_read_cost)},
-  {label:'Écriture cache / M',value:row=>priceValue(row.cache_write_cost),
-    search:row=>Object.keys(row.cache_write_rates??{}).join(' ')||row.cache_write_duration||'',
-    render:row=>{
-      const writes=['30m','12h'].filter(duration=>row.cache_write_rates?.[duration]!=null)
-      return writes.length
-        ? <>{writes.map(duration=><small key={duration}>{duration} · {price(row.cache_write_rates?.[duration]??null)}</small>)}</>
-        : <>{price(row.cache_write_cost)}{row.cache_write_duration&&<small>{row.cache_write_duration}</small>}</>
-    }},
+  {label:'Entrées',className:'model-catalog-inputs',value:row=>modalities(row.input_modalities)||null},
+  {label:'Sorties',className:'model-catalog-outputs',value:row=>modalities(row.output_modalities)||null},
+  {label:inputPriceLabel,className:'model-catalog-price',value:row=>priceValue(row.input_cost),render:row=>price(row.input_cost)},
+  {label:'T out/M',className:'model-catalog-price',value:row=>priceValue(row.output_cost),render:row=>price(row.output_cost)},
+  {label:'Re/M',className:'model-catalog-price',value:row=>priceValue(row.cache_read_cost),render:row=>price(row.cache_read_cost)},
+  {label:'Wr/M',className:'model-catalog-price',value:row=>priceValue(row.cache_write_cost),
+    search:row=>Object.entries(row.cache_write_rates??{}).map(([duration,rate])=>duration+' '+price(rate)).join(' ')||row.cache_write_duration||'',
+    render:row=>price(row.cache_write_cost)},
 ]
 
 const initialModelSort={column:columns.findIndex(column=>column.label===inputPriceLabel),descending:false}
@@ -400,7 +403,7 @@ function ModelCatalog({catalog}:{catalog:Catalog}){
     <DeleteOverview label="Supprimer la politique de modèles" title="Supprimer la politique de modèles"
       name={selected.name} remove={()=>remove(selected.id)}/>
   </>
-  return <CatalogTable viewKey={selectedId} numbered={selectedId!==null} defaultSort={initialModelSort} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
+  return <CatalogTable viewKey={selectedId} singleLine numbered={selectedId!==null} defaultSort={initialModelSort} title="Modèles" columns={columns} toolbar={toolbar} paginationActions={policyActions}
     actions={<PolicyOverview providerOptions={providerOptions} onSaved={saved=>setTab(saved.id)}/>} rows={rows} pending={catalog.pending} error={catalog.error}/>
 }
 

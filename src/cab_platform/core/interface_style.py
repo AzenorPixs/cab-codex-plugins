@@ -58,6 +58,7 @@ FIELDS = {
         number('head_height', 'En-tête · hauteur minimale', 52, 20, 120),
         number('head_padding', 'En-tête · marge verticale', 15, 0, 40),
         number('body_font', 'Cellules · taille du texte', 20, 10, 32),
+        number('icon_size', 'Cellules · taille des logos', 26, 12, 48),
         number('body_weight', 'Cellules · graisse', 400, 300, 900, ''),
         number('row_height', 'Lignes · hauteur minimale', 48, 20, 120),
         number('cell_padding', 'Cellules · marge verticale', 14, 0, 40),
@@ -143,6 +144,7 @@ _REFERENCES = {
     },
     'tables': {
         'head_height': _ALL_AUTO,
+        'icon_size': _ALL_AUTO,
         'head_padding': {'mobile':13},
         'row_height': _ALL_AUTO,
         'cell_padding': _COMPACT_TABLES,

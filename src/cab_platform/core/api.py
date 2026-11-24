@@ -417,6 +417,13 @@ def agent_catalog_display(request):
     return agent_catalog_response('rows', display())
 
 
+@api.get('/administration/agent-models/detail')
+def agent_model_detail(request, id: CatalogID):
+    principal(request, admin=True)
+    from cab_platform.agent_catalog import model_document
+    return agent_catalog_response('model', model_document(id))
+
+
 @api.post('/administration/agent-catalog-scan')
 def scan_agent_catalog(request):
     principal(request, admin=True)

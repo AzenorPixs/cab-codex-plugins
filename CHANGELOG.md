@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Compacter le tableau des modèles avec tarifs sur une ligne, cellules de texte limitées à deux lignes et détail administrateur au clic.
+
 - Ajouter PROJECT_DB et PROJECT_SPECIFICATIONS à l’éditeur et à la carte Configuration, avec OpenSpec par défaut et les icônes PostgreSQL, Electric et OpenSpec.
 
 - Réorganiser l’éditeur de projet avec aide par variable, valeurs PostgreSQL instantanées et contrôle de fraîcheur avant écriture. Renommer automatiquement PROJECT_TYPE en PROJECT_LANGUAGES et ajouter PROJECT_FRAMEWORKS.

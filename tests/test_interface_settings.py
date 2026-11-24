@@ -65,6 +65,19 @@ class InterfaceStyleTests(unittest.TestCase):
         self.assertEqual(updated['responsive']['uhd'],before['responsive']['uhd'])
         self.assertNotIn('fullhd',style.patch_profile(updated,'fullhd','resolutions',{},True)['responsive'])
 
+    def test_table_logo_size_has_independent_values_for_each_resolution(self):
+        preferences = {}
+        for index, profile in enumerate(style.PROFILES):
+            preferences = style.patch_profile(preferences, profile, 'tables', {'icon_size': 18 + index}, False)
+        self.assertEqual([preferences['profile_styles'][profile]['tables']['icon_size'] for profile in style.PROFILES],
+                         [18, 19, 20, 21, 22, 23])
+        for invalid in (11, 49, 26.5, True):
+            with self.subTest(value=invalid), self.assertRaises(ValueError):
+                style.patch_profile(preferences, 'fullhd', 'tables', {'icon_size': invalid}, False)
+        reset = style.patch_profile(preferences, 'fullhd', 'tables', {}, True)
+        self.assertNotIn('fullhd', reset['profile_styles'])
+        self.assertEqual(reset['profile_styles']['uhd']['tables']['icon_size'], 23)
+
     def test_general_range_and_partial_responsive_defaults(self):
         with self.assertRaises(ValueError):
             style.patch_profile({},'fullhd','general',{'font_scale':161},False)

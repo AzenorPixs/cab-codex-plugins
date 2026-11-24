@@ -22,6 +22,19 @@
   line-height: 1lh;
 }
 
+:root[data-custom-table-icon-size] .monitor-table :is(th, td) :is(svg, img) {
+  inline-size: var(--ui-tables-icon-size);
+  block-size: var(--ui-tables-icon-size);
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+:root[data-custom-table-icon-size] .monitor-table :is(th, td) .lifecycle-icon {
+  inline-size: calc(var(--ui-tables-icon-size) + .8rem + 2px);
+  block-size: calc(var(--ui-tables-icon-size) + .8rem + 2px);
+  flex-shrink: 0;
+}
+
 .monitor-table tbody td code {
   font-size: calc((var(--ui-tables-body-font, 20px) - 1px) * var(--font-scale));
   line-height: 0;

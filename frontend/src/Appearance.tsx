@@ -1,7 +1,8 @@
-import {createContext,useContext,useEffect,useLayoutEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from 'react'
+import {createContext,useContext,useEffect,useId,useLayoutEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import {api} from './api'
+import {InterfaceFieldHelp} from './InterfaceSettingHelp'
 import {applyComponentStyle,nearestProfile,profileInterval,profiles,styleAtWidth,tablePageSize,
   type ComponentStyle,type ProfileName,type ProfileStyles,type StyleAdjustment,type StyleFields,type StyleGroup,type TableName} from './InterfaceStyle'
 
@@ -102,6 +103,7 @@ export function useTablePageSize(table:TableName){return tablePageSize(useAppear
 export function PageAppearance({path}:{path:string}){const {selectPage}=useAppearance();useEffect(()=>selectPage(path),[path,selectPage]);return null}
 
 export function FontControls({profile}:{profile:ProfileName}){
+  const labelId=useId()
   const {preferences,saveStyle}=useAppearance()
   const [pending,setPending]=useState(false)
   const [message,setMessage]=useState('')
@@ -116,10 +118,13 @@ export function FontControls({profile}:{profile:ProfileName}){
     finally{setPending(false)}
   }
   return <div className="interface-font-controls" aria-label="Taille des polices">
+    <InterfaceFieldHelp id={labelId} label="Taille du texte"
+      description="Modifie l’échelle du texte de l’interface pour la résolution sélectionnée. Les boutons plus et moins avancent par pas de 10 %."
+      range={{min:80,max:160,unit:'%'}}/>
     <div className="font-controls">
       <button type="button" className="header-control" aria-label="Réduire la taille du texte" disabled={pending||size<=80}
         onClick={()=>void change(Math.max(80,size-10))}>−</button>
-      <output aria-label="Taille du texte">{size}%</output>
+      <output aria-labelledby={labelId}>{size}%</output>
       <button type="button" className="header-control" aria-label="Augmenter la taille du texte" disabled={pending||size>=160}
         onClick={()=>void change(Math.min(160,size+10))}>+</button>
     </div>
@@ -129,6 +134,7 @@ export function FontControls({profile}:{profile:ProfileName}){
 }
 
 export function ResponsiveControls({profile}:{profile:ProfileName}){
+  const fieldPrefix=useId()
   const {preferences,saveStyle}=useAppearance()
   const [draft,setDraft]=useState<Partial<Profile>>({})
   const [pending,setPending]=useState(false)
@@ -147,12 +153,19 @@ export function ResponsiveControls({profile}:{profile:ProfileName}){
   function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void save()}
   return <form className="responsive-controls" onSubmit={submit}>
     <h2>Adaptation par résolution</h2>
-    <p>Ces pourcentages multiplient les références de chaque page. CAB interpole les valeurs entre deux résolutions.</p>
     <fieldset className="responsive-profile"><legend>Facteurs globaux</legend>
-      {(['layout','font'] as const).map(field=><label key={field}>{field==='layout'?'Interface (%)':'Police (%)'}
-        <input type="number" min="50" max="150" step="1" required value={value[field]||''} disabled={pending}
-          onChange={event=>setDraft({...draft,[field]:Number(event.target.value)})}/>
-      </label>)}
+      {(['layout','font'] as const).map(field=>{
+        const labelId=fieldPrefix+field
+        return <div key={field}>
+          <InterfaceFieldHelp id={labelId} label={field==='layout'?'Interface (%)':'Police (%)'}
+            description={field==='layout'
+              ?'Met à l’échelle les dimensions de l’interface à cette résolution. À 100 %, CAB utilise les dimensions de référence.'
+              :'Met à l’échelle les polices à cette résolution. CAB interpole le résultat entre deux profils voisins.'}
+            range={{min:50,max:150,unit:'%'}}/>
+          <input aria-labelledby={labelId} type="number" min="50" max="150" step="1" required value={value[field]||''} disabled={pending}
+            onChange={event=>setDraft({...draft,[field]:Number(event.target.value)})}/>
+        </div>
+      })}
     </fieldset>
     <div className="interface-component-actions">
       <button type="submit" disabled={pending||!Object.keys(draft).length}>Enregistrer</button>

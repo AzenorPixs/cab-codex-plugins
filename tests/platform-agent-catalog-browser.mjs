@@ -33,7 +33,7 @@ const tableRows=title=>Array.from(find('table[aria-label="'+title+'"] tbody')?.r
 const rows=title=>tableRows(title).filter(row=>!row.classList.contains('table-filler'));
 const search=title=>'input[aria-label="Rechercher dans '+title+'"]';
 const readRows=title=>rows(title).map(row=>row.textContent);
-async function pagination(title,needle){
+async function pagination(title,needle,expected=needle){
   await wait(()=>rows(title).length===10,'Dix entrées '+title);
   const pag='nav[aria-label="Pagination '+title+'"]';
   const box=find(search(title));
@@ -44,7 +44,7 @@ async function pagination(title,needle){
   await wait(()=>rows(title).length===2,'Deux entrées en seconde page '+title);
   check(tableRows(title).length===3,'Trois lignes visibles en dernière page '+title);
   fill(search(title),needle);
-  await wait(()=>rows(title).length===1&&readRows(title)[0].includes(needle),'Recherche instantanée sur toutes les pages '+title);
+  await wait(()=>rows(title).length===1&&readRows(title)[0].includes(expected),'Recherche instantanée sur toutes les pages '+title);
   check(tableRows(title).length===3,'Trois lignes visibles avec un seul résultat '+title);
   fill(search(title),'sans-resultat-fixture');
   await wait(()=>rows(title).length===0&&tableRows(title).length===3,'Trois lignes visibles sans résultat '+title);
@@ -126,7 +126,7 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
     &&find('td[data-label="Horodatage"] button'),'Dernière réussite conservée après un échec');
   Array.from(find('dialog[open]').querySelectorAll('button')).find(button=>button.textContent==='Fermer').click();
   await click('nav[aria-label="Agents"] a[href="/agents/models"]');
-  await pagination('Modèles','fixture-12');
+  await pagination('Modèles','fixture-12','Modèle 12');
   check(find('[role=tab][aria-selected=true]').textContent==='Tous','Onglet initial Tous');
   const headers=()=>Array.from(find('table[aria-label="Modèles"] thead tr').cells);
   check(headers()[0].textContent==='Modèles'&&headers()[1].textContent==='Fournisseurs','En-têtes au pluriel');
@@ -138,9 +138,47 @@ const send=value=>fetch('/observation',{method:'POST',body:JSON.stringify(value)
   await wait(()=>rows('Modèles').length===2,'Dernière page du tri de coût');
   check(readRows('Modèles').at(-1).includes('Modèle 12'),'Coût inconnu en dernier');
   Array.from(find(modelsPagination).querySelectorAll('button')).find(button=>button.textContent==='Premier').click();
-  check(find('table[aria-label="Modèles"] thead').textContent.includes('Lecture cache / M'),'Colonne lecture du cache');
-  check(readRows('Modèles')[0].includes('30m'),'Durée de cache affichée');
-  await wait(()=>readRows('Modèles')[0]?.includes('12h'),'Deuxième tarif d’écriture affiché');
+  check(headers().slice(6).map(header=>header.textContent.replace(/[↑↓]/g,'')).join('|')
+    ==='T in/M|T out/M|Re/M|Wr/M','Libellés des quatre tarifs');
+  const row=()=>rows('Modèles')[0];
+  await wait(()=>rows('Modèles').length===10&&row().querySelector('td[data-label="Modèles"] button')?.textContent==='Modèle 2',
+    'Première page du catalogue');
+  const shownName=row().querySelector('td[data-label="Modèles"]').innerText.trim();
+  check(shownName==='Modèle 2','Seul le nom lisible est affiché : '+shownName);
+  fill(search('Modèles'),'fixture-2');
+  await wait(()=>rows('Modèles').length===1&&row().textContent.includes('Modèle 2'),'Recherche par identifiant sans l’afficher');
+  fill(search('Modèles'),'');
+  await wait(()=>rows('Modèles').length===10,'Retour à la liste complète');
+  const priceCell=()=>row().querySelector('td[data-label="T out/M"] .model-catalog-cell');
+  const outputs=()=>row().querySelector('td[data-label="Sorties"] .model-catalog-cell');
+  const computed=element=>frame.contentWindow.getComputedStyle(element);
+  check(priceCell().textContent==='999 $'&&priceCell().scrollWidth===priceCell().clientWidth,'999 $ visible sur fenêtre étroite');
+  frame.width='1660';
+  await wait(()=>computed(find('.model-catalog-table')).tableLayout==='fixed','Largeurs fixes en présentation tableau');
+  const sizes=headers().slice(6).map(header=>header.getBoundingClientRect().width);
+  check(sizes.every(size=>Math.abs(size-sizes[0])<1),'Largeurs tarifaires égales');
+  check(priceCell().scrollWidth===priceCell().clientWidth,'999 $ visible dans le tableau');
+  check(headers()[5].getBoundingClientRect().width>headers()[4].getBoundingClientRect().width,'Sorties plus large qu’Entrées');
+  const outputStyle=computed(outputs());
+  check(outputStyle.webkitLineClamp==='2'&&outputs().scrollHeight>outputs().clientHeight
+    &&Math.abs(outputs().clientHeight-2*parseFloat(outputStyle.lineHeight))<2,
+    'Sorties tronquées après exactement deux lignes');
+  check(computed(priceCell()).whiteSpace==='nowrap','Tarif conservé sur une ligne');
+  for(const label of ['Modèles','Contexte','T out/M']){
+    const cell=row().querySelector('td[data-label="'+label+'"] .model-catalog-cell');
+    check(cell.clientHeight>=2*parseFloat(computed(cell).lineHeight)-1,
+      'Hauteur minimale de deux lignes dans '+label);
+  }
+
+  row().querySelector('td[data-label="Modèles"] button').click();
+  const modelDialog=await wait(()=>find('dialog[open][aria-label="Modèle 2"]'),'Détail du modèle sélectionné');
+  const modelData=await wait(()=>modelDialog.querySelector('pre'),'Données de la base');
+  const record=JSON.parse(modelData.textContent).model;
+  check(record.id===2&&record.identifier==='fixture-2'&&record.provider==='Fournisseur 2'
+    &&record.details.summary.cache_write_rates['12h']===0.6&&record.source.description==='Donnée enregistrée',
+    'Identité, métadonnées et tarifs multiples du modèle');
+  modelDialog.querySelector('button').click();
+  frame.width='1100';
   const contextSort='table[aria-label="Modèles"] th:nth-child(3) button';
   await click(contextSort);
   await click(contextSort);
@@ -301,7 +339,9 @@ try{
   const fixtureRows=Array.from({length:12},(_,index)=>index+1)
   const modelData=()=>fixtureRows.map(id=>({
     id,identifier:'fixture-'+id,name:'Modèle '+id,provider_id:id+10,context:500000+1000*id,output:64000,
-    input_cost:id===2?0:id===12?null:0.1,output_cost:0.3,cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
+    input_cost:id===2?0:id===12?null:0.1,output_cost:id===2?999:0.3,
+    input_modalities:['text'],output_modalities:id===2?['texte','image','vidéo','audio','document','structured','longue-sortie']:['text'],
+    cache_read_cost:0.1+id/100,cache_write_cost:0.3,cache_write_duration:'30m',
     cache_write_rates:id===2?{'30m':0.3,'12h':0.6}:undefined,
   }))
   function publish(){
@@ -326,6 +366,12 @@ try{
       if(route==='/api/v1/administration/agent-reminders'){
         if(post)reminders=await body(request)
         return json(response,reminders)
+      }
+      if(route==='/api/v1/administration/agent-models/detail'){
+        const model=modelData().find(item=>item.id===Number(url.searchParams.get('id')))
+        if(!model)return json(response,{error:'agent-model-not-found'},404)
+        return json(response,{model:{id:model.id,provider_id:model.provider_id,identifier:model.identifier,
+          provider:providers.find(item=>item.id===model.provider_id).name,source:{description:'Donnée enregistrée'},details:{summary:model}}})
       }
       if(route==='/api/v1/administration/agent-catalog-display')return json(response,{rows:Array.from(projections.values())})
       if(route==='/api/v1/administration/agent-catalog-scan'){scans++;return json(response,{queued:true})}

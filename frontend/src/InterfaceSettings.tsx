@@ -1,6 +1,7 @@
-import {useState,type FormEvent,type KeyboardEvent} from 'react'
+import {useId,useState,type FormEvent,type KeyboardEvent} from 'react'
 import {FontControls,ResponsiveControls,useComponentStyle,useCurrentProfile} from './Appearance'
 import {profiles,type ProfileName,type StyleGroup,type StyleValue} from './InterfaceStyle'
+import {ComponentFieldHelp} from './InterfaceSettingHelp'
 import './InterfaceSettings.css'
 
 const tabs=[
@@ -16,6 +17,7 @@ const tabs=[
 
 function ComponentStyleControls({group,profile}:{group:StyleGroup;profile:ProfileName}){
   const {fields,values,hasOverrides,saveStyle}=useComponentStyle(group,profile)
+  const fieldPrefix=useId()
   const [draft,setDraft]=useState<Record<string,string>>({})
   const [status,setStatus]=useState('')
   const [error,setError]=useState(false)
@@ -60,19 +62,21 @@ function ComponentStyleControls({group,profile}:{group:StyleGroup;profile:Profil
         const baseline=String(current??'')
         const value=draft[field.key]??baseline
         const automatic=current===null&&draft[field.key]===undefined
-        return <label key={field.key}>{field.label}{field.kind==='number'&&field.unit?` (${field.unit})`:''}
+        const labelId=fieldPrefix+field.key
+        return <div key={field.key}>
+          <ComponentFieldHelp id={labelId} group={group} field={field}/>
           {field.kind==='choice'
-            ?<select name={field.key} value={value} disabled={saving} onChange={event=>edit(field.key,event.target.value,baseline)}>
+            ?<select aria-labelledby={labelId} name={field.key} value={value} disabled={saving} onChange={event=>edit(field.key,event.target.value,baseline)}>
               {field.options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            :<input name={field.key} type={field.kind} value={field.kind==='color'&&!value?field.default:value} disabled={saving}
+            :<input aria-labelledby={labelId} name={field.key} type={field.kind} value={field.kind==='color'&&!value?field.default:value} disabled={saving}
               {...(field.kind==='number'?{required:draft[field.key]!==undefined,min:field.min,max:field.max,step:1,
                 placeholder:automatic?'Automatique':undefined}:{})}
               onChange={event=>edit(field.key,event.target.value,baseline)}/>}
           {automatic&&field.kind==='color'&&<small>Automatique</small>}
           {values[field.key]===undefined&&draft[field.key]===undefined&&field.reference_hint&&
             <small>{field.reference_hint}</small>}
-        </label>
+        </div>
       })}
     </div>
     <div className="interface-component-actions">

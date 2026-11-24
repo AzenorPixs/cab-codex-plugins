@@ -40,6 +40,18 @@ try{
       for(let i=0;i<90;i++){const value=read();if(value)return value;await new Promise(r=>setTimeout(r,50))}
       throw Error(description)
     }
+    async function verifyHelp(doc,trigger,range,choices=0){
+      check(trigger?.classList.contains('interface-field-help-trigger')&&trigger.type==='button','Libellé cliquable');
+      trigger.focus();
+      trigger.click();
+      const dialog=await wait(()=>doc.querySelector('.interface-field-help[open]'),'Aide '+trigger.textContent);
+      check(dialog.getAttribute('aria-label')===trigger.textContent&&dialog.querySelector('p').textContent.length>15,'Description de '+trigger.textContent);
+      const shown=dialog.querySelector('.interface-field-range')?.textContent;
+      check(shown===range,'Amplitude de '+trigger.textContent+' : '+shown);
+      check(dialog.querySelectorAll('li').length===choices,'Choix de '+trigger.textContent);
+      dialog.querySelector('button').click();
+      await wait(()=>!doc.querySelector('.interface-field-help[open]'),'Fermeture de l’aide');
+    }
     (async()=>{
       const [admin,archive,mobile]=[...document.querySelectorAll('iframe')];
       const expected=['Blocs','Colonnes','Général','Menus','Résolutions','Tableaux','Titres','Top barre'];
@@ -50,6 +62,7 @@ try{
         check(JSON.stringify(tabs.map(tab=>tab.textContent))===JSON.stringify(expected),'Ordre alphabétique');
         check(doc.querySelector('[role="tab"][aria-selected="true"]').textContent==='Général','Général par défaut');
         check(doc.querySelector('#interface-panel-general .font-controls'),'Taille des polices');
+        await verifyHelp(doc,doc.querySelector('#interface-panel-general .interface-field-help-trigger'),'De 80 à 160 %.');
         const expectProfile=frame===mobile?'Mobile':'Full HD';
         const profileTabs=()=>[...doc.querySelectorAll('.interface-resolution-tabs [role="tab"]')];
         const selectedProfile=()=>profileTabs().find(tab=>tab.getAttribute('aria-selected')==='true');
@@ -68,6 +81,8 @@ try{
         tabs[4].click();
         await wait(()=>tabs[4].getAttribute('aria-selected')==='true','Onglet Résolutions');
         check(doc.querySelectorAll('#interface-panel-resolutions fieldset').length===1,'Seul le profil sélectionné est affiché');
+        for(const trigger of doc.querySelectorAll('#interface-panel-resolutions .interface-field-help-trigger'))
+          await verifyHelp(doc,trigger,'De 50 à 150 %.');
         if(frame===mobile)check(tabs.every(tab=>tab.getBoundingClientRect().right<=frame.contentWindow.innerWidth),'Onglets trop larges sur mobile');
         for(const [id,index] of [['blocs',0],['columns',1],['menus',3],['tables',5],['titles',6],['top_bar',7]]){
           tabs[index].click();
@@ -75,6 +90,18 @@ try{
           check(selectedProfile().textContent===expectProfile,'La résolution choisie reste sélectionnée');
           const input=name=>doc.querySelector('#interface-panel-'+id+' [name="'+name+'"]');
           const computed=selector=>frame.contentWindow.getComputedStyle(doc.querySelector(selector));
+          const fields=[...doc.querySelectorAll('#interface-panel-'+id+' .interface-component-fields :is(input, select)')];
+          const help=control=>doc.getElementById(control.getAttribute('aria-labelledby'));
+          check(fields.every(control=>help(control)?.classList.contains('interface-field-help-trigger')),'Tous les champs ont une aide dans '+id);
+          const numeric=id==='tables'?input('icon_size'):fields.find(control=>control.type==='number');
+          const label=help(numeric).textContent;
+          const opening=label.lastIndexOf(' (');
+          const unit=opening>=0?label.slice(opening+2,-1):'';
+          await verifyHelp(doc,help(numeric),'De '+numeric.min+' à '+numeric.max+(unit?' '+unit:'')+'.');
+          if(id==='top_bar'){
+            await verifyHelp(doc,help(fields.find(control=>control.type==='color')),undefined);
+            await verifyHelp(doc,help(input('scroll')||fields.find(control=>control.name==='scroll')),undefined,3);
+          }
           if(id==='columns'){
             check(input('content_inline').value+'px'===computed('.administration-content').paddingLeft,
               'Marges de contenu identiques à la référence CSS');
@@ -87,6 +114,12 @@ try{
           if(id==='tables'){
             check(input('cell_padding').value===(frame===mobile?'10':'14'),'Marge compacte du tableau');
             check(input('row_height').placeholder==='Automatique','Hauteur du tableau calculée par le contenu');
+            for(const profile of profileTabs()){
+              profile.click();
+              const icons=await wait(()=>input('icon_size'),'Taille des logos pour '+profile.textContent);
+              check(icons.placeholder==='Automatique'&&icons.min==='12'&&icons.max==='48','Référence et bornes des logos');
+            }
+            profileTabs().find(tab=>tab.textContent===expectProfile).click();
           }
           if(id==='top_bar'){
             check(input('inline_padding').value+'px'===computed('header').paddingLeft,
@@ -136,15 +169,31 @@ try{
       const size=await wait(()=>field('tables','page_archives'),'Pagination Full HD');
       check(size.value==='10','Pagination de référence');
       check(size.max==='10','Plafond des réglages de pagination');
+      const iconSize=field('tables','icon_size');
+      const iconStyle=()=>{
+        const icon=audit.querySelector('tbody .lifecycle-icon svg');
+        return icon?archive.contentWindow.getComputedStyle(icon):null;
+      };
+      const originalIconWidth=iconStyle().inlineSize;
+      const square=()=>audit.querySelector('tbody .lifecycle-icon')?.getBoundingClientRect();
+      const originalSquareWidth=square().width;
       edit(size,'5');
+      edit(iconSize,'12');
       await wait(()=>!size.form.querySelector('[type="submit"]').disabled,'Édition de la pagination');
       size.form.requestSubmit();
       await wait(()=>size.form.querySelector('[role="status"]').textContent==='Réglages enregistrés.','Sauvegarde des tableaux');
       const pagination=()=>archive.contentDocument.querySelector('nav[aria-label="Pagination des archives"] span')?.textContent;
       await wait(()=>pagination()?.includes('1 / 6'),'Pagination synchronisée');
-      size.form.querySelector('[type="button"]').click();
+      await wait(()=>iconStyle()?.inlineSize==='12px'&&iconStyle().blockSize==='12px','Taille appliquée dans un autre onglet par Electric');
+      const resized=square();
+      check(resized.width<originalSquareWidth&&Math.abs(resized.width-resized.height)<0.1,
+        'Le bouton rétrécit et reste carré');
+      check(!mobile.contentDocument.documentElement.style.getPropertyValue('--ui-tables-icon-size'),
+        'Le profil Mobile conserve sa taille de référence');
+      size.form.querySelector('.interface-component-actions [type="button"]').click();
       await wait(()=>size.form.querySelector('[role="status"]').textContent==='Valeurs par défaut rétablies.','Réinitialisation des tableaux');
       await wait(()=>pagination()?.includes('1 / 3'),'Pagination réinitialisée');
+      await wait(()=>iconStyle()?.inlineSize===originalIconWidth,'Taille native rétablie avec l’onglet');
       check(size.value==='10'&&referee.style.getPropertyValue('--ui-top-bar-height')==='94px','Réinitialisation indépendante');
       const archiveDoc=archive.contentDocument;
       const navigation=archiveDoc.querySelector('nav[aria-label="Pagination des archives"]');
@@ -233,7 +282,7 @@ try{
     '--no-first-run','--no-default-browser-check','--user-data-dir='+join(workspace,'profile'),
     'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
   const closed=once(browser,'close')
-  const timer=setTimeout(()=>completed({error:'Délai Chromium dépassé'}),16000)
+  const timer=setTimeout(()=>completed({error:'Délai Chromium dépassé'}),22000)
   const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt Chromium '+code}))])
   clearTimeout(timer)
   browser.kill()

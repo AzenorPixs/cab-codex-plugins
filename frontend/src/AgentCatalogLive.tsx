@@ -64,14 +64,14 @@ export function catalogDate(value:string|null|undefined){
   return Number.isNaN(date.getTime())?'—':date.toLocaleString('fr-FR')
 }
 
-export function CatalogDocument({path,title,label,className,accessibleLabel}:{path:string;title:string;label:string;className?:string;accessibleLabel?:string}){
+export function CatalogDocument({path,title,label,className,accessibleLabel,loadingLabel='Lecture du fichier…'}:{path:string;title:string;label:string;className?:string;accessibleLabel?:string;loadingLabel?:string}){
   const dialog=useRef<HTMLDialogElement>(null)
   const download=useMutation({mutationFn:()=>api<unknown>(path),networkMode:'always'})
   return <>
     <button type="button" className={className??'text-button'} aria-label={accessibleLabel} onClick={()=>{dialog.current?.showModal();download.mutate()}}>{label}</button>
-    <dialog className="lifecycle-dialog catalog-document" ref={dialog} onClose={()=>download.reset()}>
+    <dialog className="lifecycle-dialog catalog-document" ref={dialog} aria-label={title} onClose={()=>download.reset()}>
       <h2>{title}</h2>
-      {download.isPending&&<p role="status">Lecture du fichier…</p>}
+      {download.isPending&&<p role="status">{loadingLabel}</p>}
       {download.error&&<p role="alert">{download.error.message}</p>}
       {download.isSuccess&&<pre>{JSON.stringify(download.data,null,2)}</pre>}
       <button type="button" onClick={()=>dialog.current?.close()}>Fermer</button>
