@@ -1,6 +1,7 @@
 """Édition ciblée et littérale des métadonnées publiques d’un projet."""
 import base64
 import hashlib
+import hmac
 import json
 import re
 from pathlib import Path
@@ -12,12 +13,47 @@ from .core.models import Project,Run,Operation,Lease,StatisticsJob,VersionPolicy
 from .core.commands import TERMINAL
 from .paths import config
 from .forge_settings import file_operation
-from .project_metadata import ASSIGNMENT,DEBIAN_RETENTION,DOCKER_RETENTION,initialize_version_policy,public_value,synchronize
+from .project_metadata import ASSIGNMENT,DEBIAN_RETENTION,DOCKER_RETENTION,FRAMEWORKS,LANGUAGES,initialize_version_policy,public_value,synchronize
 
-FIELDS=('PROJECT_ID','PROJECT_NAME','PROJECT_TYPE','PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE',DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
+FIELDS=('PROJECT_ID','PROJECT_NAME',LANGUAGES,FRAMEWORKS,'PROJECT_DOCKERED','PROJECT_DEBIAN_PACKAGE',DEBIAN_RETENTION,DOCKER_RETENTION,'PROJECT_VERSION','GIT_USER_NAME','GIT_USER_EMAIL','LOCAL_DEFAULT_BRANCH')
 
 
-def edit(project_id,fields,digest,project_path=None):
+def configuration_fields(snapshot):
+    values = snapshot.get('values',{})
+    fields = {key:values.get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')}
+    fields[LANGUAGES] = values.get(LANGUAGES,values.get('PROJECT_TYPE',''))
+    return fields
+
+
+def configuration_revision(project, digest):
+    from .paths import secret
+    projected = project.public_metadata or {}
+    message = json.dumps([project.pk,project.root,digest,configuration_fields(projected)],
+                         sort_keys=True,separators=(',',':')).encode('utf-8')
+    return hmac.new(secret('django-secret').encode(),message,hashlib.sha256).hexdigest()
+
+
+def require_configuration_revision(project, digest, revision):
+    require(isinstance(revision,str) and hmac.compare_digest(configuration_revision(project,digest),revision),
+            'project-configuration-changed',409)
+
+
+def verify(project_id):
+    snapshot,digest,issues = synchronize(project_id,include_forges=False,include_git=False,verify_source=True)
+    project = Project.objects.get(pk=project_id)
+    env = file_operation(project,{'op':'env-read','allow_missing':True})
+    require(project.root==snapshot['project_root'] and env['digest']==digest
+            and configuration_fields(project.public_metadata)==configuration_fields(snapshot),
+            'project-configuration-changed',409)
+    require(snapshot['state'] in ('ready','partial','missing')
+            and not any(issue['key'] in (*FIELDS,'PROJECT_VERSION_POLICY') for issue in issues)
+            and not snapshot.get('version_policy_error') and not snapshot.get('language_migration_error'),
+            snapshot.get('language_migration_error') or 'project-configuration-file-invalid',409)
+    return {'fields':configuration_fields(snapshot),'project_path':project.root,
+            'revision':configuration_revision(project,digest)}
+
+
+def edit(project_id,fields,revision,project_path=None):
     require(isinstance(fields,dict) and set(fields)<=set(FIELDS),'project-configuration-fields-invalid',400)
     for key,value in fields.items():require(isinstance(value,str) and (not value or public_value(key,value)),'project-configuration-value-invalid',400)
     if 'PROJECT_ID' in fields:require(bool(fields['PROJECT_ID']),'project-configuration-id-invalid',400)
@@ -28,9 +64,8 @@ def edit(project_id,fields,digest,project_path=None):
             require(not VersionPolicyMigration.objects.filter(project=project,state='PENDING').exists(),
                     'version-policy-migration-pending',409)
             if fields.get('PROJECT_VERSION'):
-                from .project_metadata import read_metadata
                 from .versioning import VersionError, parse_policy, policy_parts
-                policy=read_metadata(project.root)['values'].get('PROJECT_VERSION_POLICY')
+                policy=(project.public_metadata or {}).get('values',{}).get('PROJECT_VERSION_POLICY')
                 if policy is not None:
                     try:policy_parts(fields['PROJECT_VERSION'],parse_policy(policy))
                     except VersionError as error:raise Refused(str(error),409) from error
@@ -38,7 +73,8 @@ def edit(project_id,fields,digest,project_path=None):
             if identifier:
                 require(not Project.objects.exclude(pk=project.pk).filter(Q(identifier=identifier)|Q(pk=identifier)).exists(),'project-configuration-id-conflict',409)
             current=file_operation(project,{'op':'env-read','allow_missing':True})
-            require(current['digest']==digest,'project-configuration-changed',409)
+            digest=current['digest']
+            require_configuration_revision(project,digest,revision)
             target=project.root
             if project_path is not None:
                 require(isinstance(project_path,str) and len(project_path)<=1500 and not any(c in project_path for c in '\r\n\0'),'project-path-invalid',400)

@@ -441,18 +441,24 @@ La sélection d’un projet et la maison ouvrent `/projects/<ID>`. Sessions ouvr
 stocké dans projects ; une relecture authentifiée s’effectue en arrière-plan.
 Electric répercute ensuite les changements externes, sans rechargement.
 
-Les seules variables retenues sont PROJECT_NAME, PROJECT_VERSION, PROJECT_TYPE
-(types séparés par des virgules), puis REMOTE_FORGEJO_, REMOTE_GITHUB_ et
-REMOTE_GITLAB_ avec BASE_URL, OWNER, REPOSITORY, NAME, BRANCH, SSL_VERIFY.
-Aucun jeton ni mot de passe n’est conservé ou affiché. Les URL authentifiées
-ou porteuses de requête/fragment sont refusées. Les cartes apparaissent si
-au moins une valeur publique valide de la forge existe. Une suppression ou
-une erreur de lecture retire les valeurs invérifiables et signale la cause ;
-le nom enregistré à la création sert alors de repli.
+Les métadonnées publiques sont validées par liste fermée. Dans la carte
+Configuration, `PROJECT_LANGUAGES` et `PROJECT_FRAMEWORKS` contiennent des
+listes ordonnées séparées par des virgules. CAB renomme automatiquement
+`PROJECT_TYPE` en `PROJECT_LANGUAGES` lors de la lecture. Si les valeurs
+des deux noms diffèrent ou sont ambiguës, CAB signale le conflit et conserve
+le fichier. Le changement est atomique et protège les autres lignes.
 
-Le watcher traite éditions, remplacements atomiques, suppressions et créations,
-avec rattrapage de60secondes. L’abonnement Electric est fermé à la sortie de
-l’accueil ; aucun fichier de configuration n’est écrit par ce parcours.
+L’éditeur affiche immédiatement la projection PostgreSQL. Suite à la
+vérification de `project.env` en arrière-plan, la révision de la source et
+des champs projetés autorise l’enregistrement. Electric actualise les champs
+et CAB protège une saisie en conflit avec une modification externe.
+Le chemin `PROJECT_PATH` est conservé dans PostgreSQL.
+
+Les cartes de forge utilisent les valeurs publiques validées de la famille
+correspondante. Les URL authentifiées ou porteuses de requête ou fragment
+sont refusées et les secrets sont exclus de la projection. Le watcher suit
+les éditions, remplacements atomiques, suppressions et créations. La
+projection Electric reste limitée au projet autorisé.
 
 ## Rechargement MCP natif (3.2.6)
 

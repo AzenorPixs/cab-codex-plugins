@@ -15,14 +15,20 @@ class MetadataReaderTests(unittest.TestCase):
         result=self.read('PROJECT_NAME="Projet démonstration"\nPROJECT_VERSION=1.2.3\nPROJECT_TYPE="Python, TypeScript, React" # commentaire\nREMOTE_FORGEJO_BASE_URL=https://forge.example/team\nREMOTE_GITHUB_OWNER=team\nREMOTE_GITLAB_SSL_VERIFY=1\n')
         self.assertEqual(result['state'],'ready');self.assertEqual(len(result['values']),5)
         self.assertNotIn('REMOTE_GITLAB_SSL_VERIFY',result['values'])
-        self.assertEqual(result['values']['PROJECT_TYPE'],'Python, TypeScript, React')
+        self.assertEqual(result['values']['PROJECT_LANGUAGES'],'Python, TypeScript, React')
     def test_secrets_unknown_and_authenticated_urls_are_not_retained(self):
         result=self.read('PROJECT_NAME=Public\nREMOTE_GITHUB_TOKEN=synthetic-secret\nPG_PASSWORD=synthetic-secret\nREMOTE_GITHUB_BASE_URL=https://user:synthetic-secret@example.org\nREMOTE_GITLAB_BASE_URL=https://example.org?token=synthetic-secret\nREMOTE_FORGEJO_BASE_URL=https://example.org#synthetic-secret\n')
         self.assertEqual(result,{'state':'partial','values':{'PROJECT_NAME':'Public'}})
         self.assertNotIn('synthetic-secret',str(result))
     def test_duplicates_and_export_cannot_reintroduce_a_value(self):
         result=self.read('PROJECT_NAME=First\nPROJECT_NAME=Second\nPROJECT_NAME=Third\nexport PROJECT_VERSION=4\nPROJECT_TYPE=Python\n')
-        self.assertEqual(result,{'state':'partial','values':{'PROJECT_TYPE':'Python'}})
+        self.assertEqual(result,{'state':'partial','values':{'PROJECT_LANGUAGES':'Python'}})
+    def test_language_and_framework_values_are_ordered_literals(self):
+        result=self.read('PROJECT_LANGUAGES=Python, TypeScript\nPROJECT_FRAMEWORKS=Django, React\n')
+        self.assertEqual(result['values'],{
+            'PROJECT_LANGUAGES':'Python, TypeScript','PROJECT_FRAMEWORKS':'Django, React',
+        })
+
     def test_shell_is_never_executed(self):
         marker=self.root/'effect'
         result=self.read(f'PROJECT_NAME=$(touch {marker})\nPROJECT_VERSION=`touch {marker}`\nPROJECT_TYPE="${{PRIVATE}}"\n')

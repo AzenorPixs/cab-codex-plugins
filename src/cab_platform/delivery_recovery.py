@@ -219,7 +219,7 @@ def snapshot(current,admission=None,resolutions=None):
         c.require(not (delivery.unstaged_code_paths(git_snapshot(current.project,index.index_path))&{r['path'] for r in reservations}),'precommit-source-changed')
     c.require(delivery._git(current.project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version).returncode==1,'precommit-tag-present')
     from .project_metadata import read_metadata
-    c.require(read_metadata(current.project.root).get('values',{}).get('PROJECT_VERSION')==version,'precommit-version-changed')
+    c.require(read_metadata(current.project.root,project=current.project).get('values',{}).get('PROJECT_VERSION')==version,'precommit-version-changed')
     import hashlib
     env_sha=hashlib.sha256((Path(current.project.root)/'project.env').read_bytes()).hexdigest()
     c.require(env_sha==by['version'].receipt['after_sha256'],'precommit-version-changed')

@@ -33,7 +33,7 @@ def version_authority(actor,run):
 
 def version_policy(run):
     from .project_metadata import read_metadata
-    values=read_metadata(run.project.root).get('values',{})
+    values=read_metadata(run.project.root,project=run.project).get('values',{})
     current=values.get('PROJECT_VERSION','')
     configured=values.get('PROJECT_VERSION_POLICY')
     try:
@@ -779,7 +779,7 @@ def push_version(project, forge, version, expected_commit, expected_tag, before_
     version_tuple(version)
     require(isinstance(expected_commit,str) and OID.fullmatch(expected_commit) and isinstance(expected_tag,str) and OID.fullmatch(expected_tag),'session-delivery-head-invalid',400)
     values,owner,branch,url,group,options,env=context(project,forge)
-    metadata=read_metadata(project.root)
+    metadata=read_metadata(project.root,project=project)
     require(metadata['state']=='ready' and branch==expected_branch and identity(project,metadata['values'],forge)==expected_signature and identity(project,values,forge)==expected_signature,'session-delivery-config-changed',409)
     local_git(project,options,env,'check-ref-format','--branch',branch)
     head=local_git(project,options,env,'rev-parse','--verify','HEAD^{commit}').decode('ascii','strict').strip()
@@ -803,7 +803,7 @@ def execute_native_build(project,kind,version,before_execute,*,reference=None):
     import subprocess
     from .project_artifacts import BUILDERS, enabled, refresh
     from .project_metadata import read_metadata
-    source=read_metadata(project.root)
+    source=read_metadata(project.root,project=project)
     metadata=source['values']
     require(source['state']=='ready' and enabled(metadata,kind) and metadata.get('PROJECT_VERSION')==version,
             'session-delivery-build-config-changed',409)
@@ -850,7 +850,7 @@ def execute_native_publication(project,target,version,plan,before_execute):
 
     try:
         with progress.step('configuration'):
-            source=read_metadata(project.root)
+            source=read_metadata(project.root,project=project)
             values=source['values']
             require(source['state']=='ready' and values.get('PROJECT_VERSION')==version and
                     identity(project,values,forge)==target['signature'] and
@@ -882,7 +882,7 @@ def delivery_preflight(project, version, *, defer_releases=False):
     from .forge_sync import refs
     from .project_metadata import read_metadata
     version_tuple(version)
-    metadata=read_metadata(project.root)
+    metadata=read_metadata(project.root,project=project)
     require(metadata['state']=='ready','session-delivery-config-invalid',409)
     values=metadata['values'];project_id=values.get('PROJECT_ID','')
     require(project_id and project_id==project.identifier and Path(project.root).name==project_id,'session-delivery-project-mismatch',409)
@@ -918,7 +918,7 @@ def verify_version(project, forge, version, commit, tag_oid, expected_signature,
     from .forge_sync import refs
     from .project_metadata import read_metadata
     values,owner,branch,url,group,options,env=context(project,forge)
-    metadata=read_metadata(project.root)
+    metadata=read_metadata(project.root,project=project)
     require(metadata['state']=='ready' and branch==expected_branch and identity(project,metadata['values'],forge)==expected_signature and identity(project,values,forge)==expected_signature,'session-delivery-config-changed',409)
     remote,tags,_=refs(project,forge,owner,group,options,env,url,branch)
     require(remote==commit and tags.get('refs/tags/'+version)==tag_oid,'session-delivery-remote-changed',409)

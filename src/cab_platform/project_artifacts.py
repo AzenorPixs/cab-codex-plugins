@@ -43,7 +43,7 @@ class BuildConfigurationRefused(Refused):
 
 def build_metadata(project, kind):
     options = {'keys': DOCKER_KEYS} if kind == 'docker' else {}
-    return read_metadata(project.root, diagnostic=True, **options)
+    return read_metadata(project.root, diagnostic=True, project=project, **options)
 
 
 def enabled(metadata, kind):

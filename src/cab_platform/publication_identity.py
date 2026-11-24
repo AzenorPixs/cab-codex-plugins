@@ -63,7 +63,7 @@ def verified_package(delivery,*,before_retire=False):
     require(delivery.state in (('RUNNING','COMPLETED') if before_retire else ('COMPLETED',)) and delivery.plan.get('debian') and not delivery.plan.get('defer_releases'),'publication-completed-debian-required')
     steps=delivery.steps.exclude(key__in=['retire','verify:package']) if before_retire else delivery.steps
     require(not steps.exclude(state__in=['COMPLETED','SKIPPED']).exists(),'publication-steps-incomplete')
-    values=read_metadata(delivery.project.root)['values']
+    values=read_metadata(delivery.project.root,project=delivery.project)['values']
     package=selected_package(local_plan(delivery.project,values,version=delivery.version).get('debian',[]),delivery.version)
     verified=[]
     for target in delivery.plan['forges']:

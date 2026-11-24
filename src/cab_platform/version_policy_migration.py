@@ -12,6 +12,7 @@ from .core.commands import Refused, require
 from .core.models import Project, Run, VersionPolicyMigration
 from .forge_settings import file_operation
 from .preexisting_git import git_guard
+from .project_configuration_edit import require_configuration_revision
 from .project_metadata import synchronize, version_configuration
 from .versioning import VersionError, VersionTagCollision, convert_version, local_tag_conversions, parse_policy
 
@@ -49,8 +50,10 @@ def _render(raw: bytes, policy: int, version: str | None) -> bytes:
     return b''.join(parts)
 
 
-def _plan(project, policy: int, side: str) -> dict:
+def _plan(project, policy: int, side: str, revision: str | None) -> dict:
     raw, digest = _source(project)
+    if revision is not None:
+        require_configuration_revision(project,digest,revision)
     try:
         values = version_configuration(raw)
         previous = parse_policy(values.get('PROJECT_VERSION_POLICY'))
@@ -79,7 +82,7 @@ def _public(plan: dict, preview_id: str, state: str) -> dict:
     }
 
 
-def preview(project_id: str, policy: int, side: str) -> dict:
+def preview(project_id: str, policy: int, side: str, *, revision: str | None = None) -> dict:
     require(type(policy) is int and 1 <= policy <= 7 and side in ('left', 'right'),
             'version-policy-input-invalid', 400)
     with git_guard(), transaction.atomic():
@@ -89,13 +92,13 @@ def preview(project_id: str, policy: int, side: str) -> dict:
             require(pending.plan['new_policy'] == policy and pending.plan['side'] == side,
                     'version-policy-migration-pending', 409)
             return _public(pending.plan,pending.preview_id,pending.state)
-        try:plan = _plan(project, policy, side)
+        try:plan = _plan(project, policy, side, revision)
         except VersionTagCollision as error:
             return {'state':'CONFLICT','reason':str(error),'tags':list(error.names)}
         return _public(plan, _id(plan), 'PREVIEW')
 
 
-def apply(project_id: str, policy: int, side: str, preview_id: str) -> dict:
+def apply(project_id: str, policy: int, side: str, preview_id: str, *, revision: str | None = None) -> dict:
     require(type(policy) is int and 1 <= policy <= 7 and side in ('left', 'right')
             and bool(re.fullmatch('[0-9a-f]{64}', preview_id)), 'version-policy-input-invalid', 400)
     require(not transaction.get_connection().in_atomic_block, 'version-policy-transaction-invalid', 409)
@@ -113,7 +116,7 @@ def apply(project_id: str, policy: int, side: str, preview_id: str) -> dict:
             else:
                 require(not VersionPolicyMigration.objects.filter(project=project,state='PENDING').exists(),
                         'version-policy-migration-pending', 409)
-                try:plan = _plan(project, policy, side)
+                try:plan = _plan(project, policy, side, revision)
                 except VersionTagCollision as error:
                     raise Refused(str(error),409) from error
                 require(_id(plan) == preview_id, 'version-policy-preview-stale', 409)

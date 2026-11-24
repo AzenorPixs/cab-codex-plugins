@@ -27,13 +27,15 @@ function TextIcon(){
   return <span className="project-metadata-icon" role="img" aria-label="Text" title="Text"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 3h13l6 6v18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#edf6fd" stroke="#5e94bd" strokeWidth="1.5" strokeLinejoin="round"/><path d="M19 3v6h6" fill="#c3e0f3" stroke="#5e94bd" strokeWidth="1.5" strokeLinejoin="round"/><path d="M8 12h12M8 16h10M8 20h7" fill="none" stroke="#7ba8c8" strokeWidth="1.7" strokeLinecap="round"/><path d="M17 23l7.7-7.7 3 3L20 26l-4 1z" fill="#ffbd43" stroke="#9a6b20" strokeWidth="1" strokeLinejoin="round"/><path d="M24.7 15.3l1-1a2.1 2.1 0 0 1 3 3l-1 1z" fill="#e96868" stroke="#9a4c4c" strokeWidth="1"/><path d="M17 23l3 3-4 1z" fill="#425463"/></svg></span>
 }
 export function ProjectConfiguration({values,projectPath}:{values:Record<string,string>;projectPath:string}){
-  const types=(values.PROJECT_TYPE||'').split(',').map(value=>value.trim()).filter(Boolean)
+  const languagesInOrder=(values.PROJECT_LANGUAGES??values.PROJECT_TYPE??'').split(',').map(value=>value.trim()).filter(Boolean)
+  const frameworks=(values.PROJECT_FRAMEWORKS||'').split(',').map(value=>value.trim()).filter(Boolean)
   const enabled=publications.filter(icon=>values[icon.name==='Debian'?'PROJECT_DEBIAN_PACKAGE':'PROJECT_DOCKERED']?.toLowerCase()==='yes')
   return <dl className="project-configuration-values">
     <div><dt>ID</dt><dd>{values.PROJECT_ID||'—'}</dd></div>
     <div><dt>Nom</dt><dd>{values.PROJECT_NAME||'—'}</dd></div>
     <div><dt>Chemin</dt><dd>{projectPath||'—'}</dd></div>
-    <div><dt>Langage</dt><dd><span className="project-metadata-icons">{types.length?types.map((type,index)=>type.toLowerCase()==='text'?<TextIcon key={index}/>:languages[type.toLowerCase()]?<IconLink key={index} icon={languages[type.toLowerCase()]}/>:<span key={index}>{type}</span>):'—'}</span></dd></div>
+    <div><dt>Langage</dt><dd><span className="project-metadata-icons">{languagesInOrder.length?languagesInOrder.map((type,index)=>type.toLowerCase()==='text'?<TextIcon key={index}/>:languages[type.toLowerCase()]?<IconLink key={index} icon={languages[type.toLowerCase()]}/>:<span key={index}>{type}</span>):'—'}</span></dd></div>
+    {frameworks.length>0&&<div><dt>Frameworks</dt><dd>{frameworks.join(', ')}</dd></div>}
     <div><dt>Publication</dt><dd><span className="project-metadata-icons">{enabled.length?enabled.map(icon=><IconLink key={icon.name} icon={icon}/>):'—'}</span></dd></div>
     <div><dt>Version</dt><dd>{values.PROJECT_VERSION||'—'}</dd></div>
   </dl>

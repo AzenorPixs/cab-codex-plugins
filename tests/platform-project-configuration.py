@@ -1,4 +1,5 @@
 """Contrôle des points d’entrée de création et d’édition avec de vrais fichiers."""
+from contextlib import nullcontext
 import grp
 import json
 import os
@@ -117,6 +118,62 @@ class ProjectConfigurationTests(unittest.TestCase):
         self.file.write_text('# commentaire\nOTHER="conservé"\nPROJECT_VERSION_POLICY=2\n')
         self.assertTrue(self.save_editor(self.open_editor())['saved'])
         self.assertTrue(self.file.read_text().startswith('# commentaire\nOTHER="conservé"\nPROJECT_VERSION_POLICY=2\n'))
+
+    def test_open_renames_legacy_key_preserves_other_lines_and_projects(self):
+        self.file.write_text('# introduction\n  PROJECT_TYPE = "Python, TypeScript" # commentaire\n'
+                             'PROJECT_FRAMEWORKS="Django, React"\nPROJECT_VERSION_POLICY=3\nOTHER=opaque\n')
+        snapshot = self.open_editor()
+        self.assertEqual(snapshot['fields']['PROJECT_LANGUAGES'],'Python, TypeScript')
+        self.assertEqual(snapshot['fields']['PROJECT_FRAMEWORKS'],'Django, React')
+        self.assertIn('  PROJECT_LANGUAGES = "Python, TypeScript" # commentaire\n',self.file.read_text())
+        self.assertIn('OTHER=opaque\n',self.file.read_text())
+        values = ProjectMetadataProjection.objects.get(pk=self.project.pk).public_metadata['values']
+        self.assertEqual(values['PROJECT_LANGUAGES'],'Python, TypeScript')
+        self.assertNotIn('PROJECT_TYPE',values)
+        self.assertEqual(self.open_editor()['revision'],snapshot['revision'])
+
+    def test_equal_language_aliases_keep_comments_and_different_aliases_block(self):
+        original = 'PROJECT_TYPE=Python # à conserver\nPROJECT_LANGUAGES=Python\nPROJECT_VERSION_POLICY=3\n'
+        self.file.write_text(original)
+        self.open_editor()
+        self.assertEqual(self.file.read_text(),original.replace('PROJECT_TYPE=Python ',''))
+        conflict = original.replace('PROJECT_LANGUAGES=Python','PROJECT_LANGUAGES=Go')
+        self.file.write_text(conflict)
+        with self.assertRaisesRegex(Refused,'project-languages-migration-conflict'):
+            self.open_editor()
+        self.assertEqual(self.file.read_text(),conflict)
+
+    def test_postgresql_editable_value_change_invalidates_verified_revision(self):
+        self.file.write_text('PROJECT_NAME=Avant\nPROJECT_VERSION_POLICY=2\n')
+        snapshot = self.open_editor()
+        project = Project.objects.get(pk=self.project.pk)
+        project.public_metadata['values']['PROJECT_NAME'] = 'Valeur concurrente'
+        project.save(update_fields=['public_metadata'])
+        with self.assertRaisesRegex(Refused,'project-configuration-changed'):
+            self.save_editor(snapshot)
+        self.assertEqual(self.file.read_text(),'PROJECT_NAME=Avant\nPROJECT_VERSION_POLICY=2\n')
+
+    def test_unrelated_electric_revision_does_not_invalidate_verified_configuration(self):
+        self.file.write_text('PROJECT_VERSION_POLICY=2\n')
+        snapshot = self.open_editor()
+        project = Project.objects.get(pk=self.project.pk)
+        project.public_metadata['revision'] += 1
+        project.public_metadata['git_status'] = {'available': False}
+        project.save(update_fields=['public_metadata'])
+        self.assertTrue(self.save_editor(snapshot)['saved'])
+
+    def test_version_policy_preview_requires_a_verified_revision(self):
+        from cab_platform import version_policy_migration as migration
+        self.file.write_text('PROJECT_VERSION=1.2.3\nPROJECT_VERSION_POLICY=3\n')
+        snapshot = self.open_editor()
+        with patch.object(migration,'git_guard',nullcontext), patch.object(migration.git,'snapshot',return_value=None):
+            with self.assertRaisesRegex(Refused,'project-configuration-changed'):
+                api.project_version_policy(None,self.project.pk,api.VersionPolicyEdit(policy=4,side='left',revision=''))
+            preview = api.project_version_policy(None,self.project.pk,api.VersionPolicyEdit(
+                policy=4,side='left',revision=snapshot['revision'],
+            ))
+        self.assertEqual(preview['state'],'PREVIEW')
+        self.assertEqual(preview['new_version'],'0.1.2.3')
 
     def test_create_project_initializes_and_projects_available_metadata_once(self):
         body = api.NewProject(name='Démonstration CAB', folder='demo-cab', request_id=str(uuid.uuid4()))

@@ -54,6 +54,8 @@ const messages:Record<string,string>={
   'project-configuration-id-conflict':'Cet identifiant est déjà utilisé par un autre projet.',
   'project-configuration-changed':'Le fichier a changé. Fermez et rouvrez cette fenêtre avant de réessayer.',
   'project-configuration-file-invalid':'Le fichier de configuration contient une variable ambiguë ou non prise en charge.',
+  'project-languages-migration-conflict':'Les déclarations PROJECT_TYPE et PROJECT_LANGUAGES sont ambiguës ou différentes. Corrigez le fichier avant de réessayer.',
+  'project-languages-migration-unconfirmed':'Le renommage de PROJECT_TYPE n’a pas pu être vérifié. Revérifiez le fichier avant de modifier le projet.',
   'project-configuration-uncertain':'Résultat incertain : vérifiez le fichier avant toute nouvelle modification.',
   'project-git-tag-changed':'Le tag a changé depuis votre confirmation. Vérifiez-le et recommencez.',
   'project-git-tag-move-failed':'Le commit a été créé, mais le tag n’a pas pu être déplacé. Vérifiez l’état du dépôt.',

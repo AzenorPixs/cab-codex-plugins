@@ -93,6 +93,7 @@ class ProjectConfigurationEdit(Schema):
 class VersionPolicyEdit(Schema):
     policy:int
     side:str
+    revision:str
     preview_id:str|None=None
 
 class ForgeEdit(Schema):
@@ -1016,45 +1017,24 @@ def refresh_project(request,project_id:str,include_forges:bool=True,include_git:
 @api.get('/projects/{project_id}/configuration')
 def project_configuration_read(request,project_id:str):
     principal(request,admin=True)
-    from cab_platform.forge_settings import file_operation
-    from cab_platform.project_configuration_edit import FIELDS
-    from cab_platform.project_metadata import initialize_version_policy, synchronize
-    from cab_platform.paths import secret
-    import base64
-    import hmac
-    project=Project.objects.get(pk=project_id)
-    read={'op':'env-read','allow_missing':True}
-    before=file_operation(project,read);snapshot=synchronize(project.pk);env=file_operation(project,read)
-    if before['digest']!=env['digest']:
-        commands.require('missing' not in (before['digest'],env['digest']),'project-configuration-changed',409)
-        try:expected=initialize_version_policy(base64.b64decode(before['content'],validate=True))
-        except ValueError:raise commands.Refused('project-configuration-changed',409) from None
-        commands.require(hashlib.sha256(expected).hexdigest()==env['digest'],'project-configuration-changed',409)
-    commands.require(Project.objects.filter(pk=project.pk,root=project.root).exists(),'project-configuration-changed',409)
-    revision=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
-    values={} if env['digest']=='missing' else snapshot.get('values',{})
-    response=JsonResponse({'fields':{key:values.get(key,'') for key in (*FIELDS,'PROJECT_VERSION_POLICY')},'project_path':project.root,'revision':revision})
-    response['Cache-Control']='no-store';return response
+    from cab_platform.project_configuration_edit import verify
+    response=JsonResponse(verify(project_id))
+    response['Cache-Control']='no-store'
+    return response
 
 @api.post('/projects/{project_id}/configuration')
 def project_configuration_save(request,project_id:str,body:ProjectConfigurationEdit):
     principal(request,admin=True)
-    from cab_platform.forge_settings import file_operation
     from cab_platform.project_configuration_edit import edit
-    from cab_platform.paths import secret
-    import hmac
-    project=Project.objects.get(pk=project_id);env=file_operation(project,{'op':'env-read','allow_missing':True})
-    expected=hmac.new(secret('django-secret').encode(),(project.root+'\0'+env['digest']).encode(),hashlib.sha256).hexdigest()
-    commands.require(hmac.compare_digest(expected,body.revision),'project-configuration-changed',409)
-    return edit(project.pk,body.fields,env['digest'],body.project_path)
+    return edit(project_id,body.fields,body.revision,body.project_path)
 
 @api.post('/projects/{project_id}/version-policy')
 def project_version_policy(request,project_id:str,body:VersionPolicyEdit):
     principal(request,admin=True)
     from cab_platform.version_policy_migration import apply, preview
     if body.preview_id is None:
-        return preview(project_id,body.policy,body.side)
-    return apply(project_id,body.policy,body.side,body.preview_id)
+        return preview(project_id,body.policy,body.side,revision=body.revision)
+    return apply(project_id,body.policy,body.side,body.preview_id,revision=body.revision)
 
 @api.get('/projects/{project_id}/change-stage-metrics')
 def project_change_stage_metrics(request,project_id:str,change_id:str|None=None,run_id:str|None=None,offset:int=0):

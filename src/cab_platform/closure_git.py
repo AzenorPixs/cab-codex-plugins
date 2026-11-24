@@ -94,7 +94,7 @@ def remote_plan(project,head,tag):
     from .forge_sync import refs
     from .forge_repository import identity as signature
     from .project_metadata import read_metadata
-    metadata=read_metadata(project.root)
+    metadata=read_metadata(project.root,project=project)
     c.require(metadata['state']=='ready','closure-git-config-invalid',409)
     targets=[]
     for forge in FORGES:
@@ -114,7 +114,7 @@ def send(project,target,commit,tag_oid):
     from .forge_repository import identity as signature
     from .project_metadata import read_metadata
     values,owner,branch,url,group,options,env=forge_context(project,target['forge'])
-    current=read_metadata(project.root)
+    current=read_metadata(project.root,project=project)
     c.require(current['state']=='ready' and branch==target['branch'] and signature(project,current['values'],target['forge'])==target['signature'] and signature(project,values,target['forge'])==target['signature'],'closure-git-config-changed',409)
     remote,tags,_=refs(project,target['forge'],owner,group,options,env,url,branch)
     tag_ref='refs/tags/'+target['tag']
@@ -156,7 +156,7 @@ def complete(run,branch,source_path):
         from .versioning import version_tag,VersionError
         from .project_metadata import read_metadata
         delivered=GitDelivery.objects.filter(run=current,state='COMPLETED').order_by('-pk').first()
-        try:tag=version_tag(delivered.version if delivered else None,read_metadata(current.project.root).get('values',{}).get('PROJECT_VERSION'))
+        try:tag=version_tag(delivered.version if delivered else None,read_metadata(current.project.root,project=current.project).get('values',{}).get('PROJECT_VERSION'))
         except VersionError as error:raise c.Refused(str(error),409) from None
         tag_ref='refs/tags/'+tag
         old_tag=_git(current.project,options,env,'rev-parse','--verify','--quiet',tag_ref)
