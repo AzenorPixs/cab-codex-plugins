@@ -65,14 +65,17 @@ header{position:var(--ui-top-bar-scroll,sticky);top:0;z-index:30;padding-inline:
 .forge-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.forge-heading :is(h2,.run-card-title){margin:0}.forge-edit{display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--muted);padding:3px}.forge-edit svg{width:21px;height:21px}.forge-edit:hover{color:var(--accent-text)}.forge-editor input{display:block;width:100%;margin-top:6px}
 .project-configuration-editor{width:min(48rem,90vw);font-size:.8rem}
 .project-configuration-editor :is(input,select,button){font-size:inherit}
+.project-configuration-editor > form > h2{margin-bottom:2.25rem}
 .project-configuration-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem 1rem}
 .project-configuration-fields label{margin:0;overflow-wrap:anywhere}
-.project-configuration-fields input{min-width:0;margin-top:.25rem}
+.project-configuration-fields input{min-width:0;margin-top:0}
+.project-configuration-fields > div > input,.project-configuration-fields .directory-input{margin-top:.25rem}
+.project-configuration-fields input,.project-policy-field > select{line-height:1.25;block-size:calc(1.25em + 26px)}
 .project-configuration-fields .project-path-field{grid-column:1/-1}
 .project-variable-label{display:block;padding:0;background:transparent;color:var(--accent-text);font-weight:600;text-align:left;overflow-wrap:anywhere}
 .project-variable-label:hover,.project-variable-label:focus-visible{text-decoration:underline}
 .project-policy-field{margin:.25rem 0 0;padding:0;border:0;min-width:0}
-.project-policy-field>select{width:100%}
+.project-policy-field>select{width:100%;margin-top:0}
 .project-variable-help{font-size:.85rem}
 @media(max-width:560px){.project-configuration-fields{grid-template-columns:minmax(0,1fr)}}
 

@@ -17,12 +17,17 @@ import {createElement} from 'react'
 import {createRoot} from 'react-dom/client'
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query'
 import {Notifications} from '/src/Notifications.tsx'
-import {PublishForgeArtifacts,useForgeArtifacts} from '/src/ForgeArtifacts.tsx'
+import {PublishedArtifactRows,PublishForgeArtifacts,useForgeArtifacts} from '/src/ForgeArtifacts.tsx'
 import '/src/style.css'
 function Fixture(){
   const state=useForgeArtifacts('fixture')
+  const values={PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes',PROJECT_VERSION:'1.0.2',
+    REMOTE_FORGEJO_BASE_URL:'https://example.test',REMOTE_FORGEJO_OWNER:'fixture',REMOTE_FORGEJO_REPOSITORY:'project',
+    REMOTE_GITHUB_BASE_URL:'https://example.test',REMOTE_GITHUB_OWNER:'fixture',REMOTE_GITHUB_REPOSITORY:'project'}
   return createElement('div',null,createElement(Notifications),
-    createElement(PublishForgeArtifacts,{state,forge:'FORGEJO',label:'Forgejo',values:{PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes',PROJECT_VERSION:'1.0.2'}}))
+    createElement('dl',{id:'published-forgejo'},createElement(PublishedArtifactRows,{state,forge:'FORGEJO',values})),
+    createElement('dl',{id:'published-github'},createElement(PublishedArtifactRows,{state,forge:'GITHUB',values})),
+    createElement(PublishForgeArtifacts,{state,forge:'FORGEJO',label:'Forgejo',values}))
 }
 createRoot(document.querySelector('#root')).render(createElement(QueryClientProvider,{client:new QueryClient()},createElement(Fixture)))
 </script>`
@@ -42,6 +47,12 @@ const check=(value,label)=>{if(!value)throw Error(label)}
 async function verify(frame){
   const doc=frame.contentDocument
   const get=selector=>doc.querySelector(selector)
+  await wait(()=>get('#published-forgejo')?.textContent.includes('pfd · 1.0.2'),'Artefacts de forge absents')
+  const forgejo=[...get('#published-forgejo').querySelectorAll('dd')].map(row=>row.textContent)
+  check(forgejo.length===2&&forgejo[0]==='pfd_1.0.2_amd64.deb · 1.0.2'&&forgejo[1]==='pfd · 1.0.2',
+    'Versions ou artefacts multiples affichés sur la même forge')
+  check(get('#published-github').textContent.includes('pfd · latest · Dernière observation'),
+    'Dernière observation Docker seule perdue')
   const bell=await wait(()=>get('.notification-bell'),'Cloche absente')
   const size=()=>{
     const {width,height}=get('dialog').getBoundingClientRect()
@@ -177,7 +188,15 @@ const server=createServer(async(request,response)=>{
     const historical={id:'ancien-recu',forge:'FORGEJO',state:state.blocked?'UNKNOWN':'COMPLETED',reconcilable:state.blocked}
     if(path.pathname.endsWith('/receipts/ancien-recu'))return reply(historical)
     if(path.pathname.includes('/receipts/'))return response.writeHead(404,{'Content-Type':'application/json'}).end(JSON.stringify({error:'artifact-publication-receipt-missing'}))
-    return reply({rows:[],jobs:{FORGEJO:historical}})
+    return reply({rows:[
+      {forge:'FORGEJO',source:['https://example.test','fixture','project'],artifacts:{
+        debian:{available:true,items:[{name:'pfd_1.0.2_amd64.deb',tags:['1.0.2']},{name:'pfd_1.0.2_arm64.deb',tags:['1.0.2']}]},
+        docker:{available:true,items:[{name:'pfd',tags:['1.0.2','1.0.1','latest']}]},
+      }},
+      {forge:'GITHUB',source:['https://example.test','fixture','project'],artifacts:{
+        docker:{available:false,items:[{name:'pfd',tags:['latest']}]},
+      }},
+    ],jobs:{FORGEJO:historical}})
   }
   if(path.pathname==='/api/v1/projects/fixture/artifacts')
     return reply({artifacts:[{kind:'docker',image:'fixture',image_id:'sha256:'+'a'.repeat(64),tags:['fixture:1.0.2']}]})

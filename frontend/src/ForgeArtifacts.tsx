@@ -64,12 +64,15 @@ type State=ReturnType<typeof useForgeArtifacts>
 export function PublishedArtifactRows({state,forge,values}:{state:State;forge:string;values:Record<string,string>}){
   const source=['BASE_URL','OWNER','REPOSITORY'].map(field=>values[`REMOTE_${forge}_${field}`]||'')
   const row=state.rows.find(row=>row.forge===forge&&row.source.every((part,index)=>part===source[index]))
-  return <>{formats.filter(([,flag])=>on(values[flag])).flatMap(([kind,,label])=>{
+  return <>{formats.filter(([,flag])=>on(values[flag])).map(([kind,,label])=>{
     const observed=row?.artifacts[kind]
-    if(!observed?.items.length)return [<div key={kind}><dt>{label}</dt><dd>{observed?.available?'Aucun observé':'Non vérifié'}</dd></div>]
-    return observed.items.map(item=><div key={`${kind}:${item.name}`}><dt>{label}</dt>
-      <dd style={{overflowWrap:'anywhere'}}>{item.name} · {item.tags.join(', ')}{!observed.available&&<small> · Dernière observation</small>}</dd>
-    </div>)
+    const item=observed?.items[0]
+    const tag=item?.tags[0]
+    return <div key={kind}><dt>{label}</dt>
+      <dd style={{overflowWrap:'anywhere'}}>{item?<>
+        {item.name}{tag&&<> · {tag}</>}{!observed?.available&&<small> · Dernière observation</small>}
+      </>:observed?.available?'Aucun observé':'Non vérifié'}</dd>
+    </div>
   })}</>
 }
 
