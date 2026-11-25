@@ -3283,6 +3283,13 @@ CAB MUST permettre de republier un artefact Docker ou Debian sous un tag de vers
 - **WHEN** le reçu enregistre un échec du push du tag de version avant l’envoi de `latest` et que CAB confirme l’absence du tag sur le registre accessible
 - **THEN** CAB conserve le reçu initial, consigne l’échec confirmé et permet une nouvelle publication demandée par l’administrateur.
 
+#### Scenario: Deux tags Docker absents après un push GitLab terminé
+
+- **WHEN** le reçu de CAB indique que le push a terminé, mais que la vérification a échoué
+- **THEN** CAB peut constater l’absence des deux manifestes si le registre répond pour le dépôt configuré et confirme l’absence de la version et de `latest`.
+- **AND THEN** CAB conserve la tentative initiale, consigne l’échec confirmé et réautorise une nouvelle demande manuelle. Une vérification partielle ou un refus d’accès conserve la protection.
+- **AND THEN** CAB autorise une série bornée de nouvelles lectures sous cette règle pour les reçus historiques qui ne l’ont jamais appliquée.
+
 #### Scenario: Publication Docker incomplète
 
 - **WHEN** un envoi ou la confirmation d’un tag échoue

@@ -158,6 +158,7 @@ const messages:Record<string,string>={
   'artifact-local-changed':'L’artefact local a changé ou n’est plus lisible.',
   'artifact-forge-unconfigured':'Le dépôt ou l’authentification de la forge est indisponible.',
   'artifact-forge-config-changed':'La configuration de la destination a changé depuis la demande.',
+  'artifact-forge-tags-absent':'Le registre confirme l’absence du tag Docker de version et de latest. Une nouvelle publication est possible.',
   'artifact-forge-version-unpublished':'Le registre confirme que le tag Docker de la version est absent après l’échec.',
   'artifact-forge-tag-missing':'Le tag Git de la version est absent du dépôt distant.',
   'artifact-forge-registry-invalid':'Le registre Docker de la destination est absent, invalide ou non pris en charge.',

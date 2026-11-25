@@ -107,6 +107,16 @@ def gitlab_first_tag_failed(job):
             and stages.get('docker-push') == 'FAILED' and stages.get('docker-confirm') == 'PENDING')
 
 
+def gitlab_push_confirm_missing(job):
+    tag = (job.plan.get('docker') or {}).get('tag')
+    stages = {step['key']: step['state']
+              for step in (job.receipt.get('progress') or {}).get('steps', [])}
+    return (job.forge == 'GITLAB' and isinstance(tag, str) and tag != 'latest'
+            and stages.get('docker-push') == 'COMPLETED'
+            and stages.get('docker-confirm') in ('FAILED', 'UNKNOWN')
+            and stages.get('docker-retention') == 'PENDING')
+
+
 def docker_confirmation_required(job):
     receipt=job.receipt
     if job.state!='UNKNOWN' or receipt.get('issued') is not True:
@@ -514,7 +524,7 @@ REGISTRY_MANIFEST_TYPES = ', '.join((
 ))
 
 
-def confirm_gitlab_registry(base, registry, repository, username, token, labels, image_id, *, allow_missing_version=False):
+def confirm_gitlab_registry(base, registry, repository, username, token, labels, image_id, *, allow_missing_version=False, allow_missing_pair=False):
     details = {'phase': 'registry-confirmation'}
     code = 'artifact-forge-publication-unconfirmed'
     require(REGISTRY.fullmatch(registry) and REPO_PATH.fullmatch(repository), code, 409, details=details)
@@ -562,6 +572,26 @@ def confirm_gitlab_registry(base, registry, repository, username, token, labels,
                 # L'accès à l'autre référence distingue une version manquante
                 # d'un dépôt ou d'un registre inaccessible.
                 observe('latest')
+                return None
+
+        if allow_missing_pair:
+            missing = []
+            for label in labels:
+                try:
+                    observe(label)
+                except httpx.HTTPStatusError as error:
+                    if error.response.status_code != 404:
+                        raise
+                    missing.append(label)
+            if missing:
+                require(len(labels) == len(missing) == 2, code, 409, details=details)
+                listing, _ = get_json(client, endpoint + repository + '/tags/list', headers=headers)
+                require(isinstance(listing, dict) and listing.get('name') == repository
+                        and 'tags' in listing, code, 409, details=details)
+                tags = listing['tags']
+                require(tags is None or isinstance(tags, list)
+                        and all(isinstance(tag, str) and tag not in missing for tag in tags),
+                        code, 409, details=details)
                 return None
 
         digests = [observe(label)[1] for label in labels]
@@ -747,22 +777,26 @@ def reconcile_docker(project,request_id,tag,image_id):
         with remote(project,values,job.forge) as (_,base,_,_,owner,repo,token,github_public):
             registry=docker_registry(base,job.forge,github_public,values)
             labels=tuple(dict.fromkeys([tag,'latest']))
-            if gitlab_first_tag_failed(job):
+            first_tag_failed = gitlab_first_tag_failed(job)
+            check_missing_pair = gitlab_push_confirm_missing(job)
+            if first_tag_failed or check_missing_pair:
                 references = confirm_gitlab_registry(
                     base, registry, (owner + '/' + repo).lower(), owner.rsplit('/', 1)[-1], token, labels, image_id,
-                    allow_missing_version=True,
+                    allow_missing_version=first_tag_failed, allow_missing_pair=check_missing_pair,
                 )
             else:
                 with registry_login(registry,owner,token) as (args,_):
                     references = confirm_forge_docker(args,base,registry,owner,repo,job.forge,token,labels,image_id)
-    except (httpx.HTTPError,OSError,subprocess.SubprocessError) as error:
+    except (httpx.HTTPError,OSError,ValueError,subprocess.SubprocessError) as error:
         raise Refused('artifact-forge-publication-unconfirmed',409,
                       details={'phase':'registry-confirmation'}) from error
     if references is None:
         result = {
             **job.receipt, 'previous': {'state': job.state, **job.receipt},
-            'error': 'artifact-forge-version-unpublished', 'reconciliation': evidence,
+            'error': 'artifact-forge-tags-absent' if check_missing_pair else 'artifact-forge-version-unpublished',
+            'reconciliation': evidence,
             'details': {'phase': 'registry-confirmation', 'tag': tag, 'reason': 'manifest-missing'},
+            'observed_absent_tags': list(labels) if check_missing_pair else [tag],
         }
         job.receipt, job.state = result, 'FAILED'
         job.save(update_fields=['state', 'receipt'])
@@ -788,6 +822,16 @@ def reconcile_docker(project,request_id,tag,image_id):
     return public(job)
 
 
+GITLAB_RECONCILIATION_PROBE = 'gitlab-pair-absence-v1'
+
+
+def reconciliation_attempts(job):
+    current = job.receipt.get('automatic_reconciliation') or {}
+    if gitlab_push_confirm_missing(job) and current.get('probe') != GITLAB_RECONCILIATION_PROBE:
+        return {'probe': GITLAB_RECONCILIATION_PROBE, **({'previous': current} if current else {})}
+    return current
+
+
 def reconciliation_due(job,now):
     docker=job.plan.get('docker')
     if not isinstance(docker,dict) or not docker_confirmation_required(job):
@@ -795,7 +839,7 @@ def reconciliation_due(job,now):
     tag,image_id=docker.get('tag'),docker.get('image_id')
     if not (isinstance(tag,str) and TAG.fullmatch(tag) and isinstance(image_id,str) and DIGEST.fullmatch(image_id)):
         return False
-    previous=job.receipt.get('automatic_reconciliation') or {}
+    previous=reconciliation_attempts(job)
     attempts=previous.get('attempts',0)
     if attempts>=len(RECONCILIATION_DELAYS):
         return False
@@ -809,8 +853,9 @@ def attempt_reconciliation(key):
         now=timezone.now()
         if not reconciliation_due(job,now):
             return
-        previous=job.receipt.get('automatic_reconciliation') or {}
-        attempt={'attempts':previous.get('attempts',0)+1,'at':now.isoformat()}
+        previous=reconciliation_attempts(job)
+        attempt={**previous,'attempts':previous.get('attempts',0)+1,'at':now.isoformat()}
+        attempt.pop('error', None)
         job.receipt={**job.receipt,'automatic_reconciliation':attempt}
         job.save(update_fields=['receipt'])
     docker=job.plan['docker']

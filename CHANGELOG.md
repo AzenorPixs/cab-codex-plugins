@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Réactiver les publications du projet après vérification de l’absence du tag Docker de version et de `latest` sur un dépôt GitLab accessible, en conservant la tentative précédente.
+
 - Aligner les tags du commit à la confirmation d’« Envoyer » sur les trois forges, en affichant les remplacements. Appliquer le style des liens des cartes aux tags d’artefacts et améliorer la vérification des manifestes et les diagnostics de publication Docker.
 
 - Envoyer les tags du commit avec la branche vers les trois forges, avec aperçu et protection des tags distants. Dans les cartes de forge, afficher les tags de la dernière publication Docker et Debian et permettre d’ouvrir la construction correspondante.

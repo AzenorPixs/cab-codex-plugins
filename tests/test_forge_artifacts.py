@@ -544,6 +544,74 @@ class ForgeArtifactsTests(unittest.TestCase):
                         with self.assertRaises(httpx.HTTPStatusError):
                             verify(*args, allow_missing_version=True)
 
+    def test_gitlab_missing_pair_requires_two_missing_refs_and_the_exact_repository(self):
+        digest = 'sha256:' + 'a' * 64
+        for latest, listed_name, tags, accepted in (
+                (404, 'group/sample', None, True),
+                (404, 'group/sample', ['old'], True),
+                (404, 'group/other', [], False),
+                (404, 'group/sample', ['latest'], False),
+                (200, 'group/sample', None, False),
+                (403, 'group/sample', None, False)):
+            with self.subTest(latest=latest, listed_name=listed_name, tags=tags):
+                def response(request):
+                    path = request.url.path.rsplit('/', 1)[-1]
+                    if path == '1.0.2':
+                        return httpx.Response(404)
+                    if path == 'latest':
+                        return httpx.Response(latest, json={'config': {'digest': digest}},
+                                              headers={'docker-content-digest': digest})
+                    if path == 'list':
+                        return httpx.Response(200, json={'name': listed_name, 'tags': tags})
+                    return httpx.Response(200)
+
+                with httpx.Client(transport=httpx.MockTransport(response)) as client, \
+                        patch.object(forge_publish_artifacts, 'forge_client', return_value=nullcontext(client)):
+                    args = ('https://git.fixture', 'registry.fixture', 'group/sample', 'alice', 'fixture',
+                            ('1.0.2', 'latest'), digest)
+                    verify = forge_publish_artifacts.confirm_gitlab_registry
+                    if accepted:
+                        self.assertIsNone(verify(*args, allow_missing_pair=True))
+                    else:
+                        with self.assertRaises((Refused, httpx.HTTPStatusError)):
+                            verify(*args, allow_missing_pair=True)
+
+    def test_gitlab_completed_push_can_reconcile_an_old_receipt_without_republishing(self):
+        tag, image_id = '1.0.2', 'sha256:' + 'a' * 64
+        module = forge_publish_artifacts
+        values = {'PROJECT_VERSION': tag, 'REMOTE_GITLAB_REGISTRY': 'registry.fixture'}
+        project = SimpleNamespace(pk='pfd', public_metadata={'values': values}, configuration={})
+        previous = {'attempts': 3, 'at': '2026-11-25T12:00:00Z', 'error': 'artifact-forge-publication-unconfirmed'}
+        receipt = {'issued': True, 'error': 'artifact-forge-publication-unconfirmed',
+                   'details': {'phase': 'registry-confirmation'}, 'automatic_reconciliation': previous,
+                   'progress': {'steps': [{'key': key, 'state': state} for key, state in (
+                       ('docker-push', 'COMPLETED'), ('docker-confirm', 'FAILED'), ('docker-retention', 'PENDING'))]}}
+        job = SimpleNamespace(pk='old-receipt', project=project, project_id=project.pk, forge='GITLAB',
+                              state='UNKNOWN', receipt=receipt, save=Mock(),
+                              plan={'docker': {'tag': tag, 'image_id': image_id}, 'registry': 'registry.fixture',
+                                    'signature': module.identity(project, values, 'GITLAB')})
+        now = datetime(2026, 11, 25, 14, tzinfo=timezone.utc)
+        self.assertTrue(module.reconciliation_due(job, now))
+        self.assertEqual(module.reconciliation_attempts(job)['previous'], previous)
+        with patch.object(module.ProjectForgeArtifactPublication, 'objects') as jobs, \
+                patch.object(module.Project, 'objects') as projects, \
+                patch.object(module.Maintenance, 'objects') as maintenance, \
+                patch.object(module, 'docker_inventory', return_value={'local': (None, {'image_id': image_id})}), \
+                patch.object(module, 'remote', return_value=nullcontext(
+                    (None, 'https://git.fixture', None, None, 'group', 'sample', 'fixture', False))), \
+                patch.object(module, 'confirm_gitlab_registry', return_value=None) as verify, \
+                patch.object(module, 'release_docker') as publish, \
+                patch('cab_platform.notifications.artifact_notification'):
+            jobs.select_for_update.return_value.filter.return_value.first.return_value = job
+            projects.select_for_update.return_value.get.return_value = project
+            maintenance.filter.return_value.exists.return_value = False
+            result = module.reconcile_docker.__wrapped__(project, job.pk, tag, image_id)
+        self.assertEqual(result['state'], 'FAILED')
+        self.assertEqual(job.receipt['previous'], {'state': 'UNKNOWN', **receipt})
+        self.assertEqual(job.receipt['observed_absent_tags'], [tag, 'latest'])
+        self.assertTrue(verify.call_args.kwargs['allow_missing_pair'])
+        publish.assert_not_called()
+
     def test_gitlab_registry_does_not_send_credentials_to_another_origin(self):
         calls = []
         def response(request):
