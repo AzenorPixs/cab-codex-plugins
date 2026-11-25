@@ -193,37 +193,65 @@ def gitlab_tag_dates(client,read,api,endpoint):
         seen.add(cursor)
 
 
-def docker(client,read,root,api,forge,owner,repo,info):
-    endpoint,rows=docker_versions(client,read,root,api,forge,owner,repo,info,exhaustive=True)
-    dates={}
-    dated=[]
-    historical=set()
+def forgejo_manifest(client, read, endpoint, tag):
+    try:
+        files, _ = read(client, endpoint + '/' + quote(tag, safe='') + '/files')
+        hashes = [item.get('sha256') for item in files if item.get('name') == 'manifest.json']
+        if len(hashes) == 1 and isinstance(hashes[0], str) and re.fullmatch(r'[a-f0-9]{64}', hashes[0]):
+            return hashes[0]
+    except (httpx.HTTPError, ValueError, AttributeError, TypeError):
+        pass
+    return None
+
+
+def docker(client, read, root, api, forge, owner, repo, info):
+    endpoint, rows = docker_versions(client, read, root, api, forge, owner, repo, info, exhaustive=True)
+    dated = []
+    historical = set()
     for row in rows:
-        if forge=='GITHUB':
-            tags=github_version_tags(row) or []
+        if forge == 'GITHUB':
+            tags = github_version_tags(row) or []
         else:
-            tag=row.get('version' if forge=='FORGEJO' else 'name')
-            tags=[tag]
-        tags={tag for tag in tags if isinstance(tag,str) and TAG.fullmatch(tag)}
+            tags = [row.get('version' if forge == 'FORGEJO' else 'name')]
+        tags = sorted({tag for tag in tags if isinstance(tag, str) and TAG.fullmatch(tag)}, key=tag_rank, reverse=True)
         if not tags:
             continue
         historical.update(tags)
-        date=publication_date(row.get('published_at') or (None if forge=='GITLAB' else row.get('created_at')))
-        tag=max(tags,key=tag_rank)
-        dated.append((date,tag))
-    if forge=='GITLAB' and historical:
+        date = publication_date(row.get('published_at') or (None if forge == 'GITLAB' else row.get('created_at')))
+        dated.append((date, tags))
+    dates = {}
+    if forge == 'GITLAB' and historical:
         try:
-            dates=gitlab_tag_dates(client,read,api,endpoint)
-        except (httpx.HTTPError,ValueError,KeyError,TypeError,AttributeError):
-            dates={}
-        if not dates or {tag for tag in dates if TAG.fullmatch(tag)}!=historical:
-            dates={}
-        dated=[(date or publication_date(dates.get(tag,{}).get('publishedAt')),tag) for date,tag in dated]
-    tags=sorted(historical,key=tag_rank,reverse=True)
-    items=[{'name':repo,'tags':tags[:8]}] if tags else []
-    now=timezone.now()
-    candidates=[(date if date and date<=now else None,{'name':repo,'tags':[tag]}) for date,tag in dated]
-    return chronology(items,candidates)
+            dates = gitlab_tag_dates(client, read, api, endpoint)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+        if {tag for tag in dates if TAG.fullmatch(tag)} != historical:
+            dates = {}
+        dated = [(date or publication_date(dates.get(tags[0], {}).get('publishedAt')), tags) for date, tags in dated]
+    tags = sorted(historical, key=tag_rank, reverse=True)
+    items = [{'name': repo, 'tags': tags[:8]}] if tags else []
+    now = timezone.now()
+    result = chronology(items, [(date if date and date <= now else None, {'name': repo, 'tags': tags})
+                                for date, tags in dated])
+    latest = result['latest']
+    if latest is None:
+        if 'latest' not in historical:
+            return result
+        groups = [labels for _, labels in dated if 'latest' in labels]
+        latest = result['latest'] = {'name': repo, 'tags': groups[0] if len(groups) == 1 else ['latest']}
+    tag = latest['tags'][0]
+    if forge == 'GITLAB':
+        digest = dates.get(tag, {}).get('digest')
+        if isinstance(digest, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
+            latest['tags'] = [name for name in tags if dates[name].get('digest') == digest]
+    elif forge == 'FORGEJO' and 'latest' in historical:
+        reference = forgejo_manifest(client, read, endpoint, tag)
+        if reference:
+            candidates = (name for name in tags if name != 'latest') if tag == 'latest' else ('latest',)
+            alias = next((name for name in candidates if forgejo_manifest(client, read, endpoint, name) == reference), None)
+            if alias:
+                latest['tags'] = sorted((tag, alias), key=tag_rank, reverse=True)
+    return result
 
 
 def observe(client,read,values,root,api,forge,owner,repo,info,*,known_debian=None):

@@ -145,22 +145,45 @@ def push_rejection(result, refs):
     return reason, complete
 
 
+def remote_refs(project, forge, owner, group, options, env, url, branch, tags=()):
+    branch_ref = 'refs/heads/' + branch
+    requested = {branch_ref, *tags}
+    try:
+        result = remote_git(project, forge, owner, group, options, env, 'ls-remote', '--refs', url, branch_ref, *tags)
+        require(result.returncode == 0 and len(result.stdout) <= 1024 * 1024,
+                'forge-push-preflight-unavailable', 409)
+        found = {}
+        for line in result.stdout.split(b'\n'):
+            if not line:
+                continue
+            oid, ref = line.decode('utf-8', 'strict').split('\t')
+            require(ref in requested and ref not in found and OID.fullmatch(oid),
+                    'forge-push-preflight-unavailable', 409)
+            found[ref] = oid
+    except (Refused, ValueError):
+        raise Refused('forge-push-preflight-unavailable', 409) from None
+    return found.pop(branch_ref, ''), found
+
+
 def remote_head(project, forge, owner, group, options, env, url, branch):
+    return remote_refs(project, forge, owner, group, options, env, url, branch)[0]
+
+
+def commit_tags(project, options, env, head):
+    result = local_git(project, options, env, 'for-each-ref', '--points-at=' + head,
+                       '--format=%(refname)%00%(objectname)', 'refs/tags/')
     try:
-        response = remote_git(project, forge, owner, group, options, env, 'ls-remote', '--heads', url, 'refs/heads/' + branch)
-    except Refused:
-        raise Refused('forge-push-preflight-unavailable', 409) from None
-    require(response.returncode == 0 and len(response.stdout) <= 8192, 'forge-push-preflight-unavailable', 409)
-    try:
-        lines = response.stdout.decode('ascii', 'strict').splitlines()
-    except UnicodeDecodeError:
-        raise Refused('forge-push-preflight-unavailable', 409) from None
-    require(len(lines) <= 1, 'forge-push-preflight-unavailable', 409)
-    if lines:
-        fields = lines[0].split('\t')
-        require(len(fields) == 2 and OID.fullmatch(fields[0]) is not None and fields[1] == 'refs/heads/' + branch, 'forge-push-preflight-unavailable', 409)
-        return fields[0]
-    return ''
+        tags = {}
+        for line in result.split(b'\n'):
+            if not line:
+                continue
+            ref, oid = line.decode('utf-8', 'strict').split('\0')
+            require(ref.startswith('refs/tags/') and OID.fullmatch(oid), 'forge-push-local-unavailable', 409)
+            tags[ref] = oid
+        require(len(tags) <= 1000, 'forge-push-local-unavailable', 409)
+        return tags
+    except ValueError:
+        raise Refused('forge-push-local-unavailable', 409) from None
 
 
 def transfer_receipts(project, forge):
@@ -182,7 +205,9 @@ def prepare(project_id, forge, actor):
     local_branch = local_git(project, options, env, 'symbolic-ref', '--quiet', '--short', 'HEAD').decode('utf-8', 'replace').strip()
     require(bool(OID.fullmatch(head)) and bool(local_branch), 'forge-push-local-unavailable', 409)
     dirty = bool(local_git(project, options, env, 'status', '--porcelain=v1', '--untracked-files=normal', '--ignore-submodules=all'))
-    remote = remote_head(project, forge, owner, group, options, env, url, branch)
+    tags = commit_tags(project, options, env, head)
+    remote, remote_tags = remote_refs(project, forge, owner, group, options, env, url, branch, tags)
+    require(all(tags[ref] == oid for ref, oid in remote_tags.items()), 'forge-push-tag-conflict', 409)
     signature = identity(project, values, forge)
     nonce = secrets.token_urlsafe(24)
     with transaction.atomic():
@@ -191,11 +216,13 @@ def prepare(project_id, forge, actor):
         config = dict(current.configuration or {})
         records = dict(config.get('forge_push') or {})
         require_no_pending_transfer(current, forge)
-        records[forge] = {'nonce': nonce, 'actor': str(actor), 'state': 'READY', 'head': head, 'remote': remote, 'branch': branch, 'signature': signature, 'expires': (timezone.now() + timedelta(minutes=5)).isoformat()}
+        records[forge] = {'nonce': nonce, 'actor': str(actor), 'state': 'READY', 'head': head, 'remote': remote, 'branch': branch, 'tags': tags, 'remote_tags': remote_tags, 'signature': signature, 'expires': (timezone.now() + timedelta(minutes=5)).isoformat()}
         config['forge_push'] = records
         current.configuration = config
         current.save(update_fields=['configuration'])
-    return {'nonce': nonce, 'branch': branch, 'local_branch': local_branch, 'head': head, 'remote': remote or None, 'dirty': dirty}
+    return {'nonce': nonce, 'branch': branch, 'local_branch': local_branch, 'head': head,
+            'remote': remote or None, 'dirty': dirty,
+            'tags': [{'name': ref.removeprefix('refs/tags/'), 'remote': ref in remote_tags} for ref in tags]}
 
 
 def execute(project_id, forge, actor, nonce):
@@ -203,6 +230,7 @@ def execute(project_id, forge, actor, nonce):
     project = Project.objects.get(pk=project_id)
     values, owner, branch, url, group, options, env = context(project, forge)
     head = local_git(project, options, env, 'rev-parse', '--verify', 'HEAD^{commit}').decode('ascii').strip()
+    tags = commit_tags(project, options, env, head)
     with transaction.atomic():
         current = Project.objects.select_for_update().get(pk=project_id)
         config = dict(current.configuration or {})
@@ -215,6 +243,12 @@ def execute(project_id, forge, actor, nonce):
         require(record.get('head') == head and bool(OID.fullmatch(head)), 'forge-push-head-changed', 409)
         expected = record.get('remote', '')
         require(isinstance(expected, str) and (not expected or OID.fullmatch(expected)), 'forge-push-preview-invalid', 409)
+        require(isinstance(record.get('tags'), dict) and isinstance(record.get('remote_tags'), dict),
+                'forge-push-preview-invalid', 409)
+        require(record['tags'] == tags, 'forge-push-tags-changed', 409)
+        expected_tags = record['remote_tags']
+        require(all(tags.get(ref) == oid for ref, oid in expected_tags.items()),
+                'forge-push-preview-invalid', 409)
         record['state'] = 'RUNNING'
         records[forge] = record
         config['forge_push'] = records
@@ -222,16 +256,30 @@ def execute(project_id, forge, actor, nonce):
         current.save(update_fields=['configuration'])
     diagnostic = None
     rejected = False
+    success = False
+    branch_ref = 'refs/heads/' + branch
+    targets = {branch_ref: head, **tags}
+    observed = {branch_ref: expected, **expected_tags}
+    leases = [f'--force-with-lease={ref}:{observed.get(ref, "")}' for ref in targets]
+    updates = [f'{oid}:{ref}' for ref, oid in targets.items()]
+    issued = False
     try:
-        result = remote_git(project, forge, owner, group, options, env, 'push', '--porcelain', '--no-follow-tags', '--force-with-lease=refs/heads/' + branch + ':' + expected, url, head + ':refs/heads/' + branch, timeout=120)
-        success = result.returncode == 0
-        if not success:
-            diagnostic, complete = push_rejection(result, {'refs/heads/' + branch})
-            rejected = complete and remote_head(project, forge, owner, group, options, env, url, branch) == expected
-    except Exception as error:
+        actual = remote_refs(project, forge, owner, group, options, env, url, branch, tags)
+        if actual != (expected, expected_tags):
+            diagnostic, rejected = 'forge-push-remote-changed', True
+        else:
+            issued = True
+            result = remote_git(project, forge, owner, group, options, env, 'push', '--atomic',
+                                '--porcelain', '--no-follow-tags', *leases, url, *updates, timeout=120)
+            if result.returncode == 0:
+                success = remote_refs(project, forge, owner, group, options, env, url, branch, tags) == (head, tags)
+            else:
+                diagnostic, complete = push_rejection(result, set(targets))
+                rejected = complete and remote_refs(project, forge, owner, group, options, env, url, branch, tags) == actual
+    except (Refused, OSError, subprocess.SubprocessError) as error:
         if isinstance(error, Refused) and not diagnostic:
             diagnostic = error.code
-        success = False
+        rejected = not issued
     with transaction.atomic():
         current = Project.objects.select_for_update().get(pk=project_id)
         config = dict(current.configuration or {})
@@ -246,7 +294,7 @@ def execute(project_id, forge, actor, nonce):
             current.configuration = config
             current.save(update_fields=['configuration'])
     if not success:
-        raise Refused(diagnostic if rejected else 'forge-push-result-unknown',
+        raise Refused((diagnostic or 'forge-push-preflight-unavailable') if rejected else 'forge-push-result-unknown',
                       details={'cause': diagnostic} if diagnostic and not rejected else None)
     def refresh():
         from .forge_repository import refresh_one

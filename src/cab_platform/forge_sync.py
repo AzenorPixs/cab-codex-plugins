@@ -15,7 +15,7 @@ from django.utils.dateparse import parse_datetime
 from .core.commands import Refused, digest, require
 from .core.models import Event, Project
 from .forge_artifacts import pages
-from .forge_push import OID, context, identity, local_git, push_rejection, remote_git, remote_head, require_no_pending_transfer, transfer_receipts
+from .forge_push import OID, context, identity, local_git, push_rejection, remote_git, remote_head, remote_refs, require_no_pending_transfer, transfer_receipts
 from .forge_repository import get_json
 from .forge_settings import crypt, forge_client
 from .forge_version import base_for
@@ -96,8 +96,8 @@ def reconcile(project_id, forge, actor, confirmation=None):
     reverse = kind == 'forge_sync' and receipt.get('source') == 'remote'
     expected = receipt.get('remote' if reverse else 'head')
     require(isinstance(expected, str) and OID.fullmatch(expected) is not None, 'forge-reconcile-receipt-invalid', 409)
-    if kind == 'forge_sync':
-        expected_tags = receipt.get('remote_tags' if reverse else 'source_tags')
+    expected_tags = receipt.get('remote_tags' if reverse else 'source_tags') if kind == 'forge_sync' else receipt.get('tags')
+    if kind == 'forge_sync' or 'tags' in receipt:
         require(isinstance(expected_tags, dict), 'forge-reconcile-receipt-invalid', 409)
 
     try:
@@ -108,6 +108,8 @@ def reconcile(project_id, forge, actor, confirmation=None):
             tags = local_tags(project, options, env, observed)
         elif kind == 'forge_sync':
             observed, tags, _ = refs(project, forge, owner, group, options, env, url, branch)
+        elif expected_tags is not None:
+            observed, tags = remote_refs(project, forge, owner, group, options, env, url, branch, expected_tags)
         else:
             observed = remote_head(project, forge, owner, group, options, env, url, branch)
     except Refused:
@@ -116,7 +118,7 @@ def reconcile(project_id, forge, actor, confirmation=None):
         raise Refused('forge-reconcile-observation-unavailable', 409) from None
     observed_refs = {'branch': receipt['local_branch'] if reverse else branch, 'head': observed}
     changes = []
-    if kind == 'forge_sync':
+    if expected_tags is not None:
         observed_refs['tags'] = tags
         changes = tag_changes(expected_tags, tags)
     diverged = observed != expected or bool(changes)

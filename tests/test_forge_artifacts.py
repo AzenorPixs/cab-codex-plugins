@@ -132,6 +132,10 @@ class ForgeArtifactsTests(unittest.TestCase):
                 known={upload_key(root,tag,asset):date
                        for tag,asset,date in zip(('2.0.0','1.0.0'),assets,(old,new))}
                 tags=[('2.0.0',old),('1.0.0',new)]
+                docker_tags=tags+[('latest',new)]
+                registry_metadata=True
+                def manifest(tag):
+                    return ('b' if tag=='2.0.0' else 'a')*64
                 def response(request):
                     path=request.url.path
                     if path=='/project/releases':
@@ -144,26 +148,34 @@ class ForgeArtifactsTests(unittest.TestCase):
                     if path.endswith('/graphql'):
                         self.assertEqual(request.method,'POST')
                         page=json.loads(request.read())['variables']['after']
-                        tag,date=tags[1 if page else 0]
+                        observations=docker_tags[1:] if page else docker_tags[:1]
                         return httpx.Response(200,json={'data':{'containerRepository':{'tags':{
-                            'nodes':[{'name':tag,'publishedAt':date}],
+                            'nodes':[{'name':tag,'publishedAt':date if registry_metadata else None,
+                                      'digest':'sha256:'+manifest(tag) if registry_metadata else None}
+                                     for tag,date in observations],
                             'pageInfo':{'hasNextPage':page is None,'endCursor':'suite'}}}}})
                     if path.endswith('/tags'):
-                        return httpx.Response(200,json=[{'name':tag} for tag,_ in tags])
+                        return httpx.Response(200,json=[{'name':tag} for tag,_ in docker_tags])
                     if path.endswith('/packages/owner'):
                         return httpx.Response(200,json=[{'type':'container','name':'sample','version':tag,'created_at':date}
-                                                        for tag,date in tags])
+                                                        for tag,date in docker_tags])
+                    if path.endswith('/files'):
+                        return httpx.Response(200,json=[{'name':'manifest.json','sha256':manifest(path.split('/')[-2])}])
                     if path.endswith('/versions'):
                         return httpx.Response(200,json=[{'created_at':date,'metadata':{'container':{
-                            'tags':[tag,'latest']}}} for tag,date in tags])
+                            'tags':[tag,'latest'] if tag=='1.0.0' else [tag]}}} for tag,date in tags])
                     return httpx.Response(404)
                 with httpx.Client(transport=httpx.MockTransport(response)) as client:
                     observed=observe(client,get_json,flags,root,api,forge,'owner','sample',{},known_debian=known)
                     self.assertEqual(observed['docker']['latest'],
-                                     {'name':'sample','tags':['1.0.0'],'published_at':new})
+                                     {'name':'sample','tags':['1.0.0','latest'],'published_at':new})
                     self.assertEqual(observed['debian']['latest'],
                                      {'name':'sample_1.0.0_all.deb','tags':['1.0.0'],'published_at':new})
                     if forge=='GITLAB':
+                        registry_metadata=False
+                        fallback=observe(client,get_json,flags,root,api,forge,'owner','sample',{},known_debian=known)
+                        self.assertTrue(fallback['docker']['chronology_unverified'])
+                        self.assertEqual(fallback['docker']['latest'],{'name':'sample','tags':['latest']})
                         assets[1]['url']='https://fixture/another-upload'
                         received=observe(client,get_json,flags,root,api,forge,'owner','sample',{},known_debian=known)
                         self.assertTrue(received['debian']['chronology_unverified'])

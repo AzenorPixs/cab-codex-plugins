@@ -111,6 +111,9 @@ class FactoryTests(unittest.TestCase):
                     'state': 'COMPLETED', 'created': after.isoformat(), 'error': None, 'exit_code': 0,
                 })
                 ProjectArtifactBuild.objects.filter(pk=manual.pk).update(created=after + timedelta(seconds=1))
+                self.assertEqual(artifacts.published_build(project, kind, 'v3.28.0')['delivery_id'], delivery.pk)
+                self.assertIsNone(artifacts.published_build(project, kind, '3.8.1'))
+                self.assertIsNone(artifacts.published_build(project, kind, '3.28.1'))
                 recent = artifacts.snapshot(project)['builds'][kind]
                 self.assertEqual((recent['source'], recent['request_id'], recent['error']),
                                  ('factory', manual.pk, 'manual-failure'))

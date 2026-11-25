@@ -3,6 +3,7 @@ import {Shape,ShapeStream} from '@electric-sql/client'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
 import {api,ApiError,apiErrorMessage} from './api'
 import {ForgeActionOverview} from './ForgeActionOverview'
+import {BuildOverview,type Build} from './ProjectFactory'
 import {newRequestId} from './requestId'
 
 const formats=[['debian','PROJECT_DEBIAN_PACKAGE','Artefact Debian'],['docker','PROJECT_DOCKERED','Artefact Docker']] as const
@@ -57,7 +58,7 @@ export function useForgeArtifacts(projectId:string){
     return ()=>{unsubscribe();controller.abort()}
   },[projectId])
   const rows=live?.projectId===projectId?live.rows:query.data?.rows||[]
-  return {rows,jobs:query.data?.jobs||{},publish,reconcile,path}
+  return {projectId,rows,jobs:query.data?.jobs||{},publish,reconcile,path}
 }
 type State=ReturnType<typeof useForgeArtifacts>
 
@@ -67,14 +68,30 @@ export function PublishedArtifactRows({state,forge,values}:{state:State;forge:st
   return <>{formats.filter(([,flag])=>on(values[flag])).map(([kind,,label])=>{
     const observed=row?.artifacts[kind]
     const item=observed?.latest
-    const tag=item?.tags[0]
     return <div key={kind}><dt>{label}</dt>
-      <dd style={{overflowWrap:'anywhere'}}>{item?<>
-        {item.name}{tag&&<> · {tag}</>}{item.published_at&&<> · <time dateTime={item.published_at}>
-          {new Date(item.published_at).toLocaleString('fr-FR')}</time></>}{!observed?.available&&<small> · Dernière observation</small>}
+      <dd style={{overflowWrap:'anywhere'}}>{item?.tags.length?<>
+        <PublishedArtifactTags projectId={state.projectId} kind={kind} tags={item.tags}/>
+        {!observed?.available&&<small> · Dernière observation</small>}
       </>:observed?.available&&observed.items.length===0?'Aucun observé':observed?.chronology_unverified||observed?.items.length?'Date de publication non vérifiée':'Non vérifié'}</dd>
     </div>
   })}</>
+}
+
+function PublishedArtifactTags({projectId,kind,tags}:{projectId:string;kind:Format;tags:string[]}){
+  const tag=tags.find(value=>value.toLowerCase()!=='latest')
+  const [detail,setDetail]=useState<Build|null>(null)
+  const lookup=useQuery({
+    queryKey:['published-artifact-build',projectId,kind,tag],
+    queryFn:()=>api<{build:Build|null}>(`projects/${encodeURIComponent(projectId)}/artifacts/builds/${kind}/${encodeURIComponent(tag!)}`),
+    enabled:!!tag,
+  })
+  const build=lookup.data?.build
+  const label=kind==='docker'?'Docker':'Debian'
+  return <>
+    {build?<button type="button" className="forge-link" title={`Détail de la construction ${label}`}
+      onClick={()=>setDetail(build)}>{tags.join(', ')}</button>:tags.join(', ')}
+    {detail&&<BuildOverview label={label} build={detail} close={()=>setDetail(null)}/>}
+  </>
 }
 
 const jobLabels:Record<string,string>={PENDING:'En attente',RUNNING:'En cours',COMPLETED:'Réussie',

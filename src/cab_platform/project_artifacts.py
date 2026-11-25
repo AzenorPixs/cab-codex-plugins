@@ -154,18 +154,23 @@ def sweep():
             logger.warning('Inventaire des artefacts indisponible', extra={'project_id': project.pk})
 
 
+def build_view(row, *, delivery=False):
+    fields = ('phase', 'steps', 'configuration', 'diagnostic', 'exit_code', 'process_started')
+    receipt = {'state': row.state, 'error': row.receipt.get('error'),
+               **{key: row.receipt[key] for key in fields if key in row.receipt}}
+    if delivery:
+        return {**receipt, 'source': 'delivery', 'delivery_id': row.delivery_id,
+                'version': row.delivery.version, 'created': row.updated.isoformat()}
+    return {**receipt, 'source': 'factory', 'request_id': row.pk,
+            'version': row.version, 'created': row.created.isoformat()}
+
+
 def latest_builds(project):
     builds = {}
     dates = {}
-    public_fields = ('phase', 'steps', 'configuration', 'diagnostic', 'exit_code', 'process_started')
     for row in ProjectArtifactBuild.objects.filter(project=project).order_by('kind', '-created', '-pk').distinct('kind'):
         dates[row.kind] = row.created
-        builds[row.kind] = {
-            'source': 'factory',
-            'request_id': row.pk, 'state': row.state, 'version': row.version,
-            'created': row.created.isoformat(), 'error': row.receipt.get('error'),
-            **{key: row.receipt[key] for key in public_fields if key in row.receipt},
-        }
+        builds[row.kind] = build_view(row)
     steps = GitDeliveryStep.objects.filter(
         delivery__project=project,
         key__in=[f'build:{kind}' for kind in FLAGS],
@@ -176,13 +181,27 @@ def latest_builds(project):
         manual = builds.get(kind)
         if manual and (manual['state'] in ACTIVE or dates[kind] >= step.updated):
             continue
-        builds[kind] = {
-            'source': 'delivery', 'delivery_id': step.delivery_id,
-            'state': step.state, 'version': step.delivery.version, 'created': step.updated.isoformat(),
-            'error': step.receipt.get('error'),
-            **{key: step.receipt[key] for key in public_fields if key in step.receipt},
-        }
+        builds[kind] = build_view(step, delivery=True)
     return builds
+
+
+def published_build(project, kind, tag):
+    from .versioning import historical_version
+
+    require(kind in FLAGS, 'artifact-kind-invalid', 400)
+    try:
+        version = historical_version(tag)
+    except ValueError:
+        return None
+    versions = (version, 'v' + version, 'V' + version) if version[:1].isdigit() else (version,)
+    manual = ProjectArtifactBuild.objects.filter(project=project, kind=kind, version__in=versions,
+                                                 state='COMPLETED').order_by('-created', '-pk').first()
+    delivered = GitDeliveryStep.objects.filter(delivery__project=project, key=f'build:{kind}',
+                                               delivery__version__in=versions, state='COMPLETED'
+                                              ).select_related('delivery').order_by('-updated', '-pk').first()
+    if delivered and (not manual or delivered.updated > manual.created):
+        return build_view(delivered, delivery=True)
+    return build_view(manual) if manual else None
 
 
 def snapshot(project):

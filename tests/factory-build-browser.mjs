@@ -47,6 +47,24 @@ const overview=()=>find('dialog[open][aria-label="Overview de construction Docke
   build.click();
   dialog=await wait(()=>overview()?.textContent.includes('Code de sortie17')&&overview(),'Échec sans code de sortie');
   check(dialog.textContent.includes('Construction Docker')&&dialog.textContent.includes('artifact-docker-pull-denied'),'Diagnostic Docker absent');
+  frame.src='/projects/fixture/forges';
+  for(const forge of ['forgejo','github','gitlab']){
+    const card=()=>find('.forge-card-'+forge);
+    const row=label=>[...(card()?.querySelectorAll('dt')||[])].find(dt=>dt.textContent===label)?.nextElementSibling;
+    const docker=await wait(()=>row('Artefact Docker')?.querySelector('button'),'Lien Docker absent '+forge);
+    check(row('Artefact Docker').textContent==='1.0.3, latest','Affichage Docker incorrect '+forge);
+    check(row('Artefact Debian').textContent==='1.0.3','Affichage Debian incorrect '+forge);
+    docker.click();
+    dialog=await wait(overview,'Détail Docker absent '+forge);
+    check(dialog.textContent.includes('build-docker-103')&&dialog.textContent.includes('Version1.0.3'),'Reçu Docker incorrect '+forge);
+    dialog.querySelector('button').click();
+    await wait(()=>!overview(),'Fermeture du détail Docker');
+    const debian=await wait(()=>row('Artefact Debian')?.querySelector('button'),'Lien Debian absent '+forge);
+    debian.click();
+    dialog=await wait(()=>find('dialog[open][aria-label="Overview de construction Debian"]'),'Détail Debian absent '+forge);
+    check(dialog.textContent.includes('build-debian-103'),'Reçu Debian incorrect '+forge);
+    dialog.querySelector('button').click();
+  }
   await send({passed:true});
 })().catch(error=>send({error:error.message}));
 </script>`
@@ -62,6 +80,13 @@ try {
   const assets=new Map()
   for(const name of index.match(/\/assets\/[\w-]+\.(?:css|js)/g))assets.set(name,await readFile(web+name))
   const json=(response,value,status=200)=>response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(value))
+  const forges=['FORGEJO','GITHUB','GITLAB']
+  const sources=Object.fromEntries(forges.map(forge=>[forge,[`https://${forge.toLowerCase()}.invalid`,'fixture','sample']]))
+  const values={PROJECT_DOCKERED:'Yes',PROJECT_DEBIAN_PACKAGE:'Yes',
+    ...Object.fromEntries(forges.flatMap(forge=>['BASE_URL','OWNER','REPOSITORY'].map((field,index)=>[
+      `REMOTE_${forge}_${field}`,sources[forge][index],
+    ]))),
+  }
   let report, requests, build
   server=createServer(async(request,response)=>{
     const path=new URL(request.url,'http://localhost').pathname
@@ -87,17 +112,29 @@ try {
     if(path==='/verification')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(preview)
     if(path==='/api/v1/health')return json(response,{initialized:true,state:'READY',csrf_token:'fixture'})
     if(path==='/api/v1/projects')return json(response,{projects:[{
-      id:'fixture',identifier:'fixture',name:'Projet de recette',root:'/projet',creation_state:'READY',public_metadata:{},
+      id:'fixture',identifier:'fixture',name:'Projet de recette',root:'/projet',creation_state:'READY',public_metadata:{values},
     }]})
     if(path==='/api/v1/projects/fixture/artifacts')return json(response,{
       enabled:{docker:true,debian:false},artifacts:[],builds:build?{docker:build}:{},
     })
+    if(path==='/api/v1/projects/fixture/published-artifacts')return json(response,{jobs:{},rows:forges.map(forge=>({
+      forge,source:sources[forge],
+      artifacts:Object.fromEntries(['docker','debian'].map(kind=>{
+        const item={name:'Nom absent de la carte',published_at:'2026-11-24T12:00:00Z',
+          tags:kind==='docker'?['1.0.3','latest']:['1.0.3']}
+        return [kind,{available:true,latest:item,items:[item]}]
+      })),
+    }))})
+    const versionedBuild=path.match(/^\/api\/v1\/projects\/fixture\/artifacts\/builds\/(docker|debian)\/1\.0\.3$/)
+    if(versionedBuild)return json(response,{build:{request_id:`build-${versionedBuild[1]}-103`,
+      version:'1.0.3',state:'COMPLETED',source:'factory'}})
+    if(path==='/api/v1/sync/forge-artifacts')return json(response,{},503)
     if(path.startsWith('/api/v1/sync/'))return response.writeHead(200,{
       'Content-Type':'application/json','electric-offset':'0_0','electric-handle':'fixture','electric-cursor':'1','electric-schema':'{}',
     }).end(JSON.stringify([{headers:{control:'up-to-date'}}]))
     if(path.startsWith('/api/v1/'))return json(response,{})
     if(assets.has(path))return response.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':'text/css'}).end(assets.get(path))
-    if(path==='/projects/fixture/factory')return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(index)
+    if(['/projects/fixture/factory','/projects/fixture/forges'].includes(path))return response.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(index)
     response.writeHead(404).end()
   }).listen(0,'127.0.0.1')
   await once(server,'listening')
@@ -115,7 +152,7 @@ try {
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
       assert.equal(requests,3)
-      console.log(name+' — Overview rouvert, refus et échec vérifiés.')
+      console.log(name+' — Détails Fabrique et liens des trois forges vérifiés.')
     }finally{
       clearTimeout(timer)
       child.kill()

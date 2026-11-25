@@ -9,7 +9,7 @@ type Kind=typeof types[number][0]
 type Artifact={key:string;kind:Kind;generated_at:string;size:number;filename?:string;package?:string;architecture?:string;version?:string;image?:string;image_id?:string;platform?:string;tags?:string[]}
 type ConfigurationIssue={key:string;line?:number;reason:string}
 type BlockingOperation={id:string;source:'factory'|'publication'|'delivery';state:string;created:string;kind?:Kind;forge?:string;version?:string}
-type Build={
+export type Build={
   state:string;request_id?:string;version?:string;created?:string;error?:string|null
   source?:'factory'|'delivery';delivery_id?:number
   phase?:string;steps?:string[];process_started?:boolean;exit_code?:number
@@ -79,7 +79,7 @@ function ArtifactInformation({artifact}:{artifact:Artifact}){
   </dl>
 }
 
-function BuildOverview({label,build,close}:{label:string;build:Build;close:()=>void}){
+export function BuildOverview({label,build,close}:{label:string;build:Build;close:()=>void}){
   const dialog=useRef<HTMLDialogElement>(null)
   useEffect(()=>{if(dialog.current&&!dialog.current.open)dialog.current.showModal()},[])
   const code=build.error||build.diagnostic?.code

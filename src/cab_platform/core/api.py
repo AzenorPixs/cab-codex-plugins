@@ -636,6 +636,16 @@ def read_project_artifacts(request,project_id:str):
     return snapshot(project)
 
 
+@api.get('/projects/{project_id}/artifacts/builds/{kind}/{tag}')
+def read_published_artifact_build(request, project_id: str, kind: str, tag: str):
+    actor = principal(request)
+    project = Project.objects.filter(pk=project_id).first()
+    commands.require(project is not None, 'project-not-authorized', 403)
+    commands.scope(actor, project)
+    from cab_platform.project_artifacts import published_build
+    return {'build': published_build(project, kind, tag)}
+
+
 @api.get('/projects/{project_id}/published-artifacts')
 def read_published_artifacts(request,project_id:str):
     actor=principal(request)

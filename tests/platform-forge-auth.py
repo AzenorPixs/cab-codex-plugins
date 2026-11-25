@@ -355,6 +355,46 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                         self.assertEqual(release['tag_name'], '1.0.0')
                         mark.assert_called_once()
 
+    def test_manual_push_sends_annotated_tag_to_all_forges_when_branch_is_aligned(self):
+        local = self.workspace / 'envoi'
+        local.mkdir()
+        self.git(local, 'init', '--initial-branch=main')
+        author = ('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org')
+        self.git(local, *author, 'commit', '--allow-empty', '-m', 'ancienne version')
+        self.git(local, 'tag', 'ancien')
+        self.git(local, *author, 'commit', '--allow-empty', '-m', 'version publiée')
+        self.git(local, *author, 'tag', '-a', '1.0.3', '-m', 'annotation')
+        head, tag_object = (self.git(local, 'rev-parse', ref) for ref in ('HEAD', 'refs/tags/1.0.3'))
+        tag = 'refs/tags/1.0.3'
+        project = SimpleNamespace(root=str(local), owner_uid=os.getuid(), public_metadata={'values': {}},
+                                  configuration={'forge_tokens_tpm': {forge: 'chiffré' for forge in forge_auth.FORGES}},
+                                  save=Mock())
+        for forge in forge_auth.FORGES:
+            with self.subTest(forge=forge):
+                self.git(self.workspace, 'init', '--bare', '--initial-branch=main', forge+'.git')
+                url = self.base + '/git/' + forge + '.git'
+                context = (project, forge, 'groupe', os.getgid(), {}, self.git_env)
+                with patch.object(forge_push, 'crypt', return_value=b'jeton-fictif'), \
+                     patch.object(forge_push, 'context', return_value=({}, 'groupe', 'main', url, os.getgid(), {}, self.git_env)), \
+                     patch.object(forge_push.Project.objects, 'get', return_value=project), \
+                     patch.object(forge_push.Project.objects, 'select_for_update', return_value=SimpleNamespace(get=Mock(return_value=project))), \
+                     patch.object(forge_push.transaction, 'atomic', side_effect=nullcontext), \
+                     patch.object(forge_push, 'threading', SimpleNamespace(Thread=Mock())):
+                    pushed = forge_push.remote_git(*context, 'push', url, head+':refs/heads/main')
+                    self.assertEqual(pushed.returncode, 0)
+                    preview = forge_push.prepare('fixture', forge, '8')
+                    self.assertEqual(preview['tags'], [{'name':'1.0.3', 'remote':False}])
+                    self.assertEqual(preview['remote'], head)
+                    forge_push.execute('fixture', forge, '8', preview['nonce'])
+                    self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag:tag_object}, {tag:head}))
+
+                    preview = forge_push.prepare('fixture', forge, '8')
+                    self.git(self.workspace / (forge+'.git'), 'update-ref', tag, head)
+                    with self.assertRaisesRegex(forge_push.Refused, 'forge-push-remote-changed'):
+                        forge_push.execute('fixture', forge, '8', preview['nonce'])
+                    with self.assertRaisesRegex(forge_push.Refused, 'forge-push-tag-conflict'):
+                        forge_push.prepare('fixture', forge, '8')
+
     def test_git_preview_push_and_atomic_sync_over_self_signed_https(self):
         local = self.workspace / 'local'
         local.mkdir()
@@ -572,6 +612,14 @@ class ForgeReconciliationTests(unittest.TestCase):
             forge_sync.execute('projet','GITLAB','7',record['nonce'])
         push.assert_not_called()
         self.assertEqual(self.locked.configuration['forge_sync']['GITLAB']['state'],'READY')
+
+    def test_manual_push_reconciliation_requires_the_tag_objects(self):
+        self.receipt['tags'] = self.tags
+        self.locked.configuration = deepcopy(self.project.configuration)
+        observed = self.patch(forge_sync, 'remote_refs', return_value=(self.head, {}))
+        self.assertEqual(self.reconcile()['error'], 'forge-reconcile-tags-diverged')
+        observed.return_value = (self.head, self.tags)
+        self.assertTrue(self.reconcile()['reconciled'])
 
     def test_running_remains_protected_without_observation(self):
         self.receipt['state'] = 'RUNNING'
