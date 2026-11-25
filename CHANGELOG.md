@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Retirer les pages Archives des menus Projets et Projet. Les sessions archivées sont accessibles dans l’onglet Archivées des pages Sessions.
+
 - Réactiver les publications du projet après vérification de l’absence du tag Docker de version et de `latest` sur un dépôt GitLab accessible, en conservant la tentative précédente.
 
 - Aligner les tags du commit à la confirmation d’« Envoyer » sur les trois forges, en affichant les remplacements. Appliquer le style des liens des cartes aux tags d’artefacts et améliorer la vérification des manifestes et les diagnostics de publication Docker.

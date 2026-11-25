@@ -429,9 +429,9 @@ réconciliés sans retirer IMPORT_PROTECTED, ni toucher aux anciens reçus.
 Le bouton Archiver appelle `session.archive` avec project_id, run_id,
 evaluation_digest et request_id stable. SessionArchive conserve une référence
 unique au RUN, l'identité, les preuves et le reçu ; aucune relation n'est
-supprimée. GET /session-archives et /projects/<ID>/archives présentent les
-sessions archivées du seul projet autorisé. Electric les retire de la liste
-courante grâce à la projection archived. L'archivage d'une session ne déplace
+supprimée. L’API GET /session-archives et l’onglet Archivées des pages Sessions
+présentent les sessions archivées des projets autorisés. Electric les retire
+de la liste courante grâce à la projection archived. L'archivage d'une session ne déplace
 pas le change OpenSpec et ne clôture aucun pair.
 
 ## Accueil des projets et project.env

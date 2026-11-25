@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Consultation des sessions archivées
+
+[remove-standalone-session-archive-pages](openspec/changes/archive/2026-11-25-remove-standalone-session-archive-pages/),
+code non attribué. Les pages Sessions globales et par projet regroupent la
+consultation des archives dans l’onglet Archivées. La recette de l’interface
+contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN remplacé.
+
 ## Tableaux des cycles de session
 
 [show-all-cycle-table-rows](openspec/changes/archive/2026-11-24-show-all-cycle-table-rows/),

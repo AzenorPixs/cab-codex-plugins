@@ -35,7 +35,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   if(query.data.replacement){
     const replacement=query.data.replacement
     return <article className="run-view">
-      <Link to="/projects/$projectId/archives" params={{projectId:routeId||projectId}} className="action-link">← Archives</Link>
+      <Link to="/projects/$projectId/sessions" params={{projectId:routeId||projectId}} search={{status:"archived"}} className="action-link">← Archives</Link>
       <div className="run-heading"><h1>{runId}</h1><span className="badge">{runStateLabel(query.data.state)}</span></div>
       <p>Replacement · <Link to="/projects/$projectId/runs/$runId" params={{projectId:routeId||projectId,runId:replacement.run_id}}>{replacement.run_id}</Link></p>
     </article>

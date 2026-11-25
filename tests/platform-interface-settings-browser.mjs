@@ -31,8 +31,11 @@ try{
   const json=(response,value,headers={})=>response.writeHead(200,{'Content-Type':'application/json',...headers}).end(JSON.stringify(value))
   const preview=`<!doctype html><meta charset="utf-8">
     <iframe width="1920" height="1080" src="/administration/interface"></iframe>
-    <iframe width="1920" height="1080" src="/projects/cab/archives"></iframe>
+    <iframe width="1920" height="1080" src="/projects/cab/sessions?status=archived"></iframe>
     <iframe width="390" height="844" src="/administration/interface"></iframe>
+    <iframe width="1920" height="1080" src="/projects/sessions?status=archived"></iframe>
+    <iframe src="/projects/archives"></iframe>
+    <iframe src="/projects/cab/archives"></iframe>
     <script>
     const report=result=>fetch('/observation',{method:'POST',body:JSON.stringify(result)});
     function check(test,description){if(!test)throw Error(description)}
@@ -53,7 +56,20 @@ try{
       await wait(()=>!doc.querySelector('.interface-field-help[open]'),'Fermeture de l’aide');
     }
     (async()=>{
-      const [admin,archive,mobile]=[...document.querySelectorAll('iframe')];
+      const [admin,archive,mobile,globalArchives,oldGlobal,oldProject]=[...document.querySelectorAll('iframe')];
+      const archiveTab='nav[aria-label="État des sessions"] [aria-current="page"]';
+      const firstRun='a[href="/projects/cab/runs/RUN-1"]';
+      for(const [frame,menu] of [[archive,'Projet'],[globalArchives,'Projets']]){
+        await wait(()=>frame.contentDocument?.querySelector(firstRun),'Sessions archivées ('+menu+')');
+        const doc=frame.contentDocument;
+        check(doc.querySelector(archiveTab)?.textContent==='Archivées','Onglet Archivées sélectionné');
+        check(![...doc.querySelectorAll('nav[aria-label="'+menu+'"] a')].some(link=>link.textContent==='Archives'),'Entrée Archives retirée ('+menu+')');
+      }
+      check(globalArchives.contentDocument.querySelector('td[data-label="Projets"] a')?.getAttribute('href')==='/projects/cab','Lien du projet dans les archives globales');
+      for(const [frame,message] of [[oldGlobal,'Projet introuvable'],[oldProject,'Not Found']]){
+        await wait(()=>frame.contentDocument?.body?.textContent.includes(message),'Ancienne adresse sans page Archives : '+message);
+        check(!frame.contentDocument.querySelector('.monitor-table'),'Aucun tableau d’archives à l’ancienne adresse');
+      }
       const expected=['Blocs','Colonnes','Général','Menus','Résolutions','Tableaux','Titres','Top barre'];
       for(const frame of [admin,mobile]){
         await wait(()=>frame.contentDocument?.querySelector('[role="tab"][aria-selected="true"]'),'Onglets absents');
@@ -202,7 +218,8 @@ try{
       check(search.previousElementSibling.textContent==='Dernier','Recherche à droite de Dernier');
       check(search.offsetLeft>search.previousElementSibling.offsetLeft,'Position visuelle de la recherche');
       await wait(()=>archiveRows().length===10,'Première page limitée à dix lignes');
-      navigation.querySelector('button:nth-of-type(3)').click();
+      const next=await wait(()=>[...navigation.querySelectorAll('button')].find(button=>button.textContent==='Suivant'&&!button.disabled),'Bouton Suivant disponible');
+      next.click();
       await wait(()=>pagination()?.includes('2 / 3'),'Navigation vers la deuxième page');
       edit(search,'RUN-30');
       await wait(()=>pagination()?.includes('1 / 1')&&archiveRows()[0]?.textContent.includes('RUN-30'),'Recherche avant pagination');
@@ -210,6 +227,11 @@ try{
       edit(search,'introuvable');
       await wait(()=>archiveRows()[0]?.textContent.includes('Aucun résultat'),'Recherche sans résultat');
       check(archiveRows().length===3&&navigation.querySelectorAll('button:disabled').length===4,'Tableau vide avec trois lignes et navigation');
+      globalArchives.contentDocument.querySelector(firstRun).click();
+      const back=await wait(()=>globalArchives.contentDocument.querySelector('.run-view a.action-link'),'Retour aux archives depuis le RUN remplacé');
+      check(back.getAttribute('href')==='/projects/cab/sessions?status=archived','Retour vers l’onglet Archivées du projet');
+      back.click();
+      await wait(()=>globalArchives.contentDocument.querySelector(archiveTab)?.textContent==='Archivées','Retour effectif dans les archives du projet');
       await report({passed:true});
     })().catch(error=>report({error:error.message}));
     </script>`
@@ -254,6 +276,7 @@ try{
         })
       }
       if(path==='/api/v1/projects')return json(response,{projects:[{id:'fixture-cab',identifier:'cab',name:'CAB',creation_state:'READY',root:'/fixture/cab',version:'3.5.0'}]})
+      if(path==='/api/v1/run')return json(response,{state:'CANCELLED_BEFORE_START',replacement:{run_id:'replacement'}})
       if(path==='/api/v1/session-archives'){
         const pageSize=Number(url.searchParams.get('page_size'))
         archivedSizes.add(pageSize)
@@ -289,7 +312,7 @@ try{
   await closed
   assert.equal(result.passed,true,result.error||'Résultat Chromium absent')
   assert.deepEqual(archivedSizes,new Set([10,5]),'Modification de la pagination sans rechargement')
-  console.log('Chromium : huit onglets, six résolutions, navigation au clavier et persistance isolée Full HD/4K/mobile, avec projection Electric.')
+  console.log('Chromium : interface et projection Electric, retrait des pages Archives et navigation des sessions archivées.')
 }finally{
   server?.closeAllConnections()
   server?.close()
