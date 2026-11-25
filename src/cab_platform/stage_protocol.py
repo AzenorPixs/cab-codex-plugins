@@ -2,7 +2,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .change_stage_metrics import PUBLICATION_KEYS, LABELS, number_for, finish_iteration
+from .change_stage_metrics import LABELS, keys_for, number_for, finish_iteration, statistics_at_closure
 from .core import commands as c
 from .core.models import ChangeStageIteration, Event, FinalizationPlan, GitDelivery, Operation, Run
 
@@ -98,15 +98,16 @@ def _begin(actor, data):
     if prior:
         return prior
     stage, description = data['stage'], _description(data)
-    c.require(type(stage) is int and 1 <= stage <= len(PUBLICATION_KEYS),'run-stage-invalid',400)
-    name = PUBLICATION_KEYS[stage-1]
+    keys = keys_for(run)
+    c.require(type(stage) is int and 1 <= stage <= len(keys),'run-stage-invalid',400)
+    name = keys[stage-1]
     c.require(name=='publication' or not ({'version','scope'} & set(data)),'stage-delivery-fields-invalid',400)
     protocol = run.configuration[KEY]
     previous = protocol.get('current')
     restart=data.get('restart',False)
     c.require(type(restart) is bool and (not restart or previous and previous['stage']==stage),'stage-restart-invalid',400)
     again = transition(previous,stage,restart=restart)
-    if name in ('implementation','verification','review','archival','statistics','publication','closure'):
+    if name in ('implementation','verification','review','archival','statistics','vacant','publication','closure'):
         from .version_skill import require_acknowledged
         require_acknowledged(run)
     active = dict(protocol.get('active', {}))
@@ -121,7 +122,7 @@ def _begin(actor, data):
             from .stage_substeps import phase
             phase(run,'publication',publication['reference'],'CANCELLED',{'reason':'agent-return'})
         kept = {index:value for index,value in active.items() if int(index) < stage}
-        if frozen(run) and stage <= number_for(run,'statistics'):
+        if frozen(run) and stage <= (11 if statistics_at_closure(run) else number_for(run,'statistics')):
             from .phase_statistics import result_for
             c.require(result_for(run)['state'] not in ('PENDING','RUNNING','UNKNOWN')
                       and not GitDelivery.objects.filter(run=run,state__in=('PENDING','RUNNING','UNKNOWN')).exists(),
@@ -134,7 +135,7 @@ def _begin(actor, data):
         c.require(not report or report['state'] not in ('RUNNING','PENDING','DISPATCHING','UNKNOWN'),
                   'stage-restart-effects-protected')
     if previous and (previous['stage'] != stage or again):
-        old = ChangeStageIteration.objects.filter(run=run,stage__key=PUBLICATION_KEYS[previous['stage']-1],
+        old = ChangeStageIteration.objects.filter(run=run,stage__key=keys[previous['stage']-1],
             parent__isnull=True,asynchronous=False,ended_at__isnull=True).first()
         if old:
             finish_iteration(old,timezone.now(),'stage-returned' if again else 'stage-transition',
@@ -171,8 +172,10 @@ def _begin(actor, data):
             delivery_version_selection(run.actor,run,version)
         target = _plan(run).get('target_version')
         c.require(not target or target==version,'stage-delivery-version-divergent')
-        from .publication_boundary import KEY as BOUNDARY, frozen
+        from .publication_boundary import KEY as BOUNDARY, frozen, prepare
         from .stage_substeps import phase
+        if statistics_at_closure(run) and not frozen(run):
+            prepare(run,publication=None)
         c.require(frozen(run),'stage-statistics-not-started')
         reference='publication-stage-'+str(attempt)
         run.configuration={**run.configuration,BOUNDARY:{**run.configuration[BOUNDARY],'publication_ref':reference}}
@@ -197,7 +200,7 @@ def _begin(actor, data):
             row.description_source='agent'
             row.save(update_fields=['description','description_source'])
     _save(run,updated)
-    result={'text':f'{"Retour" if again else "Début"} à l’étape {stage}/{len(PUBLICATION_KEYS)} — {LABELS[name]}. {description}',
+    result={'text':f'{"Retour" if again else "Début"} à l’étape {stage}/{len(keys)} — {LABELS[name]}. {description}',
             'stage':stage,'attempt':attempt,'cab':dict(entry['cab']),'reports':reports(run)}
     c.event(run,'stage-agent-started',{'request_id':key,'digest':fingerprint,'actor':actor.pk,'result':result})
     return result
@@ -267,7 +270,7 @@ def validate(actor, data):
     current=protocol.get('current')
     c.require(current and type(data['attempt']) is int and current['attempt']==data['attempt']
               and not current['validated'],'stage-attempt-not-current')
-    name=PUBLICATION_KEYS[current['stage']-1]
+    name=keys_for(run)[current['stage']-1]
     if name=='initialization' and protocol.get('mandate_confirmation'):
         from .stage_actions import mandates_validated
         if not mandates_validated(run,current['attempt']):
@@ -300,12 +303,15 @@ def validate(actor, data):
     old=ChangeStageIteration.objects.filter(run=run,stage__key=name,parent__isnull=True,
             asynchronous=False,ended_at__isnull=True).first()
     if old and name!='closure':
-        finish_iteration(old,timezone.now(),'agent-validated')
+        finish_iteration(old,timezone.now(),'agent-validated',state='SKIPPED' if name=='vacant' else 'COMPLETED')
     current={**current,'validated':True}
     active={**protocol['active'],str(current['stage']):current}
     _save(run,{**protocol,'active':active,'current':current})
     result={'validated':True,'stage':current['stage'],'attempt':current['attempt'],
             'text':f'Étape {current["stage"]} validée par l’agent. {description}','reports':reports(run)}
+    if name=='closure' and statistics_at_closure(run):
+        result['native_end_required']=True
+        result['text']+=' Terminer le tour de codage pour que CAB collecte la télémétrie et clôture le RUN.'
     c.event(run,'stage-agent-validated',{'request_id':key,'digest':fingerprint,'actor':actor.pk,'result':result})
     return result
 

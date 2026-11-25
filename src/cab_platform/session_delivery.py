@@ -334,7 +334,7 @@ def include_change_statistics(project,index,options,env,own_env):
     return reports
 
 
-def preflight_commit(project,index,version,reservations,*,complete=False,existing_tag=None,separate_reports=False):
+def preflight_commit(project,index,version,reservations,*,complete=False,existing_tag=None,separate_reports=False,include_reports=False):
     """Vérifications Git en lecture seule avant toute mutation de version."""
     import os,stat
     from pathlib import Path
@@ -347,17 +347,21 @@ def preflight_commit(project,index,version,reservations,*,complete=False,existin
     expected=str(gitdir/'cab-session-index'/(token+'.index'))
     require(index.index_path==expected,'session-delivery-index-invalid',409)
     index_digest=_index_digest(expected,project.owner_uid)
+    branch,head=_head(project,options,env)
+    reports={}
+    if include_reports:
+        from .delivery_scope import capture_full, publication_report
+        reports['publication_reports']={'snapshot':capture_full(project,index,options,env,head,gitdir,reports_only=True)}
     if complete:
         from .delivery_scope import capture_full
-        branch,head=_head(project,options,env)
         selected=capture_full(project,index,options,env,head,gitdir,exclude_reports=separate_reports)
         tag=_git(project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version)
         require(tag.returncode==1 if existing_tag is None else _git(project,options,env,'rev-parse','refs/tags/'+version).stdout.decode().strip()==existing_tag,'session-delivery-tag-exists',409)
-        return {'head':head,'branch':branch,'index_digest':index_digest,'paths':selected['paths'],'full':selected}
+        return {'head':head,'branch':branch,'index_digest':index_digest,'paths':selected['paths'],'full':selected,**reports}
     snap=git_snapshot(project,expected)
     dirty=unstaged_code_paths(snap)
+    if include_reports:dirty={path for path in dirty if not publication_report(path)}
     require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
-    branch,head=_head(project,options,env)
     names=_changed_paths(project,options,{**env,'GIT_INDEX_FILE':expected},index.base_head)
     require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
     if separate_reports:
@@ -366,14 +370,15 @@ def preflight_commit(project,index,version,reservations,*,complete=False,existin
         require(names,'session-delivery-empty',409)
     staged=_changed_paths(project,options,env,head)
     from .session_git import shared_index_allowed
-    require(shared_index_allowed(project,options,env,[path for path in names if not managed_statistics_path(path)],staged,index.origin.get('adoption')),'session-delivery-shared-index-conflict',409)
+    system_paths=set((reports.get('publication_reports',{}).get('snapshot') or {}).get('paths',[]))
+    require(shared_index_allowed(project,options,env,[path for path in names if not managed_statistics_path(path) and path not in system_paths],staged,index.origin.get('adoption')),'session-delivery-shared-index-conflict',409)
     unmerged=_git(project,options,env,'ls-files','--unmerged','-z')
     require(unmerged.returncode==0 and not unmerged.stdout,'session-delivery-shared-index-conflict',409)
     tag=_git(project,options,env,'show-ref','--verify','--quiet','refs/tags/'+version)
     require(tag.returncode in (0,1),'session-delivery-tag-invalid',409)
     require(tag.returncode==1 if existing_tag is None else _git(project,options,env,'rev-parse','refs/tags/'+version).stdout.decode().strip()==existing_tag,'session-delivery-tag-exists',409)
     require(_index_digest(expected,project.owner_uid)==index_digest,'session-delivery-index-changed',409)
-    return {'head':head,'branch':branch,'index_digest':index_digest,'paths':names}
+    return {'head':head,'branch':branch,'index_digest':index_digest,'paths':names,**reports}
 
 
 def include_global_statistics(project,options,env,own_env):
@@ -405,7 +410,7 @@ def include_global_statistics(project,options,env,own_env):
     return {'sha256':sha,'entry_digest':snapshot}
 
 
-def prepare_commit(project, index, version, reservations, *, full=None,tag_mode='create',expected_tag='',message='Mise à jour du projet',separate_reports=False):
+def prepare_commit(project, index, version, reservations, *, full=None,tag_mode='create',expected_tag='',message='Mise à jour du projet',separate_reports=False,publication_reports=None):
     """Construit le commit et l'index commun temporaire sans déplacer de référence."""
     import os,stat
     from pathlib import Path
@@ -423,6 +428,9 @@ def prepare_commit(project, index, version, reservations, *, full=None,tag_mode=
     index_digest=_index_digest(expected,project.owner_uid)
     if full is None:
         dirty=unstaged_code_paths(git_snapshot(project,expected))
+        if publication_reports is not None:
+            from .delivery_scope import publication_report
+            dirty={path for path in dirty if not publication_report(path)}
         require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
     gitdir=_gitdir(project,options,env)
     _hooks_supported(project,options,env,gitdir)
@@ -478,9 +486,25 @@ def prepare_commit(project, index, version, reservations, *, full=None,tag_mode=
                     added=_git(project,options,own_env,'update-index','--add','--cacheinfo',mode+','+oid+','+path)
                 else:added=_git(project,options,own_env,'update-index','--force-remove','--',path)
                 require(added.returncode==0,'session-delivery-index-invalid')
-        system_reports=[] if separate_reports else include_change_statistics(project,index,options,env,own_env)
+        if publication_reports is not None:
+            from .delivery_scope import capture_full, index_entries, write_entries
+            snapshot=capture_full(project,index,options,env,head,gitdir,reports_only=True)
+            require(snapshot==publication_reports['snapshot'],'session-delivery-reports-changed',409)
+            system_reports=[]
+            if snapshot:
+                from .session_git import shared_scope_digest
+                paths=snapshot['paths']
+                report_env={**env,'GIT_INDEX_FILE':own_index}
+                report_index=_temp_index(os.path.dirname(expected),project);temporary.append(report_index);os.unlink(report_index)
+                report_env['GIT_INDEX_FILE']=report_index
+                require(_git(project,options,report_env,'read-tree',snapshot['tree']).returncode==0,'session-delivery-index-invalid',409)
+                contents=index_entries(_git,project,options,report_env,set(paths))
+                write_entries(_git,project,options,own_env,{p:contents.get(p) for p in paths},len(head))
+                system_reports=[{'path':p,'entry_digest':shared_scope_digest(project,options,env,[p])} for p in paths]
+        else:
+            system_reports=[] if separate_reports else include_change_statistics(project,index,options,env,own_env)
         names=list(dict.fromkeys([*names,*[report['path'] for report in system_reports]]))
-        global_statistics=None if separate_reports else include_global_statistics(project,options,env,own_env)
+        global_statistics=None if separate_reports or publication_reports is not None else include_global_statistics(project,options,env,own_env)
         if global_statistics and 'STATISTICS.md' not in names:names=[*names,'STATISTICS.md']
         from .git_commit_remove import OID
         tree=_git(project,options,own_env,'write-tree')
@@ -660,7 +684,7 @@ def _finish_shared_index(shared):
     finally:os.close(fd)
 
 
-def commit_session(actor, data, *, full=None,tag_mode='create',expected_tag='',message='Mise à jour du projet',separate_reports=False):
+def commit_session(actor, data, *, full=None,tag_mode='create',expected_tag='',message='Mise à jour du projet',separate_reports=False,publication_reports=None):
     """Crée commit et tag d'une session sans incorporer l'index des autres."""
     import os
     from django.db import DatabaseError,connection,transaction
@@ -673,7 +697,7 @@ def commit_session(actor, data, *, full=None,tag_mode='create',expected_tag='',m
     request_id=identifier(data['request_id']);version=data['version'];version_tuple(version)
     expected_digest=data.get('expected_index_digest','')
     require(isinstance(expected_digest,str) and (not expected_digest or re.fullmatch(r'[a-f0-9]{64}',expected_digest)),'session-delivery-index-invalid',400)
-    fingerprint=digest({'operation':'commit','version':version,'expected_index_digest':expected_digest,**({'full':full} if full is not None else {}),**({'tag_mode':tag_mode,'expected_tag':expected_tag,'message':message} if tag_mode!='create' else {})})
+    fingerprint=digest({'operation':'commit','version':version,'expected_index_digest':expected_digest,**({'full':full} if full is not None else {}),**({'tag_mode':tag_mode,'expected_tag':expected_tag,'message':message} if tag_mode!='create' else {}),**({'publication_reports':publication_reports} if publication_reports is not None else {})})
     with connection.cursor() as cursor:cursor.execute('SELECT pg_advisory_lock(%s,%s)',[7348501,7348502])
     effect=None;plan=None;shared=None;dispatched=False
     try:
@@ -695,7 +719,8 @@ def commit_session(actor, data, *, full=None,tag_mode='create',expected_tag='',m
             index.state='COMMITTING';index.save(update_fields=['state','updated'])
             project=current.project
             event(current,'git-session-commit-started',{'request_id':request_id,'version':version})
-        plan=prepare_commit(project,index,version,reservations,full=full,tag_mode=tag_mode,expected_tag=expected_tag,message=message,separate_reports=separate_reports)
+        report_options={'publication_reports':publication_reports} if publication_reports is not None else {}
+        plan=prepare_commit(project,index,version,reservations,full=full,tag_mode=tag_mode,expected_tag=expected_tag,message=message,separate_reports=separate_reports,**report_options)
         options,env=context(project)
         shared=_prepare_shared_index(project,options,env,plan)
         with transaction.atomic():
@@ -1126,11 +1151,11 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     reservations=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True))
     require(reservations,'session-git-reservation-required',409)
     modern=run.configuration.get('cycle_profile')=='publication-12-v1'
-    if complete:
-        with git_guard():
-            git_plan=preflight_commit(run.project,index,version,reservations,complete=True,separate_reports=modern)
-    else:
-        git_plan=preflight_commit(run.project,index,version,reservations,separate_reports=modern)
+    from .change_stage_metrics import statistics_at_closure
+    deferred=statistics_at_closure(run)
+    with (git_guard() if complete or deferred else nullcontext()):
+        git_plan=preflight_commit(run.project,index,version,reservations,complete=complete,
+                                  separate_reports=modern and not deferred,include_reports=deferred)
     current_revision=revision(run)
     validations=Operation.objects.filter(run=run,state='COMPLETED',source_revision=current_revision).order_by('-updated')[:50]
     require(any(op.receipt.get('exit_code')==0 and (op.request.get('phase') in ('test','verify','verification') or isinstance(op.request.get('host_authorization'),dict)) for op in validations),'session-git-validation-required',409)
@@ -1167,9 +1192,10 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
             require(revision(current)==current_revision,'session-delivery-source-changed',409)
             if modern:
                 from .publication_boundary import prepare
-                boundary=prepare(current,commit_reports=True)
-                plan['statistics_job']=boundary['statistics_job']
-                plan['separate_reports']=True
+                boundary=prepare(current,commit_reports=not deferred)
+                if not deferred:
+                    plan['statistics_job']=boundary['statistics_job']
+                    plan['separate_reports']=True
                 plan['publication_ref']=boundary['publication_ref']
             delivery,created=GitDelivery.objects.get_or_create(project_id=current.project_id,run=current,version=version,defaults={'git_index':locked_index,'state':'PENDING','executor':executor,'plan':plan,'origin':{'run_id':current.run_id,'session_id':current.session_id}})
             if not created:
@@ -1318,10 +1344,11 @@ def _delivery_worker(delivery_id):
         _set_step(delivery_id,'commit','RUNNING')
         try:
             commit_request={'project_id':project.pk,'run_id':run.run_id,'request_id':'delivery-'+str(delivery_id)+'-commit','version':version,'expected_index_digest':plan['git']['index_digest']}
+            report_options={key:plan['git'][key] for key in ('publication_reports',) if key in plan['git']}
             if plan.get('scope')=='project':
-                receipt=commit_session(run.actor,commit_request,full=plan['git']['full'],separate_reports=plan.get('separate_reports',False))
+                receipt=commit_session(run.actor,commit_request,full=plan['git']['full'],separate_reports=plan.get('separate_reports',False),**report_options)
             else:
-                receipt=commit_session(run.actor,commit_request,separate_reports=plan.get('separate_reports',False))
+                receipt=commit_session(run.actor,commit_request,separate_reports=plan.get('separate_reports',False),**report_options)
         except Refused as error:
             uncertain=error.code in ('session-delivery-result-unknown','session-git-effect-unresolved')
             _set_step(delivery_id,'commit','UNKNOWN' if uncertain else 'FAILED',{'error':error.code})
@@ -1405,7 +1432,7 @@ def _continue_after_commit(delivery_id,receipt):
         _set_step(delivery_id,key,'RUNNING')
         def before_build(value):
             _update_step_receipt(delivery_id,key,value)
-        build_options={'reference':receipt['commit']} if plan.get('separate_reports') else {}
+        build_options={'reference':receipt['commit']} if plan.get('publication_ref') else {}
         try:built=execute_native_build(project,kind,version,before_build,**build_options)
         except Refused as error:
             uncertain=error.code=='session-delivery-artifact-outcome-uncertain'

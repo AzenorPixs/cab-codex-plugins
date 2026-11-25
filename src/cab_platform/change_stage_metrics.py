@@ -18,6 +18,7 @@ STAGE_KEYS = LEGACY_KEYS[:5] + ('version-skill',) + LEGACY_KEYS[5:]
 PROFILE='publication-12-v1'
 PUBLICATION_KEYS=('initialization','analysis','framing','specification','version-skill','implementation','verification','review','archival','statistics','publication','closure')
 LABELS={'initialization':'Initialisation et Prévol','analysis':'Analyse','framing':'Cadrage','specification':'Spécification','version-skill':'Versionning','implementation':'Implémentation','verification':'Vérifications','review':'Revue','archival':'Archivage','statistics':'Statistiques','publication':'Publication','closure':'Clôture'}
+LABELS['vacant']='Vacante'
 OLD_LABELS={**LABELS,'initialization':'Initialisation','preflight':'Prévol','version-skill':'Lecture du skill Version'}
 STOP_STATES = frozenset({
     'BLOCKED', 'BLOCKING', 'CANCELLED_BEFORE_START', 'CLOSED', 'CLOSURE_INVALID',
@@ -39,13 +40,20 @@ TRANSITIONS = frozenset({
 })
 
 
+def statistics_at_closure(run: Run) -> bool:
+    return run.configuration.get('statistics_at_closure') is True
+
+
 def keys_for(run: Run) -> tuple[str, ...]:
+    if statistics_at_closure(run):
+        return (*PUBLICATION_KEYS[:9], 'vacant', *PUBLICATION_KEYS[10:])
     if run.configuration.get('cycle_profile')==PROFILE:return PUBLICATION_KEYS
     return STAGE_KEYS if run.cycle_steps == len(STAGE_KEYS) else LEGACY_KEYS
 
 
 def number_for(run: Run, key: str) -> int:
     if key=='preflight' and run.configuration.get('cycle_profile')==PROFILE:key='initialization'
+    if key=='statistics' and statistics_at_closure(run):key='closure'
     return keys_for(run).index(key) + 1
 
 

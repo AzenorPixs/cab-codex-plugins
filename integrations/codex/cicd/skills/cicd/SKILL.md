@@ -41,15 +41,13 @@ champ de tag par défaut, CAB utilise PROJECT_VERSION sans préfixe ajouté.
 Une saisie nouvelle préfixée est refusée ; les lectures historiques restent
 compatibles. Les anciennes références ne sont pas renommées automatiquement.
 
-Après la livraison du code, la clôture CAB attend le commit des statistiques
-finales et de BLOCKERS.md éventuel, puis ses envois confirmés. Une session
-bloquée conserve son change ouvert et son code non livré. Lire le reçu terminal
-avant de rendre la main ; FAILED et UNKNOWN ne sont pas des clôtures réussies.
-
-Le moteur CAB déplace automatiquement le tag de version sans v sur le dernier
-commit de clôture des statistiques et de BLOCKERS.md éventuel. La branche et
-le tag sont envoyés atomiquement et vérifiés. Ce comportement est dans le code
-CAB ; le LLM ne déplace pas le tag et ne réalise aucun commit ou push parallèle.
+Pour les RUN à étape 10 vacante, le commit de Publication intègre les
+STATISTICS.md et BLOCKERS.md admissibles déjà présents dans le projet. Son tag
+de version identifie le commit livré. En Clôture, suivre le signal
+`native_end_required` du skill CAB. Une fois le tour terminé, CAB génère
+localement les rapports finaux du change et du projet, puis clôture le RUN.
+Les RUN précédents suivent le profil enregistré avec leur propre politique
+statistique. Un change bloqué conserve son état et ses preuves.
 
 Pour un RUN à douze étapes, appliquer le skill **Version** après la
 spécification. Le codeur choisit puis appelle `version_propose` après

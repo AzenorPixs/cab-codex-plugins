@@ -165,3 +165,67 @@ class ProtocolTests(unittest.TestCase):
             self.assertTrue(self.validate(12)['validated'])
         self.run.refresh_from_db()
         self.assertEqual(protocol.close_missing(self.run),[])
+
+    def test_vacant_stage_is_timestamped_without_a_statistics_job(self):
+        from cab_platform.change_stage_metrics import stage_names
+        from cab_platform.core.models import ChangeStageIteration, StatisticsJob
+        self.run.configuration['statistics_at_closure']=True
+        self.run.stage=9
+        prior={'stage':9,'attempt':9,'validated':True,'cab':{'state':'NOT_REQUIRED'}}
+        self.run.configuration[protocol.KEY].update(current=prior,active={'9':prior},sequence=9)
+        self.run.save(update_fields=['configuration','stage'])
+        with patch('cab_platform.version_skill.require_acknowledged'):
+            vacant=self.begin(10)
+            self.assertEqual(vacant['cab']['state'],'NOT_REQUIRED')
+            self.assertTrue(self.validate(vacant['attempt'])['validated'])
+        row=ChangeStageIteration.objects.get(run=self.run,stage__key='vacant')
+        self.assertEqual(row.state,'SKIPPED')
+        self.assertIsNotNone(row.started_at)
+        self.assertIsNotNone(row.ended_at)
+        self.assertFalse(row.children.exists())
+        self.assertFalse(StatisticsJob.objects.filter(project=self.project).exists())
+        self.assertEqual(stage_names(self.run)[9:],['Vacante','Publication','Clôture'])
+
+    def test_closure_waits_for_native_end_then_writes_change_and_global_without_commit(self):
+        from django.utils import timezone
+        from cab_platform.core import run_finalization
+        from cab_platform.core.models import ChangeStageIteration, Event
+        from cab_platform.core.monitor import ensure_records
+
+        archive=self.root/'openspec/changes/archive/2026-11-22-fixture'
+        archive.mkdir(parents=True)
+        (archive/'proposal.md').write_text('# Fixture\n')
+        (archive/'tasks.md').write_text('- [x] Fini\n')
+        ensure_records(self.run)
+        self.run.refresh_from_db()
+        self.plan.digest=c.digest(self.plan.policy)
+        self.plan.save(update_fields=['digest'])
+        self.run.configuration['statistics_at_closure']=True
+        self.run.stage=11
+        active={str(i):{'stage':i,'attempt':i,'validated':True,'cab':{'state':'NOT_REQUIRED'}} for i in range(1,12)}
+        self.run.configuration[protocol.KEY].update(current=active['11'],active=active,sequence=11)
+        self.run.save(update_fields=['configuration','stage'])
+        with patch('cab_platform.version_skill.require_acknowledged'):
+            close=self.begin(12)
+            self.assertTrue(self.validate(close['attempt'])['validated'])
+        with patch('cab_platform.measurement_sources.native_work_time',return_value=None):
+            with self.assertRaisesRegex(c.Refused,'closure-native-coding-end-pending'):
+                run_finalization.process(self.run.pk)
+        self.assertFalse((archive/'STATISTICS.md').exists())
+        self.assertFalse((self.root/'STATISTICS.md').exists())
+        finished=timezone.now()
+        native=((self.run.created,[(self.run.created,finished)],[],[],[]),[(finished,'last',(21,17,13,11))])
+        with patch('cab_platform.measurement_sources.native_work_time',return_value=native), \
+             patch('cab_platform.closure_git.complete') as git_closure:
+            receipt=run_finalization.process(self.run.pk)
+            git_closure.assert_not_called()
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.state,'CLOSED')
+        self.assertIsNotNone(receipt['statistics']['global_sha256'])
+        self.assertIn('| 21 | 17 | 13 | 11 |',(archive/'STATISTICS.md').read_text())
+        self.assertTrue((self.root/'STATISTICS.md').is_file())
+        stages=ChangeStageIteration.objects.filter(run=self.run,parent__stage__key='closure').order_by('started_at')
+        keys=list(stages.values_list('stage__key',flat=True))
+        self.assertLess(keys.index('closure.collect-final-telemetry'),keys.index('closure.calculate-change'))
+        self.assertLess(keys.index('closure.calculate-change'),keys.index('closure.calculate-global'))
+        self.assertEqual(Event.objects.filter(run=self.run,kind='native-coding-ended').count(),1)

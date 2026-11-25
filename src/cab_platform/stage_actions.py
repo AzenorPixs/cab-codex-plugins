@@ -3,7 +3,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .change_stage_metrics import PUBLICATION_KEYS, finish_iteration, refresh_total
+from .change_stage_metrics import keys_for, finish_iteration, refresh_total
 from .core import commands as c
 from .core.models import ChangeStage, ChangeStageIteration, Event, Operation, Run
 from .logging import redact
@@ -214,7 +214,8 @@ def observe_event(event):
         result=event.data.get('result',{})
         current=_current(run)
         if result.get('attempt')==current.get('attempt') and current.get('stage'):
-            name=PUBLICATION_KEYS[current['stage']-1]
+            name=keys_for(run)[current['stage']-1]
+            if name=='vacant':return
             _simple(run,event,('validation-agent','Étape validée par l’agent',name),'agent',latest=True)
     else:
         definition=CAB_EVENTS.get(event.kind) or AGENT_EVENTS[event.kind]
@@ -247,7 +248,8 @@ def declare(actor,data):
               'run-not-active')
     c.require(type(data['attempt']) is int and data['attempt']==current.get('attempt') and not current.get('validated'),
               'stage-attempt-not-current')
-    name=PUBLICATION_KEYS[current['stage']-1]
+    name=keys_for(run)[current['stage']-1]
+    c.require(name!='vacant','stage-action-not-allowed',400)
     action=data['action']
     c.require(isinstance(action,str) and (action in AGENT_ACTIONS[name] or action=='blocage'),'stage-action-not-allowed',400)
     at=timezone.now()
@@ -282,7 +284,7 @@ def catalogue(actor,data):
     current=_current(run)
     name=_stage_name(run)
     options=dict(AGENT_ACTIONS.get(name,{}))
-    if name:options['blocage']='Bilan de blocage rédigé'
+    if name and name!='vacant':options['blocage']='Bilan de blocage rédigé'
     return {'stage':name,'attempt':current.get('attempt'),'agent_actions':options,
             'mandates':mandates_for(run)}
 

@@ -7,25 +7,25 @@ Séparer les statistiques du travail du journal opérationnel de publication et 
 ## Requirements
 
 ### Requirement: Cycle Publication versionné à12 étapes
-CAB MUST créer les nouveaux cycles avec Initialisation/Prévol fusionnés, Analyse, Cadrage, Spécification, Versionning, Implémentation, Vérifications, Revue, Archivage, Statistiques, Publication puis Clôture. CAB MUST préserver la définition des anciens RUN.
+CAB MUST créer les nouveaux cycles avec Initialisation/Prévol fusionnés, Analyse, Cadrage, Spécification, Versionning, Implémentation, Vérifications, Revue, Archivage, Vacante, Publication puis Clôture. CAB MUST conserver le profil et les numéros des anciens RUN.
 
 #### Scenario: Nouvelle session et session historique
 - **WHEN** un nouveau RUN est créé après activation
-- **THEN** son cycle utilise Publication11 et Clôture12 ; les numéros historiques ne sont pas réinterprétés.
+- **THEN** son étape 10 est vacante, sa Publication est à l’étape 11 et sa Clôture à l’étape 12. Les passages historiques gardent leurs numéros et libellés du profil enregistré.
 
 ### Requirement: Statistiques gelées avant publication
-CAB MUST inclure l'archivage dans les mesures puis figer les statistiques avant les commits, envois, générations et publications d'artefacts. CAB MUST conserver les reçus et durées opérationnels sans les ajouter aux statistiques gelées.
+Pour les RUN du profil précédent, CAB MUST inclure l’archivage dans les mesures puis figer les statistiques avant les commits, envois, générations et publications d’artefacts. CAB MUST conserver les reçus et durées opérationnels hors des statistiques gelées du profil précédent. Pour les nouveaux RUN, la Publication fige les sources et la collecte native continue jusqu’à la fin attestée du travail.
 
 #### Scenario: Build et publication après archivage
-- **WHEN** les mesures sont figées à l'étape10
-- **THEN** les opérations des étapes11 et12 ne modifient pas leurs valeurs, même pendant leur suivi ou une reprise.
+- **WHEN** les mesures d’un RUN du profil précédent sont figées à l’étape 10
+- **THEN** les opérations des étapes 11 et 12 ne modifient pas leurs valeurs, même pendant leur suivi ou une reprise.
 
 ### Requirement: Projet immuable pendant Publication et Clôture
-CAB MUST figer les fichiers du projet avant Publication. Les constructions MUST utiliser un espace isolé et les artefacts MUST être conservés hors des sources. Publication et Clôture ne MUST réécrire ni versions, ni code, ni spécifications, ni rapports. Une correction de source MUST revenir à l'étape de travail appropriée puis être qualifiée avant une nouvelle publication.
+CAB MUST figer les sources avant publication. Les constructions MUST utiliser un espace isolé et les artefacts MUST être conservés hors des sources. Publication et Clôture MUST préserver le code et les spécifications. Pour le nouveau profil, la Clôture peut écrire localement les rapports statistiques. Une correction de source MUST revenir à l’étape de travail appropriée puis être qualifiée avant une nouvelle publication.
 
 #### Scenario: Remédiation nécessitant une correction
 - **WHEN** un build échoue et une modification de source est nécessaire
-- **THEN** une nouvelle itération de travail est ouverte avant écriture ; les reçus et durées précédents sont conservés, et le temps de publication reste hors des mesures de travail.
+- **THEN** une nouvelle itération de travail est ouverte avant écriture et les reçus et durées précédents sont conservés.
 
 ### Requirement: Chronologie persistante avec sous-étapes et itérations
 PG MUST conserver chaque passage d'étape ou sous-étape avec son début, sa fin et sa durée observés. Une réitération MUST créer un nouveau passage ; la durée cumulée et le nombre d'itérations MUST être calculés sur ces passages. Chaque cycle complet1→12 MUST posséder sa propre durée.
@@ -49,18 +49,18 @@ Une livraison Debian demandant une preuve de paquet MUST porter l’empreinte du
 - **THEN** CAB ne les assimile pas ; la preuve du paquet est établie sur les octets vérifiés de l’asset.
 
 ### Requirement: Commit local propre à la phase Statistiques
-Si le parcours du change prévoit un commit, la phase Statistiques MUST committer localement les seuls rapports qu’elle a modifiés. CAB MUST vérifier leurs empreintes et conserver les autres modifications et indexations. Ce commit MUST rester distinct du commit de publication et ne MUST déclencher ni tag ni envoi distant.
+Pour les RUN du profil précédent dont le parcours prévoit un commit, la phase Statistiques MUST committer localement les seuls rapports qu’elle modifie. CAB MUST vérifier leurs empreintes et conserver les autres modifications et indexations. Ce commit reste distinct du commit de publication et ne déclenche ni tag ni envoi distant. Le nouveau profil fait l’objet de la règle de statistiques en Clôture.
 
 #### Scenario: Rapport réécrit et BLOCKERS.md préexistant modifié
-- **WHEN** la phase réécrit les deux rapports statistiques et ne modifie pas BLOCKERS.md
-- **THEN** son commit contient seulement les deux rapports ; BLOCKERS.md, le code et les fichiers d'autres travaux sont conservés hors de ce commit.
+- **WHEN** la phase du profil précédent réécrit les deux rapports statistiques alors qu’un `BLOCKERS.md` préexistant a été modifié par ailleurs
+- **THEN** son commit contient seulement les deux rapports et conserve les autres modifications et indexations.
 
 #### Scenario: Change sans commit demandé
-- **WHEN** la phase produit ses rapports pour un parcours sans commit
-- **THEN** les rapports sont conservés localement et aucune référence Git n'est modifiée par la phase.
+- **WHEN** la phase du profil précédent produit ses rapports pour un parcours sans commit
+- **THEN** les rapports sont conservés localement et la phase préserve les références Git.
 
 #### Scenario: Rapports déjà à jour
-- **WHEN** le rapport du change, le rapport global et le fichier BLOCKERS.md ne sont pas modifiés par cette exécution
+- **WHEN** la phase du profil précédent ne modifie aucun rapport
 - **THEN** CAB ne crée aucun commit.
 
 ### Requirement: Travail observé et attente par étape
@@ -327,3 +327,30 @@ CAB MUST afficher le cumul des tokens entrants, sortants, lus dans le cache et �
 - **THEN** les lignes « Tokens Entrant total des cycles », « Tokens Sortant total des cycles », « Tokens lus dans le cache total des cycles » et « Tokens écrits dans le cache total des cycles » suivent la durée totale d’attente
 - **AND** elles exploitent la synthèse du RUN actualisée par Electric même si le détail des étapes est indisponible
 - **AND** les contributions des deux rôles sont identifiables en session pilotée
+
+### Requirement: Statistiques en dernières actions de Clôture
+CAB MUST utiliser pour les nouveaux RUN un profil à douze étapes où l’étape 10 reste vacante. CAB MUST horodater son ouverture et sa validation vide. La Publication reste à l’étape 11 et « Clôture » à l’étape 12. CAB MUST conserver le profil des RUN existants.
+
+#### Scenario: Passage vacant
+- **WHEN** l’agent ouvre et valide l’étape 10 du nouveau profil
+- **THEN** CAB conserve ses deux bornes et n’exécute aucune tâche à cette étape.
+
+#### Scenario: Dernier tour de codage
+- **WHEN** les preuves de publication et la validation finale applicable sont acquises
+- **THEN** CAB attend la fin native attestée du travail de chaque rôle applicable, collecte les durées et les tokens disponibles à cette borne, puis écrit le rapport du change et le rapport global, dans cet ordre.
+- **AND** le reçu de fermeture du RUN intervient après ces dernières actions, sans commit, tag ni envoi distant de clôture.
+
+#### Scenario: Télémétrie tardive
+- **WHEN** le dernier tour est encore actif ou sa borne manque
+- **THEN** CAB attend la preuve de fin et conserve le RUN ouvert.
+
+### Requirement: Rapports admissibles inclus dans la Publication
+Pour un RUN du nouveau profil, CAB MUST intégrer dans le snapshot Git de toute publication autorisée les fichiers `STATISTICS.md` et `BLOCKERS.md` admissibles du projet, quelle que soit leur provenance, leur date, leur quantité ou le mandat de publication. CAB MUST vérifier la cohérence des contenus et des index entre admission et commit. Le commit de publication les propage aux forges configurées.
+
+#### Scenario: Rapports différés sur plusieurs RUN
+- **WHEN** une publication est autorisée avec des rapports du projet en attente issus de plusieurs sessions et archives
+- **THEN** les rapports admissibles entrent dans le commit et ses envois aux forges pour les périmètres change et projet.
+
+#### Scenario: Modification concurrente
+- **WHEN** un rapport sélectionné change après le snapshot de publication
+- **THEN** CAB refuse le commit de ce snapshot divergent avant de modifier les références.

@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 from .core import commands as c
 from .core.models import Run,Event,MeasurementPeriod
-from .change_stage_metrics import PROFILE,number_for
+from .change_stage_metrics import PROFILE,number_for,statistics_at_closure
 
 KEY='publication_boundary'
 
@@ -51,6 +51,15 @@ def _prepare_locked(run,partial,commit_reports,before_freeze,publication):
         from .core.run_lifecycle import require_closed_change
         require_closed_change(current)
     preparation=before_freeze() if before_freeze else {}
+    cutoff=timezone.now().isoformat();generation=previous.get('generation',0)+1
+    if statistics_at_closure(current):
+        marker={'state':'FROZEN','generation':generation,'source_revision':revision,
+                'preparation':preparation,'commit_reports':False,'publication_ref':'publication-'+str(generation)}
+        current.configuration={**current.configuration,KEY:marker}
+        current.save(update_fields=['configuration','updated'])
+        c.event(current,'publication-sources-frozen',{'generation':generation,'source_revision':revision})
+        run.configuration=current.configuration
+        return marker
     from .core import measurements,statistics_service
     measurements.end_if_open(current.actor,current)
     cutoff=timezone.now().isoformat();generation=previous.get('generation',0)+1
@@ -87,7 +96,8 @@ def reopen_for_remediation(run,*,version=False,target=None):
     from .stage_protocol import enabled
     if target is None and not enabled(current):
         position(current,'version-skill' if version else 'implementation','run-progress')
-    if target!='statistics':
+    if target!='statistics' and (not statistics_at_closure(current) or
+                                 not MeasurementPeriod.objects.filter(run=current,ended__isnull=True).exists()):
         measurements.transition(current.actor,{'project_id':current.project_id,'run_id':current.run_id,'request_id':'REMEDIATION-WORK-'+str(previous['generation']),'from_coding_start':False},'begin')
     run.configuration=current.configuration;run.stage=current.stage;run.phase=current.phase
 

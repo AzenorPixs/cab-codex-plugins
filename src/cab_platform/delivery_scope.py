@@ -54,14 +54,23 @@ def write_entries(git, project, options, env, entries, oid_width):
     require(result.returncode == 0, 'session-delivery-index-invalid', 409)
 
 
-def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=False):
+def publication_report(path):
+    return path.rsplit('/',1)[-1] in ('STATISTICS.md','BLOCKERS.md')
+
+
+def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=False,reports_only=False):
     from .session_delivery import _changed_paths, _git, _index_digest, _temp_index
 
     require(not GitSessionEffect.objects.filter(run__project=project, state__in=('INTENT', 'RUNNING', 'UNKNOWN'))
             .exclude(git_index=own).exists(), 'session-delivery-full-effect-protected', 409)
     snapshot = git_snapshot(project)
     require(snapshot.get('head') == head, 'session-delivery-head-changed', 409)
+    if reports_only:
+        snapshot={**snapshot,'entries':[entry for entry in snapshot['entries']
+                  if publication_report(entry['path']) or publication_report(entry.get('previous',''))]}
     work, staged = working_paths(snapshot)
+    if reports_only:
+        work={p for p in work if publication_report(p)};staged={p for p in staged if publication_report(p)}
     from .reports_git import report_path
     if exclude_reports:work={p for p in work if not report_path(p)};staged={p for p in staged if not report_path(p)}
     entries = index_entries(_git, project, options, env, staged - work)
@@ -83,6 +92,7 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
         private = {**env, 'GIT_INDEX_FILE': str(source)}
         changed = {path for path in _changed_paths(project, options, private, index.base_head)
                    if _visible_entry('M.', path) is not None} - work
+        if reports_only:changed={p for p in changed if publication_report(p)}
         if exclude_reports:changed={p for p in changed if not report_path(p)}
         blobs = index_entries(_git, project, options, private, changed)
         require(_index_digest(source, project.owner_uid) == before, 'session-delivery-index-changed', 409)
@@ -94,6 +104,8 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
                 raise Refused('session-delivery-full-index-conflict', 409)
             selected[path] = value
     names = sorted(work | set(selected))
+    if reports_only and not names:
+        return None
     require(names, 'session-delivery-full-empty', 409)
     temporary = _temp_index(str(gitdir / 'cab-session-index'), project)
     os.unlink(temporary)
@@ -104,6 +116,11 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
         write_entries(_git, project, options, candidate, selected, len(head))
         work_entries = {path for path in work if path.encode('utf-8') in current_head
                         or os.path.lexists(os.path.join(project.root,path))}
+        if reports_only:
+            from pathlib import Path
+            from .core.commands import safe_path
+            for path in work_entries:
+                safe_path(Path(project.root),path,exists=False)
         require(not any(os.path.isdir(os.path.join(project.root,path)) and
                         not os.path.islink(os.path.join(project.root,path)) for path in work_entries),
                 'session-delivery-full-source-changed', 409)
@@ -112,8 +129,13 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
             require(_git(project, options, candidate, 'add', '-A', '-f', '--pathspec-from-file=-',
                          '--pathspec-file-nul', data=pathspec).returncode == 0, 'session-delivery-index-invalid', 409)
         changed = _changed_paths(project, options, candidate, head)
+        if reports_only and not changed:
+            return None
         require(changed and set(changed).issubset(names), 'session-delivery-full-index-conflict', 409)
-        index_entries(_git, project, options, candidate, set(changed))
+        captured=index_entries(_git, project, options, candidate, set(changed))
+        if reports_only:
+            require(all(mode in ('100644','100755') for mode,_ in captured.values()),
+                    'session-delivery-report-type-invalid',409)
         tree = _git(project, options, candidate, 'write-tree')
         oid = tree.stdout.decode('ascii').strip()
         require(tree.returncode == 0 and OID.fullmatch(oid), 'session-delivery-index-invalid', 409)

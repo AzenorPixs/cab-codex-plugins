@@ -3,8 +3,9 @@ from pathlib import Path
 from django.db import transaction
 from django.utils import timezone
 from . import commands as c,run_evidence as evidence
-from .models import EvidenceProducer,FinalizationPlan,Operation,Run,GitFileReservation
+from .models import Event,EvidenceProducer,FinalizationPlan,Operation,Run,GitFileReservation
 from cab_platform.finalization_contract import next_actions
+from cab_platform.change_stage_metrics import statistics_at_closure
 
 def dossier(run,plan,*,allow_terminal_git=False):
     from .run_lifecycle import archive_state,guard,require_closed_change
@@ -58,7 +59,7 @@ def dossier(run,plan,*,allow_terminal_git=False):
             if group in groups and groups[group]!=value:missing.append('artifact:'+group+':divergent')
             groups[group]=value
         selected.append({'id':row.pk,'digest':row.digest,'rule_id':rule['id']})
-    if run.configuration.get('cycle_profile')=='publication-12-v1':
+    if run.configuration.get('cycle_profile')=='publication-12-v1' and not statistics_at_closure(run):
         from cab_platform.phase_statistics import result_for
         status=result_for(run)
         if status.get('state')!='COMPLETED' or not status.get('verified'):missing.append('statistics:not-validated')
@@ -153,12 +154,20 @@ def process(run_id):
             plan.phase='FINALIZING';plan.missing=[];plan.save()
             c.event(run,'finalization-started',{'policy_digest':plan.digest,'proofs':result['proofs']})
     # État durable FINALIZING : aucune nouvelle exécution n'est admise.
-    from .measurements import end_if_open
+    from .measurements import end_if_open, native_closure
     from . import statistics_service
-    end_if_open(run.actor,run)
+    deferred=statistics_at_closure(run)
     from cab_platform.closure_git import complete,enabled
     report=None;report_sha=None
     try:
+        if deferred:
+            attested=Event.objects.filter(run=run,kind='native-coding-ended').first()
+            if attested is None:
+                validation=Event.objects.filter(run=run,kind='stage-agent-validated',data__result__stage=12).latest('pk')
+                coded=native_closure(run,validation.created)
+                c.require(coded is not None,'closure-native-coding-end-pending')
+        else:
+            end_if_open(run.actor,run)
         statistics_service.discover(run.project)
         from .run_lifecycle import require_closed_change
         require_closed_change(run)
@@ -170,7 +179,7 @@ def process(run_id):
             c.require(eligible(run),'closure-canonical-source-required')
             canonical=run
         descriptor=directory(run) if canonical else None
-        if run.configuration.get('cycle_profile')=='publication-12-v1':
+        if run.configuration.get('cycle_profile')=='publication-12-v1' and not deferred:
             from cab_platform.phase_statistics import result_for
             statistics=result_for(run)
             c.require(statistics.get('state')=='COMPLETED' and statistics.get('verified'),'statistics-not-validated')
@@ -180,8 +189,15 @@ def process(run_id):
         else:
             job='AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest({'proofs':result['proofs'],'canonical':descriptor})[:16] if canonical else 'AUTO-FINALIZE-'+str(run.pk)+'-'+c.digest(result['proofs'])[:16]
             kwargs={'canonical_run':run,'canonical_proofs':result['proofs']} if canonical else {}
-            publication=statistics_service.sync(run.project,job,generate=run.change if source else None,**kwargs)
-            if canonical:c.require(publication['state']=='COMPLETED','closure-statistics-job-unconfirmed')
+            if deferred:
+                from cab_platform.phase_statistics import report_observer
+                kwargs['observe_report']=report_observer(run,job,phase=None)
+            staging=statistics_service.STAGE_DOCUMENTS.set(not deferred)
+            try:
+                publication=statistics_service.sync(run.project,job,generate=run.change if source else None,**kwargs)
+            finally:
+                statistics_service.STAGE_DOCUMENTS.reset(staging)
+            if canonical or deferred:c.require(publication['state']=='COMPLETED','closure-statistics-job-unconfirmed')
             if source or canonical:
                 report=(source.path if source else descriptor)+'/STATISTICS.md'
                 from cab_platform.statistics_documents import read_source,sha
@@ -191,7 +207,7 @@ def process(run_id):
         FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);raise
     except (OSError,ValueError):
         FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=['closure-report-unavailable']);raise
-    try:terminal=complete(run,'TERMINÉ',source.path if source else descriptor) if source or canonical else None
+    try:terminal=complete(run,'TERMINÉ',source.path if source else descriptor) if not deferred and (source or canonical) else None
     except c.Refused as error:
         FinalizationPlan.objects.filter(run=run).update(phase='FINALIZING',missing=[error.code]);return
     if terminal and report:report_sha=terminal['documents'][report]['sha256']
@@ -202,6 +218,11 @@ def process(run_id):
         current=dossier(run,plan,allow_terminal_git=True)
         c.require(not current['missing'] and current['proofs']==result['proofs'] and current['source_revision']==result['source_revision'],'finalization-proof-changed')
         receipt={'receipt_id':'POLICY-FINALIZE-'+str(run.pk),'kind':'policy','branch':'TERMINÉ','policy_digest':plan.digest,'nature':plan.policy['nature'],'proofs':current['proofs'],'source_revision':current['source_revision'],'artifact_groups':current['artifact_groups'],'report':report,'sha256':report_sha,'at':timezone.now().isoformat(),'authority':'cab-policy','llm_submission_required':False,'terminal_git':terminal}
+        if deferred:
+            from .models import GitDelivery
+            receipt['delivered']=GitDelivery.objects.filter(run=run,state='COMPLETED').exists()
+            receipt['statistics']={'job_id':publication['job_id'],'change_sha256':report_sha,
+                                   'global_sha256':publication['result']['global_sha256']}
         if terminal is not None:receipt['delivered']=terminal.get('delivered',True)
         if terminal is None and run.configuration.get('host_completion'):
             receipt['host_completion']=run.configuration['host_completion']

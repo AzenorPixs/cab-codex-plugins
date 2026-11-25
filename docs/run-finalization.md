@@ -87,6 +87,14 @@ CAB ferme la période du seul RUN sur un snapshot réel au temps de finalisation
 sans rétrodatation, puis génère/amende les statistiques locales maîtres et leurs
 projections. Un composant sans change local ne reçoit pas de faux rapport local.
 
+Pour les nouveaux RUN portant le profil de statistiques en Clôture, l’étape
+10 est vacante et horodatée, puis l’étape 11 publie le code et les rapports
+admissibles déjà présents. En fin d’étape 12 « Clôture », CAB attend la borne
+native de fin du travail, rassemble les compteurs disponibles et vérifie
+d’abord le rapport du change, puis celui du projet. Le reçu de clôture garde
+leurs empreintes. Les rapports générés restent locaux jusqu’à une publication
+ultérieure.
+
 Le reçu kind=policy distingue cette validation mécanique d'une revue humaine ou
 LLM. Il cite politique, preuves et artefact, puis conduit à CLOSED11/11 sans
 commande finale du codeur. L'intention et le reçu survivent au redémarrage ;

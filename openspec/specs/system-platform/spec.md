@@ -1916,28 +1916,23 @@ CAB MUST indexer chaque rapport statistique après son écriture, avant libérat
 - **THEN** les seuls documents concernés sont indexés et leurs empreintes sont conservées.
 
 ### Requirement: Dernier commit confirmé avant clôture
-Lorsqu'une livraison Git est requise, CAB MUST publier un dernier commit limité
-aux rapports du change, au global et au BLOCKERS.md éventuel avant clôture. Les
-reçus MUST lier documents et destinations au RUN et protéger les effets incertains.
-Un développement explicitement autorisé en clôture hôte sans livraison MUST
-conserver archive, preuves et rapports sans commit ni envoi.
+Pour les RUN soumis au parcours historique de commit terminal, CAB MUST appliquer la politique de dernier commit et vérifier ses envois avant la clôture, en reliant les rapports et destinations au RUN et en protégeant les effets incertains. La clôture hôte sans livraison et la clôture du nouveau profil conservent localement les rapports. Le nouveau profil vérifie les preuves de publication applicables et les rapports locaux avant de rendre le RUN CLOSED.
 
 #### Scenario: Clôture achevée
-- **WHEN** les critères et la livraison Git applicables sont confirmés
-- **THEN** CAB termine les statistiques, vérifie le dernier commit local et ses envois distants, puis seulement rend CLOSED.
+- **WHEN** les critères et la livraison Git du nouveau profil sont confirmés et le travail est terminé
+- **THEN** CAB génère et vérifie les rapports locaux avant CLOSED, sans autre commit ni envoi distant.
 
 #### Scenario: Clôture bloquée
-- **WHEN** une session avec livraison Git s'arrête pour une dépendance non satisfaite avec BLOCKERS.md
-- **THEN** CAB publie les mêmes documents finaux et le fichier de blocage avant de rendre BLOCKED, en conservant le change ouvert et le code non livré.
+- **WHEN** une session avec dépendances non satisfaites produit `BLOCKERS.md`
+- **THEN** CAB conserve le change ouvert, son code non livré et les preuves du blocage. Le nouveau profil conserve les rapports localement pour une publication ultérieure autorisée.
 
 #### Scenario: Échec ou réponse perdue
-- **WHEN** un commit ou un envoi ne peut pas être confirmé
-- **THEN** CAB expose l'étape et son reçu, ne déclare pas la clôture réussie et ne répète pas un effet confirmé ou incertain.
+- **WHEN** un effet Git requis ne peut pas être confirmé
+- **THEN** CAB expose l’étape et son reçu, conserve la clôture en attente et protège l’effet incertain contre le rejeu.
 
 #### Scenario: Clôture hôte sans livraison
-- **WHEN** ce mode de développement direct est autorisé explicitement avec index libéré et aucune obligation de publication
-- **THEN** CAB vérifie archive et preuves courantes, indexe les rapports et rend CLOSED sans commit ni envoi
-- **AND** le reçu distingue l'absence de livraison d'une publication réussie
+- **WHEN** le développement direct sans obligation de publication réunit les preuves requises
+- **THEN** le reçu de clôture signale une fin sans livraison et les rapports restent accessibles localement.
 
 ### Requirement: Mesures terminales non récursives
 CAB MUST générer les rapports finaux à partir des snapshots de fin des périodes closes. Le commit et les envois des métadonnées MUST NOT provoquer une boucle de régénération et de commits du même bilan.
@@ -3665,3 +3660,10 @@ du projet. Une livraison déjà enregistrée MUST conserver ses étapes et reçu
 - **WHEN** le contrôle final de liaison refuse le connecteur avant la création de la livraison
 - **THEN** CAB conserve la version du projet et la proposition encore applicable
 - **AND** après rétablissement du connecteur et vérification des prérequis, le même RUN peut reprendre la publication avec la même version
+
+### Requirement: Fermeture après rendu local pour le nouveau profil
+CAB MUST attendre la génération et la vérification des rapports du change et du projet après la fin observée du travail de la session de codage. Pour le profil qui reporte les statistiques en Clôture, CAB MUST établir le reçu final sur les fichiers locaux, sans commit ni envoi distant de clôture.
+
+#### Scenario: Rendu terminé après livraison Git
+- **WHEN** les effets requis de publication sont confirmés et les rapports générés à la fin de Clôture sont vérifiés
+- **THEN** CAB rend le RUN CLOSED et conserve les rapports locaux pour la prochaine publication.

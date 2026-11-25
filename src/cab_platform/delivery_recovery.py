@@ -251,6 +251,8 @@ def _worker(delivery_id,event_id,request_id):
             c.require(c.digest(observed)==admission.data['receipt']['expected_state_digest'],'precommit-cas-changed')
             token=_MANUAL.set(observed['resolutions'])
             scope = {'full':observed['full']} if 'full' in observed else {}
+            if 'publication_reports' in current.plan['git']:
+                scope['publication_reports']=current.plan['git']['publication_reports']
             receipt=delivery.commit_session(current.run.actor,{'project_id':current.project_id,'run_id':current.run.run_id,'request_id':request_id,'version':current.version,'expected_index_digest':current.plan['git']['index_digest']},**scope)
         except c.Refused as error:
             uncertain=error.code in ('session-delivery-result-unknown','session-git-effect-unresolved')

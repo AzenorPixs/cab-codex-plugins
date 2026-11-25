@@ -42,7 +42,7 @@ def written_reports(root,expected,hashes):
     return result
 
 
-def report_observer(run, reference):
+def report_observer(run, reference, *, phase='statistics'):
     labels = {
         'preparation': 'Préparation des données et des rapports',
         'change': 'Calcul et validation des statistiques du change',
@@ -53,16 +53,16 @@ def report_observer(run, reference):
     def observe(key):
         action = 'calculate-' + key
         identity = reference + ':' + action
-        clock.update(run,action,identity,'RUNNING',labels[key],phase='statistics')
+        clock.update(run,action,identity,'RUNNING',labels[key],phase=phase)
         try:
             yield
         except Exception as error:
             code=getattr(error,'code',type(error).__name__)
             state='UNKNOWN' if 'unknown' in code else 'FAILED'
-            clock.update(run,action,identity,state,labels[key],{'error':code},phase='statistics')
+            clock.update(run,action,identity,state,labels[key],{'error':code},phase=phase)
             raise
         else:
-            clock.update(run,action,identity,'COMPLETED',labels[key],{'verified':True},phase='statistics')
+            clock.update(run,action,identity,'COMPLETED',labels[key],{'verified':True},phase=phase)
 
     return observe
 

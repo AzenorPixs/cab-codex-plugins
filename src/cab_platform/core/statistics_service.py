@@ -18,7 +18,7 @@ from cab_platform import statistics_documents as documents
 from cab_platform import sgs_engine as engine
 from . import commands,measurements
 from .monitor import identity,observe_tasks
-from .models import Project,Change,ChangeSource,StatisticsDocument,StatisticsRevision,StatisticsMetric,ProjectStatistics,StatisticsJob,StatisticsLock,Run,Operation,Maintenance
+from .models import Project,Change,ChangeSource,Event,StatisticsDocument,StatisticsRevision,StatisticsMetric,ProjectStatistics,StatisticsJob,StatisticsLock,Run,Operation,Maintenance
 
 ACTIVE=set()
 from contextvars import ContextVar
@@ -403,6 +403,8 @@ def evidence_for_change(change):
     if actor:
         data=measurements.change_statistics(actor.actor,{'project_id':change.project_id,'change':change.identifier});contribution=data['sgs_evidence']['contribution']
     else:contribution=engine.blank()
+    contribution['native_closure']=[{'run_id':row.run.run_id,**row.data} for row in
+        Event.objects.filter(run__change_record=change,kind='native-coding-ended').select_related('run').order_by('pk')]
     if change.tasks_done is not None:contribution['metrics']['tasks']={'state':'known','value':str(change.tasks_done),'reason':None,'evidence':[{'line':1,'note':'Cases locales de tasks.md ; ne valent pas validation du RUN.'}]}
     # Seuls les compteurs effectivement émis par un runner reconnu sont retenus.
     accepted=[]

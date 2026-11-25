@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Statistiques en fin de Clôture
+
+[defer-statistics-to-run-closure](openspec/changes/archive/2026-11-25-defer-statistics-to-run-closure/),
+code non attribué. Évolution du cycle Publication avec collecte finale, rapports
+locaux en Clôture et prise en compte des rapports admissibles au commit de
+publication suivant. La recette sur un nouveau RUN est prévue après activation.
+
 ## Consultation des sessions archivées
 
 [remove-standalone-session-archive-pages](openspec/changes/archive/2026-11-25-remove-standalone-session-archive-pages/),

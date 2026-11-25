@@ -144,6 +144,16 @@ def render(change: str,state: str,contribution: dict,previous: str='',expected_b
         if index==0:
             chunks.append('\n'.join(engine.table(['Rôle','Agent','Modèle','Raisonnement'],[[a['role'],a['agent'] or 'N/A',a['model'],a['reasoning']] for a in contribution['agents']]))+'\n')
             chunks.append('Provenance : '+', '.join(contribution['proof_ids'])+'\n')
+            closure_rows=[]
+            for item in contribution.get('native_closure',[]):
+                for role, proof in item['roles'].items():
+                    counters=proof['tokens']
+                    closure_rows.append([item['run_id'],role,proof['session_id'],proof['end'],proof['work_seconds'],
+                        *[counters.get(field) or 'N/A' for field in
+                          ('input_tokens','output_tokens','cache_read_tokens','cache_write_tokens')]])
+            if closure_rows:
+                chunks.append('\n'.join(engine.table(['RUN','Rôle','Session','Fin native','Travail (s)',
+                    'Entrants','Sortants','Cache lu','Cache écrit'],closure_rows))+'\n')
     chunks.append(END)
     if observations:chunks.insert(-1,'\nMesures partielles en cours — aucune valeur ci-dessous ne vaut total complet.\n\n'+'\n'.join(engine.table(['RUN','SID','Compteur','Incrément observé','Couverture'],observations))+'\n')
     block='\n'.join(chunks)

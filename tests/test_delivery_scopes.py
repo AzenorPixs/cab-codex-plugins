@@ -105,7 +105,7 @@ class DeliveryScopeTests(unittest.TestCase):
             on_commit.assert_called_once()
 
     def test_two_scopes_and_frozen_project_tree(self):
-        with TemporaryDirectory(dir=ROOT / '.cab-tests' / 'DCAB') as directory:
+        with TemporaryDirectory() as directory:
             root = Path(directory)
             env = {**os.environ, 'GIT_OPTIONAL_LOCKS':'0', 'GIT_AUTHOR_NAME': 'CAB', 'GIT_AUTHOR_EMAIL': 'cab@example.test',
                    'GIT_COMMITTER_NAME': 'CAB', 'GIT_COMMITTER_EMAIL': 'cab@example.test'}
@@ -120,7 +120,7 @@ class DeliveryScopeTests(unittest.TestCase):
             git('commit', '-m', 'initial')
             head = git('rev-parse', 'HEAD')
             gitdir = root / '.git'
-            (gitdir / 'cab-session-index').mkdir()
+            (gitdir / 'cab-session-index').mkdir(mode=0o700)
             def index(key, filename):
                 token = hashlib.sha256((key + ':native').encode()).hexdigest()
                 path = gitdir / 'cab-session-index' / (token + '.index')
@@ -137,7 +137,12 @@ class DeliveryScopeTests(unittest.TestCase):
             git('add', '--', 'shared.txt')
             (root / '.env').write_text('valeur exclue')
             (root / 'new.txt').write_text('nouveau')
-            project = SimpleNamespace(root=directory, owner_uid=os.getuid(), owner_gid=os.getgid())
+            (root / 'STATISTICS.md').write_text('rapport global')
+            (root / 'history').mkdir()
+            (root / 'history' / 'BLOCKERS.md').write_text('rapport réservé ailleurs')
+            git('add','--','history/BLOCKERS.md',alternate=other.index_path)
+            project = SimpleNamespace(root=directory, owner_uid=os.getuid(), owner_gid=os.getgid(),
+                                      public_metadata={'values':{'GIT_USER_NAME':'CAB','GIT_USER_EMAIL':'cab@example.test'}})
             changes = MagicMock()
             changes.filter.return_value.order_by.return_value = [own, other]
             effects = MagicMock()
@@ -150,8 +155,18 @@ class DeliveryScopeTests(unittest.TestCase):
                     patch.object(delivery_scope.GitSessionEffect, 'objects', effects):
                 scoped = session_delivery.preflight_commit(project, own, '2.0.0', ['own.txt'])
                 complete = session_delivery.preflight_commit(project, own, '2.0.0', ['own.txt'], complete=True)
+                publication = session_delivery.preflight_commit(project, own, '2.0.0', ['own.txt'], include_reports=True)
+                with patch('cab_platform.package_versions.require_aligned'):
+                    packet=session_delivery.prepare_commit(project,own,'2.0.0',['own.txt'],publication_reports=publication['publication_reports'])
+                    self.assertEqual(set(packet['paths']),{'own.txt','STATISTICS.md','history/BLOCKERS.md'})
+                    self.assertEqual(git('show',packet['commit']+':history/BLOCKERS.md'),'rapport réservé ailleurs')
+                    self.assertEqual(git('show',packet['commit']+':shared.txt'),'initial')
+                    (root/'STATISTICS.md').write_text('rapport global modifié')
+                    with self.assertRaisesRegex(Refused,'session-delivery-reports-changed'):
+                        session_delivery.prepare_commit(project,own,'2.0.0',['own.txt'],publication_reports=publication['publication_reports'])
             self.assertEqual(scoped['paths'], ['own.txt'])
-            self.assertEqual(set(complete['paths']), {'own.txt', 'working.txt', 'shared.txt', 'other.txt', 'new.txt'})
+            self.assertEqual(set(complete['paths']), {'own.txt', 'working.txt', 'shared.txt', 'other.txt', 'new.txt',
+                                                     'STATISTICS.md','history/BLOCKERS.md'})
             tree = complete['full']['tree']
             self.assertEqual(git('show', tree + ':other.txt'), 'other-change')
             (root / 'working.txt').write_text('modification après capture')

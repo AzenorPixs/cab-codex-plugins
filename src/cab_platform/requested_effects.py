@@ -224,7 +224,9 @@ def validate_mode(run,data,row):
 
 
 def observe(run,data):
+    from .change_stage_metrics import statistics_at_closure
     base_guard(run)
+    deferred=statistics_at_closure(run)
     row=GitDelivery.objects.filter(pk=data.get('delivery_id'),run=run).first() if data.get('delivery_id') else None
     validate_mode(run,data,row)
     index=GitSessionIndex.objects.filter(change_id=run.change_record_id,session_id=run.coding_session_id).first()
@@ -244,7 +246,7 @@ def observe(run,data):
             separate=row.plan.get('separate_reports',False)
             c.require(head==row.commit_oid or separate and delivery.reports_only_between(run.project,options,env,row.commit_oid,head),'session-delivery-head-changed')
             marker=run.configuration['delivery_recovery'];complete=marker['scope']=='project'
-            try:result['git']=delivery.preflight_commit(run.project,index,version,reservations,complete=complete,existing_tag=row.tag_oid,separate_reports=separate)
+            try:result['git']=delivery.preflight_commit(run.project,index,version,reservations,complete=complete,existing_tag=row.tag_oid,separate_reports=separate,include_reports=deferred)
             except c.Refused as error:
                 if not complete or error.code!='session-delivery-full-empty':raise
                 result['git']={'head':head,'branch':branch,'index_digest':delivery._index_digest(index.index_path,run.project.owner_uid),'reuse_commit':True,'paths':[]}
@@ -258,7 +260,7 @@ def observe(run,data):
                 c.require(not row.steps.filter(state__in=['RUNNING','UNKNOWN']).exists(),'session-effect-failed-step-required')
                 c.require(head==row.plan['git']['head'],'session-delivery-head-changed')
                 result['commit_recovery']=True
-                result['git']=delivery.preflight_commit(run.project,index,version,reservations,complete=row.plan.get('scope')=='project')
+                result['git']=delivery.preflight_commit(run.project,index,version,reservations,complete=row.plan.get('scope')=='project',include_reports=deferred)
                 active=active.exclude(pk=row.pk)
             c.require(not active.exists(),'session-delivery-active')
             result['index_digest']=delivery._index_digest(index.index_path,run.project.owner_uid)
@@ -361,8 +363,10 @@ def execute(intent_id):
             c.require(c.revision(run)==observed['source_revision'] and delivery._head(run.project,options,env)==(observed['branch'],observed['head']),'session-effect-cas-changed')
             c.require(project_source(run)==observed['project_source'],'session-effect-cas-changed')
             c.require(not GitSessionEffect.objects.filter(git_index__change__project=run.project,state__in=['INTENT','RUNNING','UNKNOWN']).exists(),'session-git-effect-unresolved')
+            from .change_stage_metrics import statistics_at_closure
+            deferred=statistics_at_closure(run)
             modern=run.configuration.get('cycle_profile')=='publication-12-v1'
-            if modern and kind!='resume' and not observed.get('commit_recovery'):
+            if modern and not deferred and kind!='resume' and not observed.get('commit_recovery'):
                 from .publication_boundary import prepare,KEY
                 from .stage_substeps import phase
                 previous=run.configuration.get(KEY,{})
@@ -374,7 +378,7 @@ def execute(intent_id):
                 c.require(snapshot(row)==observed['delivery'] and inactive_partial(row),'session-effect-cas-changed')
                 c.require(delivery._index_digest(row.git_index.index_path,run.project.owner_uid)==observed['git']['index_digest'],'session-delivery-index-changed')
                 separate=row.plan.get('separate_reports',False)
-                execution_git=observed['git'] if separate else refresh_full_statistics(run,row,observed['git'],intent.pk)
+                execution_git=observed['git'] if separate or deferred else refresh_full_statistics(run,row,observed['git'],intent.pk)
                 boundary=None
                 if separate:
                     from .publication_boundary import prepare
@@ -392,7 +396,9 @@ def execute(intent_id):
                     receipt=copy.deepcopy(row.steps.get(key='commit').receipt)
                     c.require(receipt.get('commit')==row.commit_oid and receipt.get('tag_oid')==row.tag_oid and receipt.get('session_index_digest')==observed['git']['index_digest'],'session-effect-commit-receipt-invalid')
                     GitSessionIndex.objects.filter(pk=row.git_index_id,state='OPEN').update(state='COMMITTED')
-                else:receipt=delivery.commit_session(run.actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'EFFECT-'+str(intent.pk),'version':row.version,'expected_index_digest':execution_git['index_digest']},full=execution_git.get('full'),tag_mode='move',expected_tag=observed['delivery']['tag_oid'],message=intent.data['message'],separate_reports=separate)
+                else:
+                    report_options={k:execution_git[k] for k in ('publication_reports',) if k in execution_git}
+                    receipt=delivery.commit_session(run.actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'EFFECT-'+str(intent.pk),'version':row.version,'expected_index_digest':execution_git['index_digest']},full=execution_git.get('full'),tag_mode='move',expected_tag=observed['delivery']['tag_oid'],message=intent.data['message'],separate_reports=separate,**report_options)
                 with transaction.atomic():
                     row=GitDelivery.objects.select_for_update().get(pk=row.pk)
                     row.commit_oid=receipt['commit'];row.tag_oid=receipt['tag_oid']
@@ -429,7 +435,9 @@ def execute(intent_id):
                     row.state='RUNNING';row.executor=process_identity(__import__('os').getpid());row.save(update_fields=['state','executor','updated'])
                     step=row.steps.get(key='commit');step.state='RUNNING';step.receipt={'intent_id':intent.pk};step.save()
                 dispatched=True
-                receipt=delivery.commit_session(run.actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'EFFECT-'+str(intent.pk),'version':observed['version'],'expected_index_digest':observed['index_digest']},full=observed.get('git',{}).get('full'),tag_mode='create' if recovering else 'none',message=intent.data['message'],separate_reports=modern)
+                git_plan=observed.get('git',{})
+                report_options={k:git_plan[k] for k in ('publication_reports',) if k in git_plan}
+                receipt=delivery.commit_session(run.actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'EFFECT-'+str(intent.pk),'version':observed['version'],'expected_index_digest':observed['index_digest']},full=git_plan.get('full'),tag_mode='create' if recovering else 'none',message=intent.data['message'],separate_reports=modern and not deferred,**report_options)
                 if recovering:
                     row.commit_oid=receipt['commit'];row.tag_oid=receipt['tag_oid'];row.plan={**row.plan,'git':observed['git'],'source_revision':observed['source_revision']};row.save(update_fields=['commit_oid','tag_oid','plan','updated'])
                     delivery._set_step(row.pk,'commit','COMPLETED',{**receipt,'intent_id':intent.pk});continuation=True

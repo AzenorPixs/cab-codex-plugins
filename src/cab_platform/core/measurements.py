@@ -6,7 +6,7 @@ from django.utils import timezone
 from cab_platform.measurement_sources import snapshot,difference,TOKEN_FIELDS
 from cab_platform.sgs_engine import blank
 from . import commands
-from .models import CodingSession,MeasurementPeriod,MeasurementAction,Project,Change,Run
+from .models import CodingSession,Event,MeasurementPeriod,MeasurementAction,Project,Change,Run
 from .monitor import ensure_records
 
 
@@ -54,6 +54,61 @@ def end_if_open(actor,run):
     period=MeasurementPeriod.objects.filter(run=run,ended__isnull=True).first()
     if period:
         transition(actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'CAB-FREEZE-'+str(period.pk)},'end')
+
+
+def native_closure(run, validation_at):
+    """Attester la fin du dernier tour de chaque rôle avant de figer les mesures."""
+    from cab_platform.cycle_tokens import native_sources, store_usage
+    from cab_platform.change_stage_metrics import covered_seconds
+    from cab_platform.measurement_sources import USAGE_FIELDS, native_time, native_work_time
+
+    sources = native_sources(run)
+    if run.mode == 'piloted' and len(sources) != 2:
+        return None
+    windows, usage = {}, []
+    responsible_role = 'orchestrator' if run.mode == 'piloted' else 'coder'
+    for role, actor, thread in sources:
+        observed = native_work_time(run, actor=actor, thread=thread if role == 'orchestrator' else None, tokens=True)
+        if not observed or not observed[0]:
+            return None
+        (_, turns, pending, _, _), events = observed
+        ends = [end for _, end in turns if end >= run.created]
+        if pending or not ends:
+            return None
+        end = max(ends)
+        if role == responsible_role and end < validation_at:
+            return None
+        selected = [item for item in events if run.created <= item[0] <= end]
+        metrics = {}
+        for index, field in enumerate(USAGE_FIELDS):
+            parts = [event[2][index] for event in selected]
+            metrics[field] = str(sum(parts)) if parts and all(value is not None for value in parts) else None
+        windows[role] = {'end':end.isoformat(), 'session_id':thread,
+                         'work_seconds':str(covered_seconds(turns,run.created,end)), 'tokens':metrics}
+        usage.append((role, actor.pk, thread, selected))
+    with transaction.atomic():
+        session = CodingSession.objects.select_for_update().get(pk=run.coding_session_id)
+        run = Run.objects.select_for_update().get(pk=run.pk)
+        prior = Event.objects.filter(run=run,kind='native-coding-ended').first()
+        if prior:
+            return prior.data['roles']
+        period = MeasurementPeriod.objects.select_for_update().filter(run=run,session=session,ended__isnull=True).first()
+        if period:
+            end = native_time(windows['coder']['end'])
+            sample = snapshot(run)
+            observed_at = native_time(sample.get('native_at'))
+            if observed_at and observed_at > end:
+                sample={**sample,'status':'unavailable','reason':'native-counters-after-coding-end'}
+            if end >= period.started:
+                finish(period,end,sample,'native-coding-end')
+            else:
+                return None
+        store_usage(run,usage)
+        from cab_platform.stage_substeps import update
+        update(run,'collect-final-telemetry','closure-final-telemetry','COMPLETED',
+               'Collecte de la télémétrie finale',{'roles':windows})
+        commands.event(run,'native-coding-ended',{'roles':windows})
+    return windows
 
 def union_seconds(periods):
     spans=sorted((period.started,period.ended) for period in periods if period.ended)

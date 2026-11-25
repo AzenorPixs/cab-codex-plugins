@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Horodater l’étape 10 vacante des nouveaux RUN. Produire les statistiques du change puis du projet en fin de Clôture, après la fin attestée du travail, sans commit de clôture. Inclure les rapports admissibles du projet dans le commit de publication.
+
 - Retirer les pages Archives des menus Projets et Projet. Les sessions archivées sont accessibles dans l’onglet Archivées des pages Sessions.
 
 - Réactiver les publications du projet après vérification de l’absence du tag Docker de version et de `latest` sur un dépôt GitLab accessible, en conservant la tentative précédente.

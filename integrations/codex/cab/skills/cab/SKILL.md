@@ -207,12 +207,18 @@ Quand toutes les tâches CAB du passage sont réussies, l’agent confirme sa
 part avec `run_stage_validate`, en donnant la tentative et les faits vérifiés.
 Avancer après `validated=true`. Pour la Publication, transmettre à l’entrée
 la version choisie et le périmètre autorisé (`project` sur mandat CICDF).
-En Clôture, attendre toutes les preuves, puis valider cette dernière étape.
-CAB établit le reçu final à partir des preuves et de cette validation.
+Suivre les libellés du profil enregistré. Si l’étape 10 est « Vacante »,
+annoncer son début, l’enregistrer et la valider sans lancer de tâche.
+En Clôture, attendre les preuves applicables, puis valider cette étape. Si le
+reçu indique `native_end_required`, terminer le tour de codage. CAB attend la
+preuve native de fin, collecte les dernières mesures, vérifie le rapport du
+change puis le rapport global, et clôture le RUN. Les rapports restent locaux
+jusqu’à la prochaine publication autorisée. La consultation du reçu terminal
+intervient après la fin du tour de codage.
 
 Pour les RUN historiques, déclarer la position par `run_progress` (ou `cab call run.progress`), selon le
-cycle indiqué dans le détail du RUN. Pour un nouveau cycle, l’Archivage est à
-l’étape 9. CAB fige les mesures, exécute Statistiques et Publication en
+cycle indiqué dans le détail du RUN. Pour le profil antérieur à l’étape 10
+vacante, l’Archivage est à l’étape 9. CAB fige les mesures, exécute Statistiques et Publication en
 parallèle et place la session en Clôture. Lire les reçus de la même demande
 pendant cette attente. La phase Statistiques committe localement les seuls
 rapports qu’elle modifie si le parcours du change prévoit un commit.
@@ -263,10 +269,11 @@ au parent. autonomous_recovery expose le motif si une preuve manque. Un processu
 vivant, un atelier invérifiable, un test externe ou host_authorization garde ses
 protections. La validation des sources actuelles reste distincte du résultat perdu.
 
-Le moteur CAB déplace automatiquement le tag de version sans v sur le dernier
-commit de clôture des statistiques et de BLOCKERS.md éventuel. La branche et
-le tag sont envoyés atomiquement et vérifiés. Ce comportement est dans le code
-CAB ; le LLM ne déplace pas le tag et ne réalise aucun commit ou push parallèle.
+Pour les RUN à étape 10 vacante, le tag identifie le commit de Publication.
+CAB y inclut aussi les fichiers STATISTICS.md et BLOCKERS.md admissibles déjà
+présents dans le projet, indépendamment de leur RUN d’origine. La Clôture
+produit seulement les rapports locaux. Les règles Git du profil enregistré
+restent applicables aux RUN précédents.
 
 ## Reprise nécessaire à CABU
 
