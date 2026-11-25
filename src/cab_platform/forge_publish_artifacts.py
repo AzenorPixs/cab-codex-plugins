@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import threading
 from urllib.parse import quote, unquote, urljoin, urlsplit
+from urllib.request import parse_http_list, parse_keqv_list
 
 import httpx
 from django.db import close_old_connections, connection, transaction
@@ -48,7 +49,7 @@ def diagnostic(error):
     if isinstance(error, Refused):
         details = error.details if isinstance(error.details,dict) else {}
         return error.code, {key:details[key] for key in (
-            'phase','tag','missing','exit_code','http_status','publication_confirmed','remaining_count','required_scopes'
+            'phase','tag','reason','missing','exit_code','http_status','publication_confirmed','remaining_count','required_scopes'
         ) if key in details}
     if isinstance(error,httpx.HTTPStatusError):
         return 'artifact-forge-publication-failed', {'http_status':error.response.status_code}
@@ -95,10 +96,23 @@ def track(progress,key):
     return progress.step(key) if progress is not None else nullcontext()
 
 
+def gitlab_first_tag_failed(job):
+    details = job.receipt.get('details') or {}
+    progress = job.receipt.get('progress') or {}
+    stages = {step['key']: step['state'] for step in progress.get('steps', [])}
+    tag = (job.plan.get('docker') or {}).get('tag')
+    return (job.forge == 'GITLAB' and isinstance(tag, str) and tag != 'latest'
+            and details.get('phase') == 'registry-push' and details.get('tag') == tag
+            and type(details.get('exit_code')) is int and details['exit_code'] != 0
+            and stages.get('docker-push') == 'FAILED' and stages.get('docker-confirm') == 'PENDING')
+
+
 def docker_confirmation_required(job):
     receipt=job.receipt
     if job.state!='UNKNOWN' or receipt.get('issued') is not True:
         return False
+    if gitlab_first_tag_failed(job):
+        return True
     details=receipt.get('details')
     if (receipt.get('error')=='artifact-forge-publication-unconfirmed'
             and isinstance(details,dict) and details.get('phase')=='registry-confirmation'):
@@ -412,11 +426,23 @@ def registry_rows(client,api,root,forge,owner,repo,info,*,allow_missing=False,da
     return endpoint,inventory
 
 
+def docker_failure(result, phase, tag):
+    stderr = (result.stderr or b'').lower()
+    details = {'phase': phase, 'tag': tag, 'exit_code': result.returncode}
+    if b'x509:' in stderr or b'certificate signed by unknown authority' in stderr:
+        details['reason'] = 'tls-certificate'
+    elif any(message in stderr for message in (b'insufficient_scope', b'access denied', b'unauthorized', b'forbidden')):
+        details['reason'] = 'registry-access'
+    elif b'no such manifest' in stderr or b'manifest unknown' in stderr:
+        details['reason'] = 'manifest-missing'
+    return details
+
+
 def inspect_manifest(args,remote_name,reference):
     separator='@' if DIGEST.fullmatch(reference) else ':'
     result=subprocess.run([*args,'manifest','inspect',remote_name+separator+reference],
                           env=ENV,capture_output=True,timeout=30)
-    details={'phase':'registry-confirmation','tag':reference,'exit_code':result.returncode}
+    details=docker_failure(result,'registry-confirmation',reference)
     require(result.returncode==0,'artifact-forge-publication-unconfirmed',409,details=details)
     try:
         manifest=json.loads(result.stdout)
@@ -429,7 +455,7 @@ def inspect_manifest(args,remote_name,reference):
 def registry_digest(args,remote_name,label):
     result=subprocess.run([*args,'buildx','imagetools','inspect','--format','{{json .Manifest}}',
                            remote_name+':'+label],env=ENV,capture_output=True,timeout=30)
-    details={'phase':'registry-confirmation','tag':label,'exit_code':result.returncode}
+    details=docker_failure(result,'registry-confirmation',label)
     require(result.returncode==0,'artifact-forge-publication-unconfirmed',409,details=details)
     try:
         descriptor=json.loads(result.stdout)
@@ -441,8 +467,14 @@ def registry_digest(args,remote_name,label):
     return digest
 
 
-def confirm_docker(args,remote_name,labels,image_id):
-    manifests=[inspect_manifest(args,remote_name,label) for label in labels]
+def confirm_docker(args, remote_name, labels, image_id, *, read_manifest=None, read_digest=None):
+    if read_manifest is None:
+        def read_manifest(ref):
+            return inspect_manifest(args, remote_name, ref)
+    if read_digest is None:
+        def read_digest(ref):
+            return registry_digest(args, remote_name, ref)
+    manifests = [read_manifest(label) for label in labels]
     require(all(manifest==manifests[0] for manifest in manifests),
             'artifact-forge-publication-unconfirmed',409,details={'phase':'registry-confirmation'})
     pending=[manifests[0]]
@@ -463,15 +495,96 @@ def confirm_docker(args,remote_name,labels,image_id):
                     'artifact-forge-publication-unconfirmed',409,details={'phase':'registry-confirmation'})
             if digest not in references:
                 references.add(digest)
-                pending.append(inspect_manifest(args,remote_name,digest))
+                pending.append(read_manifest(digest))
     if not found:
         # Le magasin containerd peut utiliser le descripteur OCI comme identifiant local.
         for label in labels:
-            require(registry_digest(args,remote_name,label)==image_id,
+            require(read_digest(label)==image_id,
                     'artifact-forge-publication-unconfirmed',409,
                     details={'phase':'registry-confirmation','tag':label})
         references.add(image_id)
     return references
+
+
+REGISTRY_MANIFEST_TYPES = ', '.join((
+    'application/vnd.oci.image.index.v1+json',
+    'application/vnd.oci.image.manifest.v1+json',
+    'application/vnd.docker.distribution.manifest.list.v2+json',
+    'application/vnd.docker.distribution.manifest.v2+json',
+))
+
+
+def confirm_gitlab_registry(base, registry, repository, username, token, labels, image_id, *, allow_missing_version=False):
+    details = {'phase': 'registry-confirmation'}
+    code = 'artifact-forge-publication-unconfirmed'
+    require(REGISTRY.fullmatch(registry) and REPO_PATH.fullmatch(repository), code, 409, details=details)
+    endpoint = f'https://{registry}/v2/'
+    origin = urlsplit(base)
+    manifests = {}
+    with forge_client(timeout=8, headers={'Accept': REGISTRY_MANIFEST_TYPES}) as client:
+        probe = client.get(endpoint)
+        if probe.status_code == 401:
+            scheme, _, challenge = probe.headers.get('www-authenticate', '').partition(' ')
+            fields = parse_keqv_list(parse_http_list(challenge))
+            realm = urlsplit(fields.get('realm', ''))
+            require(scheme.lower() == 'bearer' and fields.get('service') and
+                    (realm.scheme, realm.netloc, realm.path) ==
+                    ('https', origin.netloc, origin.path.rstrip('/') + '/jwt/auth')
+                    and not (realm.query or realm.fragment), code, 409, details=details)
+            credentials, _ = get_json(client, realm.geturl(), auth=(username, token), params={
+                'service': fields['service'], 'scope': f'repository:{repository}:pull',
+            }, max_bytes=32768)
+            bearer = credentials.get('token') if isinstance(credentials, dict) else None
+            require(isinstance(bearer, str) and re.fullmatch(r'[A-Za-z0-9_.=-]{1,16384}', bearer),
+                    code, 409, details=details)
+            headers = {'Authorization': 'Bearer ' + bearer}
+        else:
+            probe.raise_for_status()
+            headers = {}
+
+        def observe(ref):
+            if ref not in manifests:
+                manifest, response = get_json(client, endpoint + repository + '/manifests/' + quote(ref, safe=':'),
+                                              headers=headers)
+                digest = response.get('docker-content-digest', '')
+                require(isinstance(manifest, dict) and DIGEST.fullmatch(digest)
+                        and (not DIGEST.fullmatch(ref) or digest == ref),
+                        code, 409, details={**details, 'tag': ref})
+                manifests[ref] = manifest, digest
+            return manifests[ref]
+
+        if allow_missing_version:
+            try:
+                observe(labels[0])
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code != 404:
+                    raise
+                # L'accès à l'autre référence distingue une version manquante
+                # d'un dépôt ou d'un registre inaccessible.
+                observe('latest')
+                return None
+
+        digests = [observe(label)[1] for label in labels]
+        require(all(digest == digests[0] for digest in digests), code, 409, details=details)
+        return confirm_docker([], registry + '/' + repository, labels, image_id,
+                              read_manifest=lambda ref: observe(ref)[0],
+                              read_digest=lambda ref: observe(ref)[1])
+
+
+def confirm_forge_docker(args, base, registry, owner, repo, forge, token, labels, image_id):
+    repository = (owner + '/' + repo).lower()
+    try:
+        return confirm_docker(args, registry + '/' + repository, labels, image_id)
+    except Refused as error:
+        if forge != 'GITLAB' or (error.details or {}).get('reason') != 'tls-certificate':
+            raise
+    try:
+        return confirm_gitlab_registry(base, registry, repository, owner.rsplit('/', 1)[-1], token, labels, image_id)
+    except (httpx.HTTPError, ValueError) as error:
+        status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+        raise Refused('artifact-forge-publication-unconfirmed', 409, details={
+            'phase': 'registry-confirmation', **({'http_status': status} if status else {}),
+        }) from None
 
 
 def prune_docker(client,inventory,forge,labels,references,previous,mark,policy):
@@ -568,18 +681,29 @@ def release_docker(client,base,api,root,forge,owner,repo,token,github_public,met
     with ExitStack() as stack:
         with track(progress,'docker-login'):
             args,env=stack.enter_context(registry_login(registry,owner,token))
-        with track(progress,'docker-push'):
-            for label in labels:
-                target=remote_name+':'+label
-                tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
-                require(tagged.returncode==0,'artifact-local-changed',409,
-                        details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
-                mark()
-                pushed=subprocess.run([*args,'push','--quiet',target],env=env,capture_output=True,timeout=1800)
-                require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409,
-                        details={'phase':'registry-push','tag':label,'exit_code':pushed.returncode})
-        with track(progress,'docker-confirm'):
-            references=confirm_docker(args,remote_name,labels,image['image_id'])
+        # Un même artefact confirmé est déjà publié, même si le registre
+        # interdit de réécrire un tag existant.
+        try:
+            references = confirm_forge_docker(args, base, registry, owner, repo, forge, token, labels, image['image_id'])
+        except PUBLICATION_ERRORS:
+            references = None
+        if references is not None:
+            if progress is not None:
+                progress.set('docker-push', 'SKIPPED')
+                progress.set('docker-confirm', 'COMPLETED', at=timezone.now().isoformat())
+        else:
+            with track(progress,'docker-push'):
+                for label in labels:
+                    target=remote_name+':'+label
+                    tagged=subprocess.run([*args,'tag',image['image_id'],target],env=env,capture_output=True,timeout=10)
+                    require(tagged.returncode==0,'artifact-local-changed',409,
+                            details={'phase':'local-tag','tag':label,'exit_code':tagged.returncode})
+                    mark()
+                    pushed=subprocess.run([*args,'push','--quiet',target],env=env,capture_output=True,timeout=1800)
+                    require(pushed.returncode==0,'artifact-forge-publication-unconfirmed',409,
+                            details=docker_failure(pushed,'registry-push',label))
+            with track(progress,'docker-confirm'):
+                references=confirm_forge_docker(args,base,registry,owner,repo,forge,token,labels,image['image_id'])
         if policy != (0,None):
             with track(progress,'docker-retention'):
                 prune_docker(client,inventory,forge,labels,references,previous,mark,policy)
@@ -597,7 +721,7 @@ def reconcile_docker(project,request_id,tag,image_id):
         pk=request_id,project=project).first()
     require(job is not None,'artifact-reconciliation-ineligible',409)
     evidence={'tag':tag,'image_id':image_id}
-    if job.state=='COMPLETED' and job.receipt.get('reconciliation')==evidence:
+    if job.state in ('COMPLETED', 'FAILED') and job.receipt.get('reconciliation')==evidence:
         return public(job)
     require(not Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists(),
             'maintenance-in-progress',503)
@@ -623,11 +747,28 @@ def reconcile_docker(project,request_id,tag,image_id):
         with remote(project,values,job.forge) as (_,base,_,_,owner,repo,token,github_public):
             registry=docker_registry(base,job.forge,github_public,values)
             labels=tuple(dict.fromkeys([tag,'latest']))
-            with registry_login(registry,owner,token) as (args,_):
-                confirm_docker(args,registry+'/'+(owner+'/'+repo).lower(),labels,image_id)
+            if gitlab_first_tag_failed(job):
+                references = confirm_gitlab_registry(
+                    base, registry, (owner + '/' + repo).lower(), owner.rsplit('/', 1)[-1], token, labels, image_id,
+                    allow_missing_version=True,
+                )
+            else:
+                with registry_login(registry,owner,token) as (args,_):
+                    references = confirm_forge_docker(args,base,registry,owner,repo,job.forge,token,labels,image_id)
     except (httpx.HTTPError,OSError,subprocess.SubprocessError) as error:
         raise Refused('artifact-forge-publication-unconfirmed',409,
                       details={'phase':'registry-confirmation'}) from error
+    if references is None:
+        result = {
+            **job.receipt, 'previous': {'state': job.state, **job.receipt},
+            'error': 'artifact-forge-version-unpublished', 'reconciliation': evidence,
+            'details': {'phase': 'registry-confirmation', 'tag': tag, 'reason': 'manifest-missing'},
+        }
+        job.receipt, job.state = result, 'FAILED'
+        job.save(update_fields=['state', 'receipt'])
+        from .notifications import artifact_notification
+        artifact_notification('manual-publication:'+job.pk,job.project,job.forge,job.state,result,['docker'])
+        return public(job)
     progress=job.receipt.get('progress')
     confirmed_at=timezone.now().isoformat()
     if progress:

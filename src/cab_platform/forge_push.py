@@ -207,7 +207,6 @@ def prepare(project_id, forge, actor):
     dirty = bool(local_git(project, options, env, 'status', '--porcelain=v1', '--untracked-files=normal', '--ignore-submodules=all'))
     tags = commit_tags(project, options, env, head)
     remote, remote_tags = remote_refs(project, forge, owner, group, options, env, url, branch, tags)
-    require(all(tags[ref] == oid for ref, oid in remote_tags.items()), 'forge-push-tag-conflict', 409)
     signature = identity(project, values, forge)
     nonce = secrets.token_urlsafe(24)
     with transaction.atomic():
@@ -222,7 +221,11 @@ def prepare(project_id, forge, actor):
         current.save(update_fields=['configuration'])
     return {'nonce': nonce, 'branch': branch, 'local_branch': local_branch, 'head': head,
             'remote': remote or None, 'dirty': dirty,
-            'tags': [{'name': ref.removeprefix('refs/tags/'), 'remote': ref in remote_tags} for ref in tags]}
+            'tags': [
+                {'name': ref.removeprefix('refs/tags/'), 'remote': ref in remote_tags,
+                 **({'before': remote_tags[ref], 'after': oid} if ref in remote_tags and remote_tags[ref] != oid else {})}
+                for ref, oid in tags.items()
+            ]}
 
 
 def execute(project_id, forge, actor, nonce):
@@ -247,7 +250,8 @@ def execute(project_id, forge, actor, nonce):
                 'forge-push-preview-invalid', 409)
         require(record['tags'] == tags, 'forge-push-tags-changed', 409)
         expected_tags = record['remote_tags']
-        require(all(tags.get(ref) == oid for ref, oid in expected_tags.items()),
+        require(all(ref in tags and isinstance(oid, str) and OID.fullmatch(oid)
+                    for ref, oid in expected_tags.items()),
                 'forge-push-preview-invalid', 409)
         record['state'] = 'RUNNING'
         records[forge] = record
@@ -267,6 +271,8 @@ def execute(project_id, forge, actor, nonce):
         actual = remote_refs(project, forge, owner, group, options, env, url, branch, tags)
         if actual != (expected, expected_tags):
             diagnostic, rejected = 'forge-push-remote-changed', True
+        elif actual == (head, tags):
+            success = True
         else:
             issued = True
             result = remote_git(project, forge, owner, group, options, env, 'push', '--atomic',

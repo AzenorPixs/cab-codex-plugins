@@ -275,7 +275,7 @@ class ForgeArtifactsTests(unittest.TestCase):
         self.verify_debian_retention((2,365),(7,8))
 
     def publish_docker_fixture(self,forge,*,failure=None,alias=False,progress=None,
-                               github_owner=False,inventory_status=200,token='token-fixture',retention='1'):
+                               github_owner=False,inventory_status=200,token='token-fixture',retention='1',already_published=False):
         calls,marks=[],[]
         old={f'old-{index}' for index in range(68)}
         tags=old|{'2.0.0','latest'}
@@ -293,12 +293,15 @@ class ForgeArtifactsTests(unittest.TestCase):
                 tag=args[-1].rsplit(':',1)[-1]
                 calls.append(('push',args[-1]))
                 if tag==failure:
-                    return SimpleNamespace(returncode=1)
+                    return SimpleNamespace(returncode=1,stderr=b'')
                 versions[1].remove(tag)
                 versions[2].append(tag)
             if 'inspect' in args:
                 calls.append(('inspect',args[-1]))
-            return SimpleNamespace(returncode=0,stdout=json.dumps({'config':{'digest':image_id}}).encode())
+                ref=args[-1].rsplit(':',1)[-1]
+                if not already_published and ref not in versions[2]:
+                    return SimpleNamespace(returncode=1,stderr=b'no such manifest')
+            return SimpleNamespace(returncode=0,stderr=b'',stdout=json.dumps({'config':{'digest':image_id}}).encode())
 
         def tag_date(tag):
             if tag in ('old-0','old-1'):
@@ -359,12 +362,12 @@ class ForgeArtifactsTests(unittest.TestCase):
             with self.subTest(forge=forge):
                 calls,marks,error=self.publish_docker_fixture(forge)
                 self.assertIsNone(error)
-                self.assertEqual(calls[:4],[('push',expected+':2.0.0'),('push',expected+':latest'),
+                self.assertEqual(calls[:5],[('inspect',expected+':2.0.0'),('push',expected+':2.0.0'),('push',expected+':latest'),
                                             ('inspect',expected+':2.0.0'),('inspect',expected+':latest')])
-                self.assertTrue(all(action=='delete' for action,_ in calls[4:]))
-                self.assertEqual(len(calls[4:]),69 if forge=='GITHUB' else 68)
-                self.assertEqual(len(marks),len(calls)-2)
-                self.assertTrue(all('other' not in path and '/4/tags/' not in path for _,path in calls[4:]))
+                self.assertTrue(all(action=='delete' for action,_ in calls[5:]))
+                self.assertEqual(len(calls[5:]),69 if forge=='GITHUB' else 68)
+                self.assertEqual(len(marks),len(calls)-3)
+                self.assertTrue(all('other' not in path and '/4/tags/' not in path for _,path in calls[5:]))
 
     def test_artifact_retention_values(self):
         for value,expected in (('0',(0,None)),('3',(3,None)),('365D',(0,365)),
@@ -392,8 +395,20 @@ class ForgeArtifactsTests(unittest.TestCase):
                 progress=forge_publish_artifacts.PublicationProgress(['docker'])
                 calls,_,error=self.publish_docker_fixture(forge,retention='0',inventory_status=403,progress=progress)
                 self.assertIsNone(error)
-                self.assertEqual([action for action,_ in calls],['push','push','inspect','inspect'])
+                self.assertEqual([action for action,_ in calls],['inspect','push','push','inspect','inspect'])
                 self.assertEqual(progress.steps['docker-retention']['state'],'SKIPPED')
+
+    def test_docker_publication_with_both_tags_aligned_does_not_push(self):
+        for forge in ('FORGEJO', 'GITHUB', 'GITLAB'):
+            with self.subTest(forge=forge):
+                progress=forge_publish_artifacts.PublicationProgress(['docker'])
+                calls, marks, error=self.publish_docker_fixture(forge, retention='0', progress=progress,
+                                                                already_published=True)
+                self.assertIsNone(error)
+                self.assertEqual([action for action,_ in calls], ['inspect', 'inspect'])
+                self.assertFalse(marks)
+                self.assertEqual(progress.steps['docker-push']['state'], 'SKIPPED')
+                self.assertEqual(progress.steps['docker-confirm']['state'], 'COMPLETED')
 
     def test_docker_keeps_recent_versions_with_cumulative_policy(self):
         for forge in ('FORGEJO','GITHUB','GITLAB'):
@@ -409,7 +424,7 @@ class ForgeArtifactsTests(unittest.TestCase):
             with self.subTest(forge=forge):
                 calls,_,error=self.publish_docker_fixture(forge,failure='latest')
                 self.assertEqual(error.code,'artifact-forge-publication-unconfirmed')
-                self.assertEqual([action for action,_ in calls],['push','push'])
+                self.assertEqual([action for action,_ in calls],['inspect','push','push'])
 
     def test_publication_progress_records_each_observed_step(self):
         progress=forge_publish_artifacts.PublicationProgress(['docker'])
@@ -472,6 +487,77 @@ class ForgeArtifactsTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(Refused,'artifact-forge-publication-unconfirmed'):
                         forge_publish_artifacts.confirm_docker(args,remote,labels,image_id)
+
+    def test_gitlab_certificate_fallback_confirms_both_registry_references(self):
+        digest = 'sha256:' + 'a' * 64
+        child = 'sha256:' + 'b' * 64
+        manifest = {'manifests': [{'digest': child}]}
+        calls = []
+
+        def response(request):
+            calls.append((request.url.host, request.url.path))
+            if request.url.path == '/v2/':
+                return httpx.Response(401, headers={'www-authenticate':
+                    'Bearer realm="https://git.fixture/jwt/auth",service="container_registry"'})
+            if request.url.path == '/jwt/auth':
+                self.assertEqual(request.url.host, 'git.fixture')
+                self.assertEqual(request.url.params['scope'], 'repository:group/sample:pull')
+                self.assertTrue(request.headers.get('authorization', '').startswith('Basic '))
+                return httpx.Response(200, json={'token': 'registry-fixture'})
+            self.assertEqual(request.headers.get('authorization'), 'Bearer registry-fixture')
+            ref = request.url.path.rsplit('/', 1)[-1]
+            returned = child if ref == child else digest
+            data = {'config': {'digest': 'sha256:'+'c'*64}} if ref == child else manifest
+            return httpx.Response(200, json=data, headers={'docker-content-digest': returned})
+
+        tls = Refused('artifact-forge-publication-unconfirmed', 409,
+                      details={'phase': 'registry-confirmation', 'reason': 'tls-certificate'})
+        with httpx.Client(transport=httpx.MockTransport(response)) as client, \
+                patch.object(forge_publish_artifacts, 'forge_client', return_value=nullcontext(client)), \
+                patch.object(forge_publish_artifacts, 'inspect_manifest', side_effect=tls):
+            self.assertEqual(forge_publish_artifacts.confirm_forge_docker(
+                [], 'https://git.fixture', 'registry.fixture', 'group', 'sample', 'GITLAB', 'sensitive-fixture',
+                ('1.0.2', 'latest'), digest), {digest, child})
+        self.assertEqual(len(calls), 5)
+
+    def test_gitlab_first_failed_tag_can_be_confirmed_absent_only_in_accessible_registry(self):
+        digest = 'sha256:' + 'a' * 64
+        for latest_status in (200, 403):
+            with self.subTest(latest_status=latest_status):
+                def response(request):
+                    ref = request.url.path.rsplit('/', 1)[-1]
+                    if ref == '1.0.2':
+                        return httpx.Response(404)
+                    if ref == 'latest':
+                        return httpx.Response(latest_status, json={'config': {'digest': digest}},
+                                              headers={'docker-content-digest': digest})
+                    return httpx.Response(200)
+
+                with httpx.Client(transport=httpx.MockTransport(response)) as client, \
+                        patch.object(forge_publish_artifacts, 'forge_client', return_value=nullcontext(client)):
+                    args = ('https://git.fixture', 'registry.fixture', 'group/sample', 'alice', 'fixture',
+                            ('1.0.2', 'latest'), digest)
+                    verify = forge_publish_artifacts.confirm_gitlab_registry
+                    if latest_status == 200:
+                        self.assertIsNone(verify(*args, allow_missing_version=True))
+                    else:
+                        with self.assertRaises(httpx.HTTPStatusError):
+                            verify(*args, allow_missing_version=True)
+
+    def test_gitlab_registry_does_not_send_credentials_to_another_origin(self):
+        calls = []
+        def response(request):
+            calls.append(request.url.host)
+            return httpx.Response(401, headers={'www-authenticate':
+                'Bearer realm="https://other.fixture/jwt/auth",service="container_registry"'})
+
+        with httpx.Client(transport=httpx.MockTransport(response)) as client, \
+                patch.object(forge_publish_artifacts, 'forge_client', return_value=nullcontext(client)):
+            with self.assertRaisesRegex(Refused, 'artifact-forge-publication-unconfirmed'):
+                forge_publish_artifacts.confirm_gitlab_registry(
+                    'https://git.fixture', 'registry.fixture', 'group/sample', 'alice', 'sensitive-fixture',
+                    ('1.0.2','latest'), 'sha256:'+'a'*64)
+        self.assertEqual(calls, ['registry.fixture'])
 
     def test_reconciliation_preserves_receipt_until_tags_are_verified(self):
         tag,image_id='2.0.0','sha256:'+'a'*64
@@ -543,7 +629,12 @@ class ForgeArtifactsTests(unittest.TestCase):
                 self.assertTrue(forge_publish_artifacts.reconciliation_due(job,now))
                 steps[0]['state']='FAILED'
                 self.assertFalse(forge_publish_artifacts.reconciliation_due(job,now))
+                steps[1]['state']='PENDING'
+                job.receipt['details']={'phase':'registry-push','tag':'1.0.2','exit_code':1}
+                self.assertEqual(forge_publish_artifacts.reconciliation_due(job,now),forge=='GITLAB')
+                job.receipt.pop('details')
                 steps[0]['state']='COMPLETED'
+                steps[1]['state']='UNKNOWN'
                 with patch.object(forge_publish_artifacts.ProjectForgeArtifactPublication,'objects') as records, \
                      patch.object(forge_publish_artifacts.transaction,'atomic',side_effect=nullcontext), \
                      patch.object(forge_publish_artifacts.timezone,'now',return_value=now), \

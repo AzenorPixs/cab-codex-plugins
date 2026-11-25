@@ -53,6 +53,11 @@ const overview=()=>find('dialog[open][aria-label="Overview de construction Docke
     const row=label=>[...(card()?.querySelectorAll('dt')||[])].find(dt=>dt.textContent===label)?.nextElementSibling;
     const docker=await wait(()=>row('Artefact Docker')?.querySelector('button'),'Lien Docker absent '+forge);
     check(row('Artefact Docker').textContent==='1.0.3, latest','Affichage Docker incorrect '+forge);
+    const view=frame.contentWindow;
+    const linkStyle=view.getComputedStyle(docker);
+    check(linkStyle.fontSize===view.getComputedStyle(row('Artefact Docker')).fontSize&&
+      linkStyle.backgroundColor==='rgba(0, 0, 0, 0)'&&linkStyle.padding==='0px',
+      'Style du lien Docker différent de la colonne '+forge);
     check(row('Artefact Debian').textContent==='1.0.3','Affichage Debian incorrect '+forge);
     docker.click();
     dialog=await wait(overview,'Détail Docker absent '+forge);
@@ -60,10 +65,25 @@ const overview=()=>find('dialog[open][aria-label="Overview de construction Docke
     dialog.querySelector('button').click();
     await wait(()=>!overview(),'Fermeture du détail Docker');
     const debian=await wait(()=>row('Artefact Debian')?.querySelector('button'),'Lien Debian absent '+forge);
+    check(view.getComputedStyle(debian).fontSize===view.getComputedStyle(row('Artefact Debian')).fontSize&&
+      view.getComputedStyle(debian).backgroundColor==='rgba(0, 0, 0, 0)','Style du lien Debian incorrect '+forge);
     debian.click();
     dialog=await wait(()=>find('dialog[open][aria-label="Overview de construction Debian"]'),'Détail Debian absent '+forge);
     check(dialog.textContent.includes('build-debian-103'),'Reçu Debian incorrect '+forge);
     dialog.querySelector('button').click();
+    const label={forgejo:'Forgejo',github:'GitHub',gitlab:'GitLab'}[forge];
+    const sendAction=()=>card().querySelector('button[aria-label="Envoyer vers '+label+'"]');
+    const sendDialog=()=>find('dialog[open][aria-label="Envoyer vers '+label+'"]');
+    for(const expected of ['Remplacer','Déjà aligné']){
+      sendAction().click();
+      const confirmation=await wait(()=>[...(sendDialog()?.querySelectorAll('button')||[])]
+        .find(button=>button.textContent==='Envoyer'),'Confirmation Git absente '+forge);
+      check(sendDialog().textContent.includes(expected),'État du tag Git incorrect '+forge);
+      confirmation.click();
+      await wait(()=>sendDialog()?.textContent.includes('Envoi confirmé.'),'Envoi incorrect '+forge);
+      sendDialog().querySelector('.form-actions button').click();
+      await wait(()=>!sendDialog(),'Fermeture de l’aperçu Git');
+    }
   }
   await send({passed:true});
 })().catch(error=>send({error:error.message}));
@@ -87,7 +107,7 @@ try {
       `REMOTE_${forge}_${field}`,sources[forge][index],
     ]))),
   }
-  let report, requests, build
+  let report, requests, build, sent
   server=createServer(async(request,response)=>{
     const path=new URL(request.url,'http://localhost').pathname
     if(path==='/observation'||path.endsWith('/docker/build')){
@@ -117,6 +137,19 @@ try {
     if(path==='/api/v1/projects/fixture/artifacts')return json(response,{
       enabled:{docker:true,debian:false},artifacts:[],builds:build?{docker:build}:{},
     })
+    const transfer=path.match(/^\/api\/v1\/projects\/fixture\/forges\/(FORGEJO|GITHUB|GITLAB)\/(push-prepare|push)$/)
+    if(transfer){
+      const [,forge,action]=transfer
+      const nonce=`nonce-forge-${forge}`
+      if(action==='push-prepare')return json(response,{nonce,branch:'main',local_branch:'main',
+        head:'a'.repeat(40),remote:'a'.repeat(40),dirty:false,
+        tags:[{name:'1.0.3',remote:true,...(sent.has(forge)?{}:{before:'b'.repeat(40),after:'c'.repeat(40)})}]})
+      let raw=''
+      for await(const chunk of request)raw+=chunk
+      if(JSON.parse(raw).nonce!==nonce)return json(response,{error:'forge-push-preview-invalid'},409)
+      sent.add(forge)
+      return json(response,{sent:true,head:'a'.repeat(40)})
+    }
     if(path==='/api/v1/projects/fixture/published-artifacts')return json(response,{jobs:{},rows:forges.map(forge=>({
       forge,source:sources[forge],
       artifacts:Object.fromEntries(['docker','debian'].map(kind=>{
@@ -144,6 +177,7 @@ try {
   ]){
     requests=0
     build=undefined
+    sent=new Set()
     const observation=new Promise(resolve=>{report=resolve})
     const child=spawn(binary,[...args,'http://127.0.0.1:'+server.address().port+'/verification'],{stdio:'ignore'})
     const closed=once(child,'close')
@@ -152,7 +186,7 @@ try {
       const result=await Promise.race([observation,closed.then(([code])=>({error:'Arrêt '+code}))])
       assert.equal(result.passed,true,name+' — '+result.error)
       assert.equal(requests,3)
-      console.log(name+' — Détails Fabrique et liens des trois forges vérifiés.')
+      console.log(name+' — Détails Fabrique, styles et confirmations Git des trois forges vérifiés.')
     }finally{
       clearTimeout(timer)
       child.kill()

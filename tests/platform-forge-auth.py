@@ -392,8 +392,19 @@ class ForgeTLSIntegrationTests(unittest.TestCase):
                     self.git(self.workspace / (forge+'.git'), 'update-ref', tag, head)
                     with self.assertRaisesRegex(forge_push.Refused, 'forge-push-remote-changed'):
                         forge_push.execute('fixture', forge, '8', preview['nonce'])
-                    with self.assertRaisesRegex(forge_push.Refused, 'forge-push-tag-conflict'):
-                        forge_push.prepare('fixture', forge, '8')
+                    preview = forge_push.prepare('fixture', forge, '8')
+                    self.assertEqual(preview['tags'], [{
+                        'name': '1.0.3', 'remote': True, 'before': head, 'after': tag_object,
+                    }])
+                    with patch.object(forge_push, 'remote_git', wraps=forge_push.remote_git) as transport:
+                        forge_push.execute('fixture', forge, '8', preview['nonce'])
+                        self.assertTrue(any('push' in call.args for call in transport.call_args_list))
+                        transport.reset_mock()
+                        repeated = forge_push.prepare('fixture', forge, '8')
+                        self.assertEqual(repeated['tags'], [{'name': '1.0.3', 'remote': True}])
+                        forge_push.execute('fixture', forge, '8', repeated['nonce'])
+                        self.assertFalse(any('push' in call.args for call in transport.call_args_list))
+                    self.assertEqual(forge_sync.refs(*context, url, 'main'), (head, {tag:tag_object}, {tag:head}))
 
     def test_git_preview_push_and_atomic_sync_over_self_signed_https(self):
         local = self.workspace / 'local'

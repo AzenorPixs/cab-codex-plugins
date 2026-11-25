@@ -11,7 +11,7 @@ type Format=typeof formats[number][0]
 type Artifact={name:string;tags:string[];published_at?:string}
 type Observation={available:boolean;items:Artifact[];latest?:Artifact|null;chronology_unverified?:boolean}
 type Row={forge:string;source:string[];artifacts:Partial<Record<Format,Observation>>}
-export type PublicationDiagnostic={phase?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number;required_scopes?:string[]}
+export type PublicationDiagnostic={phase?:string;reason?:string;tag?:string;missing?:string[];exit_code?:number;http_status?:number;publication_confirmed?:boolean;remaining_count?:number;required_scopes?:string[]}
 type Step={key:string;state:string;error?:string;details?:PublicationDiagnostic}
 export type ArtifactPublication={kind:Format;forge:string;state:string;at?:string;error?:string;details?:PublicationDiagnostic;step?:string}
 type Job={id:string;forge:string;state:string;error?:string|null;details?:PublicationDiagnostic|null;progress?:{kinds:Format[];steps:Step[]}|null;reconcilable?:boolean}
@@ -88,7 +88,7 @@ function PublishedArtifactTags({projectId,kind,tags}:{projectId:string;kind:Form
   const build=lookup.data?.build
   const label=kind==='docker'?'Docker':'Debian'
   return <>
-    {build?<button type="button" className="forge-link" title={`Détail de la construction ${label}`}
+    {build?<button type="button" className="agent-config-link" title={`Détail de la construction ${label}`}
       onClick={()=>setDetail(build)}>{tags.join(', ')}</button>:tags.join(', ')}
     {detail&&<BuildOverview label={label} build={detail} close={()=>setDetail(null)}/>}
   </>
@@ -103,6 +103,10 @@ const steps:Record<string,string>={
   'docker-prepare':'Docker · Vérification du dépôt, du tag Git et du registre','docker-login':'Docker · Connexion au registre',
   'docker-push':'Docker · Étiquetage et envoi de l’image','docker-confirm':'Docker · Confirmation des tags distants',
   'docker-retention':'Docker · Rétention des anciens tags',
+}
+const registryReasons:Record<string,string>={
+  'tls-certificate':'Certificat du registre rejeté','registry-access':'Accès au registre refusé',
+  'manifest-missing':'Manifeste introuvable',
 }
 const phases:Record<string,string>={
   configuration:'Configuration de la forge',inventory:'Inventaire local',repository:'Lecture du dépôt distant',
@@ -125,6 +129,7 @@ export function PublicationFailure({state,error,details,step,message}:{state:str
       {step&&<div><dt>Étape</dt><dd>{steps[step]||step}</dd></div>}
       {error&&<div><dt>Code</dt><dd><code>{error}</code></dd></div>}
       {details?.phase&&<div><dt>Opération</dt><dd>{phases[details.phase]||details.phase}</dd></div>}
+      {details?.reason&&registryReasons[details.reason]&&<div><dt>Diagnostic</dt><dd>{registryReasons[details.reason]}</dd></div>}
       {details?.tag&&<div><dt>Tag</dt><dd><code>{details.tag}</code></dd></div>}
       {!!details?.missing?.length&&<div><dt>Éléments manquants</dt><dd>{details.missing.join(', ')}</dd></div>}
       {details?.exit_code!==undefined&&<div><dt>Code de sortie</dt><dd>{details.exit_code}</dd></div>}

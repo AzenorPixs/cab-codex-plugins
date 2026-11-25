@@ -992,16 +992,26 @@ CAB MUST utiliser les identifiants de forge qu’il gère, vérifier les référ
 
 ### Requirement: Envoi manuel de branche vers les forges
 
-CAB MUST afficher le bouton « Envoyer » après le rafraîchissement de chaque forge et utiliser ses identifiants chiffrés. L’aperçu MUST indiquer branche cible, commit et tags. CAB MUST envoyer atomiquement la branche et les tags manquants du commit, avec protection et vérification des références distantes. CAB MUST préserver les objets des tags annotés et refuser un tag homonyme divergent.
+CAB MUST afficher le bouton « Envoyer » après le rafraîchissement de chaque forge et utiliser ses identifiants chiffrés. L’aperçu MUST indiquer branche cible, commit et tags. CAB MUST envoyer atomiquement la branche et les tags du commit, avec protection et vérification des références distantes. CAB MUST préserver les objets des tags annotés et contrôler la valeur distante de chaque référence modifiée.
 
 #### Scenario: Confirmation de l’envoi
 
 - **WHEN** l’administrateur confirme un aperçu encore valide
-- **THEN** CAB actualise la branche et publie ses tags manquants même si la branche est déjà à jour, puis vérifie les références distantes et actualise l’état de la forge.
+- **THEN** CAB actualise la branche et aligne ses tags même si la branche est déjà à jour, puis vérifie les références distantes et actualise l’état de la forge.
+
+#### Scenario: Tag distant divergent
+
+- **WHEN** l’aperçu observe un tag homonyme sur un autre objet
+- **THEN** CAB présente les deux valeurs et les aligne lors de la confirmation de l’envoi normal, sur Forgejo, GitHub et GitLab.
+
+#### Scenario: Envoi répété avec des références identiques
+
+- **WHEN** l’aperçu confirmé et la forge correspondent au commit et aux tags locaux
+- **THEN** CAB confirme leur égalité et actualise la carte.
 
 #### Scenario: Tag divergent ou aperçu périmé
 
-- **WHEN** un tag homonyme est divergent ou les références confirmées ont changé
+- **WHEN** les références confirmées ont changé
 - **THEN** CAB refuse l’envoi sans écraser le tag ni appliquer de changement partiel.
 
 #### Scenario: Résultat incertain
@@ -3257,6 +3267,22 @@ CAB MUST permettre de republier un artefact Docker ou Debian sous un tag de vers
 - **THEN** CAB peut remplacer le contenu de la version et de `latest`
 - **AND THEN** CAB confirme les tags publiés avant d’appliquer la politique de rétention à la seule image ciblée et vérifie le résultat du nettoyage
 
+#### Scenario: Republication d’une image Docker identique
+
+- **WHEN** CAB confirme que le tag de version et `latest` désignent déjà l’image locale
+- **THEN** CAB confirme la publication sans retransmettre l’image.
+
+#### Scenario: Vérification du registre Docker
+
+- **WHEN** CAB vérifie les manifestes publiés sur GitLab et que le client Docker rencontre un certificat non reconnu
+- **THEN** CAB applique sa politique TLS aux lectures directes du registre configuré puis vérifie l’identité de l’image et de ses deux tags.
+- **AND THEN** la politique TLS du démon Docker continue de régir le transfert d’image, et un refus expose un diagnostic sans sortie brute.
+
+#### Scenario: Premier tag Docker absent après un échec GitLab
+
+- **WHEN** le reçu enregistre un échec du push du tag de version avant l’envoi de `latest` et que CAB confirme l’absence du tag sur le registre accessible
+- **THEN** CAB conserve le reçu initial, consigne l’échec confirmé et permet une nouvelle publication demandée par l’administrateur.
+
 #### Scenario: Publication Docker incomplète
 
 - **WHEN** un envoi ou la confirmation d’un tag échoue
@@ -3535,7 +3561,7 @@ Pour chaque format activé, CAB MUST afficher une seule ligne avec les tags de l
 #### Scenario: Construction disponible
 
 - **WHEN** une construction réussie du même format et de la version publiée est disponible
-- **THEN** les tags affichés ouvrent son détail de construction de la Fabrique, y compris pour l’alias Docker `latest` de la même image.
+- **THEN** les tags affichés ouvrent son détail de construction de la Fabrique, y compris pour l’alias Docker `latest` de la même image. Le lien reprend la présentation des liens de la colonne des valeurs.
 
 #### Scenario: Alias Docker observé sans chronologie attestée
 
