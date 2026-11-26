@@ -33,7 +33,7 @@ const tokenCounts=(input='1250',write='7654')=>({coder:{input_tokens:input,outpu
 const iterations=Array.from({length:12},(_,index)=>({
  id:index+1,number:index+1,duration_seconds:[15.8,641.2,3661.2,null][index]??null,
  state:index===11?'RUNNING':index===10?'CANCELLED':index===9?'UNKNOWN':'COMPLETED',started_at:time,ended_at:index===11?null:time,
- cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(),
+ cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(index===4?'999000000':undefined),
 }));
 const actions=Array.from({length:12},(_,index)=>({
  ...iterations[index],id:101+index,parent_id:1,description:'Action visible '+(index+1),
@@ -197,6 +197,10 @@ try{
      const warning=cancelled.querySelector('.stage-cycle-warning');
      const unknown=table.tBodies[0].rows[9].cells[22];
      const question=unknown.querySelector('.stage-cycle-unknown');
+     const completed=first.cells[22].querySelector('.stage-cycle-completed');
+     const tokenWidths=Array.from(first.cells).slice(6,22).map(cell=>cell.getBoundingClientRect().width);
+     const wideToken=table.tBodies[0].rows[4].cells[6].querySelector('.stage-cycle-token>span');
+     const extraSpace=cell=>getComputedStyle(cell,'::after').content.includes('\u00a0');
      const date=first.cells[1];
      const line=document.createRange();
      line.selectNodeContents(head.cells[0]);
@@ -208,6 +212,11 @@ try{
      return JSON.stringify({
       headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
       cycleWidth:head.cells[0].clientWidth<=headingWidth+padding+1,
+      fixedTokens:Math.max(...tokenWidths)-Math.min(...tokenWidths)<.5
+        && wideToken.textContent==='999\u202fM' && wideToken.scrollWidth<=wideToken.clientWidth,
+      spacing:Array.from(head.cells).slice(1,6).every(extraSpace)
+        && Array.from(first.cells).slice(1,6).every(extraSpace) && !extraSpace(first.cells[0]),
+      fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
       singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
       coder:first.cells[7].textContent.includes('1,25') && second.cells[7].textContent.includes('2,5')
         && second.cells[9].textContent.includes('2') && second.cells[11].textContent==='0' && second.cells[13].textContent.includes('15,31'),
@@ -218,11 +227,13 @@ try{
         && warning.querySelector('path').getAttribute('fill')==='#f4c542' && !first.querySelector('.stage-cycle-warning'),
       unknown:unknown.textContent.includes('Indéterminé') && question?.getAttribute('aria-hidden')==='true'
         && question.querySelector('circle').getAttribute('fill')==='#1766b1' && !first.querySelector('.stage-cycle-unknown'),
+      completed:first.cells[22].textContent.includes('Terminé') && completed?.getAttribute('aria-hidden')==='true'
+        && getComputedStyle(completed).color==='rgb(33, 128, 73)' && !running.querySelector('.stage-cycle-completed'),
       overflow:overflow>0?{viewport:innerWidth,available:wrapper.clientWidth,table:wrapper.scrollWidth,
         columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
      });
     })()`));
-    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,unknown:true,overflow:0},
+    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,fixedTokens:true,spacing:true,fillsWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,unknown:true,completed:true,overflow:0},
       'Tableau piloté compact et cumuls sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);
@@ -255,6 +266,14 @@ try{
    })()`));
    assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0},
     'Tableau direct sans défilement à 1 440 px');
+   const measureColumns=`JSON.stringify(Array.from(document.querySelector('.stage-passages-compact tbody tr').cells,cell=>cell.getBoundingClientRect().width))`;
+   const narrowColumns=JSON.parse(await ev(measureColumns));
+   await browser.viewport(1760,900);
+   const widerColumns=JSON.parse(await ev(measureColumns));
+   assert(widerColumns.at(-1)>narrowColumns.at(-1)
+    && widerColumns.slice(0,-1).every((width,i)=>Math.abs(width-narrowColumns[i])<1),
+    'Seule la colonne État grandit lorsque la résolution augmente');
+   await browser.viewport(1440,900);
    run.mode='piloted';metrics.piloted=true;
    await browser.navigate(new URL('/projects/fixture',url).href);
    await wait(()=>ev(`!!document.querySelector('select option[value="fixture-change"]')`),'sélecteur de change sur l’accueil projet');

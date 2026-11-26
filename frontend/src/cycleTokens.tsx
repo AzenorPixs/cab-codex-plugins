@@ -44,18 +44,24 @@ export function TokenRoleHeaders(){
   return <>{roles(true).map(role=><th key={role} colSpan={fields.length*2}>{roleLabel[role]}</th>)}</>
 }
 
+function tokenSlot(text:string, fixed:boolean, title?:string){
+  return fixed?<span className="stage-cycle-token" title={title}><span>{text}</span></span>:text
+}
+
 export function TokenColumns({tokens,cumulative,piloted=false,header=false,includeCumulative=cumulative!==undefined}:{
   tokens?:CycleTokens;cumulative?:CycleTokens;piloted?:boolean;header?:boolean;includeCumulative?:boolean
 }){
   return <>{roles(piloted).flatMap(role=>fields.flatMap(([field,abbreviation,label])=>{
     const key=role+field
+    const value=formatTokens(tokens?.[role]?.[field])
     const current=header
-      ? <th key={key} scope="col" title={label}>{abbreviation}{piloted&&!includeCumulative&&<small>{roleLabel[role]}</small>}</th>
-      : <td key={key} className="cycle-token-value">{formatTokens(tokens?.[role]?.[field])}</td>
+      ? <th key={key} scope="col" title={label}>{tokenSlot(abbreviation,includeCumulative)}{piloted&&!includeCumulative&&<small>{roleLabel[role]}</small>}</th>
+      : <td key={key} className="cycle-token-value">{tokenSlot(value,includeCumulative,value)}</td>
     if(!includeCumulative)return current
+    const cumulativeValue=formatTokens(cumulative?.[role]?.[field])
     const total=header
-      ? <th key={key+'-total'} scope="col" title={'Cumul · '+label}>C{abbreviation}</th>
-      : <td key={key+'-total'} className="cycle-token-value">{formatTokens(cumulative?.[role]?.[field])}</td>
+      ? <th key={key+'-total'} scope="col" title={'Cumul · '+label}>{tokenSlot('C'+abbreviation,true)}</th>
+      : <td key={key+'-total'} className="cycle-token-value">{tokenSlot(cumulativeValue,true,cumulativeValue)}</td>
     return [current,total]
   }))}</>
 }

@@ -55,7 +55,7 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
       <th scope="col" rowSpan={rowSpan}>{showAllRows?'Agents':'Agent(s)'}</th>
       <th scope="col" rowSpan={rowSpan}>{showAllRows?'Attentes':'Attente'}</th>
       {grouped?<TokenRoleHeaders/>:tokenHeaders}
-      <th scope="col" rowSpan={rowSpan}>État</th>
+      <th className="stage-cycle-state" scope="col" rowSpan={rowSpan}>État</th>
     </tr>{grouped&&<tr>{tokenHeaders}</tr>}</>}
     content={item=>[item.number,date(item.started_at),date(item.ended_at),stageDuration(item.cab_seconds),
       stageDuration(item.agent_seconds),stageDuration(item.waiting_seconds),item.description,item.receipt?.error,
@@ -64,7 +64,10 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
       <td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td>
       <td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td>
       <TokenColumns tokens={item.tokens} cumulative={item.cumulative} piloted={piloted}/>
-      <td>{showAllRows&&item.state==='RUNNING'&&<span className="stage-cycle-spinner" aria-hidden="true"/>}
+      <td className="stage-cycle-state">{showAllRows&&item.state==='RUNNING'&&<span className="stage-cycle-spinner" aria-hidden="true"/>}
+        {showAllRows&&item.state==='COMPLETED'&&<svg className="stage-cycle-completed" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m3 8 3.2 3.2L13 4.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>}
         {showAllRows&&item.state==='CANCELLED'&&<svg className="stage-cycle-warning" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M8 1.5 15 14H1Z" fill="#f4c542" stroke="#795900" strokeLinejoin="round"/>
           <path d="M8 5.5v4m0 2v.15" fill="none" stroke="#352700" strokeWidth="1.5" strokeLinecap="round"/>

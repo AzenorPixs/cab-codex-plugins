@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[size-stage-cycle-columns](changes/archive/2026-11-26-size-stage-cycle-columns/),
+code non attribué. Attribution ultérieure par ACL.
+
 [recover-uncertain-publication-admission](changes/archive/2026-11-26-recover-uncertain-publication-admission/),
 code non attribué. Attribution ultérieure par ACL.
 

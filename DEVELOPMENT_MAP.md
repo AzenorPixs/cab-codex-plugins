@@ -23,6 +23,11 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[size-stage-cycle-columns](openspec/changes/archive/2026-11-26-size-stage-cycle-columns/),
+code non attribué. Les contrôles Chromium et Firefox du 26 novembre 2026
+vérifient les colonnes de tokens calibrées sur `999 M`, l’espacement, la
+largeur extensible d’État et la coche verte « Terminé » dans les douze onglets.
+
 [compact-stage-cycle-tables](openspec/changes/archive/2026-11-26-compact-stage-cycle-tables/),
 code non attribué. La recette Chromium et Firefox du 26 novembre 2026 couvre
 les douze onglets, les lignes compactes, les cumuls de tokens, les états « En
