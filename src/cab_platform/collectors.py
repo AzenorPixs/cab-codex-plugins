@@ -51,7 +51,7 @@ def opencode_metrics(actor):
                 if not created and sequence<metric.sequence:continue
                 metric.sequence=sequence;metric.values=values;metric.coverage={**{k:'native' for k in values},'_scope':'session-wide','_eligible_for_change':False};metric.model={k:str(v)[:160] for k,v in row.get('model',{}).items() if k in ('id','providerID','variant')};metric.save()
 
-def codex_metrics(run):
+def codex_metrics(run, known_sequence=None):
     actor=run.actor
     source=run.mandate.get('native_source',actor.native)
     if metrics_retired(run) or not source.get('source_file'):return
@@ -63,6 +63,9 @@ def codex_metrics(run):
             if not stat.S_ISREG(info.st_mode) or info.st_uid!=actor.uid or info.st_nlink!=1 or info.st_size>128*1024*1024:return
             if 'inode' in source and (info.st_dev,info.st_ino)!=(source['device'],source['inode']):
                 log.warning('native source replaced',extra={'run_id':run.run_id});return
+            sequence=info.st_mtime_ns//1000000
+            if known_sequence is not None and sequence<=known_sequence:
+                return
             identity=None;last=None
             for line in stream:
                 try:row=json.loads(line)
@@ -71,7 +74,6 @@ def codex_metrics(run):
                 if row.get('type')=='event_msg' and row.get('payload',{}).get('type')=='token_count':last=row['payload'].get('info',{}).get('total_token_usage')
         if not identity or not last or identity.get('id')!=run.session_id or identity.get('cwd')!=run.project.root:return
         metrics={key:str(last[name]) for name,key in [('input_tokens','tokens_input'),('output_tokens','tokens_output'),('cached_input_tokens','tokens_cache_read'),('cache_write_input_tokens','tokens_cache_write'),('reasoning_output_tokens','tokens_reasoning'),('total_tokens','tokens_total')] if type(last.get(name)) is int and last[name]>=0}
-        sequence=info.st_mtime_ns//1000000
         with transaction.atomic():
             locked_run = locked_metrics_run(run)
             if not locked_run:return
@@ -82,8 +84,14 @@ def codex_metrics(run):
         log.debug('native source unavailable',extra={'run_id':run.run_id,'code':type(error).__name__})
 
 def collect():
-    for actor in Actor.objects.filter(active=True):
-        if actor.agent=='opencode' and actor.native.get('password_file'):
+    opencode_actors=[]
+    for actor in Actor.objects.filter(active=True,agent='opencode'):
+        if actor.native.get('password_file'):
             opencode_metrics(actor)
-        else:
-            for run in Run.objects.filter(actor=actor).select_related('actor','project'):codex_metrics(run)
+            opencode_actors.append(actor.pk)
+    runs=Run.objects.filter(actor__active=True).exclude(actor_id__in=opencode_actors).select_related('actor','project')
+    sequences=dict(Metric.objects.filter(
+        run__in=runs, source='codex-native', stream='native-tokens',
+    ).values_list('run_id','sequence'))
+    for run in runs.iterator():
+        codex_metrics(run,sequences.get(run.pk))

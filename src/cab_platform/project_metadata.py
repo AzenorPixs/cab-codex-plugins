@@ -210,7 +210,7 @@ def read_metadata(root, *, keys=KEYS, diagnostic=False, project=None, with_diges
         return result('missing')
     except (OSError,UnicodeError):return result('unavailable')
 
-def synchronize(project_id,include_forges=True,include_git=True,verify_source=False):
+def synchronize(project_id,include_forges=True,include_git=True,verify_source=False,*,with_status=False):
     from django.db import transaction
     from .core.models import Project,ProjectMetadataProjection
     # La lecture et la mise à jour sont sérialisées pour éviter qu'une sélection
@@ -246,7 +246,7 @@ def synchronize(project_id,include_forges=True,include_git=True,verify_source=Fa
         source_issues = snapshot.pop('issues',[])
         snapshot['project_root']=project.root
         previous=project.public_metadata or {}
-        tokens_changed=False
+        tokens_changed=False;tokens_valid=True;git_available=True
         if include_forges:
             from .forge_settings import synchronize_tokens
             from .core.commands import Refused
@@ -258,6 +258,7 @@ def synchronize(project_id,include_forges=True,include_git=True,verify_source=Fa
         if include_git:
             from .project_git import probe
             observed_git=probe(project)
+            git_available=observed_git is not None
             configuration=dict(project.configuration or {})
             if observed_git is not None:
                 if configuration.get('git_initialized') != observed_git:
@@ -299,4 +300,8 @@ def synchronize(project_id,include_forges=True,include_git=True,verify_source=Fa
         projection,created=ProjectMetadataProjection.objects.get_or_create(pk=project.pk,defaults={'public_metadata':project.public_metadata})
         if not created and projection.public_metadata!=project.public_metadata:
             projection.public_metadata=project.public_metadata;projection.save(update_fields=['public_metadata'])
+        if with_status:
+            complete=(tokens_valid and git_available and snapshot['state']!='unavailable'
+                      and not snapshot.get('version_policy_error'))
+            return project.public_metadata,complete
         return (project.public_metadata,source_digest,source_issues) if verify_source else project.public_metadata

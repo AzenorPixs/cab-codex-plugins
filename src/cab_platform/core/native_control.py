@@ -190,8 +190,10 @@ def request_connector(actor,data,peer):
     return state
 
 def queue_mismatched():
-    for connector in McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).select_related('actor'):
-        if connector.loaded_version==__version__ and connector.catalog_version==__version__:continue
+    candidates=McpConnector.objects.filter(seen__gte=timezone.now()-timedelta(seconds=15)).exclude(
+        loaded_version=__version__,catalog_version=__version__,
+    )
+    for connector in candidates.select_related('actor'):
         if not alive(connector.process) or connector.pending or connector.uncertain:continue
         actor=connector.actor
         if not actor.native:continue

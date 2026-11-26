@@ -203,7 +203,7 @@ def archive_session(actor,data):
     return {'archived':True,'request_id':request,'run_id':run.run_id,'at':row.created.isoformat()}
 
 
-_cursor=0
+_cursors={None:0,False:0,True:0}
 
 
 @transaction.atomic
@@ -225,11 +225,16 @@ def reconcile_closed_change(run):
     return current
 
 
-def sweep():
-    global _cursor
+def sweep(*, historical=None):
     if Maintenance.objects.filter(state__in=['PREPARED','INSTALLING']).exists():return
-    rows=list(Run.objects.filter(pk__gt=_cursor).order_by('pk')[:100])
-    if not rows:_cursor=0;return
+    closed_states=('CLOSED','CLOSURE_INVALID')
+    candidates=Run.objects.filter(pk__gt=_cursors[historical])
+    if historical is True:
+        candidates=candidates.filter(state__in=closed_states)
+    elif historical is False:
+        candidates=candidates.exclude(state__in=closed_states+('CANCELLED_BEFORE_START',))
+    rows=list(candidates.select_related('project').order_by('pk')[:100])
+    if not rows:_cursors[historical]=0;return
     try:
         for run in rows:
             from .models import FinalizationPlan
@@ -247,4 +252,4 @@ def sweep():
                 except (c.Refused,OSError,ValueError):continue
             # La projection corrige aussi les anciens états masqués, sans levée de protection.
             run.refresh_from_db();c.projection(run)
-    finally:_cursor=rows[-1].pk
+    finally:_cursors[historical]=rows[-1].pk

@@ -76,20 +76,43 @@ def background_metadata():
         finalize()
     refresh()
 
-def background_closure():
+def background_closure(historical=False):
     from django.db import close_old_connections
     from .core.run_lifecycle import sweep
     from .core.operation_recovery import sweep as recover_stopped
-    try:recover_stopped();sweep()
+    try:
+        if not historical:
+            recover_stopped()
+        sweep(historical=historical)
     finally:close_old_connections()
 
-def background_native():
+def background_native(convergence=False):
     from django.db import close_old_connections
     from .core.native_control import recover,queue_mismatched,work_one
     from .opencode_recovery import sweep as recover_opencode
     from .mcp_disconnect_recovery import sweep as recover_connections
     from .mcp_convergence import sweep as converge
-    try:recover();converge();recover_connections();queue_mismatched();work_one();recover_opencode()
+    try:
+        recover()
+        recover_connections()
+        work_one()
+        if convergence:
+            converge()
+            queue_mismatched()
+        recover_opencode()
+    finally:close_old_connections()
+
+
+def background_projections(collect_metrics, project_ids):
+    from django.db import close_old_connections
+    from .collectors import collect
+    from .core.monitor import refresh_changes
+
+    try:
+        if project_ids is None or project_ids:
+            refresh_changes(project_ids)
+        if collect_metrics:
+            collect()
     finally:close_old_connections()
 
 def background_agents():
@@ -198,9 +221,10 @@ def run(port=8790):
     postgres_thread=threading.Thread(target=postgres_monitor.run,args=(stop,),name='cab-postgres-watch',daemon=True)
     postgres_thread.start()
     electric=None;tasks={};recovered=False;next_collect=0;next_metadata=0;metadata=None
-    statistics_watcher=None;statistics_future=None;statistics_project=None
-    closure_future=None;next_closure=0;next_update=0;next_connectors=0
-    update_future=None;availability_future=None;native_future=None;next_native=0
+    statistics_watcher=None;statistics_future=None;metadata_scan=None
+    projection_future=None;projection_projects=set();next_projection=0
+    closure_future=None;history_future=None;next_closure=0;next_history=0;next_update=0;next_connectors=0
+    update_future=None;availability_future=None;native_future=None;next_native=0;next_convergence=0
     agents_future=None;next_agents=0
     catalog_future=None;next_catalog=0
     agent_config_future=None;next_agent_config=0
@@ -213,7 +237,8 @@ def run(port=8790):
     pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix='cab-worker')
     metadata_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-metadata')
     statistics_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-statistics')
-    closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-closure')
+    closure_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-closure')
+    projection_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-projection')
     update_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix='cab-update')
     native_pool=concurrent.futures.ThreadPoolExecutor(max_workers=1,thread_name_prefix='cab-native')
     from .agent_catalog_files import refresh as refresh_agent_catalog
@@ -231,7 +256,12 @@ def run(port=8790):
                 except Exception as error:log.warning('native control unavailable',extra={'code':type(error).__name__})
                 native_future=None
             if native_future is None and time.monotonic()>=next_native:
-                native_future=native_pool.submit(background_native);next_native=time.monotonic()+1
+                now=time.monotonic()
+                convergence=now>=next_convergence
+                native_future=native_pool.submit(background_native,convergence)
+                next_native=now+1
+                if convergence:
+                    next_convergence=now+5
             if reload_requested.is_set():
                 try:
                     level=configure()
@@ -339,25 +369,46 @@ def run(port=8790):
                         except Exception as error:log.warning('closure evaluation unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
                         closure_future=None
                     if closure_future is None and time.monotonic()>=next_closure:
-                        closure_future=closure_pool.submit(background_closure);next_closure=time.monotonic()+5
+                        closure_future=closure_pool.submit(background_closure)
+                        next_closure=time.monotonic()+5
+                    if history_future is not None and history_future.done():
+                        try:history_future.result()
+                        except Exception as error:log.warning('historical closure unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
+                        history_future=None
+                    if history_future is None and time.monotonic()>=next_history:
+                        history_future=closure_pool.submit(background_closure,True)
+                        next_history=time.monotonic()+30
                     from .statistics_watch import Watcher,synchronize
                     if statistics_watcher is None:
                         statistics_watcher=InotifyMonitor(Watcher,'inotify-statistics','Surveillance inotify Statistiques')
                     if statistics_future is not None and statistics_future.done():
-                        try:statistics_future.result()
+                        try:
+                            signature=statistics_future.result()
+                            if metadata_scan and signature is not None:
+                                watcher,project_id=metadata_scan
+                                if watcher is statistics_watcher.watcher and project_id in watcher.projects:
+                                    watcher.env_signatures[project_id]=signature
                         except Exception as error:log.warning('statistics synchronization unavailable',extra={'code':getattr(error,'code',type(error).__name__)})
                         statistics_future=None
+                        metadata_scan=None
                     due=statistics_watcher.tick()
                     observed=statistics_watcher.watcher
                     if due is not None and observed is not None:
-                        env_due=[key for key,at in observed.env_dirty.items() if time.monotonic()-at>=.3]
-                        if statistics_future is None and env_due:
-                            from .project_metadata import synchronize as synchronize_metadata
-                            project_id=env_due[0];observed.env_dirty.pop(project_id,None)
-                            statistics_future=statistics_pool.submit(synchronize_metadata,project_id)
-                        elif statistics_future is None and due:
-                            statistics_project=due[0];observed.dirty.pop(statistics_project,None)
-                            statistics_future=statistics_pool.submit(synchronize,statistics_project)
+                        projection_projects.update(observed.tasks_dirty)
+                        observed.tasks_dirty.clear()
+                        if statistics_future is None:
+                            now=time.monotonic()
+                            env_project=min((key for key,at in observed.env_dirty.items() if now-at>=.3),
+                                            key=observed.env_dirty.get,default=None)
+                            stats_project=min(due,key=observed.dirty.get,default=None)
+                            if env_project is not None and (stats_project is None or observed.env_dirty[env_project]<observed.dirty[stats_project]):
+                                observed.env_dirty.pop(env_project)
+                                observed.env_signatures.pop(env_project,None)
+                                metadata_scan=(observed,env_project)
+                                statistics_future=statistics_pool.submit(observed.synchronize_metadata,env_project)
+                            elif stats_project is not None:
+                                observed.dirty.pop(stats_project)
+                                statistics_future=statistics_pool.submit(synchronize,stats_project)
                     for op in Operation.objects.filter(state='WAITING').order_by('pk')[:4]:
                         if len(tasks)>=4:break
                         if op.pk not in tasks:tasks[op.pk]=pool.submit(execute_operation,op.pk)
@@ -367,10 +418,23 @@ def run(port=8790):
                     metadata=None
                 if metadata is None and time.monotonic()>=next_metadata:
                     metadata=metadata_pool.submit(background_metadata);next_metadata=time.monotonic()+30
-                if time.monotonic()>next_collect:
-                    from .collectors import collect
-                    from .core.monitor import refresh_changes
-                    collect();refresh_changes();next_collect=time.monotonic()+5
+                if projection_future is not None and projection_future.done():
+                    try:projection_future.result()
+                    except Exception as error:
+                        next_projection=0
+                        log.warning('change projection unavailable',extra={'code':type(error).__name__})
+                    projection_future=None
+                now=time.monotonic()
+                if projection_future is None and (projection_projects or now>=min(next_collect,next_projection)):
+                    collect_metrics=now>=next_collect
+                    full_projection=now>=next_projection
+                    project_ids=None if full_projection else tuple(projection_projects)
+                    projection_future=projection_pool.submit(background_projections,collect_metrics,project_ids)
+                    projection_projects.clear()
+                    if collect_metrics:
+                        next_collect=now+5
+                    if full_projection:
+                        next_projection=now+60
             except Exception as error:
                 # Une panneSQL n’est jamais une installation neuve ou une fin d’effet.
                 log.warning('background unavailable',extra={'code':type(error).__name__});stop.wait(2)
@@ -386,6 +450,7 @@ def run(port=8790):
         native_pool.shutdown(wait=True,cancel_futures=True)
         update_pool.shutdown(wait=True,cancel_futures=True)
         closure_pool.shutdown(wait=True,cancel_futures=True)
+        projection_pool.shutdown(wait=True,cancel_futures=True)
         statistics_pool.shutdown(wait=True,cancel_futures=True)
         if statistics_watcher is not None:statistics_watcher.close()
         pool.shutdown(wait=True,cancel_futures=True)

@@ -86,6 +86,12 @@ et des entrées séparées pour ses sources locales ouvertes ou archivées.
 Les hashes par fichier incluent `STATISTICS.md` lorsqu’il existe. Seules les
 données publiques sont transmises par Electric, dans la portée du projet.
 La veille inotify et un créneau aléatoire par jour UTC réconcilient le catalogue.
+Les événements OpenSpec alimentent la projection des tâches par projet. Un
+rattrapage global couvre la perte d'événements. La surveillance des métadonnées
+compare des signatures de fichiers établies après une lecture réussie.
+Les RUN actifs et les clôtures historiques ont des balayages distincts.
+La convergence MCP est réévaluée toutes les cinq secondes. Les files actives
+de récupération et de contrôle natif conservent leur cadence.
 La fiche récupère les données publiques du change depuis PostgreSQL. La route
 peut préciser une des sources observées pour distinguer les archives homonymes.
 

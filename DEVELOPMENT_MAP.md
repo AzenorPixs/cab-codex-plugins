@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Charge CPU du service
+
+`reduce-cab-background-cpu`, code non attribué. Les veilles de métadonnées et
+de tâches, la télémétrie Codex, les clôtures historiques et la convergence
+MCP sont qualifiées au sein du même RUN. La comparaison sur l'hôte distingue
+le service, Electric, les connexions PostgreSQL CAB et les connecteurs.
+
 ## Réconciliation des admissions de publication
 
 [automate-publication-recovery-and-cabu](openspec/changes/archive/2026-11-26-automate-publication-recovery-and-cabu/),

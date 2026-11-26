@@ -74,9 +74,15 @@ def observe_tasks(change):
     except (OSError,ValueError,UnicodeError):return {'source_state':'unavailable'}
 
 
-def refresh_changes():
-    for run in Run.objects.filter(change_record__isnull=True).select_related('actor','project').iterator():ensure_records(run)
-    for change in Change.objects.select_related('project').iterator():
+def refresh_changes(project_ids=None):
+    runs=Run.objects.filter(change_record__isnull=True).select_related('actor','project')
+    changes=Change.objects.select_related('project')
+    if project_ids is not None:
+        runs=runs.filter(project_id__in=project_ids)
+        changes=changes.filter(project_id__in=project_ids)
+    for run in runs.iterator():
+        ensure_records(run)
+    for change in changes.iterator():
         values=observe_tasks(change);tasks=values.pop('tasks',None)
         changed=any(getattr(change,key)!=value for key,value in values.items())
         if tasks is not None and ChangeTask.objects.filter(change=change,active=True).count()!=len(tasks):changed=True
