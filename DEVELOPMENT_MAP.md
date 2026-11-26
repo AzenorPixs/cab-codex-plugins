@@ -23,6 +23,11 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[summarize-last-cycle-per-stage](openspec/changes/archive/2026-11-26-summarize-last-cycle-per-stage/),
+code non attribué. Les vérifications Chromium et Firefox du 26 novembre 2026
+couvrent le dernier passage dans l’en-tête de chaque onglet, les gabarits,
+les colonnes C sans données et le pictogramme « Non exécuté ».
+
 [size-stage-cycle-columns](openspec/changes/archive/2026-11-26-size-stage-cycle-columns/),
 code non attribué. Les contrôles Chromium et Firefox du 26 novembre 2026
 vérifient les colonnes de tokens calibrées sur `999 M`, l’espacement, la

@@ -357,15 +357,21 @@ Pour un RUN du nouveau profil, CAB MUST intégrer dans le snapshot Git de toute 
 
 ### Requirement: Tableau compact des passages par étape
 
-Dans les douze onglets d’étape, CAB MUST garder chaque passage sur une ligne. Cycle MUST s’ajuster à son titre lorsqu’il suffit. Début, Fin, CAB, Agents et Attentes MUST s’ajuster au titre et au contenu avec un espace ajouté. Les compteurs MUST partager une largeur fixe suffisante pour `999 M`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
+Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fin, CAB, Agents et Attentes MUST utiliser des gabarits fixes. Les colonnes de tokens MUST partager une largeur suffisante pour `999 M`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
 
 #### Scenario: Colonnes dans les douze onglets
 
 - **WHEN** un onglet d’étape affiche ses passages
 - **THEN** le tableau affiche Cycle, Début, Fin, CAB, Agents et Attentes, puis Te, CTe, Ts, CTs, Tr, CTr, Tw et CTw pour chaque rôle applicable, puis État
-- **AND** chaque compteur cumulé additionne les mesures disponibles de ce rôle dans l’ordre des passages de cette étape, jusqu’au passage de la ligne incluse
-- **AND** un cumul sans mesure affiche un tiret et une valeur mesurée à zéro affiche zéro
-- **AND** les titres et les valeurs de Début, Fin, CAB, Agents, Attentes et État restent entiers
+- **AND** les colonnes CTe, CTs, CTr et CTw restent vides et sans liaison aux mesures
+- **AND** le texte complet d’une valeur dépassant sa colonne reste consultable dans son infobulle
+
+#### Scenario: Largeurs fixes des colonnes de passage
+
+- **WHEN** un onglet affiche le tableau Cycle
+- **THEN** Cycle est dimensionné sur son titre suivi de deux espaces
+- **AND** Début et Fin sont dimensionnés sur une date complète avec heures, minutes et secondes suivie de deux espaces
+- **AND** CAB, Agents et Attentes sont dimensionnés sur `9999,9 s` suivi de deux espaces
 
 #### Scenario: Compteurs de tailles différentes
 
@@ -395,6 +401,11 @@ Dans les douze onglets d’étape, CAB MUST garder chaque passage sur une ligne.
 - **WHEN** un passage est terminé
 - **THEN** une coche verte accompagne le libellé « Terminé » dans la colonne État
 
+#### Scenario: Passage non exécuté
+
+- **WHEN** un passage porte l’état « Non exécuté »
+- **THEN** un cercle gris avec un tiret accompagne son libellé dans la colonne État
+
 ### Requirement: Réconciliation autonome d’une admission de publication incertaine
 
 Pour les admissions d’un RUN à étape 10 vacante, CAB MUST conserver un prévol durable avant d’émettre la demande d’admission lorsque les preuves sont disponibles. CAB MUST conserver le reçu d’origine en cas d’incertitude et vérifier l’identité du RUN, la version, la portée et la révision de la livraison. Une reprise autonome MUST rester limitée à une nouvelle tentative sur le même RUN, avec sa propre référence.
@@ -422,3 +433,19 @@ Dans les tableaux des douze onglets d’étape, CAB MUST accompagner le libellé
 
 - **WHEN** un passage est indéterminé
 - **THEN** le pictogramme et le libellé restent visibles dans la cellule État sur une ligne
+
+### Requirement: Dernier cycle dans le titre de chaque étape
+
+Dans chaque onglet d’étape du détail de session, CAB MUST afficher le pictogramme du dernier passage immédiatement après le titre de l’étape. Sa taille MUST suivre celle du titre. À sa suite, « Dernier Cycle de cette étape » MUST présenter la durée et les quatre mesures de tokens de ce passage pour chaque rôle applicable.
+
+#### Scenario: Dernier passage disponible
+
+- **WHEN** l’étape possède plusieurs passages chronologiques
+- **THEN** le pictogramme et les valeurs proviennent exclusivement du dernier passage observé de cette étape
+- **AND** la durée est suivie de Token/Entrant, Token/Sortant, Tokens lus dans le cache et Tokens écrits dans le cache pour le ou les rôles applicables
+- **AND** une mesure indisponible affiche un tiret
+
+#### Scenario: Aucun passage disponible
+
+- **WHEN** l’étape n’a aucun passage observé
+- **THEN** son titre reste seul sans résumé du dernier cycle

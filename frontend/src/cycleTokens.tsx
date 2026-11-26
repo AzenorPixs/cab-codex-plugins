@@ -27,29 +27,20 @@ const roles=(piloted:boolean):TokenRole[]=>piloted?['coder','orchestrator']:['co
 export const tokenColumnCount=(piloted:boolean)=>roles(piloted).length*fields.length
 const roleLabel:Record<TokenRole,string>={coder:'Codeur',orchestrator:'Orchestrateur'}
 
-export function cumulativeCycleTokens(previous:CycleTokens, tokens:CycleTokens|undefined, piloted:boolean):CycleTokens{
-  const total:CycleTokens={}
-  for(const role of roles(piloted)){
-    const counts:TokenCounts={...previous[role]}
-    for(const [field] of fields){
-      const value=tokens?.[role]?.[field]
-      if(value&&/^\d+$/.test(value))counts[field]=(BigInt(counts[field]??'0')+BigInt(value)).toString()
-    }
-    total[role]=counts
-  }
-  return total
-}
-
 export function TokenRoleHeaders(){
   return <>{roles(true).map(role=><th key={role} colSpan={fields.length*2}>{roleLabel[role]}</th>)}</>
 }
 
-function tokenSlot(text:string, fixed:boolean, title?:string){
-  return fixed?<span className="stage-cycle-token" title={title}><span>{text}</span></span>:text
+export function FixedStageValue({value,sample,title}:{value:string;sample:string;title?:string}){
+  return <span className="stage-cycle-slot" data-size-example={sample} title={title}><span>{value}</span></span>
 }
 
-export function TokenColumns({tokens,cumulative,piloted=false,header=false,includeCumulative=cumulative!==undefined}:{
-  tokens?:CycleTokens;cumulative?:CycleTokens;piloted?:boolean;header?:boolean;includeCumulative?:boolean
+function tokenSlot(value:string,fixed:boolean,title?:string){
+  return fixed?<FixedStageValue value={value} sample={'999\u202fM'} title={title}/>:value
+}
+
+export function TokenColumns({tokens,piloted=false,header=false,includeCumulative=false}:{
+  tokens?:CycleTokens;piloted?:boolean;header?:boolean;includeCumulative?:boolean
 }){
   return <>{roles(piloted).flatMap(role=>fields.flatMap(([field,abbreviation,label])=>{
     const key=role+field
@@ -58,10 +49,9 @@ export function TokenColumns({tokens,cumulative,piloted=false,header=false,inclu
       ? <th key={key} scope="col" title={label}>{tokenSlot(abbreviation,includeCumulative)}{piloted&&!includeCumulative&&<small>{roleLabel[role]}</small>}</th>
       : <td key={key} className="cycle-token-value">{tokenSlot(value,includeCumulative,value)}</td>
     if(!includeCumulative)return current
-    const cumulativeValue=formatTokens(cumulative?.[role]?.[field])
     const total=header
       ? <th key={key+'-total'} scope="col" title={'Cumul · '+label}>{tokenSlot('C'+abbreviation,true)}</th>
-      : <td key={key+'-total'} className="cycle-token-value">{tokenSlot(cumulativeValue,true,cumulativeValue)}</td>
+      : <td key={key+'-total'} className="cycle-token-value">{tokenSlot('',true)}</td>
     return [current,total]
   }))}</>
 }

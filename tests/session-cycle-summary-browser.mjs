@@ -46,7 +46,10 @@ const cycles=Array.from({length:12},(_,index)=>({
 const metrics={piloted:true,tokens:tokenCounts(),session_tokens:tokenCounts(),cycles,
  cycle_summary:{iteration_count:2,measured_count:2,duration_complete:true,last_started_at:time,last_ended_at:time,last_duration_seconds:200,duration_seconds:300,cab_seconds:40,agent_seconds:200,waiting_seconds:60,tokens:tokenCounts()},
  complete_cycle_duration_seconds:64,
- stages:Array.from({length:12},(_,i)=>({key:'step-'+i,observed:true,iteration_count:12,cab_seconds:0,agent_seconds:26.5,waiting_seconds:0,tokens:tokenCounts('8983622'),iterations,children:[{iterations:[...actions,shortAction]}]})),
+ stages:Array.from({length:12},(_,i)=>({key:'step-'+i,observed:true,iteration_count:12,cab_seconds:0,agent_seconds:26.5,waiting_seconds:0,tokens:tokenCounts('8983622'),
+  iterations:[...iterations.slice(0,-1),{...iterations[11],...(i===1
+   ?{state:'SKIPPED',duration_seconds:0,ended_at:time,tokens:undefined}
+   :{tokens:tokenCounts('4570','9876')})}],children:[{iterations:[...actions,shortAction]}]})),
 };
 const metricsPath='projects/fixture/change-stage-metrics';
 const changeList={changes:[{id:'fixture-change',identifier:'change-demo'}],has_more:false};
@@ -191,50 +194,61 @@ try{
      const headers=Array.from(head.cells,cell=>cell.textContent).join('|');
      const tokenHeaders=Array.from(counts.cells,cell=>cell.textContent).join('|');
      const [first,second]=table.tBodies[0].rows;
-     const running=table.tBodies[0].rows[11].cells[22];
-     const spinner=running.querySelector('.stage-cycle-spinner');
+     const last=table.tBodies[0].rows[11].cells[22];
+     const icon=last.querySelector(${stage}===2?'.stage-cycle-skipped':'.stage-cycle-spinner');
      const cancelled=table.tBodies[0].rows[10].cells[22];
      const warning=cancelled.querySelector('.stage-cycle-warning');
      const unknown=table.tBodies[0].rows[9].cells[22];
      const question=unknown.querySelector('.stage-cycle-unknown');
      const completed=first.cells[22].querySelector('.stage-cycle-completed');
      const tokenWidths=Array.from(first.cells).slice(6,22).map(cell=>cell.getBoundingClientRect().width);
-     const wideToken=table.tBodies[0].rows[4].cells[6].querySelector('.stage-cycle-token>span');
-     const extraSpace=cell=>getComputedStyle(cell,'::after').content.includes('\u00a0');
+     const wideToken=table.tBodies[0].rows[4].cells[6].querySelector('.stage-cycle-slot>span');
+     const fixedExamples=Array.from(first.cells).slice(0,6).map(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample);
+     const stageHeading=document.querySelector('.stage-cycle-heading');
+     const stageTitle=stageHeading.querySelector('h2');
+     const titleIcon=stageTitle.querySelector('[role=img]');
+     const lastSummary=stageHeading.querySelector('.cycle-token-summary').textContent;
+     const skipped=${stage}===2;
      const date=first.cells[1];
-     const line=document.createRange();
-     line.selectNodeContents(head.cells[0]);
-     const headingWidth=line.getBoundingClientRect().width;
      const padding=parseFloat(getComputedStyle(head.cells[0]).paddingInlineStart)*2;
      const wrapper=table.parentElement;
      const tokens='Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw';
      const overflow=Math.max(0,wrapper.scrollWidth-wrapper.clientWidth);
      return JSON.stringify({
       headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
-      cycleWidth:head.cells[0].clientWidth<=headingWidth+padding+1,
+      widths:fixedExamples[0]==='Cycle\u00a0\u00a0'
+        && fixedExamples.slice(1,3).every(example=>example==='00/00/0000 00:00:00\u00a0\u00a0')
+        && fixedExamples.slice(3).every(example=>example==='9999,9\u202fs\u00a0\u00a0')
+        && Math.abs(first.cells[1].clientWidth-first.cells[2].clientWidth)<=1
+        && Math.abs(first.cells[3].clientWidth-first.cells[5].clientWidth)<=1,
       fixedTokens:Math.max(...tokenWidths)-Math.min(...tokenWidths)<.5
         && wideToken.textContent==='999\u202fM' && wideToken.scrollWidth<=wideToken.clientWidth,
-      spacing:Array.from(head.cells).slice(1,6).every(extraSpace)
-        && Array.from(first.cells).slice(1,6).every(extraSpace) && !extraSpace(first.cells[0]),
       fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
       singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
-      coder:first.cells[7].textContent.includes('1,25') && second.cells[7].textContent.includes('2,5')
-        && second.cells[9].textContent.includes('2') && second.cells[11].textContent==='0' && second.cells[13].textContent.includes('15,31'),
-      orchestrator:second.cells[15].textContent.includes('4,69') && second.cells[21].textContent==='—',
-      running:running.textContent.includes('En cours') && spinner?.getAttribute('aria-hidden')==='true'
-        && getComputedStyle(spinner).animationName==='stage-cycle-spin' && !first.querySelector('.stage-cycle-spinner'),
+      counters:first.cells[6].textContent.includes('1,25') && second.cells[10].textContent==='0'
+        && second.cells[14].textContent.includes('2,35') && second.cells[20].textContent==='—',
+      reserved:Array.from(table.tBodies[0].rows).every(row=>[7,9,11,13,15,17,19,21].every(col=>row.cells[col].textContent==='')),
+      lastIcon:last.textContent.includes(skipped?'Non exécuté':'En cours') && icon?.getAttribute('aria-hidden')==='true'
+        && (skipped?getComputedStyle(icon).color==='rgb(100, 107, 115)':getComputedStyle(icon).animationName==='stage-cycle-spin')
+        && titleIcon?.getAttribute('aria-label')===(skipped?'Non exécuté':'En cours')
+        && Math.abs(titleIcon.getBoundingClientRect().width-parseFloat(getComputedStyle(stageTitle).fontSize))<=1,
+      lastSummary:lastSummary.includes('Dernier Cycle de cette étape')
+        && lastSummary.includes(skipped?'Durée : 0\u202fs':'Durée : —')
+        && lastSummary.includes(skipped?'Token/Entrant : —':'Token/Entrant : 4,57\u202fK')
+        && lastSummary.includes('Token/Sortant') && lastSummary.includes('Tokens lus dans le cache')
+        && lastSummary.includes('Tokens écrits dans le cache') && !lastSummary.includes('8,98'),
       cancelled:cancelled.textContent.includes('Annulé') && warning?.getAttribute('aria-hidden')==='true'
         && warning.querySelector('path').getAttribute('fill')==='#f4c542' && !first.querySelector('.stage-cycle-warning'),
       unknown:unknown.textContent.includes('Indéterminé') && question?.getAttribute('aria-hidden')==='true'
         && question.querySelector('circle').getAttribute('fill')==='#1766b1' && !first.querySelector('.stage-cycle-unknown'),
       completed:first.cells[22].textContent.includes('Terminé') && completed?.getAttribute('aria-hidden')==='true'
-        && getComputedStyle(completed).color==='rgb(33, 128, 73)' && !running.querySelector('.stage-cycle-completed'),
+        && getComputedStyle(completed).color==='rgb(33, 128, 73)' && !last.querySelector('.stage-cycle-completed'),
       overflow:overflow>0?{viewport:innerWidth,available:wrapper.clientWidth,table:wrapper.scrollWidth,
         columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
      });
     })()`));
-    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,fixedTokens:true,spacing:true,fillsWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,unknown:true,completed:true,overflow:0},
-      'Tableau piloté compact et cumuls sans défilement à 1 920 px, étape '+stage);
+    assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,fillsWidth:true,singleLine:true,counters:true,reserved:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
+      'Tableau piloté et dernier cycle sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
