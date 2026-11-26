@@ -9,6 +9,8 @@ from .core.models import ChangeStageIteration, Event, FinalizationPlan, GitDeliv
 
 KEY = 'stage_protocol'
 VERSION = 'agent-stages-v1'
+DEADLOCK_SQLSTATE = '40P01'
+MAX_DEADLOCK_RETRIES = 3
 
 
 def enabled(run):
@@ -407,8 +409,11 @@ def _recover_publication(run_id):
         if cab['state']=='DISPATCHING':
             _set_publication(run,attempt,'UNKNOWN',error='stage-publication-dispatcher-stopped',execution_finished=True)
             cab=run.configuration[KEY]['current']['cab']
+        retry_count=cab.get('retry_count',int(cab.get('recovery_state')=='RETRIED'))
+        deadlock=cab.get('sqlstate')==DEADLOCK_SQLSTATE
+        limit=MAX_DEADLOCK_RETRIES if deadlock else 1
         if (row or not statistics_at_closure(run) or not cab.get('execution_finished')
-                or not cab.get('admission_snapshot') or cab.get('recovery_state')
+                or not cab.get('admission_snapshot') or cab.get('recovery_state')=='PROTECTED' or retry_count>=limit
                 or run.state not in ('WORKING','FINALIZATION_PENDING') or run.suspension
                 or Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists()):
             return
@@ -432,17 +437,20 @@ def _recover_publication(run_id):
         if reason:
             _set_publication(run,attempt,'UNKNOWN',error=cab['error'],recovery_state='PROTECTED',recovery_reason=reason)
             return
-        reference=cab['reference']+'-retry-1'
+        retry_count+=1
+        reference=f'publication-stage-{attempt}-retry-{retry_count}'
+        retry_after=timezone.now().timestamp()+(2**retry_count if deadlock else 0)
         proof={'attempt':attempt,'version':cab['version'],'scope':cab['scope'],'state':'FAILED_NO_EFFECTS',
                'original_event_id':unknown.pk,'original_receipt_digest':c.digest(unknown.data),
-               'dispatch_event_id':dispatch.pk,'snapshot':snapshot,'reference':reference}
+               'dispatch_event_id':dispatch.pk,'snapshot':snapshot,'reference':reference,'retry_after':retry_after}
         c.event(run,'stage-cab-publication-reconciled-no-effects',proof)
         original=phase(run,'publication',cab['reference'],'UNKNOWN')
         if original:
             finish_iteration(original,timezone.now(),'admission-reconciled-no-effects',state='UNKNOWN')
         run.configuration={**run.configuration,BOUNDARY:{**run.configuration[BOUNDARY],'publication_ref':reference}}
         _set_publication(run,attempt,'QUEUED',reference=reference,admission_snapshot=None,execution_finished=False,
-                         executor=None,error=None,recovery_state='RETRIED',recovery_snapshot=snapshot,
+                         executor=None,error=None,sqlstate=None,recovery_state='RETRIED',recovery_snapshot=snapshot,
+                         retry_count=retry_count,retry_after=retry_after,
                          original_receipt_digest=proof['original_receipt_digest'])
         phase(run,'publication',reference,'RUNNING')
 
@@ -486,6 +494,8 @@ def start_queued_publication(run_id):
         if not step or step['cab'].get('state')!='QUEUED' or not c.no_pending(run):
             return
         cab=step['cab']
+        if cab.get('retry_after',0)>timezone.now().timestamp():
+            return
         prior=GitDelivery.objects.filter(run=run,version=cab['version']).first()
         if prior:
             if _compatible_delivery(prior,cab):
@@ -537,7 +547,10 @@ def start_queued_publication(run_id):
     except c.Refused as error:
         state,details=('UNKNOWN' if any(word in error.code for word in ('unknown','uncertain','unconfirmed')) else 'FAILED'),{'error':error.code}
     except Exception as error:
+        cause=error.__cause__
+        sqlstate=getattr(cause,'sqlstate',None) or getattr(cause,'pgcode',None)
         state,details='UNKNOWN',{'error':'stage-publication-outcome-unconfirmed','failure_type':type(error).__name__}
+        if sqlstate==DEADLOCK_SQLSTATE:details['sqlstate']=sqlstate
     else:
         state,details='ADMITTED',{}
     with transaction.atomic():

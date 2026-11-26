@@ -2,6 +2,11 @@
 
 ## Réconciliation des admissions de publication
 
+[automate-publication-recovery-and-cabu](openspec/changes/archive/2026-11-26-automate-publication-recovery-and-cabu/),
+code non attribué. La qualification PostgreSQL du 26 novembre 2026 couvre la
+compatibilité des verrous MCP avec les clés étrangères, les reprises bornées
+et la demande CABU liée au paquet attesté après clôture.
+
 [recover-uncertain-publication-admission](openspec/changes/archive/2026-11-26-recover-uncertain-publication-admission/),
 code non attribué. Le contrôle PostgreSQL du 26 novembre 2026 couvre
 l’adoption du reçu et la reprise unique sur preuves. Chromium et Firefox

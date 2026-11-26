@@ -189,6 +189,39 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual((current['state'],current['recovery_reason']),('UNKNOWN','stage-publication-proof-divergent'))
         start.assert_called_once()
 
+    def test_deadlock_retries_are_spaced_and_stop_after_three(self):
+        from datetime import timedelta
+        from django.db import OperationalError
+        from django.utils import timezone
+        from cab_platform.core.models import Event
+
+        class Deadlock(Exception):
+            sqlstate='40P01'
+
+        def deadlock(*args,**kwargs):
+            raise OperationalError from Deadlock
+
+        self.queued_publication()
+        now=timezone.now()
+        with patch.object(protocol,'_publication_snapshot',return_value={'head':'stable'}), \
+             patch('cab_platform.connector_process.alive',return_value=True), \
+             patch('cab_platform.session_delivery.start_delivery',side_effect=deadlock) as start, \
+             patch.object(protocol.timezone,'now',return_value=now) as clock:
+            protocol.start_queued_publication(self.run.pk)
+            for retry in range(1,4):
+                protocol._recover_publication(self.run.pk)
+                cab=self.current_publication()
+                self.assertEqual(cab['reference'],f'publication-stage-11-retry-{retry}')
+                self.assertEqual(cab['retry_after'],clock.return_value.timestamp()+2**retry)
+                protocol.start_queued_publication(self.run.pk)
+                self.assertEqual(start.call_count,retry)
+                clock.return_value+=timedelta(seconds=2**retry)
+                protocol.start_queued_publication(self.run.pk)
+                self.assertEqual(start.call_count,retry+1)
+            protocol._recover_publication(self.run.pk)
+        self.assertEqual(self.current_publication()['state'],'UNKNOWN')
+        self.assertEqual(Event.objects.filter(run=self.run,kind='stage-cab-publication-reconciled-no-effects').count(),3)
+
     def test_uncertain_admission_protects_artifact_effect(self):
         from cab_platform.core.models import ProjectArtifactBuild
 

@@ -29,6 +29,36 @@ class StandaloneCabuTests(unittest.TestCase):
         self.assertTrue(package_proof_required(plan,rules))
         self.assertFalse(package_proof_required({**plan,'debian':False},rules))
 
+    def test_post_close_update_requires_explicit_package_proof(self):
+        from cab_platform.finalization_contract import ContractError, validate
+        rule={'id':'publish','producer':'cab-delivery:p','kind':'publication','criteria':['livré']}
+        policy={'nature':'delivery','post_close_cabu':True,'requirements':[rule]}
+        with self.assertRaisesRegex(ContractError,'finalization-post-close-cabu-package-proof-required'):
+            validate(policy,['livré'],'direct',legacy=False)
+        rule['artifact_group']='package'
+        self.assertIs(validate(policy,['livré'],'direct',legacy=False)['post_close_cabu'],True)
+        with self.assertRaisesRegex(ContractError,'finalization-post-close-cabu-package-proof-required'):
+            validate(policy,['livré'],'piloted',legacy=False)
+
+    def test_divergent_published_package_stops_before_apt(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from cab_platform import update
+
+        with TemporaryDirectory() as work:
+            root=Path(work)
+            package=root/'cab.deb'
+            package.write_bytes(b'different package')
+            with patch.object(update,'STATE',root), patch.object(update.os,'getuid',return_value=0), \
+                 patch.object(update.subprocess,'check_output',side_effect=['3.46.3','cab','3.47.0']), \
+                 patch.object(update.subprocess,'run',return_value=SimpleNamespace(returncode=1)) as run, \
+                 patch.object(update,'preflight_package') as preflight:
+                with self.assertRaisesRegex(ClientError,'update-published-package-divergent'):
+                    update.update(package,version='3.47.0',expected_package_sha256='a'*64)
+                run.assert_called_once()
+                self.assertEqual(run.call_args.args[0][0],'/usr/bin/dpkg')
+                preflight.assert_not_called()
+
     def test_cli_uses_the_same_service_receipt_with_no_reinstallation(self):
         client=Mock()
         client.command.side_effect=[{'state':'QUEUED'},ClientError('cab-unavailable'),{'state':'OK','version':'3.9.12'}]
@@ -90,3 +120,93 @@ class LegacyDisplayTests(unittest.TestCase):
         self.assertNotIn('CABU',str(result))
         self.assertFalse(result['stages'][-1]['children'])
         self.assertTrue(ChangeStageIteration.objects.filter(pk=record.pk).exists())
+
+
+@unittest.skipUnless(os.environ.get('CAB_EFFECTS_FIXTURE')=='1','PostgreSQL isolé requis')
+class AutomaticCabuTests(unittest.TestCase):
+    setUp=fixtures.ProtocolTests.setUp
+    finish=fixtures.ProtocolTests.finish
+
+    def seal_delivery(self,package_sha='a'*64,published_sha='a'*64):
+        from cab_platform.core.models import GitDelivery,GitDeliveryStep,GitSessionIndex
+        from cab_platform.stage_protocol import KEY
+
+        self.project.identifier='cab'
+        self.project.save(update_fields=['identifier'])
+        sha=c.revision(self.run)
+        self.plan.policy={'nature':'delivery','post_close_cabu':True,'target_version':'3.47.0'}
+        self.plan.digest=c.digest(self.plan.policy)
+        self.plan.phase='CLOSED'
+        self.plan.receipt={'receipt_id':'fixture-closure','delivered':True,'source_revision':sha,
+                           'artifact_groups':{'package':published_sha}}
+        self.plan.save()
+        self.run.review={'closure':self.plan.receipt}
+        self.run.configuration[KEY]['active']['11']={'validated':True,'cab':{'version':'3.47.0'}}
+        self.run.state='CLOSED'
+        self.run.save(update_fields=['state','review','configuration'])
+        index=GitSessionIndex.objects.create(initial_run=self.run,change_id=self.run.change_record_id,
+                                             session_id=self.run.coding_session_id,index_path='fixture')
+        delivery=GitDelivery.objects.create(run=self.run,project=self.project,git_index=index,version='3.47.0',
+                         state='COMPLETED',commit_oid='a'*40,tag_oid='b'*40,plan={'source_revision':sha})
+        GitDeliveryStep.objects.create(delivery=delivery,key='verify:package',state='COMPLETED',
+                                      receipt={'package_sha256':package_sha,'verified':True})
+        return delivery
+
+    def test_sealed_delivery_archives_and_queues_once(self):
+        from cab_platform.core.models import Event,SessionArchive,SystemUpdate
+        from cab_platform.system_updates import enqueue_closed_delivery
+
+        delivery=self.seal_delivery()
+        with patch('cab_platform.core.run_lifecycle.evaluate',return_value={'archive_allowed':True,'evaluation_digest':'verified'}), \
+             patch('cab_platform.core.connectors.snapshot',return_value=[]):
+            job=enqueue_closed_delivery(self.run.pk)
+            self.assertIsNone(enqueue_closed_delivery(self.run.pk))
+        self.assertEqual(job['state'],'QUEUED')
+        audit=SystemUpdate.objects.get(pk=f'AUTO-CABU-{self.run.pk}')
+        self.assertEqual(audit.result['delivery_proof'],
+                         {'delivery_id':delivery.pk,'closure_receipt':'fixture-closure','package_sha256':'a'*64})
+        self.assertTrue(SessionArchive.objects.filter(run=self.run).exists())
+        self.assertEqual(Event.objects.filter(run=self.run,kind='post-close-cabu-queued').count(),1)
+
+    def test_divergent_package_blocks_before_archive_and_update(self):
+        from cab_platform.core.models import SessionArchive,SystemUpdate
+        from cab_platform.system_updates import enqueue_pending_deliveries
+
+        self.seal_delivery(published_sha='b'*64)
+        enqueue_pending_deliveries()
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.configuration['post_close_update'],
+                         {'state':'BLOCKED','reason':'post-close-cabu-package-unverified'})
+        self.assertFalse(SessionArchive.objects.filter(run=self.run).exists())
+        self.assertFalse(SystemUpdate.objects.filter(actor=self.actor).exists())
+
+
+@unittest.skipUnless(os.environ.get('CAB_EFFECTS_FIXTURE')=='1','PostgreSQL isolé requis')
+class ConnectorProjectionLockTests(unittest.TestCase):
+    def test_connector_projection_allows_key_share_and_serializes_writers(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from uuid import uuid4
+        from django.db import OperationalError, connection, connections, transaction
+        from cab_platform.core.connectors import project_connector
+        from cab_platform.core.models import Actor,McpConnector,McpConnectorProjection
+
+        key=uuid4().hex
+        actor=Actor.objects.create(pk=key,uid=os.getuid(),agent='fixture',token_hash=key)
+        connector=McpConnector.objects.create(pk=key,actor=actor,agent='fixture',process={},worker={})
+        self.addCleanup(actor.delete)
+        self.addCleanup(connector.delete)
+        self.addCleanup(McpConnectorProjection.objects.filter(connector=connector).delete)
+
+        def check_concurrent_locks():
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute('SELECT id FROM mcp_connectors WHERE id=%s FOR KEY SHARE NOWAIT',[key])
+                    self.assertEqual(cursor.fetchone(),(key,))
+                with self.assertRaises(OperationalError),connection.cursor() as cursor:
+                    cursor.execute('SELECT id FROM mcp_connectors WHERE id=%s FOR UPDATE NOWAIT',[key])
+            finally:
+                connections.close_all()
+
+        with transaction.atomic(),ThreadPoolExecutor(max_workers=1) as pool:
+            project_connector(connector)
+            pool.submit(check_concurrent_locks).result(timeout=10)

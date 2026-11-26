@@ -43,7 +43,7 @@ def observe_native_worker(actor,run,peer):
     guard(run,allow_measurement=True)
     c.require(not run.mandate.get('native_frozen_at') and not run.mandate.get('legacy_snapshot_id'),'native-worker-observation-protected',409)
     # Ce verrou sérialise aussi le premier heartbeat du relais réel.
-    Actor.objects.select_for_update().get(pk=actor.pk)
+    Actor.objects.select_for_update(no_key=True).get(pk=actor.pk)
     existing=worker_connector(actor,peer)
     if existing is not None:return existing
     c.require(not McpConnector.objects.filter(actor=actor,process=parent).exclude(state='SUPERSEDED').exists(),'connector-parent-observation-divergent',409)
@@ -57,7 +57,7 @@ def observe_native_worker(actor,run,peer):
 
 def adopt_native_observation(actor,row):
     from .models import McpRunBinding,McpThreadBinding
-    observed=McpConnector.objects.select_for_update().filter(actor=actor,process=row.process,worker=row.worker,state='OBSERVED').exclude(pk=row.pk)
+    observed=McpConnector.objects.select_for_update(no_key=True).filter(actor=actor,process=row.process,worker=row.worker,state='OBSERVED').exclude(pk=row.pk).order_by('pk')
     for previous in observed:
         binding=McpRunBinding.objects.select_for_update().filter(connector=previous).first()
         target=McpRunBinding.objects.select_for_update().filter(connector=row).first()
@@ -100,13 +100,13 @@ def register_parallel(anchor,run):
 @transaction.atomic
 def bind_worker_run(actor,data,peer,*,native_thread=None):
     from .models import McpRunBinding,McpThreadBinding
-    Actor.objects.select_for_update().get(pk=actor.pk)
+    Actor.objects.select_for_update(no_key=True).get(pk=actor.pk)
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
     c.require(bool(run.mandate.get('native_source')),'native-source-not-bound',409)
     connector=worker_connector(actor,peer)
     if connector is None:connector=observe_native_worker(actor,run,peer)
     if connector is None:return False
-    connector=McpConnector.objects.select_for_update().get(pk=connector.pk)
+    connector=McpConnector.objects.select_for_update(no_key=True).get(pk=connector.pk)
     c.require(connector.state!='SUPERSEDED' and connector.actor_id==actor.pk and connector.worker==identity(peer['pid']) and alive(connector.process),'connector-owner-divergent',403)
     if native_thread is not None:
         c.require(actor.agent in ('codex','codex-cli') and native_thread==run.session_id,
@@ -133,7 +133,7 @@ def bind_worker_run(actor,data,peer,*,native_thread=None):
 def lock_worker_binding(actor,connector_id,run):
     """Fige la liaison pendant l'admission d'un effet Git."""
     from .models import McpRunBinding,McpThreadBinding
-    connector=McpConnector.objects.select_for_update().filter(pk=connector_id,actor=actor).exclude(state='SUPERSEDED').first()
+    connector=McpConnector.objects.select_for_update(no_key=True).filter(pk=connector_id,actor=actor).exclude(state='SUPERSEDED').first()
     c.require(connector is not None and alive(connector.process) and alive(connector.worker),'session-connector-unbound',409)
     binding=McpThreadBinding.objects.select_related('run').filter(connector=connector,thread=run.session_id).first()
     if binding is None:
@@ -186,10 +186,11 @@ def heartbeat(actor,data,peer):
     version=data.get('loaded_version');c.require(isinstance(version,str) and re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',version),'connector-version-invalid',400)
     c.require(type(data.get('pending')) is int and 0<=data['pending']<=10000,'connector-pending-invalid',400)
     state=data.get('state');c.require(state in ('READY','BUSY','RELOADING','CATALOG_PENDING','FAILED'),'connector-state-invalid',400)
-    Actor.objects.select_for_update().get(pk=actor.pk)
+    # Le rythme MCP ne modifie aucune clé et doit laisser passer les contrôles FK au commit.
+    Actor.objects.select_for_update(no_key=True).get(pk=actor.pk)
     others=McpConnector.objects.filter(actor=actor,process=process).exclude(pk=key).exclude(state='SUPERSEDED')
     c.require(not others.exclude(state='OBSERVED',worker=worker).exists(),'connector-process-already-registered',409)
-    row,created=McpConnector.objects.select_for_update().get_or_create(pk=key,defaults={'actor':actor,'agent':actor.agent,'process':process})
+    row,created=McpConnector.objects.select_for_update(no_key=True).get_or_create(pk=key,defaults={'actor':actor,'agent':actor.agent,'process':process})
     c.require(row.actor_id==actor.pk and row.process==process,'connector-owner-divergent',403)
     changed=row.worker!=worker
     if changed:row.generation+=1;row.catalog_version=''
@@ -208,7 +209,7 @@ def heartbeat(actor,data,peer):
 @transaction.atomic
 def project_connector(row):
     from cab_platform.mcp_disconnect_recovery import capture_anchor,enqueue
-    row=McpConnector.objects.select_for_update(of=('self',)).select_related('actor').get(pk=row.pk)
+    row=McpConnector.objects.select_for_update(of=('self',),no_key=True).select_related('actor').get(pk=row.pk)
     connected=(row.seen>=timezone.now()-timedelta(seconds=15) and alive(row.process) and alive(row.worker)
                and row.state in ('READY','BUSY') and not row.uncertain
                and bool(row.loaded_version) and row.catalog_version==row.loaded_version)
@@ -230,7 +231,7 @@ def refresh_projection():
 
 @transaction.atomic
 def disconnected(actor,data,peer):
-    row=McpConnector.objects.select_for_update().get(pk=data['connector_id'])
+    row=McpConnector.objects.select_for_update(no_key=True).get(pk=data['connector_id'])
     c.require(peer and row.actor_id==actor.pk and row.process==identity(peer['pid']),'connector-owner-divergent',403)
     row.state='DISCONNECTED';row.save(update_fields=['state','seen']);project_connector(row)
     return {'state':'DISCONNECTED'}
@@ -239,7 +240,7 @@ def disconnected(actor,data,peer):
 def stop_report(actor,data,peer):
     from cab_platform.worker_stop import policy
     c.require(peer and peer['uid']==actor.uid,'connector-peer-required',403)
-    row=McpConnector.objects.select_for_update().get(pk=data['connector_id'])
+    row=McpConnector.objects.select_for_update(no_key=True).get(pk=data['connector_id'])
     c.require(row.actor_id==actor.pk and row.process==identity(peer['pid']),'connector-owner-divergent',403)
     key=data.get('attempt_id');c.require(isinstance(key,str) and re.fullmatch('[a-f0-9]{32}',key),'connector-stop-id-invalid',400)
     report=data.get('report');c.require(isinstance(report,dict) and set(report)<={'worker','policy','state','stages','reason'},'connector-stop-report-invalid',400)

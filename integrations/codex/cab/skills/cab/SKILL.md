@@ -193,9 +193,13 @@ possibles avec `run_stage_action_catalogue` puis consigner l’action avec
 `run_stage_action`. CAB journalise de lui-même les opérations et reçus connus.
 L’Overview ne présente que les actions effectivement observées.
 
-Les mandats d’étape concernent le change. CABU est une mise à jour de l’hôte :
-lancer cab update séparément après la clôture et l’archivage lorsque le
-développeur l’a autorisée, puis annoncer le résultat du reçu système.
+Les mandats d’étape concernent le change. Pour une livraison directe de CAB,
+si le développeur autorise CABU, enregistrer `post_close_cabu=true` dans la
+politique de finalisation et une exigence de publication `artifact_group="package"`.
+CAB archive le RUN clôturé puis soumet la mise à jour du paquet attesté. Lire
+le reçu système publié par l’événement `post-close-cabu-queued` et annoncer son
+résultat. Pour les RUN sans cette capacité, utiliser `cab update` après clôture
+et archivage, sous le même mandat développeur.
 
 Après avoir produit un bilan de blocage, le déclarer dans le passage courant
 avec `run_stage_action(action="blocage", blocker_path=…)` et sa tentative.

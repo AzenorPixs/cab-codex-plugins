@@ -49,7 +49,7 @@ def main():
             assert {field.name: field.deconstruct()[1:] for field in token_state._meta.fields} == {
                 field.name: field.deconstruct()[1:] for field in CycleTokenUsage._meta.fields}
             suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(module) for module in (
-                'test_session_cycle_summary','test_time_projection','test_publication_cycle','test_stage_protocol','test_stage_work_time','test_cycle_attribution','test_cycle_tokens','test_stage_actions','test_measurement_sources'))
+                'test_session_cycle_summary','test_time_projection','test_publication_cycle','test_stage_protocol','test_stage_work_time','test_cycle_attribution','test_cycle_tokens','test_stage_actions','test_measurement_sources','test_standalone_cabu'))
             result=unittest.TextTestRunner(verbosity=2).run(suite)
             return result.wasSuccessful() and not result.skipped
         finally:

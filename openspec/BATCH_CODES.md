@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[automate-publication-recovery-and-cabu](changes/archive/2026-11-26-automate-publication-recovery-and-cabu/),
+code non attribué. Attribution ultérieure par ACL.
+
 [summarize-last-cycle-per-stage](changes/archive/2026-11-26-summarize-last-cycle-per-stage/),
 code non attribué. Attribution ultérieure par ACL.
 

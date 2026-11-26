@@ -26,9 +26,13 @@ Sur demande autorisée, le LLM lance la commande système
 imposée, laisser CAB résoudre la version officielle courante. Le CLI soumet
 la demande au service. L’installation est portée par cab-update.service.
 
-CABU est extérieur aux douze étapes. Pour une livraison de CAB, le RUN
-atteint la clôture et l’archivage sur ses preuves de publication, puis le LLM
-lance CABU et annonce le résultat dans le chat.
+CABU est extérieur aux douze étapes. Pour une livraison directe de CAB avec
+mandat explicite, transmettre `post_close_cabu=true` dans la politique de
+finalisation et attester la publication dans le groupe `package`. Après le
+scellement, le service archive le RUN et crée une seule demande pour le
+SHA-256 attesté. L’événement `post-close-cabu-queued` donne l’identifiant du
+reçu. Suivre ce reçu et annoncer son résultat. Le parcours manuel reste
+disponible pour les mises à jour hors RUN et les anciens contrats.
 
 Garder le même identifiant pour `cab update-status --request-id IDENTIFIANT`.
 Le reçu OK confirme la version installée, la santé et le connecteur. En cas

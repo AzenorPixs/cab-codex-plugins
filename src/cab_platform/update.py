@@ -79,7 +79,7 @@ def preflight_package(path,version,*,pass_fds=(),require_payload_hashes=False):
     return {'public_paths_verified':public,'embedded_version_verified':version,'private_paths_modified':False}
 
 
-def update(package=None,version=None,progress=None):
+def update(package=None,version=None,progress=None,expected_package_sha256=None):
     if os.getuid()!=0:raise ClientError('root-administration-required')
     if version is not None and (not isinstance(version,str) or not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',version)):raise ClientError('update-version-invalid')
     def stage(value):
@@ -127,6 +127,8 @@ def update(package=None,version=None,progress=None):
         if not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,6}',target) or version and target!=version:raise ClientError('debian-package-version-invalid')
         if subprocess.run(['/usr/bin/dpkg','--compare-versions',target,'lt',previous],capture_output=True).returncode==0:raise ClientError('update-downgrade-refused')
         sha=hashlib.sha256(path.read_bytes()).hexdigest()
+        if expected_package_sha256 is not None and sha!=expected_package_sha256:
+            raise ClientError('update-published-package-divergent')
         payload=preflight_package(path,target)
         # apt/dpkg réalise preinst/postinst et conserve leurs reçus de maintenance.
         stage('INSTALLING')
