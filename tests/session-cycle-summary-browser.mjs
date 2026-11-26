@@ -179,7 +179,7 @@ try{
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 12")'),'actions de l’étape');
     assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().left>=durations.getBoundingClientRect().right && tokens.innerText.includes('8,98\u202fM') && durations.innerText.includes('Attente')})()`),'cumuls dans le même bloc à droite, étape '+stage);
-    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers.slice(5,-1).join('|')==='TeCodeur|TsCodeur|TrCodeur|TwCodeur|TeOrchestrateur|TsOrchestrateur|TrOrchestrateur|TwOrchestrateur' && table.tBodies[0].rows[0].cells[8].textContent.includes('7,65') && table.tBodies[0].rows[0].cells[12].textContent==='—' && JSON.stringify(durations.slice(0,4))===JSON.stringify(['15,8 s','10 min 41,2 s','1 h 1 min 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
+    assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers.slice(5,-1).join('|')==='TeCodeur|TsCodeur|TrCodeur|TwCodeur|TeOrchestrateur|TsOrchestrateur|TrOrchestrateur|TwOrchestrateur' && table.tBodies[0].rows[0].cells[8].textContent.includes('7,65') && table.tBodies[0].rows[0].cells[12].textContent==='—' && JSON.stringify(durations.slice(0,4))===JSON.stringify(['15,8 s','10 m 41,2 s','1 h 1 m 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
     assert(await ev(`(()=>{
      const overview=document.querySelector('.stage-overview');
      const [passages,actionTable,shortTable]=overview.querySelectorAll('table');
@@ -217,12 +217,14 @@ try{
      return JSON.stringify({
       headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
       widths:fixedExamples[0]==='Cycle\u00a0\u00a0'
-        && fixedExamples.slice(1,3).every(example=>example==='00/00/0000 00:00:00\u00a0\u00a0')
-        && fixedExamples.slice(3).every(example=>example==='9999,9\u202fs\u00a0\u00a0')
+        && fixedExamples.slice(1,3).every(example=>example==='00/00/0000 00:00:00\u00a0\u00a0\u00a0')
+        && fixedExamples.slice(3).every(example=>example==='9999,9\u202fs\u00a0\u00a0\u00a0')
         && Math.abs(first.cells[1].clientWidth-first.cells[2].clientWidth)<=1
         && Math.abs(first.cells[3].clientWidth-first.cells[5].clientWidth)<=1,
       fixedTokens:Math.max(...tokenWidths)-Math.min(...tokenWidths)<.5
+        && Array.from(first.cells).slice(6,22).every(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample==='999\u202fM\u202f')
         && wideToken.textContent==='999\u202fM' && wideToken.scrollWidth<=wideToken.clientWidth,
+      durations:Array.from(first.cells).slice(3,6).map(cell=>cell.textContent.replaceAll('\u202f',' ')).join('|')==='1 h 1 m 1,2 s|10 m 41,2 s|15,8 s',
       fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
       singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
       counters:first.cells[6].textContent.includes('1,25') && second.cells[10].textContent==='0'
@@ -247,7 +249,7 @@ try{
         columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
      });
     })()`));
-    assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,fillsWidth:true,singleLine:true,counters:true,reserved:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
+    assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,durations:true,fillsWidth:true,singleLine:true,counters:true,reserved:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
       'Tableau piloté et dernier cycle sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);

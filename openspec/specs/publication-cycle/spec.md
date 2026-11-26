@@ -266,7 +266,13 @@ Résumé MUST afficher « Durée totale de tous les cycles » sous les étapes, 
 
 #### Scenario: Action longue et deux cycles
 - **WHEN** une action dure 3661,2 secondes et les deux cycles durent 100 et 200 secondes
-- **THEN** la colonne affiche 1 h 1 min 1,2 s, le cumul affiche 5 min 0 s et le dernier cycle 3 min 20 s.
+- **THEN** la colonne affiche 1 h 1 m 1,2 s dans un onglet d’étape, le cumul affiche 5 min 0 s et le dernier cycle 3 min 20 s.
+
+#### Scenario: Unités des douze onglets d’étape
+
+- **WHEN** une durée est affichée dans un sous-onglet d’étape
+- **THEN** ses unités sont `h`, `m` et `s` selon les seuils communs
+- **AND** Résumé et les autres vues conservent le format commun
 
 ### Requirement: Informations de session en lignes de bloc forge
 Le corps de l’onglet Informations MUST utiliser une ligne par information avec un libellé à gauche et sa valeur à droite. Le détail du RUN MUST fournir la synthèse persistée. L’indisponibilité du détail des étapes MUST laisser visibles les compteurs enregistrés.
@@ -378,13 +384,13 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 
 - **WHEN** un onglet affiche le tableau Cycle
 - **THEN** Cycle est dimensionné sur son titre suivi de deux espaces
-- **AND** Début et Fin sont dimensionnés sur une date complète avec heures, minutes et secondes suivie de deux espaces
-- **AND** CAB, Agents et Attentes sont dimensionnés sur `9999,9 s` suivi de deux espaces
+- **AND** Début et Fin sont dimensionnés sur une date complète avec heures, minutes et secondes suivie de trois espaces
+- **AND** CAB, Agents et Attentes sont dimensionnés sur `9999,9 s` suivi de trois espaces
 
 #### Scenario: Compteurs de tailles différentes
 
 - **WHEN** les compteurs ont des contenus de tailles différentes
-- **THEN** leurs colonnes gardent la même largeur et affichent `999 M` en entier
+- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivie d’une espace fine
 - **AND** toute valeur dont le format dépassera cette largeur reste consultable en entier dans son infobulle
 
 #### Scenario: Espace disponible pour une ligne complète

@@ -28,6 +28,10 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[widen-stage-cycle-columns](openspec/changes/archive/2026-11-26-widen-stage-cycle-columns/),
+code non attribué. La recette Chromium et Firefox du 26 novembre 2026
+vérifie les colonnes élargies et les unités h, m et s dans les douze onglets.
+
 [summarize-last-cycle-per-stage](openspec/changes/archive/2026-11-26-summarize-last-cycle-per-stage/),
 code non attribué. Les vérifications Chromium et Firefox du 26 novembre 2026
 couvrent le dernier passage dans l’en-tête de chaque onglet, les gabarits,

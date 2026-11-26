@@ -36,7 +36,7 @@ export function FixedStageValue({value,sample,title}:{value:string;sample:string
 }
 
 function tokenSlot(value:string,fixed:boolean,title?:string){
-  return fixed?<FixedStageValue value={value} sample={'999\u202fM'} title={title}/>:value
+  return fixed?<FixedStageValue value={value} sample={'999\u202fM\u202f'} title={title}/>:value
 }
 
 export function TokenColumns({tokens,piloted=false,header=false,includeCumulative=false}:{
