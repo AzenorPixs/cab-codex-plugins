@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Réconciliation des admissions de publication
+
+[recover-uncertain-publication-admission](openspec/changes/archive/2026-11-26-recover-uncertain-publication-admission/),
+code non attribué. Le contrôle PostgreSQL du 26 novembre 2026 couvre
+l’adoption du reçu et la reprise unique sur preuves. Chromium et Firefox
+vérifient le pictogramme de l’état « Indéterminé » dans les douze onglets.
+
 ## Statistiques en fin de Clôture
 
 [defer-statistics-to-run-closure](openspec/changes/archive/2026-11-25-defer-statistics-to-run-closure/),

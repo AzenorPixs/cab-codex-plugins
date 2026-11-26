@@ -126,6 +126,104 @@ class ProtocolTests(unittest.TestCase):
             self.assertNotEqual(current['cab']['operations'],previous['cab']['operations'])
             self.assertFalse(self.validate(current['attempt'])['validated'])
 
+    def queued_publication(self):
+        from cab_platform.core.models import McpConnector, McpRunBinding, Operation
+        from cab_platform.publication_boundary import KEY as BOUNDARY
+        from cab_platform.stage_substeps import phase
+
+        revision=c.revision(self.run)
+        cab={'state':'QUEUED','version':'3.46.1','scope':'project','source_revision':revision,'reference':'publication-stage-11'}
+        step={'stage':11,'attempt':11,'validated':False,'cab':cab}
+        self.run.stage=11
+        self.run.configuration['statistics_at_closure']=True
+        self.run.configuration[BOUNDARY]={'state':'FROZEN','publication_ref':cab['reference']}
+        self.run.configuration[protocol.KEY].update(current=step,active={'11':step},sequence=11)
+        self.run.save(update_fields=['stage','configuration'])
+        connector=McpConnector.objects.create(pk=uuid4().hex,actor=self.actor,agent=self.actor.agent,state='READY',
+                                              process={'pid':1},worker={'pid':2})
+        McpRunBinding.objects.create(connector=connector,run=self.run)
+        Operation.objects.create(run=self.run,request_id='qualification',state='COMPLETED',
+                                 source_revision=revision,receipt={'exit_code':0})
+        phase(self.run,'publication',cab['reference'],'RUNNING')
+        return cab
+
+    def current_publication(self):
+        self.run.refresh_from_db()
+        return self.run.configuration[protocol.KEY]['current']['cab']
+
+    def test_uncertain_admission_requeues_once_and_keeps_original_receipt(self):
+        from cab_platform.core.models import Event
+
+        self.queued_publication()
+        snapshot={'head':'identique','index_sha256':'stable','remote_heads':{'FORGEJO':'identique'}}
+        with patch.object(protocol,'_publication_snapshot',return_value=snapshot), \
+             patch('cab_platform.connector_process.alive',return_value=True), \
+             patch('cab_platform.session_delivery.start_delivery',side_effect=RuntimeError) as start:
+            protocol.start_queued_publication(self.run.pk)
+            unknown=Event.objects.get(run=self.run,kind='stage-cab-publication-unknown')
+            self.assertEqual(self.current_publication()['state'],'UNKNOWN')
+            protocol._recover_publication(self.run.pk)
+            queued=self.current_publication()
+            self.assertEqual((queued['state'],queued['recovery_state'],queued['reference']),
+                             ('QUEUED','RETRIED','publication-stage-11-retry-1'))
+            proof=Event.objects.get(run=self.run,kind='stage-cab-publication-reconciled-no-effects').data
+            self.assertEqual(proof['state'],'FAILED_NO_EFFECTS')
+            self.assertEqual(proof['original_receipt_digest'],c.digest(unknown.data))
+            self.assertEqual(Event.objects.get(pk=unknown.pk).data,unknown.data)
+            self.assertEqual(self.run.stage_iterations.get(reference=c.digest([self.run.pk,'phase','publication-stage-11'])).state,'UNKNOWN')
+            protocol.start_queued_publication(self.run.pk)
+            protocol._recover_publication(self.run.pk)
+            self.assertEqual(self.current_publication()['state'],'UNKNOWN')
+            self.assertEqual(start.call_count,2)
+            self.assertEqual(Event.objects.filter(run=self.run,kind='stage-cab-publication-reconciled-no-effects').count(),1)
+
+    def test_uncertain_admission_protects_changed_preflight(self):
+        self.queued_publication()
+        with patch.object(protocol,'_publication_snapshot',side_effect=[{'head':'initial'},{'head':'modifié'}]), \
+             patch('cab_platform.connector_process.alive',return_value=True), \
+             patch('cab_platform.session_delivery.start_delivery',side_effect=RuntimeError) as start:
+            protocol.start_queued_publication(self.run.pk)
+            protocol._recover_publication(self.run.pk)
+            protocol.start_queued_publication(self.run.pk)
+        current=self.current_publication()
+        self.assertEqual((current['state'],current['recovery_reason']),('UNKNOWN','stage-publication-proof-divergent'))
+        start.assert_called_once()
+
+    def test_uncertain_admission_protects_artifact_effect(self):
+        from cab_platform.core.models import ProjectArtifactBuild
+
+        self.queued_publication()
+        with patch.object(protocol,'_publication_snapshot',return_value={'head':'stable'}) as snapshot, \
+             patch('cab_platform.connector_process.alive',return_value=True), \
+             patch('cab_platform.session_delivery.start_delivery',side_effect=RuntimeError):
+            protocol.start_queued_publication(self.run.pk)
+            ProjectArtifactBuild.objects.create(pk=uuid4().hex,project=self.project,kind='debian',version='3.46.1')
+            protocol._recover_publication(self.run.pk)
+        current=self.current_publication()
+        self.assertEqual((current['state'],current['recovery_reason']),('UNKNOWN','stage-publication-effect-protected'))
+        snapshot.assert_called_once()
+
+    def test_interrupted_dispatch_adopts_only_compatible_delivery(self):
+        from cab_platform.core.models import GitDelivery, GitSessionIndex
+
+        cab=self.queued_publication()
+        protocol._set_publication(self.run,11,'DISPATCHING',executor={'pid':1})
+        index=GitSessionIndex.objects.create(initial_run=self.run,change_id=self.run.change_record_id,
+                                             session_id=self.run.coding_session_id,index_path='fixture')
+        row=GitDelivery.objects.create(run=self.run,git_index=index,project=self.project,version=cab['version'],
+                                       plan={'scope':'change','source_revision':cab['source_revision']})
+        with patch('cab_platform.connector_process.alive',return_value=True):
+            protocol._recover_publication(self.run.pk)
+        self.assertEqual(self.current_publication()['state'],'DISPATCHING')
+        with patch('cab_platform.connector_process.alive',return_value=False):
+            protocol._recover_publication(self.run.pk)
+        self.assertEqual(self.current_publication()['state'],'UNKNOWN')
+        row.plan={**row.plan,'scope':'project'}
+        row.save(update_fields=['plan'])
+        protocol._recover_publication(self.run.pk)
+        current=self.current_publication()
+        self.assertEqual((current['state'],current['delivery_id']),('ADMITTED',row.pk))
+
     def test_statistics_and_skipped_publication_keep_the_real_stage_and_complete_cycle(self):
         from cab_platform.phase_statistics import execute
         archive=self.root/'openspec/changes/archive/2026-11-22-fixture'

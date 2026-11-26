@@ -32,7 +32,7 @@ const time='2026-11-22T12:00:00Z';
 const tokenCounts=(input='1250',write='7654')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0',cache_write_tokens:write},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
 const iterations=Array.from({length:12},(_,index)=>({
  id:index+1,number:index+1,duration_seconds:[15.8,641.2,3661.2,null][index]??null,
- state:index===11?'RUNNING':index===10?'CANCELLED':'COMPLETED',started_at:time,ended_at:index===11?null:time,
+ state:index===11?'RUNNING':index===10?'CANCELLED':index===9?'UNKNOWN':'COMPLETED',started_at:time,ended_at:index===11?null:time,
  cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(),
 }));
 const actions=Array.from({length:12},(_,index)=>({
@@ -195,6 +195,8 @@ try{
      const spinner=running.querySelector('.stage-cycle-spinner');
      const cancelled=table.tBodies[0].rows[10].cells[22];
      const warning=cancelled.querySelector('.stage-cycle-warning');
+     const unknown=table.tBodies[0].rows[9].cells[22];
+     const question=unknown.querySelector('.stage-cycle-unknown');
      const date=first.cells[1];
      const line=document.createRange();
      line.selectNodeContents(head.cells[0]);
@@ -214,11 +216,13 @@ try{
         && getComputedStyle(spinner).animationName==='stage-cycle-spin' && !first.querySelector('.stage-cycle-spinner'),
       cancelled:cancelled.textContent.includes('Annulé') && warning?.getAttribute('aria-hidden')==='true'
         && warning.querySelector('path').getAttribute('fill')==='#f4c542' && !first.querySelector('.stage-cycle-warning'),
+      unknown:unknown.textContent.includes('Indéterminé') && question?.getAttribute('aria-hidden')==='true'
+        && question.querySelector('circle').getAttribute('fill')==='#1766b1' && !first.querySelector('.stage-cycle-unknown'),
       overflow:overflow>0?{viewport:innerWidth,available:wrapper.clientWidth,table:wrapper.scrollWidth,
         columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
      });
     })()`));
-    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,overflow:0},
+    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,unknown:true,overflow:0},
       'Tableau piloté compact et cumuls sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);

@@ -341,7 +341,7 @@ header .brand {
 }
 .stage-passages-compact th[colspan]{text-align:center}
 .stage-passages-compact :is(th,td):last-child p{display:inline;margin-inline-start:.55em}
-.stage-cycle-spinner,.stage-cycle-warning{
+.stage-cycle-spinner,.stage-cycle-warning,.stage-cycle-unknown{
   display:inline-block;
   width:1em;
   height:1em;

@@ -69,6 +69,10 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
           <path d="M8 1.5 15 14H1Z" fill="#f4c542" stroke="#795900" strokeLinejoin="round"/>
           <path d="M8 5.5v4m0 2v.15" fill="none" stroke="#352700" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>}
+        {showAllRows&&item.state==='UNKNOWN'&&<svg className="stage-cycle-unknown" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="7.5" fill="#1766b1"/>
+          <path d="M5.8 5.7a2.25 2.25 0 0 1 4.35.7c0 1.5-2.15 1.55-2.15 3.15m0 2.05v.15" fill="none" stroke="#fff" strokeWidth="1.45" strokeLinecap="round"/>
+        </svg>}
         {item.state?states[item.state]||item.state:''}
         {item.description&&<p>{item.description}</p>}
         {typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}

@@ -1,5 +1,6 @@
 """Entrées et validations explicites, reçus CAB indépendants."""
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .change_stage_metrics import LABELS, keys_for, number_for, finish_iteration, statistics_at_closure
@@ -232,14 +233,14 @@ def reports(run):
         elif 'version' in cab:
             row=GitDelivery.objects.filter(run=run,version=cab['version']).first()
             if row and (row.plan.get('source_revision') != cab['source_revision'] or row.plan.get('scope')!=cab['scope']):
-                state='FAILED'
+                state='UNKNOWN' if admission=='UNKNOWN' else 'FAILED'
                 details={'error':'stage-publication-source-changed','version':row.version}
             elif row:
                 state=row.state
                 details={'delivery_id':row.pk,'version':row.version,
                          'steps':list(row.steps.order_by('pk').values('key','state'))}
             else:
-                details={k:cab[k] for k in ('version','error') if k in cab}
+                details={k:cab[k] for k in ('version','error','recovery_state','recovery_reason') if k in cab}
         if admission != 'NOT_REQUIRED':
             result.append({'stage':step['stage'],'attempt':step['attempt'],'state':state,**details})
     return result
@@ -340,7 +341,110 @@ def _set_publication(run, attempt, state, **details):
     if state in ('FAILED','UNKNOWN'):
         from .stage_substeps import phase
         phase(run,'publication',step['cab']['reference'],state,details)
-    c.event(run,'stage-cab-publication-'+state.lower(),{'attempt':attempt,**details})
+    c.event(run,'stage-cab-publication-'+state.lower(),{'attempt':attempt,'reference':step['cab']['reference'],**details})
+
+
+def _publication_snapshot(run, cab):
+    from .core.models import GitSessionIndex
+    from .session_delivery import delivery_preflight, preflight_commit
+
+    revision=c.revision(run)
+    c.require(revision==cab['source_revision'],'stage-publication-source-changed')
+    index=GitSessionIndex.objects.filter(change_id=run.change_record_id,session_id=run.coding_session_id,state='OPEN').first()
+    c.require(index is not None,'session-delivery-index-invalid')
+    reservations=sorted(index.reservations.filter(active=True).values_list('path',flat=True))
+    c.require(reservations,'session-git-reservation-required')
+    git=preflight_commit(run.project,index,cab['version'],reservations,
+                         complete=cab['scope']=='project',include_reports=True)
+    plan=delivery_preflight(run.project,cab['version'])
+    return {'revision':revision,'head':git['head'],'index':index.pk,'index_sha256':git['index_digest'],
+            'git_sha256':c.digest(git),'reservations_sha256':c.digest(reservations),
+            'delivery_sha256':c.digest(plan),'remote_heads':{forge['name']:forge['remote'] for forge in plan['forges']}}
+
+
+def _compatible_delivery(row, cab):
+    return row.plan.get('source_revision')==cab['source_revision'] and row.plan.get('scope')==cab['scope']
+
+
+def _publication_effects_absent(run, cab, dispatch):
+    from .core.models import GitSessionEffect, Lease, ProjectArtifactBuild, ProjectForgeArtifactPublication, TerminalGitCommit
+
+    project=run.project_id
+    active=('PENDING','RUNNING','UNKNOWN','PARTIAL')
+    return (c.no_pending(run)
+            and not Lease.objects.filter(run__project_id=project,state='HELD').exists()
+            and not GitDelivery.objects.filter(project_id=project).filter(
+                Q(run=run)|Q(version=cab['version'])|Q(state__in=active)|Q(created__gte=dispatch.created)).exists()
+            and not GitSessionEffect.objects.filter(run__project_id=project).filter(
+                Q(state__in=('INTENT','RUNNING','UNKNOWN'))|Q(created__gte=dispatch.created)).exists()
+            and not TerminalGitCommit.objects.filter(run=run).exists()
+            and not ProjectArtifactBuild.objects.filter(project_id=project).filter(
+                Q(version=cab['version'])|Q(state__in=active)|Q(created__gte=dispatch.created)).exists()
+            and not ProjectForgeArtifactPublication.objects.filter(project_id=project).filter(
+                Q(plan__version=cab['version'])|Q(receipt__version=cab['version'])|Q(state__in=active)|Q(created__gte=dispatch.created)).exists())
+
+
+def _recover_publication(run_id):
+    from .connector_process import alive
+    from .core.models import Maintenance
+    from .preexisting_git import git_guard
+    from .publication_boundary import KEY as BOUNDARY
+    from .stage_substeps import phase
+
+    with git_guard(),transaction.atomic():
+        run=Run.objects.select_for_update().get(pk=run_id)
+        step=run.configuration[KEY].get('current',{})
+        cab=step.get('cab',{})
+        if step.get('stage')!=11 or cab.get('state') not in ('DISPATCHING','UNKNOWN'):
+            return
+        if cab['state']=='DISPATCHING' and alive(cab.get('executor') or {}):
+            return
+        attempt=step['attempt']
+        row=GitDelivery.objects.filter(run=run,version=cab['version']).first()
+        if row and _compatible_delivery(row,cab):
+            _set_publication(run,attempt,'ADMITTED',delivery_id=row.pk)
+            return
+        if cab['state']=='DISPATCHING':
+            _set_publication(run,attempt,'UNKNOWN',error='stage-publication-dispatcher-stopped',execution_finished=True)
+            cab=run.configuration[KEY]['current']['cab']
+        if (row or not statistics_at_closure(run) or not cab.get('execution_finished')
+                or not cab.get('admission_snapshot') or cab.get('recovery_state')
+                or run.state not in ('WORKING','FINALIZATION_PENDING') or run.suspension
+                or Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists()):
+            return
+        events=Event.objects.filter(run=run,data__attempt=attempt,data__reference=cab['reference'])
+        dispatch=events.filter(kind='stage-cab-publication-dispatching').last()
+        unknown=events.filter(kind='stage-cab-publication-unknown').last()
+        reason='stage-publication-evidence-incomplete'
+        if (dispatch and unknown and dispatch.pk<unknown.pk
+                and dispatch.data.get('admission_snapshot')==cab['admission_snapshot']
+                and unknown.data.get('execution_finished') is True):
+            reason='stage-publication-effect-protected'
+            if _publication_effects_absent(run,cab,dispatch):
+                try:
+                    with transaction.atomic():
+                        snapshot=_publication_snapshot(run,cab)
+                except Exception as error:
+                    # Le prévol peut inclure le système de fichiers et des forges indisponibles.
+                    reason=error.code if isinstance(error,c.Refused) else type(error).__name__
+                else:
+                    reason=None if snapshot==cab['admission_snapshot'] else 'stage-publication-proof-divergent'
+        if reason:
+            _set_publication(run,attempt,'UNKNOWN',error=cab['error'],recovery_state='PROTECTED',recovery_reason=reason)
+            return
+        reference=cab['reference']+'-retry-1'
+        proof={'attempt':attempt,'version':cab['version'],'scope':cab['scope'],'state':'FAILED_NO_EFFECTS',
+               'original_event_id':unknown.pk,'original_receipt_digest':c.digest(unknown.data),
+               'dispatch_event_id':dispatch.pk,'snapshot':snapshot,'reference':reference}
+        c.event(run,'stage-cab-publication-reconciled-no-effects',proof)
+        original=phase(run,'publication',cab['reference'],'UNKNOWN')
+        if original:
+            finish_iteration(original,timezone.now(),'admission-reconciled-no-effects',state='UNKNOWN')
+        run.configuration={**run.configuration,BOUNDARY:{**run.configuration[BOUNDARY],'publication_ref':reference}}
+        _set_publication(run,attempt,'QUEUED',reference=reference,admission_snapshot=None,execution_finished=False,
+                         executor=None,error=None,recovery_state='RETRIED',recovery_snapshot=snapshot,
+                         original_receipt_digest=proof['original_receipt_digest'])
+        phase(run,'publication',reference,'RUNNING')
 
 
 def _archive_checks(run):
@@ -371,9 +475,10 @@ def _archive_checks(run):
 def start_queued_publication(run_id):
     from .connector_process import alive, identity
     from .core.models import McpRunBinding, McpThreadBinding, Maintenance
+    from .preexisting_git import git_guard
     from .session_delivery import start_delivery
 
-    with transaction.atomic():
+    with git_guard(),transaction.atomic():
         run=Run.objects.select_for_update().get(pk=run_id)
         if run.state not in ('WORKING','FINALIZATION_PENDING') or run.suspension or Maintenance.objects.filter(state__in=('PREPARED','INSTALLING')).exists():
             return
@@ -383,7 +488,10 @@ def start_queued_publication(run_id):
         cab=step['cab']
         prior=GitDelivery.objects.filter(run=run,version=cab['version']).first()
         if prior:
-            _set_publication(run,step['attempt'],'ADMITTED',delivery_id=prior.pk)
+            if _compatible_delivery(prior,cab):
+                _set_publication(run,step['attempt'],'ADMITTED',delivery_id=prior.pk)
+            else:
+                _set_publication(run,step['attempt'],'UNKNOWN',error='stage-publication-source-changed')
             return
         revision=c.revision(run)
         if revision != cab['source_revision']:
@@ -411,32 +519,37 @@ def start_queued_publication(run_id):
         executor=identity(threading.get_native_id())
         if executor is None:
             return
-        _set_publication(run,step['attempt'],'DISPATCHING',executor=executor)
+        snapshot=None
+        if statistics_at_closure(run):
+            try:
+                with transaction.atomic():
+                    snapshot=_publication_snapshot(run,cab)
+            except Exception as error:
+                c.event(run,'stage-cab-publication-snapshot-unavailable',{
+                    'attempt':step['attempt'],'reference':cab['reference'],
+                    'reason':error.code if isinstance(error,c.Refused) else type(error).__name__})
+        if cab.get('recovery_state')=='RETRIED' and snapshot!=cab['recovery_snapshot']:
+            _set_publication(run,step['attempt'],'UNKNOWN',error='stage-publication-proof-divergent',recovery_state='PROTECTED')
+            return
+        _set_publication(run,step['attempt'],'DISPATCHING',executor=executor,admission_snapshot=snapshot)
     try:
         start_delivery(run.actor,run,cab['version'],next(iter(usable)),complete=cab['scope']=='project',stage_authorized=True)
     except c.Refused as error:
         state,details=('UNKNOWN' if any(word in error.code for word in ('unknown','uncertain','unconfirmed')) else 'FAILED'),{'error':error.code}
-    except Exception:
-        state,details='UNKNOWN',{'error':'stage-publication-outcome-unconfirmed'}
+    except Exception as error:
+        state,details='UNKNOWN',{'error':'stage-publication-outcome-unconfirmed','failure_type':type(error).__name__}
     else:
         state,details='ADMITTED',{}
     with transaction.atomic():
         current=Run.objects.select_for_update().get(pk=run.pk)
-        _set_publication(current,step['attempt'],state,**details)
+        _set_publication(current,step['attempt'],state,execution_finished=True,**details)
 
 
 def dispatch():
-    from .connector_process import alive
-    for pk in Run.objects.filter(configuration__stage_protocol__current__cab__state='DISPATCHING').values_list('pk',flat=True)[:10]:
-        with transaction.atomic():
-            run=Run.objects.select_for_update().get(pk=pk)
-            entry=run.configuration[KEY]['current'];job=entry['cab']
-            if job['state']=='DISPATCHING' and not alive(job.get('executor') or {}):
-                row=GitDelivery.objects.filter(run=run,version=job['version']).first()
-                if row:
-                    _set_publication(run,entry['attempt'],'ADMITTED',delivery_id=row.pk)
-                else:
-                    _set_publication(run,entry['attempt'],'UNKNOWN',error='stage-publication-dispatcher-stopped')
+    pending=Run.objects.filter(state__in=('WORKING','FINALIZATION_PENDING'),
+        configuration__stage_protocol__current__cab__state__in=('DISPATCHING','UNKNOWN'))
+    for pk in pending.values_list('pk',flat=True):
+        _recover_publication(pk)
     for pk in Run.objects.filter(state__in=('WORKING','FINALIZATION_PENDING'),suspension='',
             configuration__stage_protocol__current__cab__state='ARCHIVE_WAITING').values_list('pk',flat=True)[:10]:
         with transaction.atomic():
