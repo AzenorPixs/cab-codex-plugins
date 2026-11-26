@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[compact-stage-cycle-tables](changes/archive/2026-11-26-compact-stage-cycle-tables/),
+code non attribué. Change archivé. Attribution ultérieure par ACL.
+
 [show-all-cycle-table-rows](changes/archive/2026-11-24-show-all-cycle-table-rows/),
 code non attribué. Change archivé. Attribution ultérieure par ACL.
 

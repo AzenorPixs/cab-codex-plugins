@@ -27,12 +27,36 @@ const roles=(piloted:boolean):TokenRole[]=>piloted?['coder','orchestrator']:['co
 export const tokenColumnCount=(piloted:boolean)=>roles(piloted).length*fields.length
 const roleLabel:Record<TokenRole,string>={coder:'Codeur',orchestrator:'Orchestrateur'}
 
-export function TokenColumns({tokens,piloted=false,header=false}:{tokens?:CycleTokens;piloted?:boolean;header?:boolean}){
-  return <>{roles(piloted).flatMap(role=>fields.map(([field,abbreviation,label])=>{
+export function cumulativeCycleTokens(previous:CycleTokens, tokens:CycleTokens|undefined, piloted:boolean):CycleTokens{
+  const total:CycleTokens={}
+  for(const role of roles(piloted)){
+    const counts:TokenCounts={...previous[role]}
+    for(const [field] of fields){
+      const value=tokens?.[role]?.[field]
+      if(value&&/^\d+$/.test(value))counts[field]=(BigInt(counts[field]??'0')+BigInt(value)).toString()
+    }
+    total[role]=counts
+  }
+  return total
+}
+
+export function TokenRoleHeaders(){
+  return <>{roles(true).map(role=><th key={role} colSpan={fields.length*2}>{roleLabel[role]}</th>)}</>
+}
+
+export function TokenColumns({tokens,cumulative,piloted=false,header=false,includeCumulative=cumulative!==undefined}:{
+  tokens?:CycleTokens;cumulative?:CycleTokens;piloted?:boolean;header?:boolean;includeCumulative?:boolean
+}){
+  return <>{roles(piloted).flatMap(role=>fields.flatMap(([field,abbreviation,label])=>{
     const key=role+field
-    return header
-      ? <th key={key} scope="col" title={label}>{abbreviation}{piloted&&<small>{roleLabel[role]}</small>}</th>
+    const current=header
+      ? <th key={key} scope="col" title={label}>{abbreviation}{piloted&&!includeCumulative&&<small>{roleLabel[role]}</small>}</th>
       : <td key={key} className="cycle-token-value">{formatTokens(tokens?.[role]?.[field])}</td>
+    if(!includeCumulative)return current
+    const total=header
+      ? <th key={key+'-total'} scope="col" title={'Cumul · '+label}>C{abbreviation}</th>
+      : <td key={key+'-total'} className="cycle-token-value">{formatTokens(cumulative?.[role]?.[field])}</td>
+    return [current,total]
   }))}</>
 }
 

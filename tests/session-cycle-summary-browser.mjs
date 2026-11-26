@@ -32,7 +32,8 @@ const time='2026-11-22T12:00:00Z';
 const tokenCounts=(input='1250',write='7654')=>({coder:{input_tokens:input,output_tokens:'1000000',cache_read_tokens:'0',cache_write_tokens:write},orchestrator:{input_tokens:'2345678901',output_tokens:'12',cache_read_tokens:null}});
 const iterations=Array.from({length:12},(_,index)=>({
  id:index+1,number:index+1,duration_seconds:[15.8,641.2,3661.2,null][index]??null,
- state:'COMPLETED',started_at:time,ended_at:time,description:'Passage '+(index+1),tokens:tokenCounts(),
+ state:index===11?'RUNNING':index===10?'CANCELLED':'COMPLETED',started_at:time,ended_at:index===11?null:time,
+ cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(),
 }));
 const actions=Array.from({length:12},(_,index)=>({
  ...iterations[index],id:101+index,parent_id:1,description:'Action visible '+(index+1),
@@ -114,6 +115,7 @@ await new Promise(done=>server.listen(0,'127.0.0.1',done));
 const url='http://127.0.0.1:'+server.address().port+'/projects/fixture/runs/RUN';
 try{
  for(const factory of [chromium,firefox]){
+  run.mode='piloted';metrics.piloted=true;
   metricsUnavailable=true;
   terminalRequests=0;
   metrics.cycle_summary={...metrics.cycle_summary,iteration_count:2,duration_seconds:300,last_duration_seconds:200,tokens:tokenCounts()};metrics.cycles.at(-1).tokens=tokenCounts();revision++;
@@ -169,6 +171,7 @@ try{
     return table.tBodies[0].rows.length===12 && table.tBodies[0].rows[11].cells[0].textContent==='12'
       && !table.closest('[role=tabpanel]').querySelector('input[type="search"],nav[aria-label^="Pagination"]');
    })()`),'Douze cycles accessibles directement dans le Résumé');
+   await browser.viewport(1920,900);
    for(let stage=1;stage<=12;stage++){
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 12")'),'actions de l’étape');
@@ -182,15 +185,73 @@ try{
        && shortTable.tBodies[0].rows.length===3 && shortTable.querySelectorAll('.table-filler').length===2
        && !overview.querySelector('input[type="search"],nav[aria-label^="Pagination"]');
     })()`),'Itérations et actions sans pagination ni recherche, étape '+stage);
+    const compactTable=JSON.parse(await ev(`(()=>{
+     const table=document.querySelector('.stage-passages-compact');
+     const [head,counts]=table.tHead.rows;
+     const headers=Array.from(head.cells,cell=>cell.textContent).join('|');
+     const tokenHeaders=Array.from(counts.cells,cell=>cell.textContent).join('|');
+     const [first,second]=table.tBodies[0].rows;
+     const running=table.tBodies[0].rows[11].cells[22];
+     const spinner=running.querySelector('.stage-cycle-spinner');
+     const cancelled=table.tBodies[0].rows[10].cells[22];
+     const warning=cancelled.querySelector('.stage-cycle-warning');
+     const date=first.cells[1];
+     const line=document.createRange();
+     line.selectNodeContents(head.cells[0]);
+     const headingWidth=line.getBoundingClientRect().width;
+     const padding=parseFloat(getComputedStyle(head.cells[0]).paddingInlineStart)*2;
+     const wrapper=table.parentElement;
+     const tokens='Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw';
+     const overflow=Math.max(0,wrapper.scrollWidth-wrapper.clientWidth);
+     return JSON.stringify({
+      headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
+      cycleWidth:head.cells[0].clientWidth<=headingWidth+padding+1,
+      singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
+      coder:first.cells[7].textContent.includes('1,25') && second.cells[7].textContent.includes('2,5')
+        && second.cells[9].textContent.includes('2') && second.cells[11].textContent==='0' && second.cells[13].textContent.includes('15,31'),
+      orchestrator:second.cells[15].textContent.includes('4,69') && second.cells[21].textContent==='—',
+      running:running.textContent.includes('En cours') && spinner?.getAttribute('aria-hidden')==='true'
+        && getComputedStyle(spinner).animationName==='stage-cycle-spin' && !first.querySelector('.stage-cycle-spinner'),
+      cancelled:cancelled.textContent.includes('Annulé') && warning?.getAttribute('aria-hidden')==='true'
+        && warning.querySelector('path').getAttribute('fill')==='#f4c542' && !first.querySelector('.stage-cycle-warning'),
+      overflow:overflow>0?{viewport:innerWidth,available:wrapper.clientWidth,table:wrapper.scrollWidth,
+        columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
+     });
+    })()`));
+    assert.deepEqual(compactTable,{headers:true,cycleWidth:true,singleLine:true,coder:true,orchestrator:true,running:true,cancelled:true,overflow:0},
+      'Tableau piloté compact et cumuls sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
+   assert(await ev(`(()=>{
+    const table=document.querySelector('.stage-passages-compact');
+    const wrapper=table.parentElement;
+    wrapper.scrollLeft=wrapper.scrollWidth;
+    const last=table.tBodies[0].rows[11].lastElementChild;
+    return wrapper.scrollLeft>0 && last.getBoundingClientRect().right<=wrapper.getBoundingClientRect().right+1
+      && getComputedStyle(last).whiteSpace==='nowrap' && last.innerText.includes('Passage 12');
+   })()`),'Défilement horizontal limité au tableau sur mobile, état intégralement accessible');
    assert(await ev(fullWidthSession),'Bloc de session pleine largeur sans terminal sur mobile');
    assert.equal(terminalRequests,0,'Aucune requête de terminal depuis le détail de session');
    assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().top>=durations.getBoundingClientRect().bottom})()`),'cumuls sous les durées dans le même encadré sur mobile');
    await browser.screenshot();
 
    await browser.viewport(1440,900);
+   run.mode='direct';metrics.piloted=false;
+   await browser.navigate(url);
+   await wait(()=>ev('!!document.querySelector(".run-card-title")'),'session directe');
+   await click('Étapes du cycle');
+   await click('1');
+   await wait(()=>ev('!!document.querySelector(".stage-passages-compact")'),'tableau de la session directe');
+   const directTable=JSON.parse(await ev(`(()=>{
+    const table=document.querySelector('.stage-passages-compact');
+    const wrapper=table.parentElement;
+    const headers=Array.from(table.tHead.rows[0].cells,cell=>cell.textContent).join('|');
+    return JSON.stringify({rows:table.tHead.rows.length,headers,overflow:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth)});
+   })()`));
+   assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0},
+    'Tableau direct sans défilement à 1 440 px');
+   run.mode='piloted';metrics.piloted=true;
    await browser.navigate(new URL('/projects/fixture',url).href);
    await wait(()=>ev(`!!document.querySelector('select option[value="fixture-change"]')`),'sélecteur de change sur l’accueil projet');
    await ev(`(()=>{

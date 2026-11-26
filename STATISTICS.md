@@ -21462,6 +21462,12 @@ Portée : cumulative.
 -->
 
 
+## Change `compact-stage-cycle-tables` — openspec/changes/archive/2026-11-26-compact-stage-cycle-tables/STATISTICS.md
+
+
+STATISTICS.md missing ; aucune donnée inventée.
+
+
 ## Change `complete-supervisor-public-status` — openspec/changes/archive/2026-10-13-complete-supervisor-public-status/STATISTICS.md
 
 
@@ -82513,4 +82519,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "61d2de633f5e6f8696ad41ae554038a74666cd6bea740414d2bedb0238339aec", "generated_at": "2026-11-25T18:20:37.849074+00:00", "revision": "61d2de633f5e6f8696ad41ae554038a74666cd6bea740414d2bedb0238339aec", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "a8363cc1028cabde742e9be21d0278794e41408492ed9ec2ff5e28b91501ae7a", "generated_at": "2026-11-26T08:18:37.131621+00:00", "revision": "a8363cc1028cabde742e9be21d0278794e41408492ed9ec2ff5e28b91501ae7a", "scope": "project"} -->

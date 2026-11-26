@@ -1,7 +1,7 @@
 import {type ReactNode} from 'react'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {stageDuration} from './stageDuration'
-import {formatTokens,tokenColumnCount,TokenColumns,TokenSummary,type CycleTokens} from './cycleTokens'
+import {cumulativeCycleTokens,formatTokens,tokenColumnCount,TokenColumns,TokenRoleHeaders,TokenSummary,type CycleTokens} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
 type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null}
@@ -14,17 +14,17 @@ const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAIL
 function Waiting({time}:{time:Attribution}){
   return <>{stageDuration(time.waiting_seconds)}</>
 }
-function StageTable<Row>({title,items,columns,header,content,render,showAllRows}:{
+function StageTable<Row>({title,items,columns,header,content,render,showAllRows,compact=false}:{
   title:string;items:Row[];columns:number;header:ReactNode
-  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean
+  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean;compact?:boolean
 }){
   const navigation=useTableSearch()
   const matching=showAllRows?items:filterTableRows(items,navigation.query,content)
   const pagination=showAllRows?null:tablePage(matching,navigation.page)
   const rows=pagination?.rows??items
   return <>
-    <div className="cycle-table-scroll"><table className="stage-passages monitor-table" aria-label={title}>
-      <thead><tr>{header}</tr></thead>
+    <div className="cycle-table-scroll"><table className={'stage-passages monitor-table'+(compact?' stage-passages-compact':'')} aria-label={title}>
+      <thead>{header}</thead>
       <tbody>{rows.map(render)}
         <TableFiller count={rows.length} columns={columns}
           empty={pagination&&navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'}/>
@@ -38,16 +38,46 @@ function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
 function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;showAllRows:boolean}){
-  return <StageTable showAllRows={showAllRows} title="Itérations de l’étape" items={items} columns={7+tokenColumnCount(piloted)}
-    header={<><th>Itération</th><th>Début</th><th>Fin</th><th>Travail observé par CAB</th><th>Agent(s)</th><th>Attente</th><TokenColumns header piloted={piloted}/><th>État</th></>}
+  let cumulative:CycleTokens={}
+  const rows:(Passage & {cumulative?:CycleTokens})[]=showAllRows?items.map(item=>{
+    cumulative=cumulativeCycleTokens(cumulative,item.tokens,piloted)
+    return {...item,cumulative}
+  }):items
+  const grouped=showAllRows&&piloted
+  const rowSpan=grouped?2:undefined
+  const tokenHeaders=<TokenColumns header piloted={piloted} includeCumulative={showAllRows}/>
+  return <StageTable showAllRows={showAllRows} compact={showAllRows} title="Itérations de l’étape" items={rows}
+    columns={7+tokenColumnCount(piloted)*(showAllRows?2:1)}
+    header={<><tr>
+      <th scope="col" rowSpan={rowSpan}>{showAllRows?'Cycle':'Itération'}</th>
+      <th scope="col" rowSpan={rowSpan}>Début</th><th scope="col" rowSpan={rowSpan}>Fin</th>
+      <th scope="col" rowSpan={rowSpan}>{showAllRows?'CAB':'Travail observé par CAB'}</th>
+      <th scope="col" rowSpan={rowSpan}>{showAllRows?'Agents':'Agent(s)'}</th>
+      <th scope="col" rowSpan={rowSpan}>{showAllRows?'Attentes':'Attente'}</th>
+      {grouped?<TokenRoleHeaders/>:tokenHeaders}
+      <th scope="col" rowSpan={rowSpan}>État</th>
+    </tr>{grouped&&<tr>{tokenHeaders}</tr>}</>}
     content={item=>[item.number,date(item.started_at),date(item.ended_at),stageDuration(item.cab_seconds),
       stageDuration(item.agent_seconds),stageDuration(item.waiting_seconds),item.description,item.receipt?.error,
       item.state&&states[item.state],...tokenValues(item.tokens)]}
-    render={item=><tr key={item.id}><td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td><td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td><TokenColumns tokens={item.tokens} piloted={piloted}/><td>{item.state?states[item.state]||item.state:''}{item.description&&<p>{item.description}</p>}{typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}</td></tr>}/>
+    render={item=><tr key={item.id}>
+      <td>{item.number}</td><td>{date(item.started_at)}</td><td>{date(item.ended_at)}</td>
+      <td>{stageDuration(item.cab_seconds)}</td><td>{stageDuration(item.agent_seconds)}</td><td><Waiting time={item}/></td>
+      <TokenColumns tokens={item.tokens} cumulative={item.cumulative} piloted={piloted}/>
+      <td>{showAllRows&&item.state==='RUNNING'&&<span className="stage-cycle-spinner" aria-hidden="true"/>}
+        {showAllRows&&item.state==='CANCELLED'&&<svg className="stage-cycle-warning" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M8 1.5 15 14H1Z" fill="#f4c542" stroke="#795900" strokeLinejoin="round"/>
+          <path d="M8 5.5v4m0 2v.15" fill="none" stroke="#352700" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>}
+        {item.state?states[item.state]||item.state:''}
+        {item.description&&<p>{item.description}</p>}
+        {typeof item.receipt?.error==='string'&&<p role="status">{item.receipt.error}</p>}
+      </td>
+    </tr>}/>
 }
 function ActionTable({title,actions,passage,piloted,showAllRows}:{title:string;actions:Passage[];passage:Passage;piloted:boolean;showAllRows:boolean}){
   return <StageTable showAllRows={showAllRows} title={title} items={actions} columns={6+tokenColumnCount(piloted)}
-    header={<><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><TokenColumns header piloted={piloted}/><th>État</th></>}
+    header={<tr><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><TokenColumns header piloted={piloted}/><th>État</th></tr>}
     content={action=>[action.description,action.source,date(action.started_at),date(action.ended_at),
       stageDuration(action.duration_seconds),action.state&&states[action.state],action.receipt?.note,action.receipt?.mandates,
       action.receipt?.request_id,action.receipt?.path,action.receipt?.error,...tokenValues(action.tokens)]}
@@ -101,7 +131,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
 export function CycleIterations({cycles,piloted=false,showAllRows=false}:{cycles:CycleMetric[];piloted?:boolean;showAllRows?:boolean}){
   return <section className="change-progress"><h2>Itérations du cycle</h2>
     <StageTable showAllRows={showAllRows} title="Itérations du cycle" items={cycles} columns={8+tokenColumnCount(piloted)}
-      header={<><th>Itération</th><th>Début</th><th>Fin</th><th>CAB</th><th>Agent(s)</th><th>Attente</th><th>Durée totale</th><TokenColumns header piloted={piloted}/><th>État</th></>}
+      header={<tr><th>Itération</th><th>Début</th><th>Fin</th><th>CAB</th><th>Agent(s)</th><th>Attente</th><th>Durée totale</th><TokenColumns header piloted={piloted}/><th>État</th></tr>}
       content={cycle=>[cycle.number,date(cycle.started_at),date(cycle.ended_at),stageDuration(cycle.cab_seconds),
         stageDuration(cycle.agent_seconds),stageDuration(cycle.waiting_seconds),
         stageDuration(cycle.display_duration_seconds??cycle.duration_seconds),

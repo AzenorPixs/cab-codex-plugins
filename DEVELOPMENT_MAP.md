@@ -16,6 +16,11 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[compact-stage-cycle-tables](openspec/changes/archive/2026-11-26-compact-stage-cycle-tables/),
+code non attribué. La recette Chromium et Firefox du 26 novembre 2026 couvre
+les douze onglets, les lignes compactes, les cumuls de tokens, les états « En
+cours » et « Annulé » et le défilement limité au tableau sur mobile.
+
 [show-all-cycle-table-rows](openspec/changes/archive/2026-11-24-show-all-cycle-table-rows/),
 code non attribué. La recette du 24 novembre 2026 a qualifié le Résumé et les
 étapes 1 à 12 sans pagination ni recherche, ainsi que le maintien des contrôles
