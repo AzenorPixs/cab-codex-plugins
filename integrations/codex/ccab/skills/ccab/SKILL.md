@@ -34,6 +34,10 @@ obtenir la vérification du déclarant, puis appeler `incident.resolve` avec les
 preuves. `incident.purge` ne retire que les incidents résolus dont le claim
 reste valide. Ne pas déduire la résolution d’une présence source ou d’un code0.
 
+Réserver les seuls fichiers source à écrire maintenant. Après écriture,
+utiliser `session_git_finish_write`. Les essais lisent sans bail et écrivent
+leurs fichiers temporaires sous `/tmp` ou dans le banc Debian 13 prescrit.
+
 Un claim expiré peut être renouvelé aussi pour RESOLVED : conserver son claim_id
 et sa résolution, sans rouvrir l'incident. Qualifier chaque entrée corrigée,
 faux positif ou déjà traitée avec ses limites ; ne pas appeler « réparée » une

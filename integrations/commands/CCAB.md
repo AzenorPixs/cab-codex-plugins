@@ -1,6 +1,6 @@
 ---
 description: CCAB — mandat correctif CAB sous SCM/CICD
-version: 3.48.0
+version: 3.48.1
 ---
 
 L'invocation explicite de CCAB autorise les correctifs CAB nécessaires sous
@@ -16,3 +16,6 @@ reçus, SID/RUN et protections. Argument utilisateur : `$ARGUMENTS`.
 Pour purger : qualifier chaque entrée et obtenir son retour vérifié, renouveler
 le claim sans rouvrir RESOLVED, puis utiliser incident.purge ou la purge globale
 atomique explicitement demandée. Aucun incident non résolu ne doit disparaître.
+
+Réserver uniquement les sources à écrire, puis les libérer par
+`session_git_finish_write`. Qualifier en lecture seule avec des fichiers de test sous /tmp.

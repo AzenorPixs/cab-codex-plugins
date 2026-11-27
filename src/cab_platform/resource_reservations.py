@@ -12,6 +12,7 @@ from .core.models import Event, GitFileReservation, Lease, McpConnector, Resourc
 LIFETIME = timedelta(seconds=300)
 RENEW_AFTER = timedelta(seconds=240)
 WARNING = timedelta(seconds=30)
+FILE_WARNING = timedelta(minutes=1)
 ACTIVE_STATES = ('WORKING', 'REVIEW_PENDING', 'FINALIZATION_PENDING', 'ACCEPTED')
 _sweep_worker = Lock()
 _notice_worker = Lock()
@@ -145,7 +146,9 @@ def sweep(now=None):
     resource_guard()
     now = now or timezone.now()
     upcoming = list(ResourceReservation.objects.select_for_update().filter(
-        warned=False, expires__gt=now, expires__lte=now + WARNING,
+        Q(kind='file', expires__lte=now + FILE_WARNING)
+        | (~Q(kind='file') & Q(expires__lte=now + WARNING)),
+        warned=False, expires__gt=now,
     ))
     Event.objects.bulk_create([
         Event(run_id=row.run_id, project_id=row.project_id, kind='reservation-warning', data={

@@ -1,9 +1,11 @@
 ---
 description: Entrée CAB système CABU
-version: 3.48.0
+version: 3.48.1
 ---
 
 Répondre en français et charger le skill CABU. Hors des étapes d’un change,
 lancer cab update avec la version demandée et un identifiant de demande stable.
 Suivre le même reçu via cab update-status et annoncer le résultat dans le chat.
 La commande adresse cab-update.service. Argument utilisateur : $ARGUMENTS.
+
+La vérification de l’activation ne prend aucun bail de lecture sur les sources.

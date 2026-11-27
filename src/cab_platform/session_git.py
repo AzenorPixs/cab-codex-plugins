@@ -12,6 +12,65 @@ from .project_git import probe
 from .git_commit_remove import context, run
 
 
+def test_file(path):
+    from pathlib import PurePosixPath
+    parts=PurePosixPath(path).parts
+    name=parts[-1] if parts else ''
+    return (bool({'test','tests','__tests__','.cab-tests'}.intersection(parts))
+            or name.startswith('test_') or name.endswith(('.test','.spec'))
+            or '.test.' in name or '.spec.' in name or PurePosixPath(name).stem.endswith('_test'))
+
+
+def delivery_files(index):
+    paths=set(index.reservations.filter(active=True).values_list('path',flat=True))|set(index.origin.get('staged_sources',[]))
+    return sorted(path for path in paths if not test_file(path))
+
+
+def _written_fingerprint(project,path):
+    from pathlib import Path
+    from .core.commands import safe_path
+    from .preexisting_git import fingerprint
+    target=safe_path(Path(project.root),path,exists=False)
+    return fingerprint(project.root,path) if target.exists() else None
+
+
+def finish_writes(actor,data,connector_id=None):
+    """Libère les baux d'écriture et conserve les octets à vérifier après les tests."""
+    from django.db import transaction
+    from .core import commands as c
+    from .core.models import Event,GitFileReservation,GitSessionIndex,ResourceReservation
+    from .preexisting_git import git_guard,validate_paths
+
+    require(set(data)=={'project_id','run_id','request_id','paths'},'session-git-fields-invalid',400)
+    paths=validate_paths(data['paths'])
+    request_id=c.identifier(data['request_id'])
+    with git_guard(),transaction.atomic():
+        current=c.run_scope(actor,data['run_id'],data['project_id'],lock=True)
+        if connector_id is not None:
+            from .core.connectors import lock_worker_binding
+            lock_worker_binding(actor,connector_id,current)
+        prior=Event.objects.filter(run=current,kind='git-writes-finished',data__request_id=request_id).first()
+        if prior:
+            require(prior.data['paths']==paths,'session-git-request-conflict',409)
+            return prior.data['receipt']
+        c.working(current)
+        require(c.no_pending(current),'session-git-effect-unresolved',409)
+        index=GitSessionIndex.objects.select_for_update().filter(change_id=current.change_record_id,
+            session_id=current.coding_session_id,state__in=('PENDING','OPEN')).first()
+        require(index is not None,'session-git-index-unavailable',409)
+        live=ResourceReservation.objects.filter(run=current,source='git',expires__gt=timezone.now())
+        reservations=GitFileReservation.objects.filter(git_index=index,active=True,path__in=paths,
+                                                         pk__in=live.values('source_id'))
+        require(reservations.count()==len(paths),'session-git-reservation-required',409)
+        snapshots={path:_written_fingerprint(current.project,path) for path in paths}
+        index.origin={**index.origin,'finished_writes':{**index.origin.get('finished_writes',{}),**snapshots}}
+        index.save(update_fields=['origin','updated'])
+        reservations.update(active=False,released=timezone.now())
+        receipt={'request_id':request_id,'state':'RELEASED','released_count':len(paths),'snapshot_digest':c.digest(snapshots)}
+        c.event(current,'git-writes-finished',{'request_id':request_id,'paths':paths,'receipt':receipt})
+        return receipt
+
+
 def _visible_entry(status, path, previous=None):
     blocked = {'__pycache__', '.cache', '.npm', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.cab-tests', 'tmp', 'output', 'reports'} | PROTECTED
     if SECRET.search(path) or any(part in blocked for part in path.split('/')):
@@ -134,6 +193,7 @@ def _reserve_files_locked(actor, data, connector_id=None):
         options, env = context(project)
         for path in paths:
             require(path!='STATISTICS.md','session-git-system-managed-path',409)
+            require(not test_file(path),'session-git-test-file-excluded',409)
             require(str(Path(path)) == path, 'session-git-path-invalid', 400)
             require(any(path == scope or path.startswith(scope + '/') for scope in framed), 'session-git-outside-mandate', 403)
             target = safe_path(root, path, exists=False)
@@ -411,7 +471,14 @@ def _stage_files_locked(actor, data, connector_id=None):
         recorded = set(GitFileReservation.objects.filter(
             git_index=index, active=True, pk__in=reservations.values('source_id'),
         ).values_list('path', flat=True))
-        require(set(paths).issubset(recorded), 'session-git-reservation-required', 409)
+        require(not any(test_file(path) for path in paths),'session-git-test-file-excluded',409)
+        completed=index.origin.get('finished_writes',{})
+        finished=set(paths)-recorded
+        require(finished.issubset(completed),'session-git-reservation-required',409)
+        require(not GitFileReservation.objects.filter(project=current.project,path__in=finished,active=True).exists(),
+                'session-git-reserved',409)
+        require(all(_written_fingerprint(current.project,path)==completed[path] for path in finished),
+                'session-git-finished-write-changed',409)
         for path in paths:
             safe_path(__import__('pathlib').Path(current.project.root), path, exists=False)
         current_revision = revision(current)
@@ -452,6 +519,8 @@ def _stage_files_locked(actor, data, connector_id=None):
         mutated=True
         staged = subprocess.run(['/usr/bin/git', '-C', project.root, '-c', 'core.fsmonitor=false', 'add', '--all', '--pathspec-from-file=-', '--pathspec-file-nul'], input=b'\0'.join(path.encode('utf-8') for path in paths) + b'\0', cwd='/', env={**env, 'GIT_INDEX_FILE':path, 'GIT_LITERAL_PATHSPECS':'1'}, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120, **options)
         require(staged.returncode == 0, 'session-git-effect-unresolved', 409)
+        require(all(_written_fingerprint(project,name)==completed[name] for name in finished),
+                'session-git-finished-write-changed',409)
         tree=run(project,options,{**env,'GIT_INDEX_FILE':path},'write-tree')
         require(tree.returncode==0,'session-git-effect-unresolved',409)
         oid=tree.stdout.decode('ascii','strict').strip()
@@ -488,7 +557,10 @@ def _stage_files_locked(actor, data, connector_id=None):
         index.keep_ref = keep_ref
         index.keep_oid = oid
         index.state = 'OPEN'
-        index.save(update_fields=['index_path','keep_ref','keep_oid','state','updated'])
+        index.origin={**index.origin,
+                      'finished_writes':{name:value for name,value in index.origin.get('finished_writes',{}).items() if name not in paths},
+                      'staged_sources':sorted(set(index.origin.get('staged_sources',[]))|set(paths))}
+        index.save(update_fields=['index_path','keep_ref','keep_oid','state','origin','updated'])
         effect.state = 'COMPLETED'
         effect.receipt = {'request_id': request_id, 'staged_count': len(paths), 'state':'COMPLETED'}
         effect.save(update_fields=['state','receipt','updated'])
@@ -515,7 +587,7 @@ def inspect_session(actor, data):
     index=GitSessionIndex.objects.filter(change_id=current.change_record_id,session_id=current.coding_session_id).first()
     paths=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True)) if index else []
     snap=git_snapshot(current.project,index.index_path if index and index.state=='OPEN' else None)
-    owned=set(paths)
+    owned=set(delivery_files(index)) if index else set()
     relevant=[entry for entry in snap['entries'] if entry['path'] in owned]
     staged=sum(entry['status']!='??' and entry['status'][0:1]!='.' for entry in relevant)
     baseline=GitChange.objects.filter(change_id=current.change_record_id).first()
@@ -573,15 +645,17 @@ def release_files(actor,data,connector_id=None):
             validations=Operation.objects.filter(run=current,state='COMPLETED',source_revision=revision).order_by('-updated')[:50]
             require(any(op.receipt.get('exit_code')==0 and (op.request.get('phase') in ('test','verify','verification') or isinstance(op.request.get('host_authorization'),dict)) for op in validations),'session-git-validation-required',409)
             paths=list(GitFileReservation.objects.select_for_update().filter(git_index=index,active=True).values_list('path',flat=True))
-            require(paths and (requested is None or set(requested)<=set(paths)),'session-git-reservation-required',409)
-            releasing=paths if requested is None else requested
-            entire_index=len(releasing)==len(paths)
+            require(requested is None or set(requested)<=set(paths),'session-git-reservation-required',409)
+            require(not index.origin.get('finished_writes'),'session-git-release-unstaged',409)
+            releasing=delivery_files(index) if requested is None else requested
+            require(releasing,'session-git-reservation-required',409)
+            entire_index=set(paths).issubset(releasing)
             options,env=context(current.project)
             require(index.index_path==_index_path(current.project,index,options,env) and index.keep_ref and index.keep_oid,'session-git-index-unavailable',409)
             keep=run(current.project,options,env,'rev-parse','--verify',index.keep_ref)
             require(keep.returncode==0 and keep.stdout.decode('ascii').strip()==index.keep_oid,'session-git-index-unavailable',409)
             digest=verify_releasable_index(current.project,index.index_path,releasing)
-            receipt={'request_id':request_id,'released_count':len(releasing),'state':'RELEASED','source_revision':revision,'index_sha256':digest,'index_preserved':True,'delivered':False}
+            receipt={'request_id':request_id,'released_count':len(set(paths)&set(releasing)),'state':'RELEASED','source_revision':revision,'index_sha256':digest,'index_preserved':True,'delivered':False}
             GitFileReservation.objects.filter(git_index=index,active=True,path__in=releasing).update(active=False,released=timezone.now())
             if entire_index:
                 index.state='RELEASED'

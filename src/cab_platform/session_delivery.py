@@ -339,7 +339,7 @@ def preflight_commit(project,index,version,reservations,*,complete=False,existin
     import os,stat
     from pathlib import Path
     from .git_commit_remove import context
-    from .session_git import git_snapshot
+    from .session_git import git_snapshot,test_file
     version_tuple(version)
     require(index.state=='OPEN' and index.base_head,'session-delivery-index-invalid',409)
     options,env=context(project);gitdir=_gitdir(project,options,env);_hooks_supported(project,options,env,gitdir)
@@ -364,6 +364,7 @@ def preflight_commit(project,index,version,reservations,*,complete=False,existin
     require(not (dirty & set(reservations)),'session-delivery-unstaged-session-files',409)
     names=_changed_paths(project,options,{**env,'GIT_INDEX_FILE':expected},index.base_head)
     require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
+    require(not any(test_file(path) for path in names),'session-git-test-file-excluded',409)
     if separate_reports:
         from .reports_git import report_path
         names=[path for path in names if not report_path(path)]
@@ -449,6 +450,8 @@ def prepare_commit(project, index, version, reservations, *, full=None,tag_mode=
     else:
         names=_changed_paths(project,options,source_env,index.base_head)
         require(names and set(names).issubset(set(reservations)),'session-delivery-index-invalid',409)
+    from .session_git import test_file
+    require(not any(test_file(path) for path in names),'session-git-test-file-excluded',409)
     report_paths=[]
     if separate_reports and full is None:
         from .reports_git import report_path
@@ -713,7 +716,8 @@ def commit_session(actor, data, *, full=None,tag_mode='create',expected_tag='',m
             require(index is not None and index.state=='OPEN','session-delivery-index-invalid',409)
             if expected_digest:require(_index_digest(index.index_path,current.project.owner_uid)==expected_digest,'session-delivery-index-changed',409)
             require(not index.effects.filter(state__in=('INTENT','RUNNING','UNKNOWN')).exists(),'session-git-effect-unresolved',409)
-            reservations=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True))
+            from .session_git import delivery_files
+            reservations=delivery_files(index)
             require(reservations or full is not None,'session-git-reservation-required',409)
             effect=GitSessionEffect.objects.create(run=current,git_index=index,origin={'run_id':current.run_id,'session_id':current.session_id},request_id=request_id,request_digest=fingerprint,state='RUNNING')
             index.state='COMMITTING';index.save(update_fields=['state','updated'])
@@ -1148,7 +1152,8 @@ def start_delivery(actor, run, version, connector_id, *, complete=False, stage_a
     require(contract is not None and contract.policy.get('nature')=='delivery','session-delivery-not-authorized',403)
     index=GitSessionIndex.objects.filter(change_id=run.change_record_id,session_id=run.coding_session_id).first()
     require(index is not None and index.state=='OPEN','session-delivery-index-invalid',409)
-    reservations=list(GitFileReservation.objects.filter(git_index=index,active=True).values_list('path',flat=True))
+    from .session_git import delivery_files
+    reservations=delivery_files(index)
     require(reservations,'session-git-reservation-required',409)
     modern=run.configuration.get('cycle_profile')=='publication-12-v1'
     from .change_stage_metrics import statistics_at_closure

@@ -5,7 +5,7 @@ import os
 from .core.commands import Refused, require
 from .core.models import GitSessionEffect, GitSessionIndex
 from .git_commit_remove import OID
-from .session_git import _visible_entry, git_snapshot, shared_scope_digest
+from .session_git import _visible_entry, git_snapshot, shared_scope_digest, test_file
 
 
 def index_entries(git, project, options, env, paths):
@@ -65,6 +65,8 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
             .exclude(git_index=own).exists(), 'session-delivery-full-effect-protected', 409)
     snapshot = git_snapshot(project)
     require(snapshot.get('head') == head, 'session-delivery-head-changed', 409)
+    snapshot={**snapshot,'entries':[entry for entry in snapshot['entries']
+              if not test_file(entry['path']) and not test_file(entry.get('previous',''))]}
     if reports_only:
         snapshot={**snapshot,'entries':[entry for entry in snapshot['entries']
                   if publication_report(entry['path']) or publication_report(entry.get('previous',''))]}
@@ -91,7 +93,7 @@ def capture_full(project, own, options, env, head, gitdir,*,exclude_reports=Fals
         before = _index_digest(source, project.owner_uid)
         private = {**env, 'GIT_INDEX_FILE': str(source)}
         changed = {path for path in _changed_paths(project, options, private, index.base_head)
-                   if _visible_entry('M.', path) is not None} - work
+                   if _visible_entry('M.', path) is not None and not test_file(path)} - work
         if reports_only:changed={p for p in changed if publication_report(p)}
         if exclude_reports:changed={p for p in changed if not report_path(p)}
         blobs = index_entries(_git, project, options, private, changed)

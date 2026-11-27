@@ -1625,9 +1625,9 @@ def command(request,body:Command):
         connector = worker_connector(actor, peer)
         commands.require(connector is not None, 'session-connector-unbound', 409)
         return session_reservations(actor, current, connector.pk, data, renewal=renewal)
-    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release'):
+    if name in ('session.git.reserve','session.git.stage','session.git.status','session.git.inspect','session.git.release','session.git.finish_write'):
         from .connectors import current_worker_run,worker_connector
-        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files
+        from cab_platform.session_git import reserve_files,stage_files,effect_status,inspect_session,release_files,finish_writes
         peer=getattr(request,'cab_peer',None)
         current=current_worker_run(actor,peer,read_only=name in ('session.git.status','session.git.inspect'),native_thread=native_thread,
                                    project_id=data.get('project_id',''),run_id=data.get('run_id',''))
@@ -1635,6 +1635,7 @@ def command(request,body:Command):
         commands.require(connector is not None,'session-connector-unbound',409)
         commands.require(data.get('project_id',current.project_id)==current.project_id and data.get('run_id',current.run_id)==current.run_id,'session-connector-run-divergent',403)
         scoped={**data,'project_id':current.project_id,'run_id':current.run_id}
+        if name=='session.git.finish_write':return finish_writes(actor,scoped,connector.pk)
         if name=='session.git.release':return release_files(actor,scoped,connector.pk)
         if name in ('session.git.reserve','session.git.stage'):
             return (reserve_files if name=='session.git.reserve' else stage_files)(actor,scoped,connector.pk)

@@ -1,6 +1,6 @@
 ---
 description: Déclencher et suivre la CI/CD du projet par CAB
-version: 3.48.0
+version: 3.48.1
 ---
 
 Répondre en français. Charger le skill `cicd` distribué avec le plugin `CICD`.
@@ -20,3 +20,6 @@ et le commit. Pour commits, constructions ou publications ponctuels/autorisés
 ou de reprise, utiliser `session_effect` ; CAB porte effets, CAS, reçus et suivi.
 Le LLM n'exécute pas Git. Une livraison partielle garde son identité/version ;
 consulter le parcours open_recovery/resume du skill, sans nouveau start.
+
+La qualification lit les sources sans bail. Les fichiers de test et les
+artefacts temporaires ne sont pas indexés par CAB.

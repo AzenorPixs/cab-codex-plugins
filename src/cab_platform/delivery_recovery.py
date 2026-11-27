@@ -211,7 +211,10 @@ def snapshot(current,admission=None,resolutions=None):
     c.require(head==current.plan['git']['head'] and branch==current.plan['git']['branch'],'precommit-head-changed')
     digest=delivery._index_digest(index.index_path,current.project.owner_uid)
     c.require(digest==current.plan['git']['index_digest'],'precommit-index-changed')
-    reservations=list(index.reservations.filter(active=True).order_by('path').values('path','path_digest','git_index_id'))
+    from hashlib import sha256
+    from .session_git import delivery_files
+    reservations=[{'path':path,'path_digest':sha256(path.encode()).hexdigest(),'git_index_id':index.pk}
+                  for path in delivery_files(index)]
     names=delivery._changed_paths(current.project,options,{**env,'GIT_INDEX_FILE':index.index_path},index.base_head)
     c.require(names and set(names).issubset({r['path'] for r in reservations}),'precommit-reservations-changed')
     from .session_git import git_snapshot,shared_scope_digest

@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CAB
-version: 3.48.0
+version: 3.48.1
 ---
 
 Répondre en français. Charger le skill CAB distribué avec le plugin du même nom.
@@ -18,3 +18,7 @@ et le commit. Pour commits, constructions ou publications ponctuels/autorisés
 ou de reprise, utiliser `session_effect` ; CAB porte effets, CAS, reçus et suivi.
 Le LLM n'exécute pas Git. Une livraison partielle garde son identité/version ;
 consulter le parcours open_recovery/resume du skill, sans nouveau start.
+
+Réserver uniquement les sources à modifier immédiatement, puis utiliser
+`session_git_finish_write` dès la fin de l’écriture. Les lectures sont sans bail.
+Les essais et leurs fichiers restent sous /tmp ou dans le banc Debian 13 prescrit.

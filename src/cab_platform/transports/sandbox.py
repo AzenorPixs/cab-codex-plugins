@@ -182,8 +182,11 @@ def sandbox_command(args,grant):
     validate_args(args)
     workspace=Path(args["directory"])
     expected=Path(grant["atelier"])
-    if set(grant)-{"autonomy"}!={"status","directory","atelier","runtimeRoots"} or grant["status"]!="AUTHORIZED_ATELIER" or grant["directory"]!=str(workspace) or grant["atelier"]!=str(expected):
+    if set(grant)-{"autonomy","projectReadOnly"}!={"status","directory","atelier","runtimeRoots"} or grant["status"]!="AUTHORIZED_ATELIER" or grant["directory"]!=str(workspace) or grant["atelier"]!=str(expected):
         raise AtelierError("atelier-grant-divergent")
+    read_only=grant.get('projectReadOnly',False)
+    if type(read_only) is not bool or read_only and 'autonomy' in grant:
+        raise AtelierError('atelier-grant-divergent')
     if expected.resolve()!=expected or not expected.is_dir() or not (expected.is_relative_to(workspace/".cab-tests") or expected.is_relative_to(Path("/tmp/cab"))):raise AtelierError("atelier-path-unsafe")
     binary=Path("/usr/bin/bwrap")
     if not binary.is_file() or not os.access(binary,os.X_OK):
@@ -274,7 +277,7 @@ def sandbox_command(args,grant):
     search=":".join(dict.fromkeys([*resources['binPaths'],*(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)]))
     command += ["--setenv","PATH",(search+":" if search else "")+"/usr/bin:/bin",
                 "--setenv","HOME",str(expected/".home"),"--setenv","TMPDIR","/cab-tmp",
-                "--setenv","PYTHONDONTWRITEBYTECODE","1","--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(workspace if autonomy else expected),"--",*args["argv"]]
+                "--setenv","PYTHONDONTWRITEBYTECODE","1","--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(workspace if autonomy or read_only else expected),"--",*args["argv"]]
     return {'argv':command,'masked_shared_links':masked,'devops_resources':resources}
 
 

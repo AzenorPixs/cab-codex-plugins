@@ -40,7 +40,13 @@ def _local_prepare(op):
     r=op.run;p=workshop(r)
     args={'request_id':op.request_id,'run_id':r.run_id,'reservation_version':r.generation,'session_id':r.session_id,'change_id':r.change,'directory':r.project.root,'argv':op.request['argv'],'timeout_ms':op.request.get('timeout_ms',120000)}
     roots=r.mandate.get('runtime_roots',[])
-    grant={'status':'AUTHORIZED_ATELIER','directory':r.project.root,'atelier':str(p),'runtimeRoots':roots,'autonomy':{'protocol':'autonomous-change-v1','mandateId':r.mandate.get('mandate_id',r.run_id),'paths':[str(Path(r.project.root)/v) for v in r.mandate['paths']]}}
+    grant={'status':'AUTHORIZED_ATELIER','directory':r.project.root,'atelier':str(p),'runtimeRoots':roots}
+    writes=commands.operation_write_paths(r,op.request)
+    if writes:
+        grant['autonomy']={'protocol':'autonomous-change-v1','mandateId':r.mandate.get('mandate_id',r.run_id),
+                           'paths':[str(Path(r.project.root)/path) for path in writes]}
+    else:
+        grant['projectReadOnly']=True
     result=child({'action':'sandbox','args':args,'grant':grant},r.actor.uid)
     return result['argv'],p
 

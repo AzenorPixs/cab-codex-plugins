@@ -159,6 +159,11 @@ def session_git_release(request_id:str,project_id:str='',run_id:str='',paths:lis
     return client().command('session.git.release',data)
 
 @public_tool()
+def session_git_finish_write(paths:list[str],request_id:str,project_id:str='',run_id:str='')->dict:
+    """Constate les octets écrits et libère aussitôt les réservations de ces fichiers."""
+    return client().command('session.git.finish_write',{'paths':paths,'request_id':request_id,**run_target(project_id,run_id)})
+
+@public_tool()
 def session_git_reserve(request_id:str,paths:list[str],project_id:str='',run_id:str='')->dict:
     """Réserve avant modification les fichiers du RUN lié à cette connexion."""
     return client().command('session.git.reserve',{'request_id':request_id,'paths':paths,**run_target(project_id,run_id)})
@@ -285,9 +290,10 @@ def native_locate(project_id:str,session_id:str,codex_home:str='')->dict:
     import os
     return client().command('native.locate',{'project_id':project_id,'session_id':session_id,'codex_home':codex_home or os.environ.get('CODEX_HOME','')})
 
-async def execute(kind,project_id,run_id,session_id,generation,request_id,argv,timeout_ms,resources,adapter_id='',files=None,phase='test'):
+async def execute(kind,project_id,run_id,session_id,generation,request_id,argv,timeout_ms,resources,adapter_id='',files=None,phase='test',write_paths=None):
     c=client();data={'project_id':project_id,'run_id':run_id,'session_id':session_id,'generation':generation,'request_id':request_id,'kind':kind,'argv':argv,'timeout_ms':timeout_ms,'resources':resources or [],'phase':phase}
     if kind=='external':data.update(adapter_id=adapter_id,files=files or [])
+    if write_paths:data['write_paths']=write_paths
     try:result=await asyncio.to_thread(c.command,'operation.start',data)
     except ClientError as error:
         return {'state':'ADMISSION_UNCONFIRMED','error':str(error),'request_id':request_id,'run_id':run_id,'retry_execution':False,'next_action':'read-same-receipt'}
@@ -301,9 +307,10 @@ async def execute(kind,project_id,run_id,session_id,generation,request_id,argv,t
     return result
 
 @public_tool()
-async def atelier_execute(project_id:str,run_id:str,session_id:str,generation:int,request_id:str,argv:list[str],timeout_ms:int=120000,resources:list[str]|None=None)->dict:
-    """Exécute dans le mandat isolé ; atelier piloté sous/tmp propre au projet. Aucun accord par commande."""
-    return await execute('local',project_id,run_id,session_id,generation,request_id,argv,timeout_ms,resources)
+async def atelier_execute(project_id:str,run_id:str,session_id:str,generation:int,request_id:str,argv:list[str],timeout_ms:int=120000,resources:list[str]|None=None,write_paths:list[str]|None=None)->dict:
+    """Lit le projet depuis /tmp sans bail. Une écriture ne couvre que write_paths."""
+    return await execute('local',project_id,run_id,session_id,generation,request_id,argv,timeout_ms,resources,
+                         phase='write' if write_paths else 'test',write_paths=write_paths)
 @public_tool()
 def atelier_status(project_id:str,run_id:str,request_id:str)->dict:
     """Consulte le même reçu, sans rejeu."""

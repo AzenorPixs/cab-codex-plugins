@@ -70,8 +70,8 @@ MUST distinguer sources, tests, publication, installation et activation.
 Pour les sessions pilotées, CAB MUST déplacer àchaud la racine .cab-tests
 sous/tmp dans un espace propre au projet, en conservant change/RUN et
 les identités vérifiées, sans lien symbolique ni écrasement des pairs. Les reçus
-et preuves durables MUST rester hors/tmp. Les sessions directes MUST conserver
-leur profil. Un atelier absent après redémarrage MUST NOT autoriser un rejeu.
+et preuves durables MUST rester hors/tmp. Les nouveaux ateliers directs MUST aussi
+être créés sous `/tmp/cab`. Un atelier absent après redémarrage MUST NOT autoriser un rejeu.
 
 #### Scenario: Premier essai piloté
 - **WHEN** le codeur demande son premier essai autorisé
@@ -1820,6 +1820,22 @@ CAB MUST enregistrer en PostgreSQL, avant le travail de codage d'un change, un i
 
 ### Requirement: Index Git isolé par session
 CAB MUST lier chaque connexion MCP à son RUN natif vérifié et refuser toute opération Git demandée pour un autre RUN. Les sessions MUST réserver les fichiers auprès de CAB avant modification ; CAB MUST refuser les réservations concurrentes sur un même chemin. CAB MUST gérer un index isolé par session et refuser l'indexation d'un fichier dont l'attribution ou l'état est incertain.
+
+#### Scenario: Restitution d’une écriture avant qualification
+- **WHEN** le codeur termine l’écriture d’un fichier de source réservé
+- **THEN** CAB conserve son empreinte et restitue le bail aussitôt
+- **AND** l’indexation ultérieure exige une qualification de la révision et des octets identiques à la preuve d’écriture
+
+#### Scenario: Tests et lectures des sources
+- **WHEN** un agent lit des fichiers du projet, y compris lors d’un test local
+- **THEN** il ne réserve aucun fichier du projet et lit l’arbre projet en lecture seule dans le sandbox
+- **AND** les nouveaux fichiers de test restent sous `/tmp`, ou dans le banc Debian 13 Docker ou LXC retenu si la vérification locale ne suffit pas
+- **AND** les fichiers de test sont exclus des réservations et de l’indexation effectuées par CAB
+
+#### Scenario: Échéance du verrou d’écriture
+- **WHEN** un verrou d’écriture reste actif
+- **THEN** CAB avertit le propriétaire une minute avant l’échéance de cinq minutes
+- **AND** CAB notifie la restitution, immédiate à la fin de l’écriture ou automatique à l’échéance, sous réserve d’un effet actif ou indéterminé à réconcilier
 
 #### Scenario: Deux sessions et fichier partagé
 - **WHEN** deux sessions préparent des fichiers distincts ou revendiquent un même fichier

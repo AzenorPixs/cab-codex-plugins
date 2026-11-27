@@ -354,7 +354,8 @@ def _publication_snapshot(run, cab):
     c.require(revision==cab['source_revision'],'stage-publication-source-changed')
     index=GitSessionIndex.objects.filter(change_id=run.change_record_id,session_id=run.coding_session_id,state='OPEN').first()
     c.require(index is not None,'session-delivery-index-invalid')
-    reservations=sorted(index.reservations.filter(active=True).values_list('path',flat=True))
+    from .session_git import delivery_files
+    reservations=delivery_files(index)
     c.require(reservations,'session-git-reservation-required')
     git=preflight_commit(run.project,index,cab['version'],reservations,
                          complete=cab['scope']=='project',include_reports=True)

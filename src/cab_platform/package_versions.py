@@ -98,7 +98,7 @@ def _prepare_locked(actor,data):
             run.mandate['framing_digest']=c.digest({k:v for k,v in run.mandate.items() if k not in ('framing_digest','native_source','native_frozen_at','native_source_home','native_source_history')})
             run.save(update_fields=['mandate','updated'])
             c.event(run,'package-version-scope-prepared',{'request_id':key,'paths':extra,'previous_framing_digest':old,'framing_digest':run.mandate['framing_digest'],'authority':actor.pk})
-    from .session_git import reserve_files
+    from .session_git import finish_writes,reserve_files
     if plan['mismatches']:
         reserve_files(actor,{'project_id':run.project_id,'run_id':run.run_id,'request_id':'VER-'+c.digest([run.pk,key]),'paths':plan['mismatches']})
     with transaction.atomic():
@@ -112,6 +112,9 @@ def _prepare_locked(actor,data):
         target=c.safe_path(Path(run.project.root),path)
         c.require(target.read_bytes()==raw,'package-version-source-changed')
         with target.open('r+b') as stream:stream.write(updated);stream.truncate();stream.flush();__import__('os').fsync(stream.fileno())
+    if changes:
+        finish_writes(actor,{'project_id':run.project_id,'run_id':run.run_id,
+                             'request_id':'VER-DONE-'+c.digest([run.pk,key]),'paths':list(changes)})
     receipt={'version':data['version'],'updated_paths':list(changes),'aligned':not inspect(run.project.root,data['version'])['mismatches']}
     c.event(run,'package-version-prepared',{'request_id':key,'fingerprint':fingerprint,'receipt':receipt})
     return receipt

@@ -64,21 +64,30 @@ Les opérations Git des sessions passent exclusivement par CAB. Après le
 rattachement natif, `session_git_context` identifie le RUN courant et
 `session_git_inspect` fournit son état compact. Avant toute édition, réserver
 les chemins exacts en un appel `session_git_reserve` ; un refus de réservation
-interdit de modifier le fichier concerné. Après validation d'une étape, appeler
-`session_git_stage` avec ses seuls chemins réservés et un request_id stable.
+interdit de modifier le fichier concerné. Dès l’écriture achevée, appeler
+`session_git_finish_write`. Après validation, appeler `session_git_stage` avec
+les seuls chemins couverts par les preuves d’écriture et un request_id stable.
 `session_git_status` relit le reçu ; ne pas rejouer un effet UNKNOWN. CAB possède
 l'index isolé et les références internes qui conservent ses objets jusqu'à la
 livraison confirmée. L'archive OpenSpec ne retire pas cet index. Le global
 STATISTICS.md est écrit et indexé par CAB avant libération ; les agents ne le
 réservent ni ne l'éditent.
 
-Réserver chaque fichier et ressource avant usage, y compris les bancs Docker,
-LXC et navigateurs. Les baux durent 300 secondes. À 240 secondes, renouveler
+Réserver uniquement les fichiers source à modifier maintenant. Dès la dernière
+écriture, appeler `session_git_finish_write` avec les chemins exacts : CAB
+garde leur empreinte et libère les baux avant qualification. Un test lit le
+projet en lecture seule et utilise `/tmp` sans réserver de fichier. Si `/tmp`
+ne qualifie pas le change, utiliser un banc Docker Debian 13 ou LXC Debian 13
+prescrit. Les fichiers de test ne sont ni réservés ni indexés par CAB.
+
+Réserver les bancs Docker, LXC et navigateurs lorsqu’ils sont utilisés. Les baux
+durent 300 secondes. À 240 secondes, renouveler
 avec `session_reservations_renew` les seuls IDs encore nécessaires. Employer un
 identifiant de demande stable pour une même prorogation. `session_reservations`
-donne les IDs, les échéances et les avis. À 30 secondes de l’échéance, CAB
-avertit le propriétaire encore actif. Cesser l’usage dès expiration et vérifier
-la restitution avant de réacquérir une ressource protégée.
+donne les IDs, les échéances et les avis. CAB avertit le propriétaire encore
+actif une minute avant l’échéance d’un verrou de fichier et 30 secondes avant
+celle d’un banc. Cesser l’usage dès expiration et vérifier la restitution avant
+de réacquérir une ressource protégée.
 
 Libérer chaque ressource dès la fin d’usage. `session_git_release(paths=[…])`
 rend les fichiers validés qui correspondent à l’index de session. Pour un banc

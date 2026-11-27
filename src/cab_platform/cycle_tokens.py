@@ -9,6 +9,10 @@ from django.utils import timezone
 
 from .core.models import Actor, AgentModel, ChangeStageIteration, CycleTokenUsage, SessionAgent
 from .measurement_sources import USAGE_FIELDS
+from .model_policies import comparable_cost
+
+
+RATE_FIELDS=('input_cost','output_cost','cache_read_cost','cache_write_cost')
 
 
 def native_sources(run):
@@ -101,6 +105,41 @@ def run_totals(run):
     return token_totals(CycleTokenUsage.objects.filter(run=run)).get((), {})
 
 
+def _agent_catalog(identifiers):
+    catalog=defaultdict(list)
+    for identifier,provider_id,name,summary in AgentModel.objects.filter(identifier__in=identifiers).values_list(
+        'identifier','provider_id','provider__name','details__summary',
+    ):
+        catalog[identifier].append((provider_id,name,summary))
+    return catalog
+
+
+def _catalog_model(candidates,native_provider,provider_id=None):
+    if native_provider:
+        matches=[entry for entry in candidates if entry[1].casefold()==native_provider.casefold()]
+    elif provider_id is not None:
+        matches=[entry for entry in candidates if entry[0]==provider_id]
+    else:
+        matches=candidates
+    return matches[0] if len(matches)==1 else None
+
+
+def _catalog_rates(summary):
+    rates={}
+    if not isinstance(summary,dict):
+        return rates
+    for field,rate in zip(USAGE_FIELDS,RATE_FIELDS):
+        source=summary.get(rate)
+        if type(source) not in (str,int,float) or len(str(source))>64:
+            continue
+        value=comparable_cost(source)
+        if value is None or (value and not -24<=value.adjusted()<=14):
+            continue
+        text=format(value,'f') if value else '0'
+        rates[field]=text.rstrip('0').rstrip('.') if '.' in text else text
+    return rates
+
+
 def store_session_agents(run, sources):
     """Conserve les réglages natifs applicables aux tours qui recoupent un passage."""
     if not sources or not run.coding_session_id:
@@ -129,19 +168,15 @@ def store_session_agents(run, sources):
                     pending.setdefault(key,max(beginning,stamp))
     if not pending:
         return False
-    catalog=defaultdict(dict)
-    for model,provider_id,provider_name in AgentModel.objects.filter(identifier__in={key[2] for key in pending}).values_list(
-        'identifier','provider_id','provider__name',
-    ):
-        catalog[model][provider_name.casefold()]=provider_id
+    catalog=_agent_catalog({key[2] for key in pending})
     existing={(row.stage_passage_id,row.role,row.model,row.reasoning,row.native_provider):row
               for row in SessionAgent.objects.filter(session_id=run.coding_session_id,stage_passage__run=run)}
     inserts=[]
     updates=[]
     for key,stamp in pending.items():
         passage_id,role,model,reasoning,hint=key
-        providers=catalog[model]
-        provider=next(iter(providers.values())) if len(providers)==1 else providers.get(hint.casefold())
+        entry=_catalog_model(catalog[model],hint)
+        provider=entry[0] if entry else None
         row=existing.get(key)
         if row is None:
             inserts.append(SessionAgent(session_id=run.coding_session_id,stage_passage_id=passage_id,role=role,
@@ -158,11 +193,15 @@ def store_session_agents(run, sources):
 
 def stage_agents(run):
     agents=defaultdict(list)
-    rows=SessionAgent.objects.filter(session_id=run.coding_session_id,stage_passage__run=run).select_related('provider')
-    for row in rows.order_by('role','observed_at','pk'):
+    rows=list(SessionAgent.objects.filter(session_id=run.coding_session_id,stage_passage__run=run).select_related('provider')
+              .order_by('role','observed_at','pk'))
+    catalog=_agent_catalog({row.model for row in rows})
+    for row in rows:
+        entry=_catalog_model(catalog[row.model],row.native_provider,row.provider_id)
         costs=row.token_costs if isinstance(row.token_costs,dict) else {}
         agents[row.stage_passage_id].append({'id':row.pk,'role':row.role,'model':row.model,
-            'reasoning':row.reasoning,'provider':row.provider.name if row.provider else None,
+            'reasoning':row.reasoning,'provider':entry[1] if entry else row.provider.name if row.provider else None,
+            'rates':_catalog_rates(entry[2]) if entry else {},
             'costs':{field:costs[field] for field in USAGE_FIELDS if isinstance(costs.get(field),str)}})
     return agents
 

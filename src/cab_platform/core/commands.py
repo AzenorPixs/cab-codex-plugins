@@ -393,22 +393,46 @@ def start_operation(actor,data,*,host_authorized=False):
     require(data.get('kind') in ('local','external','native'),'operation-kind-invalid',400)
     argv=data.get('argv');require(native or isinstance(argv,list) and argv and len(argv)<=128 and all(isinstance(v,str) and '\0' not in v for v in argv),'command-invalid',400)
     require(type(data.get('timeout_ms',120000)) is int and 1<=data.get('timeout_ms',120000)<=2147483647,'timeout-invalid',400)
+    resources=data.get('resources',[])
+    require(isinstance(resources,list) and len(resources)<=128 and all(isinstance(key,str) and key for key in resources),
+            'resources-invalid',400)
+    operation_write_paths(r,data)
     if data['kind']=='external':require(data.get('adapter_id') in r.mandate.get('external_adapters',{}),'external-adapter-required',403)
     op=Operation.objects.create(run=r,request_id=request_id,input_digest=input_hash,request=data,source_revision=revision(r),dispatch_nonce=secrets.token_hex(32),state='WAITING')
     event(r,'operation-queued',{'request_id':request_id});return op,True
 
+def operation_write_paths(run,request):
+    paths=request.get('write_paths',[])
+    require(isinstance(paths,list) and len(paths)<=128 and all(isinstance(path,str) and path for path in paths)
+            and len(set(paths))==len(paths),'operation-write-paths-invalid',400)
+    if not paths:
+        return []
+    require(request.get('kind')=='local' and request.get('phase')=='write' and not request.get('host_authorization'),
+            'operation-write-phase-required',400)
+    from cab_platform.session_git import test_file
+    for path in paths:
+        require(path==str(Path(path)) and not test_file(path)
+                and any(path==scope or path.startswith(scope+'/') for scope in run.mandate['paths']),
+                'operation-write-path-outside-project',403)
+        target=safe_path(Path(run.project.root),path)
+        require(target.is_file() and target.stat().st_nlink==1,'operation-write-file-required',400)
+    return paths
+
 @transaction.atomic
 def claim_operation(operation_id):
-    try:op=Operation.objects.select_for_update().select_related('run__project','run__actor').get(pk=operation_id,state='WAITING')
+    try:op=Operation.objects.select_for_update(of=('self',),no_key=True).select_related('run__project','run__actor').get(pk=operation_id,state='WAITING')
     except Operation.DoesNotExist:return None
-    r=Run.objects.select_for_update().get(pk=op.run_id)
+    r=Run.objects.select_for_update(no_key=True).get(pk=op.run_id)
     working(r)
     # Un effet incertain conserve sa ressource. Pas de blocage des autres RUN.
-    file_keys=['file:'+r.project.root+'/'+p for p in r.mandate['paths']] if op.request['kind']=='local' else []
+    file_keys=['file:'+r.project.root+'/'+path for path in operation_write_paths(r,op.request)]
     bank_keys=[]
     if op.request['kind']=='external':
         bank_keys=[r.mandate['external_adapters'][op.request['adapter_id']]['resource_key']]
-    keys=sorted(set(file_keys+bank_keys+op.request.get('resources',[])))
+    resources=[key for key in op.request.get('resources',[]) if not key.startswith('file:')]
+    keys=sorted(set(file_keys+bank_keys+resources))
+    if not keys:
+        op.state='INTENT';op.save();event(r,'operation-intent',{'request_id':op.request_id});return op
     from cab_platform.resource_reservations import overlaps, resource_guard
     resource_guard()
     working(r)

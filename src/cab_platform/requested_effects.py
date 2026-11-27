@@ -146,7 +146,8 @@ def refresh_full_statistics(run,row,git,intent_id):
     import hashlib
     options,env=context(run.project)
     index=GitSessionIndex.objects.get(pk=row.git_index_id)
-    reservations=list(index.reservations.filter(active=True).values_list('path',flat=True))
+    from .session_git import delivery_files
+    reservations=delivery_files(index)
     fresh=delivery.preflight_commit(run.project,index,row.version,reservations,complete=True,existing_tag=row.tag_oid)
     changed=delivery._git(run.project,options,env,'diff','--name-only','-z',git['full']['tree'],fresh['full']['tree'])
     c.require(changed.returncode==0,'session-effect-statistics-comparison-failed')
@@ -237,7 +238,8 @@ def observe(run,data):
     delivery.version_tuple(version);result['version']=version
     if data['kind'] in ('commit','resume'):
         c.require(index is not None and index.state=='OPEN','session-effect-index-protected')
-        reservations=list(index.reservations.filter(active=True).values_list('path',flat=True))
+        from .session_git import delivery_files
+        reservations=delivery_files(index)
         c.require(reservations or data['kind']=='resume','session-git-reservation-required')
         if data['kind']=='resume':
             c.require(row is not None and editable_delivery(run)==row.pk,'session-effect-edit-admission-required')
