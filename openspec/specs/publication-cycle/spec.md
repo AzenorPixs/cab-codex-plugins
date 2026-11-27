@@ -542,5 +542,5 @@ CAB MUST calculer le montant en dollars par rôle et catégorie du passage à pa
 
 #### Scenario: Montant de plusieurs modèles
 - **WHEN** des mesures de tokens appartiennent à différents segments
-- **THEN** CAB attribue chaque mesure au segment actif à son horodatage, additionne les montants exacts avant arrondi et actualise la session et la projection Electric
-- **AND** une catégorie reste sans montant si des tokens positifs ont un tarif indisponible, tandis que zéro token déclaré produit un montant nul.
+- **THEN** CAB répartit les tokens déclarés pour chaque catégorie au prorata de la durée des segments du rôle, applique le tarif de chaque segment et arrondit seulement la somme avant de l’enregistrer et de la diffuser via Electric
+- **AND** une catégorie reste sans montant si des tokens positifs rencontrent un segment de durée positive dont le tarif est indisponible, tandis que zéro token déclaré produit un montant nul.

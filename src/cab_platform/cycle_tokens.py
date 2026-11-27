@@ -1,6 +1,7 @@
 """Rattachement des mesures natives horodatées aux fenêtres du cycle."""
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from hashlib import sha256
 import json
@@ -214,44 +215,47 @@ def store_cycle_costs(run, session):
                   .select_related('stage_passage').order_by('observed_at', 'pk'))
     catalog = _agent_catalog({agent.model for agent in agents})
     segments = defaultdict(list)
+    now = timezone.now()
+    microsecond = timedelta(microseconds=1)
+    by_passage = defaultdict(list)
     for agent in agents:
-        entry = _catalog_model(catalog[agent.model], agent.native_provider, agent.provider_id)
-        rates = _catalog_rates(entry[2]) if entry else {}
-        segments[agent.stage_passage_id, agent.role].append((agent, rates))
-    boundaries = {key:[agent.observed_at for agent,_ in rows] for key,rows in segments.items()}
-    totals = defaultdict(dict)
-    unavailable = defaultdict(set)
+        by_passage[agent.stage_passage_id, agent.role].append(agent)
+    for key, rows in by_passage.items():
+        passage = rows[0].stage_passage
+        if (rows[0].observed_at != passage.started_at or rows[-1].ended_at != passage.ended_at
+                or any(left.ended_at != right.observed_at for left, right in zip(rows, rows[1:]))):
+            continue
+        for agent in rows:
+            end = agent.ended_at or now
+            duration = (end - agent.observed_at) // microsecond
+            if duration <= 0:
+                continue
+            entry = _catalog_model(catalog[agent.model], agent.native_provider, agent.provider_id)
+            rates = _catalog_rates(entry[2]) if entry else {}
+            segments[key].append((duration, rates))
+
+    counts = token_totals(CycleTokenUsage.objects.filter(run=run), 'stage_passage_id')
+    costs = defaultdict(dict)
     with localcontext() as context:
         context.prec = 80
-        usage = CycleTokenUsage.objects.filter(run=run).values_list(
-            'stage_passage_id', 'role', 'observed_at', *USAGE_FIELDS,
-        )
-        for passage_id, role, stamp, *counts in usage.iterator():
-            key = (passage_id, role)
-            index = bisect_right(boundaries.get(key, ()), stamp) - 1
-            rates = {}
-            if index >= 0:
-                agent, segment_rates = segments[key][index]
-                end = agent.ended_at or agent.stage_passage.ended_at
-                if end is None or stamp < end:
-                    rates = segment_rates
-            for field, count in zip(USAGE_FIELDS, counts):
-                if count is None or field in unavailable[key]:
-                    continue
-                rate = rates.get(field)
-                if count and rate is None:
-                    unavailable[key].add(field)
-                    totals[key].pop(field, None)
-                    continue
-                value = Decimal(rate) * count / 1_000_000 if count else Decimal(0)
-                totals[key][field] = totals[key].get(field, Decimal(0)) + value
-        costs = defaultdict(dict)
-        for (passage, role), amounts in totals.items():
-            if amounts:
-                costs[str(passage)][role] = {
-                    field: str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-                    for field, amount in amounts.items()
-                }
+        for (passage,), roles in counts.items():
+            for role, totals in roles.items():
+                weights = segments[passage, role]
+                elapsed = sum(duration for duration, _ in weights)
+                amounts = {}
+                for field, count in totals.items():
+                    if count is None:
+                        continue
+                    if int(count) == 0:
+                        amount = Decimal(0)
+                    else:
+                        if not elapsed or any(field not in rates for _, rates in weights):
+                            continue
+                        weighted_rate = sum(duration * Decimal(rates[field]) for duration, rates in weights)
+                        amount = int(count) * weighted_rate / (elapsed * 1_000_000)
+                    amounts[field] = str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                if amounts:
+                    costs[str(passage)][role] = amounts
     key = str(run.pk)
     if session.token_costs.get(key, {}) == costs:
         return False

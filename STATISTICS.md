@@ -22120,7 +22120,105 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 ## Change `compute-live-stage-cycle-costs` — openspec/changes/archive/2026-11-27-compute-live-stage-cycle-costs/STATISTICS.md
 
 
-STATISTICS.md missing ; aucune donnée inventée.
+# Statistiques du change — compute-live-stage-cycle-costs
+
+<!-- CAB_STATISTICS_CURRENT_V1 -->
+
+Change : `compute-live-stage-cycle-costs` · état local : `archived`. Les valeurs absentes restent N/A.
+
+## 1. Statistiques générales et décisions
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes refusées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes expirées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Demandes annulées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+| Rôle | Agent | Modèle | Raisonnement |
+| --- | --- | --- | --- |
+
+
+Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+
+| RUN | Rôle | Session | Fin native | Travail (s) | Entrants | Sortants | Cache lu | Cache écrit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCM-COUTS-CYCLE-TEMPS-REEL-20261127 | coder | 01a2169e-09f0-75f2-a401-a040bb7e8172 | 2026-11-27T22:37:34.046000+00:00 | 634.429451 | 16104083 | 24771 | 16059264 | 0 |
+
+
+## 2. Messages et outils
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Messages des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages utilisateur | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Messages assistant | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels d’outils des codeurs | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels terminés | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Erreurs techniques | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels en cours | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 3. Fichiers et tâches
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures effectivement exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Fichiers distincts touchés par change | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 4. Commandes et validations
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 255 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 255 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+
+
+## 5. Accès web
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Appels aux outils web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Appels web réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Recherches web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Consultations web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+## 6. Synthèse et couverture
+
+| Mesure | Valeur | Preuve ou limite |
+| --- | --- | --- |
+| Écritures de fichiers | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Commandes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Web | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Autres outils | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+
+
+<!-- CAB_STATISTICS_CURRENT_END -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "a6a0748f32ca6b66b031db39043e8a7e9f76e5730cf55f09f68eece0d8a44a83", "generated_at": "2026-11-27T22:37:48.274325+00:00", "revision": "a6a0748f32ca6b66b031db39043e8a7e9f76e5730cf55f09f68eece0d8a44a83", "scope": "change"} -->
 
 
 ## Change `configure-controller-command-length-limit` — openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/STATISTICS.md
@@ -51261,6 +51359,12 @@ Sources officielles OpenCode2.2.0 consultées pour le plugin Promise, la découv
 ## 6. Synthèse globale
 
 La projection à chaud réussit au même modèle/compte cible/SID/PID, conserve texte, ancien outil terminé et son résultat, sans nouveau tool ni mutation des enregistrements. Pair non ciblé inchangé ; connexion différente bloquée avant fournisseur. Les cinq tests unitaires et les bancs finaux sont verts. Les premières mises au point des fixtures/enveloppes et attentes de version sont expliquées dans QUALIFICATION.md, sans garde assouplie. Source qualifiée et archivée ; publication, CABU puis application et contrôle historique réel par les propriétaires restent distincts. Aucune reprise réelle déduite de ce rapport.
+
+
+## Change `prorate-cycle-costs-by-model-duration` — openspec/changes/archive/2026-11-28-prorate-cycle-costs-by-model-duration/STATISTICS.md
+
+
+STATISTICS.md missing ; aucune donnée inventée.
 
 
 ## Change `protect-shared-retired-identities-and-test-routing` — openspec/changes/archive/2026-11-07-protect-shared-retired-identities-and-test-routing/STATISTICS.md
@@ -83987,4 +84091,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f8abc39ad31652f77a067b746de28e15859bea2059dd8caae88c622f8663ddfc", "generated_at": "2026-11-27T22:33:47.836777+00:00", "revision": "f8abc39ad31652f77a067b746de28e15859bea2059dd8caae88c622f8663ddfc", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "6e36dac3a1490ea0737104f2c4366d8ea6e340f2ebc72e98aba6db9817c285af", "generated_at": "2026-11-27T23:01:10.863855+00:00", "revision": "6e36dac3a1490ea0737104f2c4366d8ea6e340f2ebc72e98aba6db9817c285af", "scope": "project"} -->
