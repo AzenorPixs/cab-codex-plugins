@@ -112,9 +112,11 @@ def _prepare_locked(actor,data):
         target=c.safe_path(Path(run.project.root),path)
         c.require(target.read_bytes()==raw,'package-version-source-changed')
         with target.open('r+b') as stream:stream.write(updated);stream.truncate();stream.flush();__import__('os').fsync(stream.fileno())
-    if changes:
-        finish_writes(actor,{'project_id':run.project_id,'run_id':run.run_id,
-                             'request_id':'VER-DONE-'+c.digest([run.pk,key]),'paths':list(changes)})
     receipt={'version':data['version'],'updated_paths':list(changes),'aligned':not inspect(run.project.root,data['version'])['mismatches']}
-    c.event(run,'package-version-prepared',{'request_id':key,'fingerprint':fingerprint,'receipt':receipt})
+    c.require(receipt['aligned'],'package-version-source-changed')
+    with transaction.atomic():
+        c.event(run,'package-version-prepared',{'request_id':key,'fingerprint':fingerprint,'receipt':receipt})
+        if changes:
+            finish_writes(actor,{'project_id':run.project_id,'run_id':run.run_id,
+                                 'request_id':'VER-DONE-'+c.digest([run.pk,key]),'paths':list(changes)})
     return receipt

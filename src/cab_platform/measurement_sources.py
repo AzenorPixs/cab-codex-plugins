@@ -14,6 +14,10 @@ TOKEN_FIELDS={'input_tokens':'tokens_input','output_tokens':'tokens_output','cac
 USAGE_FIELDS=('input_tokens','output_tokens','cache_read_tokens','cache_write_tokens')
 _CODEX_USAGE_FIELDS=('input_tokens','output_tokens','cached_input_tokens','cache_write_input_tokens')
 _MAX_TOKEN_COUNT=2**63-1
+_CODEX_LINE_LIMIT = 2 * 1024 * 1024
+_CODEX_COMPACTION = re.compile(
+    rb'\A\s*\{\s*"timestamp"\s*:\s*"[^"\\]{1,64}"\s*,\s*"type"\s*:\s*"compacted"\s*,\s*"payload"\s*:'
+)
 
 
 def _token_count(value):
@@ -60,6 +64,30 @@ def _agent_label(value, limit):
     return value if isinstance(value,str) and len(value)<=limit and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./:+@ ()-]*',value) else ''
 
 
+def _codex_lines(stream, size):
+    offset = 0
+    while offset < size:
+        line = stream.readline(min(_CODEX_LINE_LIMIT, size - offset))
+        if not line:
+            return
+        offset += len(line)
+        if line.endswith(b'\n'):
+            yield offset, line
+            continue
+        if offset == size:
+            return
+        if not _CODEX_COMPACTION.match(line):
+            raise NativeSourceError('native-record-too-large')
+        while offset < size:
+            chunk = stream.readline(min(_CODEX_LINE_LIMIT, size - offset))
+            if not chunk:
+                return
+            offset += len(chunk)
+            if chunk.endswith(b'\n'):
+                yield offset, None
+                break
+
+
 def _time_lines(stream, size, usage=None, models=None):
     """Ne garder que les bornes et identifiants des tours de cette session."""
     turns, pending, uncertain = [], {}, []
@@ -68,14 +96,9 @@ def _time_lines(stream, size, usage=None, models=None):
     provider = ''
     last_model = ''
     progress = deque(maxlen=96)
-    remaining = size
-    while remaining:
-        line = stream.readline(min(remaining, 2 * 1024 * 1024))
-        remaining -= len(line)
-        if not line.endswith(b'\n'):
-            if remaining:
-                raise NativeSourceError('native-record-too-large')
-            break
+    for _, line in _codex_lines(stream, size):
+        if line is None:
+            continue
         row = json.loads(line)
         if not isinstance(row, dict):
             raise NativeSourceError('native-record-invalid')
@@ -241,12 +264,9 @@ def codex_snapshot(run):
         captured_at=timezone.now().isoformat()
         if (info.st_dev,info.st_ino)!=(source['device'],source['inode']) or not stat.S_ISREG(info.st_mode) or info.st_size>128*1024*1024:
             raise NativeSourceError('native-source-unavailable')
-        while offset<info.st_size:
-            line=stream.readline(min(2*1024*1024,info.st_size-offset));offset+=len(line)
-            if not line:break
-            if not line.endswith(b'\n'):
-                if offset<info.st_size:raise NativeSourceError('native-record-too-large')
-                offset-=len(line);break
+        for offset, line in _codex_lines(stream, info.st_size):
+            if line is None:
+                continue
             try:row=json.loads(line)
             except (ValueError,UnicodeError):raise NativeSourceError('native-record-invalid') from None
             if not isinstance(row,dict):raise NativeSourceError('native-record-invalid')

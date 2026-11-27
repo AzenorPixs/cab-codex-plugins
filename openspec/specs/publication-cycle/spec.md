@@ -358,6 +358,11 @@ CAB MUST utiliser pour les nouveaux RUN un profil à douze étapes où l’étap
 - **WHEN** le dernier tour est encore actif ou sa borne manque
 - **THEN** CAB attend la preuve de fin et conserve le RUN ouvert.
 
+#### Scenario: Tour de clôture suivi d’un nouveau tour
+- **WHEN** le journal natif vérifié atteste la fin du tour portant la validation finale d’un RUN direct
+- **THEN** CAB collecte la télémétrie jusqu’à cette fin, même si un tour ultérieur est ouvert
+- **AND** les entrées de compaction sans télémétrie ne bloquent pas la lecture des bornes et des compteurs.
+
 ### Requirement: Rapports admissibles inclus dans la Publication
 Pour un RUN du nouveau profil, CAB MUST intégrer dans le snapshot Git de toute publication autorisée les fichiers `STATISTICS.md` et `BLOCKERS.md` admissibles du projet, quelle que soit leur provenance, leur date, leur quantité ou le mandat de publication. CAB MUST vérifier la cohérence des contenus et des index entre admission et commit. Le commit de publication les propage aux forges configurées.
 
@@ -515,4 +520,12 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 - **AND** Type est dimensionné pour « Orchestrateur » suivi de deux espaces et Fournisseurs précède les quatre coûts
 - **AND** les quatre coûts suivent les bords et largeurs du groupe de coûts le plus à droite de Cycle
 - **AND** Raisonnement précède Agents, dont le nom de modèle occupe le reste sans retour à la ligne
-- **AND** un coût par type indisponible reste vide
+- **AND** un tarif par type indisponible reste vide
+
+#### Scenario: Tarif par identifiant observé
+
+- **WHEN** CAB dispose de l’identifiant natif du modèle d’un codeur ou d’un orchestrateur
+- **THEN** le tableau Agents affiche les tarifs d’entrée, de sortie, de lecture et d’écriture du cache, en dollars par million de tokens, depuis l’entrée exacte de ce fournisseur dans le catalogue
+- **AND** un tarif nul s’affiche avec sa valeur zéro
+- **AND** une correspondance ambiguë ou incompatible avec le fournisseur observé laisse les tarifs vides
+- **AND** les montants de coût observés restent des données distinctes des tarifs du catalogue

@@ -27,3 +27,24 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 - **AND** un tarif nul s’affiche avec sa valeur zéro
 - **AND** une correspondance ambiguë ou incompatible avec le fournisseur observé laisse les tarifs vides
 - **AND** les montants de coût observés restent des données distinctes des tarifs du catalogue
+
+### Requirement: Statistiques en dernières actions de Clôture
+CAB MUST utiliser pour les nouveaux RUN un profil à douze étapes où l’étape 10 reste vacante. CAB MUST horodater son ouverture et sa validation vide. La Publication reste à l’étape 11 et « Clôture » à l’étape 12. CAB MUST conserver le profil des RUN existants.
+
+#### Scenario: Passage vacant
+- **WHEN** l’agent ouvre et valide l’étape 10 du nouveau profil
+- **THEN** CAB conserve ses deux bornes et n’exécute aucune tâche à cette étape.
+
+#### Scenario: Dernier tour de codage
+- **WHEN** les preuves de publication et la validation finale applicable sont acquises
+- **THEN** CAB attend la fin native attestée du travail de chaque rôle applicable, collecte les durées et les tokens disponibles à cette borne, puis écrit le rapport du change et le rapport global, dans cet ordre.
+- **AND** le reçu de fermeture du RUN intervient après ces dernières actions, sans commit, tag ni envoi distant de clôture.
+
+#### Scenario: Télémétrie tardive
+- **WHEN** le dernier tour est encore actif ou sa borne manque
+- **THEN** CAB attend la preuve de fin et conserve le RUN ouvert.
+
+#### Scenario: Tour de clôture suivi d’un nouveau tour
+- **WHEN** le journal natif vérifié atteste la fin du tour portant la validation finale d’un RUN direct
+- **THEN** CAB collecte la télémétrie jusqu’à cette fin, même si un tour ultérieur est ouvert
+- **AND** les entrées de compaction sans télémétrie ne bloquent pas la lecture des bornes et des compteurs.

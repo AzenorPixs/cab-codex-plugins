@@ -73,10 +73,17 @@ def native_closure(run, validation_at):
             return None
         (_, turns, pending, _, _), events = observed
         ends = [end for _, end in turns if end >= run.created]
-        if pending or not ends:
+        if not ends:
             return None
         end = max(ends)
         if role == responsible_role and end < validation_at:
+            return None
+        if run.mode == 'direct':
+            validation_ends = [stop for start, stop in turns if start <= validation_at <= stop]
+            if validation_ends:
+                end = min(validation_ends)
+                pending = tuple(start for start in pending if start <= end)
+        if pending:
             return None
         selected = [item for item in events if run.created <= item[0] <= end]
         metrics = {}
