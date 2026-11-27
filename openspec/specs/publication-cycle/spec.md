@@ -390,7 +390,7 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 #### Scenario: Compteurs de tailles différentes
 
 - **WHEN** les compteurs ont des contenus de tailles différentes
-- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivi de deux espaces ordinaires
+- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivi de trois espaces ordinaires
 - **AND** toute valeur dont le format dépassera cette largeur reste consultable en entier dans son infobulle
 
 #### Scenario: Espace disponible pour une ligne complète
@@ -419,6 +419,12 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 
 - **WHEN** un passage porte l’état « Non exécuté »
 - **THEN** un cercle gris avec un tiret accompagne son libellé dans la colonne État
+
+#### Scenario: Aligner Cycle et Actions
+
+- **WHEN** un sous-onglet d’étape affiche Cycle et un tableau Actions
+- **THEN** les zones de ces tableaux partagent les mêmes bords gauche et droit
+- **AND** les en-têtes et cellules d’Actions adoptent la typographie de Cycle
 
 ### Requirement: Réconciliation autonome d’une admission de publication incertaine
 

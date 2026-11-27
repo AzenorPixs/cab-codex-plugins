@@ -175,7 +175,7 @@ try{
     return table.tBodies[0].rows.length===12 && table.tBodies[0].rows[11].cells[0].textContent==='12'
       && !table.closest('[role=tabpanel]').querySelector('input[type="search"],nav[aria-label^="Pagination"]');
    })()`),'Douze cycles accessibles directement dans le Résumé');
-   await browser.viewport(1920,900);
+   await browser.viewport(2048,900);
    for(let stage=1;stage<=12;stage++){
     await click(String(stage));
     await wait(()=>ev('document.body.innerText.includes("Action visible 12")'),'actions de l’étape');
@@ -189,6 +189,19 @@ try{
        && shortTable.tBodies[0].rows.length===3 && shortTable.querySelectorAll('.table-filler').length===2
        && !overview.querySelector('input[type="search"],nav[aria-label^="Pagination"]');
     })()`),'Itérations et actions sans pagination ni recherche, étape '+stage);
+    assert(await ev(`(()=>{
+     const [cycle,...actions]=document.querySelectorAll('.stage-overview table');
+     const cycleBounds=cycle.parentElement.getBoundingClientRect();
+     return actions.length>0 && actions.every(action=>{
+      const bounds=action.parentElement.getBoundingClientRect();
+      return Math.abs(bounds.left-cycleBounds.left)<1 && Math.abs(bounds.right-cycleBounds.right)<1
+       && ['thead th','tbody td'].every(selector=>{
+        const expected=getComputedStyle(cycle.querySelector(selector));
+        const actual=getComputedStyle(action.querySelector(selector));
+        return ['fontFamily','fontSize','fontWeight','letterSpacing'].every(key=>actual[key]===expected[key]);
+       });
+     });
+    })()`),'Marges et typographie identiques dans Cycle et Actions, étape '+stage);
     const compactTable=JSON.parse(await ev(`(()=>{
      const table=document.querySelector('.stage-passages-compact');
      const [head,counts]=table.tHead.rows;
@@ -230,7 +243,7 @@ try{
         && Math.abs(first.cells[1].clientWidth-first.cells[2].clientWidth)<=1
         && [4,5].every(col=>Math.abs(first.cells[3].clientWidth-first.cells[col].clientWidth)<=1),
       fixedTokens:Math.max(...tokenWidths)-Math.min(...tokenWidths)<.5
-        && Array.from(first.cells).slice(6,22).every(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample==='999\u202fM\u00a0\u00a0')
+        && Array.from(first.cells).slice(6,22).every(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample==='999\u202fM\u00a0\u00a0\u00a0')
         && wideToken.textContent==='999\u202fM' && wideToken.scrollWidth<=wideToken.clientWidth,
       durations:Array.from(first.cells).slice(3,6).map(cell=>cell.textContent.replaceAll('\u202f',' ')).join('|')==='1 h 1 m 1,2 s|10 m 41,2 s|15,8 s',
       fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
@@ -264,7 +277,7 @@ try{
      });
     })()`));
     assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,durations:true,fillsWidth:true,singleLine:true,counters:true,costs:true,layout:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
-      'Tableau piloté et dernier cycle sans défilement à 1 920 px, étape '+stage);
+      'Tableau piloté et dernier cycle sans défilement à 2 048 px, étape '+stage);
    }
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
@@ -294,7 +307,7 @@ try{
    await click('Étapes du cycle');
    await click('1');
    await wait(()=>ev('!!document.querySelector(".stage-passages-compact")'),'tableau de la session directe');
-   const directTable=JSON.parse(await ev(`(()=>{
+   const directLayout=`(()=>{
     const table=document.querySelector('.stage-passages-compact');
     const wrapper=table.parentElement;
     const headers=Array.from(table.tHead.rows[0].cells,cell=>cell.textContent).join('|');
@@ -304,9 +317,14 @@ try{
     return JSON.stringify({rows:table.tHead.rows.length,headers,overflow:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth),
       insideCard:tableBounds.left>=scrollport.left-1 && tableBounds.right<=scrollport.right+1
         && content.scrollWidth<=content.clientWidth+1});
-   })()`));
+   })()`;
+   const narrowerTable=JSON.parse(await ev(directLayout));
+   assert(narrowerTable.insideCard,'Cycle reste dans les marges de la carte à 1 440 px');
+   assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'),'La page garde sa largeur à 1 440 px');
+   await browser.viewport(1600,900);
+   const directTable=JSON.parse(await ev(directLayout));
    assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0,insideCard:true},
-    'Tableau direct sans défilement à 1 440 px');
+    'Tableau direct sans défilement à 1 600 px');
    const measureColumns=`JSON.stringify(Array.from(document.querySelector('.stage-passages-compact tbody tr').cells,cell=>cell.getBoundingClientRect().width))`;
    const narrowColumns=JSON.parse(await ev(measureColumns));
    await browser.viewport(1760,900);

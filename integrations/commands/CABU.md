@@ -1,6 +1,6 @@
 ---
 description: Entrée CAB système CABU
-version: 3.47.3
+version: 3.47.4
 ---
 
 Répondre en français et charger le skill CABU. Hors des étapes d’un change,

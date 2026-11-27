@@ -60,16 +60,16 @@ function StageStateIcon({state,labelled=false}:{state:string;labelled?:boolean})
 function Waiting({time,shortUnits=false}:{time:Attribution;shortUnits?:boolean}){
   return <>{stageDuration(time.waiting_seconds,shortUnits)}</>
 }
-function StageTable<Row>({title,items,columns,header,content,render,showAllRows,compact=false}:{
+function StageTable<Row>({title,items,columns,header,content,render,showAllRows,compact=false,stepTypography=false}:{
   title:string;items:Row[];columns:number;header:ReactNode
-  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean;compact?:boolean
+  content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean;compact?:boolean;stepTypography?:boolean
 }){
   const navigation=useTableSearch()
   const matching=showAllRows?items:filterTableRows(items,navigation.query,content)
   const pagination=showAllRows?null:tablePage(matching,navigation.page)
   const rows=pagination?.rows??items
   return <>
-    <div className="cycle-table-scroll"><table className={'stage-passages monitor-table'+(compact?' stage-passages-compact':'')} aria-label={title}>
+    <div className="cycle-table-scroll"><table className={'stage-passages monitor-table'+(compact?' stage-passages-compact':'')+(compact||stepTypography?' stage-table-step':'')} aria-label={title}>
       <thead>{header}</thead>
       <tbody>{rows.map(render)}
         <TableFiller count={rows.length} columns={columns}
@@ -116,7 +116,7 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
     </tr>}/>
 }
 function ActionTable({title,actions,passage,piloted,showAllRows}:{title:string;actions:Passage[];passage:Passage;piloted:boolean;showAllRows:boolean}){
-  return <StageTable showAllRows={showAllRows} title={title} items={actions} columns={6+tokenColumnCount(piloted)}
+  return <StageTable showAllRows={showAllRows} stepTypography={showAllRows} title={title} items={actions} columns={6+tokenColumnCount(piloted)}
     header={<tr><th>Action</th><th>Origine</th><th>Début</th><th>Retour ou validation</th><th>Durée</th><TokenColumns header piloted={piloted}/><th>État</th></tr>}
     content={action=>[action.description,action.source,date(action.started_at),date(action.ended_at),
       stageDuration(action.duration_seconds),action.state&&states[action.state],action.receipt?.note,action.receipt?.mandates,

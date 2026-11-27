@@ -35,6 +35,10 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[align-stage-cycle-and-action-tables](openspec/changes/archive/2026-11-27-align-stage-cycle-and-action-tables/),
+code non attribué. Chromium et Firefox vérifient les marges et la typographie
+communes à Cycle et Actions, ainsi que les gabarits de tokens élargis.
+
 [show-last-stage-cycle-costs](openspec/changes/archive/2026-11-27-show-last-stage-cycle-costs/),
 code non attribué. Chromium et Firefox vérifient les deux groupes de colonnes
 élargies, l’alignement du bloc et les coûts du dernier passage.

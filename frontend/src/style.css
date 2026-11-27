@@ -333,21 +333,13 @@ header .brand {
 .cycle-table-scroll{max-width:100%;overflow-x:auto}
 .cycle-table-scroll th small{display:block}
 .stage-passages-compact{width:100%}
-@media(min-width:1280px){
-  .run-session-card:has(.stage-passages-compact)>.forge-card-content{
-    --stage-table-inset:22px;
-    margin-inline:calc(-1 * var(--stage-table-inset));
-    padding-inline:var(--stage-table-inset);
-  }
-  .stage-overview>.cycle-table-scroll:has(>.stage-passages-compact){
-    margin-inline:calc(-1 * var(--stage-table-inset,0px));
-    max-width:none;
-  }
-}
-:root .cycle-table-scroll .stage-passages-compact.monitor-table :is(thead th,tbody td){
-  padding:4px 1.5px;
+:root .cycle-table-scroll .stage-table-step.monitor-table :is(thead th,tbody td){
   font-size:calc(12px * var(--font-scale));
   letter-spacing:normal;
+}
+.stage-table-step :is(th,td) small{font-family:inherit;font-size:inherit}
+:root .cycle-table-scroll .stage-passages-compact.monitor-table :is(thead th,tbody td){
+  padding:4px 1.5px;
   white-space:nowrap;
 }
 .stage-passages-compact th[colspan]{text-align:center}
