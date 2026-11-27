@@ -7,7 +7,7 @@ from django.db import close_old_connections, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from .core.models import ChangeStage, ChangeStageIteration, Run, RunCycleIteration
+from .core.models import ChangeStage, ChangeStageIteration, CodingSession, Run, RunCycleIteration
 from .cycle_attribution import PROJECTION_SCHEMA
 
 _guard=Lock()
@@ -17,7 +17,7 @@ _cursor=0
 
 def refresh(run_id):
     from .change_stage_metrics import cycle_summary, summarize
-    from .cycle_tokens import run_totals, store_session_agents, store_usage
+    from .cycle_tokens import run_totals, store_cycle_costs, store_session_agents, store_usage
 
     run=Run.objects.select_related('actor','project','change_record').filter(pk=run_id).first()
     if not run or not run.change_record_id:
@@ -28,11 +28,14 @@ def refresh(run_id):
     agents=[]
     overview=summarize(run.change_record,run,projection=batch,usage=usage,agent_observations=agents)
     with transaction.atomic():
+        session = CodingSession.objects.select_for_update().get(pk=run.coding_session_id) if run.coding_session_id else None
         current=Run.objects.select_for_update().get(pk=run_id)
-        if current.updated!=anchor:
+        if current.updated!=anchor or current.coding_session_id!=run.coding_session_id:
             return False
         changed=store_usage(run, usage)
         changed=store_session_agents(run,agents) or changed
+        if session:
+            changed=store_cycle_costs(run,session) or changed
         summary=cycle_summary(overview['cycles'],tokens=run_totals(run))
         for model,key in ((ChangeStageIteration,'passes'),(RunCycleIteration,'cycles')):
             rows=model.objects.filter(run_id=run_id,pk__in=batch[key]).only('time_projection')

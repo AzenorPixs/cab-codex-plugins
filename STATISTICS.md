@@ -18122,6 +18122,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | RUN | Rôle | Session | Fin native | Travail (s) | Entrants | Sortants | Cache lu | Cache écrit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CAB-LIAISON-AUTOMATIQUE-REPRISE-20261127 | coder | 01a2169e-09f0-75f2-a401-a040bb7e8172 | 2026-11-27T21:34:52.006000+00:00 | 212.535876 | 6054522 | 8174 | 6037760 | 0 |
+| SCM-LIAISON-AUTOMATIQUE-REPRISE-LIVRAISON-20261127 | coder | 01a2169e-09f0-75f2-a401-a040bb7e8172 | 2026-11-27T22:00:53.709000+00:00 | 296.199291 | 8601194 | 8053 | 8585088 | 0 |
 
 
 ## 2. Messages et outils
@@ -18152,8 +18153,8 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | 176 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
-| Tests finaux réussis | 176 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests exécutés dans le bilan final | 264 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 264 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -18185,7 +18186,7 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "909f588bf1bd686da5ab1fa2dc7df1d0993e58c4ae465cdc1abb51d2ec6eb7a9", "generated_at": "2026-11-27T21:35:03.455609+00:00", "revision": "909f588bf1bd686da5ab1fa2dc7df1d0993e58c4ae465cdc1abb51d2ec6eb7a9", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "d93cb29220e0a0a428f880343f0db1423146e3ef9b844de800eb4c9223589917", "generated_at": "2026-11-27T22:01:09.602008+00:00", "revision": "d93cb29220e0a0a428f880343f0db1423146e3ef9b844de800eb4c9223589917", "scope": "change"} -->
 
 
 ## Change `bind-json-string-command-in-codemode` — openspec/changes/archive/2026-11-02-bind-json-string-command-in-codemode/STATISTICS.md
@@ -22114,6 +22115,12 @@ Provenance : change-periods:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f
 
 <!-- CAB_STATISTICS_CURRENT_END -->
 <!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "3d236412db4a35d3cf034d05ef024a57bbc39eb1d2dfb099b0f3becae6b8e11b", "generated_at": "2026-11-22T11:19:26.235407+00:00", "revision": "3d236412db4a35d3cf034d05ef024a57bbc39eb1d2dfb099b0f3becae6b8e11b", "scope": "change"} -->
+
+
+## Change `compute-live-stage-cycle-costs` — openspec/changes/archive/2026-11-27-compute-live-stage-cycle-costs/STATISTICS.md
+
+
+STATISTICS.md missing ; aucune donnée inventée.
 
 
 ## Change `configure-controller-command-length-limit` — openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/STATISTICS.md
@@ -83980,4 +83987,4 @@ ambigus/étrangers, ACK manquant, effets supplémentaires et frontières actives
 restent protégés. Les défauts optionnels ne sont pas normalisés rétroactivement.
 L’input d’une nouvelle proposition edit omet replaceAll faux par défaut.
 Le transfert SID C12 et l’exclusion Syncthing sont des sujets séparés.
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "4fcd718d55f2e5c696b3b68fbdf3a6ab449eb84a2b5b1a8303fb1b5bcae09346", "generated_at": "2026-11-27T21:35:07.852818+00:00", "revision": "4fcd718d55f2e5c696b3b68fbdf3a6ab449eb84a2b5b1a8303fb1b5bcae09346", "scope": "project"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "f8abc39ad31652f77a067b746de28e15859bea2059dd8caae88c622f8663ddfc", "generated_at": "2026-11-27T22:33:47.836777+00:00", "revision": "f8abc39ad31652f77a067b746de28e15859bea2059dd8caae88c622f8663ddfc", "scope": "project"} -->

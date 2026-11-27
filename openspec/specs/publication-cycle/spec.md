@@ -376,7 +376,7 @@ Pour un RUN du nouveau profil, CAB MUST intégrer dans le snapshot Git de toute 
 
 ### Requirement: Tableau compact des passages par étape
 
-Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fin, CAB, Agents et Attentes MUST utiliser des gabarits fixes. Les colonnes de tokens MUST partager une largeur suffisante pour `999 M`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
+Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fin, CAB, Agents et Attentes MUST utiliser des gabarits fixes. Les colonnes de tokens MUST partager une largeur suffisante pour `99 999,99 M`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
 
 #### Scenario: Colonnes dans les douze onglets
 
@@ -395,7 +395,7 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 #### Scenario: Compteurs de tailles différentes
 
 - **WHEN** les compteurs ont des contenus de tailles différentes
-- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivi de trois espaces ordinaires
+- **THEN** les huit colonnes de chaque rôle partagent la largeur de `99 999,99 M` suivi de trois espaces ordinaires
 - **AND** toute valeur dont le format dépassera cette largeur reste consultable en entier dans son infobulle
 
 #### Scenario: Espace disponible pour une ligne complète
@@ -529,3 +529,18 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 - **AND** un tarif nul s’affiche avec sa valeur zéro
 - **AND** une correspondance ambiguë ou incompatible avec le fournisseur observé laisse les tarifs vides
 - **AND** les montants de coût observés restent des données distinctes des tarifs du catalogue
+
+### Requirement: Coûts des passages calculés en direct
+
+CAB MUST calculer le montant en dollars par rôle et catégorie du passage à partir des tokens natifs déclarés et du tarif catalogue par million du modèle et du fournisseur applicables. CAB MUST stocker les montants par RUN et passage dans `sessions.token_costs`. Le chargement du tableau Cycle et du bloc de coûts de l’étape MUST lire cette projection persistée. Electric MUST signaler toute mise à jour de cette projection via le RUN. Les montants affichés MUST avoir au plus deux décimales.
+
+#### Scenario: Modèles successifs dans un même passage
+- **WHEN** CAB observe plusieurs réglages de modèle successifs pour un rôle dans un passage
+- **THEN** le premier segment commence au début exact du passage, chaque changement termine le segment précédent et commence le suivant, et le dernier se termine à la fin exacte du passage
+- **AND** un modèle qui revient après un autre reste une ligne distincte
+- **AND** le tableau Agents conserve les quatre colonnes tarifaires alignées sur les colonnes de coût du tableau Cycle.
+
+#### Scenario: Montant de plusieurs modèles
+- **WHEN** des mesures de tokens appartiennent à différents segments
+- **THEN** CAB attribue chaque mesure au segment actif à son horodatage, additionne les montants exacts avant arrondi et actualise la session et la projection Electric
+- **AND** une catégorie reste sans montant si des tokens positifs ont un tarif indisponible, tandis que zéro token déclaré produit un montant nul.

@@ -37,11 +37,15 @@ export function FixedStageValue({value,sample,title}:{value:string;sample:string
 }
 
 function tokenSlot(value:string,fixed:boolean,title?:string){
-  return fixed?<FixedStageValue value={value} sample={'999\u202fM\u00a0\u00a0\u00a0'} title={title}/>:value
+  return fixed?<FixedStageValue value={value} sample={'99\u202f999,99\u202fM\u00a0\u00a0\u00a0'} title={title}/>:value
 }
 
 function tokenCost(costs:CycleTokenCosts|undefined,role:TokenRole,field:TokenField){
-  return costs?.[role]?.[field]??''
+  const value=costs?.[role]?.[field]??''
+  const parts=/^(\d+)(?:\.(\d{1,2}))?$/.exec(value)
+  if(!parts)return value
+  const fraction=parts[2]?.replace(/0+$/,'')
+  return formatter.format(BigInt(parts[1]))+(fraction?','+fraction:'')+'\u202f$'
 }
 
 export function TokenColumns({tokens,costs,piloted=false,header=false,includeCosts=false}:{

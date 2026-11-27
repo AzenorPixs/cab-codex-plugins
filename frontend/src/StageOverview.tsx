@@ -4,7 +4,7 @@ import {stageDuration} from './stageDuration'
 import {FixedStageValue,formatTokens,tokenColumnCount,tokenFields,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens,type TokenCounts} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
-type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;rates?:TokenCounts}
+type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;started_at?:string;ended_at?:string|null;rates?:TokenCounts}
 type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
 export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
@@ -131,7 +131,8 @@ function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableE
         <th scope="col" title="Raisonnement">Raisonnement</th><th scope="col">Agents</th>
       </tr></thead>
       <tbody>{rows.length?rows.map(({passage,agent})=><tr key={agent.id}>
-        <td>{passage.number}</td><td>{date(passage.started_at)}</td><td>{date(passage.ended_at)}</td>
+        <td>{passage.number}</td><td title={agent.started_at}>{date(agent.started_at??passage.started_at)}</td>
+        <td title={agent.ended_at??undefined}>{date(agent.ended_at===undefined?passage.ended_at:agent.ended_at)}</td>
         <td>{piloted&&agent.role==='orchestrator'?'Orchestrateur':'Codage'}</td>
         <td title={agent.provider||undefined}>{agent.provider||'—'}</td>
         {tokenFields.map(([field])=>{

@@ -378,6 +378,7 @@ class CodingSession(models.Model):
     agent=models.CharField(max_length=40)
     uid=models.PositiveIntegerField()
     configuration=models.JSONField(default=dict)
+    token_costs=models.JSONField(default=dict,db_default={})
     created=models.DateTimeField(auto_now_add=True)
     updated=models.DateTimeField(auto_now=True)
     class Meta:
@@ -752,11 +753,12 @@ class SessionAgent(models.Model):
     native_provider=models.CharField(max_length=160,blank=True)
     provider=models.ForeignKey(AgentProvider,null=True,on_delete=models.SET_NULL,related_name='+')
     observed_at=models.DateTimeField()
+    ended_at=models.DateTimeField(null=True)
     token_costs=models.JSONField(default=dict,db_default={})
 
     class Meta:
         db_table='sessions_agents'
-        constraints=[models.UniqueConstraint(fields=['stage_passage','role','model','reasoning','native_provider'],name='cab_session_agent_identity')]
+        constraints=[models.UniqueConstraint(fields=['stage_passage','role','model','reasoning','native_provider','observed_at'],name='cab_session_agent_segment')]
 
 
 class MeasurementPeriod(models.Model):

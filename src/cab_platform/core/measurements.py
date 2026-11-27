@@ -58,7 +58,7 @@ def end_if_open(actor,run):
 
 def native_closure(run, validation_at):
     """Attester la fin du dernier tour de chaque rôle avant de figer les mesures."""
-    from cab_platform.cycle_tokens import native_sources, store_usage
+    from cab_platform.cycle_tokens import native_sources, store_cycle_costs, store_usage
     from cab_platform.change_stage_metrics import covered_seconds
     from cab_platform.measurement_sources import USAGE_FIELDS, native_time, native_work_time
 
@@ -111,6 +111,7 @@ def native_closure(run, validation_at):
             else:
                 return None
         store_usage(run,usage)
+        store_cycle_costs(run,session)
         from cab_platform.stage_substeps import update
         update(run,'collect-final-telemetry','closure-final-telemetry','COMPLETED',
                'Collecte de la télémétrie finale',{'roles':windows})
