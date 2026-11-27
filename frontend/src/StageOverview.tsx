@@ -1,10 +1,10 @@
 import {type ReactNode} from 'react'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {stageDuration} from './stageDuration'
-import {FixedStageValue,formatTokens,tokenColumnCount,TokenColumns,TokenRoleHeaders,TokenSummary,type CycleTokens} from './cycleTokens'
+import {FixedStageValue,formatTokens,tokenColumnCount,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
-type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null}
+type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
 export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
 export type CycleSummary={tokens?:CycleTokens;iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
@@ -13,7 +13,7 @@ const date=(value:string|null)=>value?new Date(value).toLocaleString('fr-FR'):''
 const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAILED:'Échec',UNKNOWN:'Indéterminé',PENDING:'En attente',SKIPPED:'Non exécuté',NOT_REQUESTED:'Non demandé',CANCELLED:'Annulé'}
 const cycleSample='Cycle\u00a0\u00a0'
 const dateSample='00/00/0000 00:00:00\u00a0\u00a0\u00a0'
-const durationSample='9999,9\u202fs\u00a0\u00a0\u00a0'
+const durationSample='9999,9\u202fs\u00a0\u00a0\u00a0\u00a0'
 
 function StageStateIcon({state,labelled=false}:{state:string;labelled?:boolean}){
   const label=labelled?(states[state]||state):undefined
@@ -87,7 +87,7 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
   const grouped=showAllRows&&piloted
   const rowSpan=grouped?2:undefined
   const value=(text:string,sample:string)=>showAllRows?<FixedStageValue value={text} sample={sample} title={text||undefined}/>:text
-  const tokenHeaders=<TokenColumns header piloted={piloted} includeCumulative={showAllRows}/>
+  const tokenHeaders=<TokenColumns header piloted={piloted} includeCosts={showAllRows}/>
   return <StageTable showAllRows={showAllRows} compact={showAllRows} title="Itérations de l’étape" items={items}
     columns={7+tokenColumnCount(piloted)*(showAllRows?2:1)}
     header={<><tr>
@@ -107,7 +107,7 @@ function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;s
       <td>{value(date(item.started_at),dateSample)}</td><td>{value(date(item.ended_at),dateSample)}</td>
       <td>{value(stageDuration(item.cab_seconds,showAllRows),durationSample)}</td><td>{value(stageDuration(item.agent_seconds,showAllRows),durationSample)}</td>
       <td>{value(stageDuration(item.waiting_seconds,showAllRows),durationSample)}</td>
-      <TokenColumns tokens={item.tokens} piloted={piloted} includeCumulative={showAllRows}/>
+      <TokenColumns tokens={item.tokens} costs={item.token_costs} piloted={piloted} includeCosts={showAllRows}/>
       <td className="stage-cycle-state">{showAllRows&&item.state&&<StageStateIcon state={item.state}/>}
         {item.state?states[item.state]||item.state:''}
         {item.description&&<p>{item.description}</p>}
@@ -162,7 +162,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
         <TokenSummary tokens={lastPassage.tokens} piloted={piloted}/>
       </p>
     </div>:<h2>{title}</h2>}{stage?.not_required&&<p>Revue non requise pour ce RUN.</p>}{stage?.observed&&<>
-    <div className="run-metadata stage-metadata">
+    <div className={'run-metadata stage-metadata'+(showAllRows?' stage-metadata-with-costs':'')} data-piloted={piloted||undefined}>
       <dl className="stage-duration-totals">
         {stage.iteration_count!=null&&<><dt>Itérations</dt><dd>{stage.iteration_count}</dd></>}
         {stage.cab_seconds!=null&&<><dt>Travail observé par CAB</dt><dd>{stageDuration(stage.cab_seconds,showAllRows)}</dd></>}
@@ -170,6 +170,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
         {stage.waiting_seconds!=null&&<><dt>Attente</dt><dd><Waiting time={stage} shortUnits={showAllRows}/></dd></>}
       </dl>
       <div className="stage-token-totals"><TokenSummary tokens={stage.tokens} piloted={piloted}/></div>
+      {showAllRows&&<div className="stage-cost-totals"><TokenCostSummary costs={lastPassage?.token_costs} piloted={piloted}/></div>}
     </div>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
     <Passages items={stage.iterations} piloted={piloted} showAllRows={showAllRows}/>

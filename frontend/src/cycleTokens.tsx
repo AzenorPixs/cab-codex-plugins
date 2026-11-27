@@ -8,6 +8,7 @@ type TokenField=typeof fields[number][0]
 type TokenRole='coder'|'orchestrator'
 type TokenCounts=Partial<Record<TokenField,string|null>>
 export type CycleTokens=Partial<Record<TokenRole,TokenCounts>>
+export type CycleTokenCosts=Partial<Record<TokenRole,Partial<Record<TokenField,string|null>>>>
 
 const formatter=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2})
 const magnitudes=[[1_000_000_000n,'B'],[1_000_000n,'M'],[1_000n,'K']] as const
@@ -36,24 +37,36 @@ export function FixedStageValue({value,sample,title}:{value:string;sample:string
 }
 
 function tokenSlot(value:string,fixed:boolean,title?:string){
-  return fixed?<FixedStageValue value={value} sample={'999\u202fM\u202f'} title={title}/>:value
+  return fixed?<FixedStageValue value={value} sample={'999\u202fM\u00a0\u00a0'} title={title}/>:value
 }
 
-export function TokenColumns({tokens,piloted=false,header=false,includeCumulative=false}:{
-  tokens?:CycleTokens;piloted?:boolean;header?:boolean;includeCumulative?:boolean
+function tokenCost(costs:CycleTokenCosts|undefined,role:TokenRole,field:TokenField){
+  return costs?.[role]?.[field]??''
+}
+
+export function TokenColumns({tokens,costs,piloted=false,header=false,includeCosts=false}:{
+  tokens?:CycleTokens;costs?:CycleTokenCosts;piloted?:boolean;header?:boolean;includeCosts?:boolean
 }){
   return <>{roles(piloted).flatMap(role=>fields.flatMap(([field,abbreviation,label])=>{
     const key=role+field
     const value=formatTokens(tokens?.[role]?.[field])
     const current=header
-      ? <th key={key} scope="col" title={label}>{tokenSlot(abbreviation,includeCumulative)}{piloted&&!includeCumulative&&<small>{roleLabel[role]}</small>}</th>
-      : <td key={key} className="cycle-token-value">{tokenSlot(value,includeCumulative,value)}</td>
-    if(!includeCumulative)return current
-    const total=header
-      ? <th key={key+'-total'} scope="col" title={'Cumul · '+label}>{tokenSlot('C'+abbreviation,true)}</th>
-      : <td key={key+'-total'} className="cycle-token-value">{tokenSlot('',true)}</td>
-    return [current,total]
+      ? <th key={key} scope="col" title={label}>{tokenSlot(abbreviation,includeCosts)}{piloted&&!includeCosts&&<small>{roleLabel[role]}</small>}</th>
+      : <td key={key} className="cycle-token-value">{tokenSlot(value,includeCosts,value)}</td>
+    if(!includeCosts)return current
+    const cost=tokenCost(costs,role,field)
+    const costCell=header
+      ? <th key={key+'-cost'} scope="col" title={'Coût · '+label}>{tokenSlot('C'+abbreviation,true)}</th>
+      : <td key={key+'-cost'} className="cycle-token-value">{tokenSlot(cost,true,cost||undefined)}</td>
+    return [current,costCell]
   }))}</>
+}
+
+export function TokenCostSummary({costs,piloted=false}:{costs?:CycleTokenCosts;piloted?:boolean}){
+  return <>{roles(piloted).map(role=><span key={role} className="cycle-token-group">
+    {piloted&&<strong>{roleLabel[role]}</strong>}
+    {fields.map(([field,,label])=><span key={field} title={'Coût · '+label}>Coût : {tokenCost(costs,role,field)||'—'}</span>)}
+  </span>)}</>
 }
 
 export function TokenSummary({tokens,piloted=false}:{tokens?:CycleTokens;piloted?:boolean}){

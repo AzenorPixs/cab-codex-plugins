@@ -34,6 +34,7 @@ const iterations=Array.from({length:12},(_,index)=>({
  id:index+1,number:index+1,duration_seconds:[15.8,641.2,3661.2,null][index]??null,
  state:index===11?'RUNNING':index===10?'CANCELLED':index===9?'UNKNOWN':'COMPLETED',started_at:time,ended_at:index===11?null:time,
  cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(index===4?'999000000':undefined),
+ token_costs:index===0?{coder:{input_tokens:'8,88 €'}}:undefined,
 }));
 const actions=Array.from({length:12},(_,index)=>({
  ...iterations[index],id:101+index,parent_id:1,description:'Action visible '+(index+1),
@@ -49,7 +50,7 @@ const metrics={piloted:true,tokens:tokenCounts(),session_tokens:tokenCounts(),cy
  stages:Array.from({length:12},(_,i)=>({key:'step-'+i,observed:true,iteration_count:12,cab_seconds:0,agent_seconds:26.5,waiting_seconds:0,tokens:tokenCounts('8983622'),
   iterations:[...iterations.slice(0,-1),{...iterations[11],...(i===1
    ?{state:'SKIPPED',duration_seconds:0,ended_at:time,tokens:undefined}
-   :{tokens:tokenCounts('4570','9876')})}],children:[{iterations:[...actions,shortAction]}]})),
+   :{tokens:tokenCounts('4570','9876'),token_costs:{coder:{input_tokens:'0,12 €',output_tokens:'0 €',cache_write_tokens:'0,04 €'},orchestrator:{cache_read_tokens:'0,08 €'}}})}],children:[{iterations:[...actions,shortAction]}]})),
 };
 const metricsPath='projects/fixture/change-stage-metrics';
 const changeList={changes:[{id:'fixture-change',identifier:'change-demo'}],has_more:false};
@@ -209,6 +210,13 @@ try{
      const titleIcon=stageTitle.querySelector('[role=img]');
      const lastSummary=stageHeading.querySelector('.cycle-token-summary').textContent;
      const skipped=${stage}===2;
+     const frame=document.querySelector('.stage-metadata-with-costs');
+     const columns=Array.from(frame.children,cell=>cell.getBoundingClientRect());
+     const costColumn=frame.querySelector('.stage-cost-totals');
+     const costRows=Array.from(costColumn.querySelectorAll('.cycle-token-group>span'));
+     const tokenRows=Array.from(frame.querySelectorAll('.stage-token-totals .cycle-token-group>span'));
+     const lastCells=table.tBodies[0].rows[11].cells;
+     const costValues=[7,9,11,13,15,17,19,21].map(col=>lastCells[col].textContent);
      const date=first.cells[1];
      const padding=parseFloat(getComputedStyle(head.cells[0]).paddingInlineStart)*2;
      const wrapper=table.parentElement;
@@ -218,18 +226,24 @@ try{
       headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
       widths:fixedExamples[0]==='Cycle\u00a0\u00a0'
         && fixedExamples.slice(1,3).every(example=>example==='00/00/0000 00:00:00\u00a0\u00a0\u00a0')
-        && fixedExamples.slice(3).every(example=>example==='9999,9\u202fs\u00a0\u00a0\u00a0')
+        && fixedExamples.slice(3).every(example=>example==='9999,9\u202fs\u00a0\u00a0\u00a0\u00a0')
         && Math.abs(first.cells[1].clientWidth-first.cells[2].clientWidth)<=1
-        && Math.abs(first.cells[3].clientWidth-first.cells[5].clientWidth)<=1,
+        && [4,5].every(col=>Math.abs(first.cells[3].clientWidth-first.cells[col].clientWidth)<=1),
       fixedTokens:Math.max(...tokenWidths)-Math.min(...tokenWidths)<.5
-        && Array.from(first.cells).slice(6,22).every(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample==='999\u202fM\u202f')
+        && Array.from(first.cells).slice(6,22).every(cell=>cell.querySelector('.stage-cycle-slot').dataset.sizeExample==='999\u202fM\u00a0\u00a0')
         && wideToken.textContent==='999\u202fM' && wideToken.scrollWidth<=wideToken.clientWidth,
       durations:Array.from(first.cells).slice(3,6).map(cell=>cell.textContent.replaceAll('\u202f',' ')).join('|')==='1 h 1 m 1,2 s|10 m 41,2 s|15,8 s',
       fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
       singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
       counters:first.cells[6].textContent.includes('1,25') && second.cells[10].textContent==='0'
         && second.cells[14].textContent.includes('2,35') && second.cells[20].textContent==='—',
-      reserved:Array.from(table.tBodies[0].rows).every(row=>[7,9,11,13,15,17,19,21].every(col=>row.cells[col].textContent==='')),
+      costs:costRows.length===8 && first.cells[7].textContent==='8,88 €'
+        && (skipped?costValues.every(value=>!value):costValues[0]==='0,12 €' && costValues[1]==='0 €' && costValues[6]==='0,08 €')
+        && costRows.every((row,i)=>row.textContent==='Coût : '+(costValues[i]||'—')),
+      layout:columns.length===3 && columns[1].left>=columns[0].right && columns[2].left>=columns[1].right
+        && columns.slice(1).every(column=>Math.abs(column.width-columns[0].width)<1)
+        && parseFloat(getComputedStyle(costColumn).borderInlineStartWidth)>0
+        && costRows.every((row,i)=>Math.abs(row.getBoundingClientRect().top-tokenRows[i].getBoundingClientRect().top)<1),
       lastIcon:last.textContent.includes(skipped?'Non exécuté':'En cours') && icon?.getAttribute('aria-hidden')==='true'
         && (skipped?getComputedStyle(icon).color==='rgb(100, 107, 115)':getComputedStyle(icon).animationName==='stage-cycle-spin')
         && titleIcon?.getAttribute('aria-label')===(skipped?'Non exécuté':'En cours')
@@ -249,7 +263,7 @@ try{
         columns:Array.from(first.cells,cell=>cell.clientWidth),padding,font:getComputedStyle(date).fontSize}:0
      });
     })()`));
-    assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,durations:true,fillsWidth:true,singleLine:true,counters:true,reserved:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
+    assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,durations:true,fillsWidth:true,singleLine:true,counters:true,costs:true,layout:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
       'Tableau piloté et dernier cycle sans défilement à 1 920 px, étape '+stage);
    }
    await browser.viewport(390,844);
@@ -265,6 +279,12 @@ try{
    assert(await ev(fullWidthSession),'Bloc de session pleine largeur sans terminal sur mobile');
    assert.equal(terminalRequests,0,'Aucune requête de terminal depuis le détail de session');
    assert(await ev(`(()=>{const frame=document.querySelector('.stage-metadata');const tokens=frame.querySelector('.stage-token-totals');const durations=frame.querySelector('.stage-duration-totals');return tokens.getBoundingClientRect().top>=durations.getBoundingClientRect().bottom})()`),'cumuls sous les durées dans le même encadré sur mobile');
+   assert(await ev(`(()=>{
+    const costs=document.querySelector('.stage-cost-totals');
+    const tokens=document.querySelector('.stage-token-totals');
+    return costs.getBoundingClientRect().top>=tokens.getBoundingClientRect().bottom
+      && parseFloat(getComputedStyle(costs).borderBlockStartWidth)>0;
+   })()`),'Coûts empilés sous les tokens sur mobile');
    await browser.screenshot();
 
    await browser.viewport(1440,900);
@@ -278,9 +298,14 @@ try{
     const table=document.querySelector('.stage-passages-compact');
     const wrapper=table.parentElement;
     const headers=Array.from(table.tHead.rows[0].cells,cell=>cell.textContent).join('|');
-    return JSON.stringify({rows:table.tHead.rows.length,headers,overflow:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth)});
+    const content=table.closest('.forge-card-content');
+    const scrollport=content.getBoundingClientRect();
+    const tableBounds=wrapper.getBoundingClientRect();
+    return JSON.stringify({rows:table.tHead.rows.length,headers,overflow:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth),
+      insideCard:tableBounds.left>=scrollport.left-1 && tableBounds.right<=scrollport.right+1
+        && content.scrollWidth<=content.clientWidth+1});
    })()`));
-   assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0},
+   assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0,insideCard:true},
     'Tableau direct sans défilement à 1 440 px');
    const measureColumns=`JSON.stringify(Array.from(document.querySelector('.stage-passages-compact tbody tr').cells,cell=>cell.getBoundingClientRect().width))`;
    const narrowColumns=JSON.parse(await ev(measureColumns));

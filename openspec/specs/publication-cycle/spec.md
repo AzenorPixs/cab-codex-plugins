@@ -377,7 +377,7 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 
 - **WHEN** un onglet d’étape affiche ses passages
 - **THEN** le tableau affiche Cycle, Début, Fin, CAB, Agents et Attentes, puis Te, CTe, Ts, CTs, Tr, CTr, Tw et CTw pour chaque rôle applicable, puis État
-- **AND** les colonnes CTe, CTs, CTr et CTw restent vides et sans liaison aux mesures
+- **AND** les colonnes CTe, CTs, CTr et CTw affichent les coûts fournis pour le passage et restent vides quand ces coûts sont indisponibles
 - **AND** le texte complet d’une valeur dépassant sa colonne reste consultable dans son infobulle
 
 #### Scenario: Largeurs fixes des colonnes de passage
@@ -385,12 +385,12 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 - **WHEN** un onglet affiche le tableau Cycle
 - **THEN** Cycle est dimensionné sur son titre suivi de deux espaces
 - **AND** Début et Fin sont dimensionnés sur une date complète avec heures, minutes et secondes suivie de trois espaces
-- **AND** CAB, Agents et Attentes sont dimensionnés sur `9999,9 s` suivi de trois espaces
+- **AND** CAB, Agents et Attentes sont dimensionnés sur le même gabarit `9999,9 s` suivi de quatre espaces
 
 #### Scenario: Compteurs de tailles différentes
 
 - **WHEN** les compteurs ont des contenus de tailles différentes
-- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivie d’une espace fine
+- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 M` suivi de deux espaces ordinaires
 - **AND** toute valeur dont le format dépassera cette largeur reste consultable en entier dans son infobulle
 
 #### Scenario: Espace disponible pour une ligne complète
@@ -470,3 +470,23 @@ Dans chaque onglet d’étape du détail de session, CAB MUST afficher le pictog
 
 - **WHEN** l’étape n’a aucun passage observé
 - **THEN** son titre reste seul sans résumé du dernier cycle
+
+### Requirement: Coûts du dernier passage dans le bloc des étapes
+
+Dans les douze onglets d’étape, le bloc avant Cycle MUST présenter les durées, les compteurs de tokens et les coûts en trois colonnes équilibrées lorsque la largeur le permet. Une séparation verticale MUST délimiter chaque groupe de tokens et de coûts. Chaque ligne « Coût » MUST reprendre la valeur de la cellule de coût correspondante du dernier passage de l’étape, par type de token et par rôle.
+
+#### Scenario: Plusieurs passages et coûts distincts
+
+- **WHEN** le tableau contient un coût pour un type de token du dernier passage
+- **THEN** la même valeur figure sur sa ligne Coût, y compris si elle vaut zéro
+- **AND** les coûts éventuels des passages précédents ne contribuent pas à ce bloc
+
+#### Scenario: Coût indisponible
+
+- **WHEN** la cellule correspondante du dernier passage est vide ou que le passage est absent
+- **THEN** le bloc affiche un tiret pour ce coût
+
+#### Scenario: Écran étroit
+
+- **WHEN** les trois colonnes ne tiennent plus dans le bloc
+- **THEN** elles sont empilées avec une séparation horizontale et restent accessibles

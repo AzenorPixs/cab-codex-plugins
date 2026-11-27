@@ -1,5 +1,8 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[show-last-stage-cycle-costs](changes/archive/2026-11-27-show-last-stage-cycle-costs/),
+code non attribué. Attribution ultérieure par ACL.
+
 [widen-stage-cycle-columns](changes/archive/2026-11-26-widen-stage-cycle-columns/),
 code non attribué. Attribution ultérieure par ACL.
 
