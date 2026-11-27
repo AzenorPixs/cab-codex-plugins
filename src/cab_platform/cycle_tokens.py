@@ -1,11 +1,13 @@
 """Rattachement des mesures natives horodatées aux fenêtres du cycle."""
+from bisect import bisect_left
 from collections import defaultdict
 from hashlib import sha256
 import json
 
 from django.db.models import Q, Sum
+from django.utils import timezone
 
-from .core.models import Actor, ChangeStageIteration, CycleTokenUsage
+from .core.models import Actor, AgentModel, ChangeStageIteration, CycleTokenUsage, SessionAgent
 from .measurement_sources import USAGE_FIELDS
 
 
@@ -99,6 +101,72 @@ def run_totals(run):
     return token_totals(CycleTokenUsage.objects.filter(run=run)).get((), {})
 
 
+def store_session_agents(run, sources):
+    """Conserve les réglages natifs applicables aux tours qui recoupent un passage."""
+    if not sources or not run.coding_session_id:
+        return False
+    passages=ChangeStageIteration.objects.filter(run=run,parent__isnull=True,started_at__isnull=False).exclude(
+        state__in=('SKIPPED','NOT_REQUESTED'))
+    now=timezone.now()
+    pending={}
+    for role, trace, observations in sources:
+        _, turns, unfinished, _, _=trace
+        settings=sorted(observations,key=lambda item:item[0])
+        stamps=[item[0] for item in settings]
+        intervals=[(start,end) for start,end in turns if end>run.created]
+        intervals.extend((start,now) for start in unfinished)
+        for passage in passages:
+            for start,end in intervals:
+                beginning=max(start,passage.started_at)
+                ending=min(end,passage.ended_at or now)
+                if beginning>=ending:
+                    continue
+                left=bisect_left(stamps,beginning)
+                if left and stamps[left-1]>=start:
+                    left-=1
+                for stamp,model,provider,reasoning in settings[left:bisect_left(stamps,ending)]:
+                    key=(passage.pk,role,model,reasoning,provider)
+                    pending.setdefault(key,max(beginning,stamp))
+    if not pending:
+        return False
+    catalog=defaultdict(dict)
+    for model,provider_id,provider_name in AgentModel.objects.filter(identifier__in={key[2] for key in pending}).values_list(
+        'identifier','provider_id','provider__name',
+    ):
+        catalog[model][provider_name.casefold()]=provider_id
+    existing={(row.stage_passage_id,row.role,row.model,row.reasoning,row.native_provider):row
+              for row in SessionAgent.objects.filter(session_id=run.coding_session_id,stage_passage__run=run)}
+    inserts=[]
+    updates=[]
+    for key,stamp in pending.items():
+        passage_id,role,model,reasoning,hint=key
+        providers=catalog[model]
+        provider=next(iter(providers.values())) if len(providers)==1 else providers.get(hint.casefold())
+        row=existing.get(key)
+        if row is None:
+            inserts.append(SessionAgent(session_id=run.coding_session_id,stage_passage_id=passage_id,role=role,
+                model=model,reasoning=reasoning,native_provider=hint,provider_id=provider,observed_at=stamp))
+        elif row.provider_id!=provider:
+            row.provider_id=provider
+            updates.append(row)
+    if inserts:
+        SessionAgent.objects.bulk_create(inserts,ignore_conflicts=True)
+    if updates:
+        SessionAgent.objects.bulk_update(updates,['provider'])
+    return bool(inserts or updates)
+
+
+def stage_agents(run):
+    agents=defaultdict(list)
+    rows=SessionAgent.objects.filter(session_id=run.coding_session_id,stage_passage__run=run).select_related('provider')
+    for row in rows.order_by('role','observed_at','pk'):
+        costs=row.token_costs if isinstance(row.token_costs,dict) else {}
+        agents[row.stage_passage_id].append({'id':row.pk,'role':row.role,'model':row.model,
+            'reasoning':row.reasoning,'provider':row.provider.name if row.provider else None,
+            'costs':{field:costs[field] for field in USAGE_FIELDS if isinstance(costs.get(field),str)}})
+    return agents
+
+
 def overview(change, run, records, cycles):
     query = CycleTokenUsage.objects.filter(change=change)
     if run is not None:
@@ -107,9 +175,16 @@ def overview(change, run, records, cycles):
     actions = token_totals(query.exclude(action__isnull=True), 'action_id')
     by_stage = token_totals(query, 'stage_passage__stage__key')
     by_cycle = token_totals(query, 'stage_passage__cycle_id')
+    agents=stage_agents(run) if run is not None else {}
     for record in records:
         source = passes if record.get('parent_id') is None else actions
         record['tokens'] = source.get((record['id'],), {})
+        if run is not None and record.get('parent_id') is None:
+            record['agents']=agents.get(record['id'],[])
+            by_role=defaultdict(list)
+            for agent in record['agents']:
+                by_role[agent['role']].append(agent['costs'])
+            record['token_costs']={role:costs[0] for role,costs in by_role.items() if len(costs)==1 and costs[0]}
     for cycle in cycles:
         cycle['tokens'] = by_cycle.get((cycle['id'],), {})
     total = token_totals(query).get((), {})

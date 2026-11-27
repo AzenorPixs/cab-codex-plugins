@@ -17,7 +17,7 @@ _cursor=0
 
 def refresh(run_id):
     from .change_stage_metrics import cycle_summary, summarize
-    from .cycle_tokens import run_totals, store_usage
+    from .cycle_tokens import run_totals, store_session_agents, store_usage
 
     run=Run.objects.select_related('actor','project','change_record').filter(pk=run_id).first()
     if not run or not run.change_record_id:
@@ -25,12 +25,14 @@ def refresh(run_id):
     anchor=run.updated
     batch={'passes':{},'cycles':{}}
     usage=[]
-    overview=summarize(run.change_record,run,projection=batch,usage=usage)
+    agents=[]
+    overview=summarize(run.change_record,run,projection=batch,usage=usage,agent_observations=agents)
     with transaction.atomic():
         current=Run.objects.select_for_update().get(pk=run_id)
         if current.updated!=anchor:
             return False
         changed=store_usage(run, usage)
+        changed=store_session_agents(run,agents) or changed
         summary=cycle_summary(overview['cycles'],tokens=run_totals(run))
         for model,key in ((ChangeStageIteration,'passes'),(RunCycleIteration,'cycles')):
             rows=model.objects.filter(run_id=run_id,pk__in=batch[key]).only('time_projection')

@@ -42,12 +42,17 @@ def main():
             call_command('migrate',verbosity=0)
             from django.db import connection
             from django.db.migrations.executor import MigrationExecutor
-            from cab_platform.core.models import CycleTokenUsage, Run
+            from cab_platform.core.models import CycleTokenUsage, Run, SessionAgent
             state=MigrationExecutor(connection).loader.project_state()
             assert state.apps.get_model('cab_core','Run')._meta.get_field('cycle_summary').deconstruct()[1:] == Run._meta.get_field('cycle_summary').deconstruct()[1:]
             token_state=state.apps.get_model('cab_core','CycleTokenUsage')
             assert {field.name: field.deconstruct()[1:] for field in token_state._meta.fields} == {
                 field.name: field.deconstruct()[1:] for field in CycleTokenUsage._meta.fields}
+            agent_state=state.apps.get_model('cab_core','SessionAgent')
+            assert agent_state._meta.db_table==SessionAgent._meta.db_table=='sessions_agents'
+            assert {field.name:field.deconstruct()[1:] for field in agent_state._meta.fields}=={
+                field.name:field.deconstruct()[1:] for field in SessionAgent._meta.fields}
+            assert 'sessions_agents' in connection.introspection.table_names()
             suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(module) for module in (
                 'test_session_cycle_summary','test_time_projection','test_publication_cycle','test_stage_protocol','test_stage_work_time','test_cycle_attribution','test_cycle_tokens','test_stage_actions','test_measurement_sources','test_standalone_cabu'))
             result=unittest.TextTestRunner(verbosity=2).run(suite)

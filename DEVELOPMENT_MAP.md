@@ -35,6 +35,10 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[show-stage-session-agents](openspec/changes/archive/2026-11-27-show-stage-session-agents/),
+code non attribué. PostgreSQL, Chromium et Firefox vérifient les observations
+dans `sessions_agents`, le catalogue et l’alignement du tableau Agents sous Cycle.
+
 [align-stage-cycle-and-action-tables](openspec/changes/archive/2026-11-27-align-stage-cycle-and-action-tables/),
 code non attribué. Chromium et Firefox vérifient les marges et la typographie
 communes à Cycle et Actions, ainsi que les gabarits de tokens élargis.

@@ -344,6 +344,15 @@ header .brand {
 }
 .stage-passages-compact th[colspan]{text-align:center}
 .stage-passages-compact .stage-cycle-state{width:100%}
+.stage-agents-table{table-layout:fixed}
+.stage-agents-table :is(th,td){overflow:hidden;text-overflow:ellipsis}
+.stage-agents-sample{
+  position:absolute;
+  visibility:hidden;
+  white-space:pre;
+  font-size:calc(12px * var(--font-scale));
+  font-weight:var(--ui-tables-body-weight,400);
+}
 :root .cycle-table-scroll .stage-passages-compact.monitor-table .stage-cycle-slot{
   display:block;
   position:relative;

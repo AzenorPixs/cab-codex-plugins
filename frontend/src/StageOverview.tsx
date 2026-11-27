@@ -1,10 +1,11 @@
-import {type ReactNode} from 'react'
+import {useLayoutEffect,useRef,useState,type ReactNode,type RefObject} from 'react'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {stageDuration} from './stageDuration'
-import {FixedStageValue,formatTokens,tokenColumnCount,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens} from './cycleTokens'
+import {FixedStageValue,formatTokens,tokenColumnCount,tokenFields,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens,type TokenCounts} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
-type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts}
+type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;costs?:TokenCounts}
+type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
 export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
 export type CycleSummary={tokens?:CycleTokens;iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
@@ -60,22 +61,23 @@ function StageStateIcon({state,labelled=false}:{state:string;labelled?:boolean})
 function Waiting({time,shortUnits=false}:{time:Attribution;shortUnits?:boolean}){
   return <>{stageDuration(time.waiting_seconds,shortUnits)}</>
 }
-function StageTable<Row>({title,items,columns,header,content,render,showAllRows,compact=false,stepTypography=false}:{
+function StageTable<Row>({title,items,columns,header,content,render,showAllRows,compact=false,stepTypography=false,tableRef,afterTable}:{
   title:string;items:Row[];columns:number;header:ReactNode
   content:(row:Row)=>unknown[];render:(row:Row)=>ReactNode;showAllRows:boolean;compact?:boolean;stepTypography?:boolean
+  tableRef?:RefObject<HTMLTableElement|null>;afterTable?:ReactNode
 }){
   const navigation=useTableSearch()
   const matching=showAllRows?items:filterTableRows(items,navigation.query,content)
   const pagination=showAllRows?null:tablePage(matching,navigation.page)
   const rows=pagination?.rows??items
   return <>
-    <div className="cycle-table-scroll"><table className={'stage-passages monitor-table'+(compact?' stage-passages-compact':'')+(compact||stepTypography?' stage-table-step':'')} aria-label={title}>
+    <div className="cycle-table-scroll"><table ref={tableRef} className={'stage-passages monitor-table'+(compact?' stage-passages-compact':'')+(compact||stepTypography?' stage-table-step':'')} aria-label={title}>
       <thead>{header}</thead>
       <tbody>{rows.map(render)}
         <TableFiller count={rows.length} columns={columns}
           empty={pagination&&navigation.query.trim()?'Aucun résultat.':'Aucune entrée.'}/>
       </tbody>
-    </table></div>
+    </table>{afterTable}</div>
     {pagination&&<TableNavigation {...navigation} label={'Pagination · '+title} searchLabel={'Rechercher · '+title}
       current={pagination.current} pages={pagination.pages} total={matching.length}/>}
   </>
@@ -83,12 +85,70 @@ function StageTable<Row>({title,items,columns,header,content,render,showAllRows,
 function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
+
+function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableElement|null>;items:Passage[];piloted:boolean}){
+  const typeSample=useRef<HTMLSpanElement>(null)
+  const reasoningSample=useRef<HTMLSpanElement>(null)
+  const [geometry,setGeometry]=useState<number[]>([])
+  useLayoutEffect(()=>{
+    const cycle=cycleRef.current
+    const first=cycle?.tHead?.rows[0]
+    const second=cycle?.tHead?.rows[1]
+    const type=typeSample.current
+    const reasoning=reasoningSample.current
+    if(!cycle||!first||!type||!reasoning)return
+    const cells=second?[...Array.from(first.cells).slice(0,6),...Array.from(second.cells),first.cells[first.cells.length-1]]:Array.from(first.cells)
+    const measure=()=>{
+      const width=cycle.getBoundingClientRect().width
+      if(!width)return
+      const widths=cells.map(cell=>cell.getBoundingClientRect().width)
+      const costStart=widths.length-5
+      const preceding=widths.slice(3,costStart).reduce((sum,value)=>sum+value,0)
+      const cellStyle=getComputedStyle(cells[0])
+      const padding=parseFloat(cellStyle.paddingInlineStart)+parseFloat(cellStyle.paddingInlineEnd)
+      const typeWidth=Math.min(preceding,type.getBoundingClientRect().width+padding)
+      const reasoningWidth=Math.min(widths[widths.length-1]/2,reasoning.getBoundingClientRect().width+padding)
+      const layout=[width,...widths.slice(0,3),typeWidth,preceding-typeWidth,...widths.slice(costStart,costStart+4),reasoningWidth]
+      setGeometry(previous=>previous.length===layout.length&&previous.every((value,index)=>value===layout[index])?previous:layout)
+    }
+    measure()
+    const observer=new ResizeObserver(measure)
+    for(const element of [cycle,...cells,type,reasoning])observer.observe(element)
+    return ()=>observer.disconnect()
+  },[cycleRef,piloted])
+
+  const rows=items.flatMap(passage=>(passage.agents??[]).filter(agent=>piloted||agent.role==='coder').map(agent=>({passage,agent})))
+  return <>
+    <span ref={typeSample} className="stage-agents-sample" aria-hidden="true">{'Orchestrateur\u00a0\u00a0'}</span>
+    <span ref={reasoningSample} className="stage-agents-sample" aria-hidden="true">{'Raisonnement\u00a0\u00a0'}</span>
+    <table className="stage-passages monitor-table stage-passages-compact stage-table-step stage-agents-table" aria-label="Agents"
+      style={{width:geometry[0],visibility:geometry.length?undefined:'hidden'}}>
+      <colgroup>{geometry.slice(1).map((width,index)=><col key={index} style={{width}}/>)}<col/></colgroup>
+      <thead><tr>
+        <th scope="col">Cycle</th><th scope="col">Début</th><th scope="col">Fin</th>
+        <th scope="col">Type</th><th scope="col">Fournisseurs</th>
+        {tokenFields.map(([field,abbreviation,label])=><th key={field} scope="col" title={'Coût · '+label}>C{abbreviation}</th>)}
+        <th scope="col" title="Raisonnement">Raisonnement</th><th scope="col">Agents</th>
+      </tr></thead>
+      <tbody>{rows.length?rows.map(({passage,agent})=><tr key={agent.id}>
+        <td>{passage.number}</td><td>{date(passage.started_at)}</td><td>{date(passage.ended_at)}</td>
+        <td>{piloted&&agent.role==='orchestrator'?'Orchestrateur':'Codage'}</td>
+        <td title={agent.provider||undefined}>{agent.provider||'—'}</td>
+        {tokenFields.map(([field])=><td key={field} title={agent.costs?.[field]||undefined}>{agent.costs?.[field]}</td>)}
+        <td title={agent.reasoning||undefined}>{agent.reasoning||'—'}</td><td title={agent.model}>{agent.model}</td>
+      </tr>):<tr><td colSpan={11}>Aucun agent observé.</td></tr>}</tbody>
+    </table>
+  </>
+}
+
 function Passages({items,piloted,showAllRows}:{items:Passage[];piloted:boolean;showAllRows:boolean}){
+  const cycleRef=useRef<HTMLTableElement>(null)
   const grouped=showAllRows&&piloted
   const rowSpan=grouped?2:undefined
   const value=(text:string,sample:string)=>showAllRows?<FixedStageValue value={text} sample={sample} title={text||undefined}/>:text
   const tokenHeaders=<TokenColumns header piloted={piloted} includeCosts={showAllRows}/>
   return <StageTable showAllRows={showAllRows} compact={showAllRows} title="Itérations de l’étape" items={items}
+    tableRef={cycleRef} afterTable={showAllRows?<StageAgentTable cycleRef={cycleRef} items={items} piloted={piloted}/>:undefined}
     columns={7+tokenColumnCount(piloted)*(showAllRows?2:1)}
     header={<><tr>
       <th scope="col" rowSpan={rowSpan}>{value(showAllRows?'Cycle':'Itération',cycleSample)}</th>

@@ -35,6 +35,10 @@ const iterations=Array.from({length:12},(_,index)=>({
  state:index===11?'RUNNING':index===10?'CANCELLED':index===9?'UNKNOWN':'COMPLETED',started_at:time,ended_at:index===11?null:time,
  cab_seconds:3661.2,agent_seconds:641.2,waiting_seconds:15.8,description:'Passage '+(index+1),tokens:tokenCounts(index===4?'999000000':undefined),
  token_costs:index===0?{coder:{input_tokens:'8,88 €'}}:undefined,
+ agents:index===0?[
+  {id:91,role:'coder',model:'atelier/codage',provider:'Fournisseur A',reasoning:'high',costs:{input_tokens:'8,88 €'}},
+  {id:92,role:'orchestrator',model:'atelier/orchestrateur',provider:'Fournisseur B',reasoning:'low',costs:{cache_write_tokens:'0 €'}},
+ ]:undefined,
 }));
 const actions=Array.from({length:12},(_,index)=>({
  ...iterations[index],id:101+index,parent_id:1,description:'Action visible '+(index+1),
@@ -183,14 +187,15 @@ try{
     assert(await ev(`(()=>{const table=document.querySelector('.stage-overview section table');const headers=Array.from(table.querySelectorAll('th')).map(x=>x.textContent);const durations=Array.from(document.querySelectorAll('.stage-overview section table tbody tr:not(.table-filler)')).map(row=>row.children[4].textContent.replaceAll('\\u202f',' '));return headers[3]==='Retour ou validation' && headers[4]==='Durée' && headers.slice(5,-1).join('|')==='TeCodeur|TsCodeur|TrCodeur|TwCodeur|TeOrchestrateur|TsOrchestrateur|TrOrchestrateur|TwOrchestrateur' && table.tBodies[0].rows[0].cells[8].textContent.includes('7,65') && table.tBodies[0].rows[0].cells[12].textContent==='—' && JSON.stringify(durations.slice(0,4))===JSON.stringify(['15,8 s','10 m 41,2 s','1 h 1 m 1,2 s','Non observée'])})()`),'durées de l’étape '+stage);
     assert(await ev(`(()=>{
      const overview=document.querySelector('.stage-overview');
-     const [passages,actionTable,shortTable]=overview.querySelectorAll('table');
+     const [passages,,actionTable,shortTable]=overview.querySelectorAll('table');
      return passages.tBodies[0].rows.length===12 && passages.tBodies[0].rows[11].cells[0].textContent==='12'
        && actionTable.tBodies[0].rows.length===12 && actionTable.tBodies[0].rows[11].cells[0].textContent==='Action visible 12'
        && shortTable.tBodies[0].rows.length===3 && shortTable.querySelectorAll('.table-filler').length===2
        && !overview.querySelector('input[type="search"],nav[aria-label^="Pagination"]');
     })()`),'Itérations et actions sans pagination ni recherche, étape '+stage);
     assert(await ev(`(()=>{
-     const [cycle,...actions]=document.querySelectorAll('.stage-overview table');
+     const cycle=document.querySelector('.stage-overview .stage-passages-compact');
+     const actions=Array.from(document.querySelectorAll('.stage-overview section table'));
      const cycleBounds=cycle.parentElement.getBoundingClientRect();
      return actions.length>0 && actions.every(action=>{
       const bounds=action.parentElement.getBoundingClientRect();
@@ -229,11 +234,11 @@ try{
      const costRows=Array.from(costColumn.querySelectorAll('.cycle-token-group>span'));
      const tokenRows=Array.from(frame.querySelectorAll('.stage-token-totals .cycle-token-group>span'));
      const lastCells=table.tBodies[0].rows[11].cells;
-     const costValues=[7,9,11,13,15,17,19,21].map(col=>lastCells[col].textContent);
+     const costValues=[10,11,12,13,18,19,20,21].map(col=>lastCells[col].textContent);
      const date=first.cells[1];
      const padding=parseFloat(getComputedStyle(head.cells[0]).paddingInlineStart)*2;
      const wrapper=table.parentElement;
-     const tokens='Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw';
+     const tokens='Te|Ts|Tr|Tw|CTe|CTs|CTr|CTw';
      const overflow=Math.max(0,wrapper.scrollWidth-wrapper.clientWidth);
      return JSON.stringify({
       headers:headers==='Cycle|Début|Fin|CAB|Agents|Attentes|Codeur|Orchestrateur|État' && tokenHeaders===tokens+'|'+tokens,
@@ -248,9 +253,9 @@ try{
       durations:Array.from(first.cells).slice(3,6).map(cell=>cell.textContent.replaceAll('\u202f',' ')).join('|')==='1 h 1 m 1,2 s|10 m 41,2 s|15,8 s',
       fillsWidth:Math.abs(table.getBoundingClientRect().right-wrapper.getBoundingClientRect().right)<=1,
       singleLine:first.cells.length===23 && getComputedStyle(date).whiteSpace==='nowrap',
-      counters:first.cells[6].textContent.includes('1,25') && second.cells[10].textContent==='0'
-        && second.cells[14].textContent.includes('2,35') && second.cells[20].textContent==='—',
-      costs:costRows.length===8 && first.cells[7].textContent==='8,88 €'
+      counters:first.cells[6].textContent.includes('1,25') && second.cells[8].textContent==='0'
+        && second.cells[14].textContent.includes('2,35') && second.cells[17].textContent==='—',
+      costs:costRows.length===8 && first.cells[10].textContent==='8,88 €'
         && (skipped?costValues.every(value=>!value):costValues[0]==='0,12 €' && costValues[1]==='0 €' && costValues[6]==='0,08 €')
         && costRows.every((row,i)=>row.textContent==='Coût : '+(costValues[i]||'—')),
       layout:columns.length===3 && columns[1].left>=columns[0].right && columns[2].left>=columns[1].right
@@ -278,6 +283,24 @@ try{
     })()`));
     assert.deepEqual(compactTable,{headers:true,widths:true,fixedTokens:true,durations:true,fillsWidth:true,singleLine:true,counters:true,costs:true,layout:true,lastIcon:true,lastSummary:true,cancelled:true,unknown:true,completed:true,overflow:0},
       'Tableau piloté et dernier cycle sans défilement à 2 048 px, étape '+stage);
+    assert(await ev(`(()=>{
+     const cycle=document.querySelector('table[aria-label="Itérations de l’étape"]');
+     const agents=document.querySelector('table[aria-label="Agents"]');
+     const first=cycle.tBodies[0].rows[0].cells;
+     const [coder,orchestrator]=agents.tBodies[0].rows;
+     const equalBounds=(one,two)=>{
+      const a=one.getBoundingClientRect(),b=two.getBoundingClientRect();
+      return Math.abs(a.left-b.left)<1 && Math.abs(a.width-b.width)<1;
+     };
+     return agents.parentElement===cycle.parentElement
+       && Math.abs(agents.getBoundingClientRect().top-cycle.getBoundingClientRect().bottom)<=1
+       && [0,1,2].every(i=>equalBounds(first[i],coder.cells[i]) && coder.cells[i].textContent===first[i].textContent)
+       && [0,1,2,3].every(i=>equalBounds(first[18+i],coder.cells[5+i]))
+       && coder.cells[3].textContent==='Codage' && orchestrator.cells[3].textContent==='Orchestrateur'
+       && coder.cells[4].textContent==='Fournisseur A' && coder.cells[5].textContent==='8,88 €'
+       && orchestrator.cells[8].textContent==='0 €' && coder.cells[9].textContent==='high'
+       && coder.cells[10].textContent==='atelier/codage' && getComputedStyle(coder.cells[10]).whiteSpace==='nowrap';
+    })()`),'Agents collé à Cycle et coûts alignés en mode piloté, étape '+stage);
    }
    await browser.viewport(390,844);
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'));
@@ -323,7 +346,7 @@ try{
    assert(await ev('document.documentElement.scrollWidth<=innerWidth+1'),'La page garde sa largeur à 1 440 px');
    await browser.viewport(1600,900);
    const directTable=JSON.parse(await ev(directLayout));
-   assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|CTe|Ts|CTs|Tr|CTr|Tw|CTw|État',overflow:0,insideCard:true},
+   assert.deepEqual(directTable,{rows:1,headers:'Cycle|Début|Fin|CAB|Agents|Attentes|Te|Ts|Tr|Tw|CTe|CTs|CTr|CTw|État',overflow:0,insideCard:true},
     'Tableau direct sans défilement à 1 600 px');
    const measureColumns=`JSON.stringify(Array.from(document.querySelector('.stage-passages-compact tbody tr').cells,cell=>cell.getBoundingClientRect().width))`;
    const narrowColumns=JSON.parse(await ev(measureColumns));
@@ -332,6 +355,13 @@ try{
    assert(widerColumns.at(-1)>narrowColumns.at(-1)
     && widerColumns.slice(0,-1).every((width,i)=>Math.abs(width-narrowColumns[i])<1),
     'Seule la colonne État grandit lorsque la résolution augmente');
+   assert(await ev(`(()=>{
+    const cycle=document.querySelector('table[aria-label="Itérations de l’étape"]');
+    const agents=document.querySelector('table[aria-label="Agents"]');
+    const agent=agents.tBodies[0].rows[0];
+    return agents.tBodies[0].rows.length===1 && agent.cells[3].textContent==='Codage'
+      && [0,1,2,3].every(i=>Math.abs(agent.cells[5+i].getBoundingClientRect().left-cycle.tBodies[0].rows[0].cells[10+i].getBoundingClientRect().left)<1);
+   })()`),'Agent unique de codage et coûts alignés en mode direct après redimensionnement');
    await browser.viewport(1440,900);
    run.mode='piloted';metrics.piloted=true;
    await browser.navigate(new URL('/projects/fixture',url).href);

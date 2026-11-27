@@ -3,6 +3,7 @@ from functools import lru_cache
 import json
 from collections import deque
 import os
+import re
 from pathlib import Path
 import stat
 from datetime import datetime,timezone as datetime_timezone
@@ -55,11 +56,17 @@ def native_time(value):
     return None
 
 
-def _time_lines(stream, size, usage=None):
+def _agent_label(value, limit):
+    return value if isinstance(value,str) and len(value)<=limit and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./:+@ ()-]*',value) else ''
+
+
+def _time_lines(stream, size, usage=None, models=None):
     """Ne garder que les bornes et identifiants des tours de cette session."""
     turns, pending, uncertain = [], {}, []
     covered_from = None
     previous_usage = None
+    provider = ''
+    last_model = ''
     progress = deque(maxlen=96)
     remaining = size
     while remaining:
@@ -78,6 +85,16 @@ def _time_lines(stream, size, usage=None):
             continue
         if row.get('type') == 'session_meta':
             covered_from = covered_from or stamp
+            provider = _agent_label(payload.get('model_provider'),160) or provider
+        if models is not None and ('turn_context' == row.get('type') or 'thread_settings_applied' in (row.get('type'),payload.get('type'))):
+            settings=payload.get('settings')
+            settings=settings if isinstance(settings,dict) else payload
+            model=_agent_label(settings.get('model'),255)
+            effort=_agent_label(settings.get('reasoning_effort') or settings.get('effort'),80)
+            provider=_agent_label(settings.get('model_provider') or settings.get('provider'),160) or provider
+            if model or (effort and last_model):
+                last_model=model or last_model
+                models.append((stamp,last_model,provider,effort))
         if row.get('type') != 'event_msg':
             continue
         kind, key = payload.get('type'), payload.get('turn_id')
@@ -113,11 +130,12 @@ def _codex_time_file(path, uid, device, inode, size, modified):
         ) != (device, inode, size, modified) or size > 128 * 1024 * 1024:
             raise NativeSourceError('native-source-unavailable')
         usage = []
-        timing = _time_lines(stream, size, usage)
-        return timing, tuple(usage)
+        models = []
+        timing = _time_lines(stream, size, usage, models)
+        return timing, tuple(usage), tuple(models)
 
 
-def codex_work_time(run, *, actor=None, thread=None, tokens=False):
+def codex_work_time(run, *, actor=None, thread=None, tokens=False, models=False):
     """Lire les bornes du seul journal déjà authentifié, sans restituer son contenu."""
     actor = actor or run.actor
     if actor.agent not in ('codex', 'codex-cli'):
@@ -140,16 +158,18 @@ def codex_work_time(run, *, actor=None, thread=None, tokens=False):
         info = os.stat(path, follow_symlinks=False)
         if (info.st_dev, info.st_ino) != (source['device'], source['inode']):
             return None
-        timing, usage = _codex_time_file(path, actor.uid, info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        timing, usage, observations = _codex_time_file(path, actor.uid, info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        if models:
+            return timing,usage,observations
         return (timing, usage) if tokens else timing
     except (NativeSourceError, Refused, KeyError, ValueError, OSError):
         return None
 
 
-def native_work_time(run, *, actor=None, thread=None, tokens=False):
+def native_work_time(run, *, actor=None, thread=None, tokens=False, models=False):
     actor = actor or run.actor
     if actor.agent != 'opencode':
-        return codex_work_time(run,actor=actor,thread=thread,tokens=tokens)
+        return codex_work_time(run,actor=actor,thread=thread,tokens=tokens,models=models)
     import httpx
     from types import SimpleNamespace
     from .core.commands import Refused
@@ -161,6 +181,7 @@ def native_work_time(run, *, actor=None, thread=None, tokens=False):
         return None
     covered, spans, unfinished, progress = [], [], [], []
     usage = []
+    observations = []
     complete = True
     for row in rows:
         timing = row.get('time') if isinstance(row,dict) else None
@@ -175,6 +196,11 @@ def native_work_time(run, *, actor=None, thread=None, tokens=False):
             continue
         covered.append(start)
         if role == 'assistant':
+            if models:
+                model=_agent_label(row.get('modelID'),255)
+                if model:
+                    observations.append((start,model,_agent_label(row.get('providerID'),160),
+                                         _agent_label(row.get('reasoningEffort') or row.get('variant'),80)))
             if end and end >= start:
                 spans.append((start,end))
                 progress.append((end,row.get('id'),True))
@@ -185,6 +211,8 @@ def native_work_time(run, *, actor=None, thread=None, tokens=False):
             else:
                 unfinished.append(start)
     timing = (min(covered) if complete else None,spans,unfinished,(),progress) if covered else None
+    if models:
+        return timing,tuple(usage),tuple(observations)
     return (timing, tuple(usage)) if tokens else timing
 
 

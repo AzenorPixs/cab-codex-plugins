@@ -743,6 +743,22 @@ class CycleTokenUsage(models.Model):
         constraints=[models.UniqueConstraint(fields=['project','native_key'],name='cab_cycle_token_native_event')]
 
 
+class SessionAgent(models.Model):
+    session=models.ForeignKey(CodingSession,on_delete=models.CASCADE,related_name='observed_agents')
+    stage_passage=models.ForeignKey(ChangeStageIteration,on_delete=models.CASCADE,related_name='observed_agents')
+    role=models.CharField(max_length=12,choices=[('coder','Codage'),('orchestrator','Orchestrateur')])
+    model=models.CharField(max_length=255)
+    reasoning=models.CharField(max_length=80,blank=True)
+    native_provider=models.CharField(max_length=160,blank=True)
+    provider=models.ForeignKey(AgentProvider,null=True,on_delete=models.SET_NULL,related_name='+')
+    observed_at=models.DateTimeField()
+    token_costs=models.JSONField(default=dict,db_default={})
+
+    class Meta:
+        db_table='sessions_agents'
+        constraints=[models.UniqueConstraint(fields=['stage_passage','role','model','reasoning','native_provider'],name='cab_session_agent_identity')]
+
+
 class MeasurementPeriod(models.Model):
     session=models.ForeignKey(CodingSession,on_delete=models.PROTECT,related_name='measurement_periods')
     run=models.ForeignKey(Run,on_delete=models.PROTECT,related_name='measurement_periods')

@@ -226,7 +226,7 @@ def split_time(start, end, native, operations, *, wait_only=False, work_from=Non
     return (work or None), None
 
 
-def _timeline(run, *, local_only=False, usage=None):
+def _timeline(run, *, local_only=False, usage=None, agent_observations=None):
     from .core.models import Event, Operation
     from .measurement_sources import native_work_time, native_time
     from .cycle_tokens import native_sources
@@ -244,11 +244,15 @@ def _timeline(run, *, local_only=False, usage=None):
         trace = None
         if not local_only or actor.agent in ('codex','codex-cli'):
             identity = {'actor': actor, 'thread': thread} if role == 'orchestrator' else {}
+            if collect and agent_observations is not None:
+                identity['models']=True
             trace = native_work_time(run, tokens=collect, **identity)
         if trace is not None and collect:
-            trace, occurrences = trace
+            trace, occurrences, *models = trace
             if occurrences:
                 usage.append((role, actor.pk, thread, occurrences))
+            if models and models[0] and trace:
+                agent_observations.append((role,trace,models[0]))
         traces.append(trace)
     return events, traces[0], intervals, traces
 
@@ -419,7 +423,7 @@ def visible_description(description):
                                                  sentence,re.IGNORECASE)) or None
 
 
-def summarize(change,run=None,*, projection=None,local_only=False,usage=None) -> dict:
+def summarize(change,run=None,*, projection=None,local_only=False,usage=None,agent_observations=None) -> dict:
     """Détails observés et travail attesté, distinct du temps mural."""
     rows=ChangeStageIteration.objects.filter(stage__change=change).select_related('stage','run').order_by('started_at','pk')
     if run is not None:rows=rows.filter(run=run)
@@ -435,7 +439,7 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None) ->
     cycle_evidence=defaultdict(list)
     run_traces={}
     for current in runs:
-        events, native, operations, traces = _timeline(current,local_only=local_only,usage=usage)
+        events, native, operations, traces = _timeline(current,local_only=local_only,usage=usage,agent_observations=agent_observations)
         run_traces[current.pk]=traces
         current_rows = rows_by_run[current.pk]
         present = {r.stage.key for r in current_rows if r.parent_id is None}

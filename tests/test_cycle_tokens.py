@@ -9,13 +9,23 @@ from django.utils import timezone
 import test_stage_protocol as fixtures
 
 from cab_platform.change_stage_metrics import save_cycle_summary, summarize
-from cab_platform.core.models import Actor, ChangeStage, ChangeStageIteration, CycleTokenUsage, RunCycleIteration
-from cab_platform.cycle_tokens import store_usage
+from cab_platform.core.models import Actor, AgentModel, AgentProvider, ChangeStage, ChangeStageIteration, CycleTokenUsage, RunCycleIteration, SessionAgent
+from cab_platform.cycle_tokens import store_session_agents, store_usage
 from cab_platform.measurement_sources import _opencode_usage, _time_lines
 from cab_platform.time_projection import refresh
 
 
 class NativeTokenTests(unittest.TestCase):
+    def test_codex_observes_only_model_provider_and_reasoning(self):
+        rows=[('session_meta',{'model_provider':'openai','other':'secret-unused'}),
+              ('turn_context',{'model':'gpt-fixture','effort':'medium','instructions':'never exported'}),
+              ('event_msg',{'type':'thread_settings_applied','settings':{'model':'gpt-next','reasoning_effort':'high'}})]
+        data=b''.join(json.dumps({'timestamp':f'2026-11-22T12:00:{i:02}+00:00','type':kind,'payload':payload}).encode()+b'\n'
+                      for i,(kind,payload) in enumerate(rows))
+        observed=[]
+        _time_lines(BytesIO(data),len(data),models=observed)
+        self.assertEqual([item[1:] for item in observed],[('gpt-fixture','openai','medium'),('gpt-next','openai','high')])
+
     def test_codex_uses_deltas_and_never_invents_missing_cache(self):
         def record(second, total, last=None):
             return {'timestamp':f'2026-11-22T12:00:{second:02}+00:00','type':'event_msg',
@@ -48,6 +58,36 @@ class CycleTokenTests(unittest.TestCase):
     finish=fixtures.ProtocolTests.finish
     begin=fixtures.ProtocolTests.begin
 
+    def test_agents_are_persisted_by_passage_role_and_observed_settings(self):
+        self.begin(1)
+        self.run.refresh_from_db()
+        passage=self.run.stage_iterations.get(parent=None)
+        start=passage.started_at
+        end=start+timedelta(seconds=10)
+        passage.ended_at=end
+        passage.save(update_fields=['ended_at'])
+        first=AgentProvider.objects.create(name='Provider A',api_url='https://a.invalid')
+        second=AgentProvider.objects.create(name='Provider B',api_url='https://b.invalid')
+        for provider in (first,second):
+            AgentModel.objects.create(provider=provider,identifier='fixture/model',source={},details={})
+        trace=(start,[(start,end)],(),(),())
+        observations=[(start-timedelta(seconds=2),'ancienne/session','','low'),
+                      (start+timedelta(seconds=1),'fixture/model','provider b','high'),
+                      (start+timedelta(seconds=3),'fixture/model','','')]
+        sources=[('coder',trace,observations)]
+        self.assertTrue(store_session_agents(self.run,sources))
+        self.assertFalse(store_session_agents(self.run,sources))
+        rows=SessionAgent.objects.filter(stage_passage=passage).order_by('observed_at')
+        self.assertEqual(list(rows.values_list('model','provider_id','reasoning')),
+                         [('fixture/model',second.pk,'high'),('fixture/model',None,'')])
+        row=rows.first()
+        row.token_costs={'input_tokens':'0 €','unauthorized':'not projected'}
+        row.save(update_fields=['token_costs'])
+        view=summarize(self.run.change_record,self.run)
+        agents=view['stages'][0]['iterations'][0]['agents']
+        self.assertEqual([(item['role'],item['provider'],item['costs']) for item in agents],
+                         [('coder','Provider B',{'input_tokens':'0 €'}),('coder',None,{})])
+
     def test_persisted_rollups_and_live_invalidation(self):
         self.begin(1)
         self.run.refresh_from_db()
@@ -79,7 +119,9 @@ class CycleTokenTests(unittest.TestCase):
                                                [(usage[1][0], 'one', (10,2,0))])]))
         historical_measurement = CycleTokenUsage.objects.get(run=self.run)
         self.assertIsNone(historical_measurement.cache_write_tokens)
-        def native(run, *, actor=None, thread=None, tokens=False):
+        def native(run, *, actor=None, thread=None, tokens=False, models=False):
+            if models:
+                return None,parent_usage if thread else usage,()
             return (None, parent_usage if thread else usage) if tokens else None
 
         with patch('cab_platform.measurement_sources.native_work_time',side_effect=native):

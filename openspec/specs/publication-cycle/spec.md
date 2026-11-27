@@ -376,7 +376,7 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 #### Scenario: Colonnes dans les douze onglets
 
 - **WHEN** un onglet d’étape affiche ses passages
-- **THEN** le tableau affiche Cycle, Début, Fin, CAB, Agents et Attentes, puis Te, CTe, Ts, CTs, Tr, CTr, Tw et CTw pour chaque rôle applicable, puis État
+- **THEN** le tableau affiche Cycle, Début, Fin, CAB, Agents et Attentes, puis Te, Ts, Tr, Tw, puis CTe, CTs, CTr et CTw pour chaque rôle applicable, puis État
 - **AND** les colonnes CTe, CTs, CTr et CTw affichent les coûts fournis pour le passage et restent vides quand ces coûts sont indisponibles
 - **AND** le texte complet d’une valeur dépassant sa colonne reste consultable dans son infobulle
 
@@ -496,3 +496,23 @@ Dans les douze onglets d’étape, le bloc avant Cycle MUST présenter les duré
 
 - **WHEN** les trois colonnes ne tiennent plus dans le bloc
 - **THEN** elles sont empilées avec une séparation horizontale et restent accessibles
+
+### Requirement: Agents observés des passages d’étape
+
+CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et niveaux de raisonnement observés pour les passages et rôles applicables. CAB MUST résoudre le fournisseur depuis le catalogue des modèles et fournisseurs lorsque le rapprochement est univoque. Le détail du RUN MUST afficher Agents directement sous Cycle dans le même espace de défilement.
+
+#### Scenario: Observer le rôle et les réglages
+
+- **WHEN** un modèle est observé pendant un tour qui recoupe un passage
+- **THEN** CAB conserve le modèle, le raisonnement disponible et le type « Codage » ou « Orchestrateur » établi dans le RUN
+- **AND** une nouvelle collecte des mêmes réglages ne duplique pas la ligne
+- **AND** un fournisseur ambigu ou un raisonnement absent demeure indisponible
+
+#### Scenario: Aligner Agents sous Cycle
+
+- **WHEN** le tableau Cycle d’un onglet d’étape est affiché
+- **THEN** Agents suit immédiatement Cycle, avec les mêmes trois premières colonnes et les mêmes largeurs
+- **AND** Type est dimensionné pour « Orchestrateur » suivi de deux espaces et Fournisseurs précède les quatre coûts
+- **AND** les quatre coûts suivent les bords et largeurs du groupe de coûts le plus à droite de Cycle
+- **AND** Raisonnement précède Agents, dont le nom de modèle occupe le reste sans retour à la ligne
+- **AND** un coût par type indisponible reste vide
