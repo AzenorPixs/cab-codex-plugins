@@ -2731,6 +2731,14 @@ afficher le lien vers le RUN de remplacement.
 - **THEN** la ligne Sessions et le détail du RUN bloqué indiquent que le change est clôturé et donnent accès au RUN de reprise
 - **AND** l’état, le reçu et les preuves du blocage sont conservés.
 
+#### Scenario: Liaison automatique lors de la clôture
+- **WHEN** CAB scelle une reprise directe livrée et trouve un seul RUN bloqué antérieur encore sans lien pour le même acteur, projet, change et SID
+- **THEN** CAB vérifie les reçus et enregistre le lien vers la reprise lors du scellement, sans appel de l’agent.
+
+#### Scenario: Liaison ambiguë ou déjà établie
+- **WHEN** plusieurs blocages antérieurs sans lien correspondent à la même reprise, ou un lien vers cette reprise existe déjà
+- **THEN** CAB conserve les liens et les reçus existants et n’ajoute aucune association automatique.
+
 ### Requirement: Index de session dans un répertoire de groupe projet
 
 CAB MUST reconnaître le répertoire d’index partagé avec le groupe du projet

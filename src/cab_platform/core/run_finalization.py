@@ -1,11 +1,14 @@
 """Automate déterministe ; validation par politique, jamais une revue LLM simulée."""
 from pathlib import Path
+import logging
 from django.db import transaction
 from django.utils import timezone
 from . import commands as c,run_evidence as evidence
 from .models import Event,EvidenceProducer,FinalizationPlan,Operation,Run,GitFileReservation
 from cab_platform.finalization_contract import next_actions
 from cab_platform.change_stage_metrics import statistics_at_closure
+
+log = logging.getLogger(__name__)
 
 def dossier(run,plan,*,allow_terminal_git=False):
     from .run_lifecycle import archive_state,guard,require_closed_change
@@ -230,4 +233,10 @@ def process(run_id):
         plan.receipt=receipt;plan.phase='CLOSED';plan.missing=[];plan.save()
         run.review={**run.review,'closure':receipt};run.state='CLOSED';run.stage=run.cycle_steps;run.phase='CLOSED';run.save(update_fields=['review','state','stage','phase','updated'])
         c.event(run,'run-closed',receipt)
+        from .run_replacement import link_recovery_on_close
+        try:
+            link_recovery_on_close(run)
+        except (c.Refused, OSError, ValueError) as error:
+            log.warning('Association automatique du RUN bloqué indisponible',
+                        extra={'run_id':run.run_id, 'code':getattr(error,'code',type(error).__name__)})
         return receipt
