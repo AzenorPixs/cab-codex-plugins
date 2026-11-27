@@ -2,20 +2,20 @@
 
 <!-- CAB_STATISTICS_CURRENT_V1 -->
 
-Change : `show-session-agent-catalog-rates` · état local : `working`. Les valeurs absentes restent N/A.
+Change : `show-session-agent-catalog-rates` · état local : `archived`. Les valeurs absentes restent N/A.
 
 ## 1. Statistiques générales et décisions
 
 | Mesure | Valeur | Preuve ou limite |
 | --- | --- | --- |
-| Durée globale | 2777.794276 | Bornes serveur et union des périodes fermées. |
-| Durée hors pauses et attentes | 2777.794276 | Bornes serveur et union des périodes fermées. |
-| Tokens d’entrée | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
-| Tokens de sortie | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
-| Tokens de raisonnement | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
-| Tokens de cache lus | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
-| Tokens de cache écrits | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
-| Total natif des tokens | N/A | Une période ouverte, indisponible ou un champ absent empêche un total complet. |
+| Durée globale | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Durée hors pauses et attentes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens d’entrée | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de sortie | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de raisonnement | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache lus | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tokens de cache écrits | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Total natif des tokens | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Compactions achevées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes d’autorisation distinctes | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Demandes approuvées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
@@ -30,6 +30,11 @@ Change : `show-session-agent-catalog-rates` · état local : `working`. Les vale
 
 
 Provenance : change-periods:d8b34117395b2b1c4a64efd032aff5c9f96197ea0783c47a0c86c1809e796960
+
+| RUN | Rôle | Session | Fin native | Travail (s) | Entrants | Sortants | Cache lu | Cache écrit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCM-AGENT-CATALOG-RATES-REPRISE-20261127 | coder | 01a2169e-09f0-75f2-a401-a040bb7e8172 | 2026-11-27T21:12:11.627000+00:00 | 443.783579 | 9010360 | 16515 | 8977536 | 0 |
+
 
 ## 2. Messages et outils
 
@@ -59,15 +64,15 @@ Provenance : change-periods:d8b34117395b2b1c4a64efd032aff5c9f96197ea0783c47a0c86
 | Commandes exécutées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Commandes en échec | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests exécutés dans le bilan final | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux réussis | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tests finaux échoués | N/A | Mesure absente ou périmètre exhaustif non identifiable |
+| Tests exécutés dans le bilan final | 164 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux réussis | 164 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
+| Tests finaux échoués | 0 | Reçus de runners unittest terminés, référencés par la revue ; aucune déclaration LLM. |
 | Fichiers ayant passé un contrôle syntaxique | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec standard échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes réussies | N/A | Mesure absente ou périmètre exhaustif non identifiable |
 | Validations OpenSpec strictes échouées | N/A | Mesure absente ou périmètre exhaustif non identifiable |
-| Tâches OpenSpec prouvées et terminées | 2 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
+| Tâches OpenSpec prouvées et terminées | 3 | Cases locales de tasks.md ; ne valent pas validation du RUN. |
 
 
 ## 5. Accès web
@@ -92,4 +97,4 @@ Provenance : change-periods:d8b34117395b2b1c4a64efd032aff5c9f96197ea0783c47a0c86
 
 
 <!-- CAB_STATISTICS_CURRENT_END -->
-<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "9240726441277ab34e26dbb4b3bdf206744a1048fef49b46ac132b85141e4aff", "generated_at": "2026-11-27T20:48:16.654587+00:00", "revision": "9240726441277ab34e26dbb4b3bdf206744a1048fef49b46ac132b85141e4aff", "scope": "change"} -->
+<!-- CAB_STATISTICS_DOCUMENT_V1 {"content_sha256": "36da715259e2e604bb71f80cf35a88ffc9b642e0508096a67779c0bf33707749", "generated_at": "2026-11-27T21:12:23.882396+00:00", "revision": "36da715259e2e604bb71f80cf35a88ffc9b642e0508096a67779c0bf33707749", "scope": "change"} -->

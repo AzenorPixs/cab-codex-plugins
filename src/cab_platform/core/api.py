@@ -594,8 +594,9 @@ def web_login(request,body:Login):
 def web_logout(request):logout(request);return {'authenticated':False}
 
 def run_data(run):
+    from .run_replacement import closed_recovery
     change=run.change_record if run.state!='CANCELLED_BEFORE_START' else None
-    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'cycle_profile':run.configuration.get('cycle_profile',''),'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement')}
+    return {'project_id':run.project_id,'run_id':run.run_id,'session_id':run.session_id,'mode':run.mode,'change':run.change,'state':run.state,'suspension':run.suspension,'generation':run.generation,'cycle_steps':run.cycle_steps,'cycle_profile':run.configuration.get('cycle_profile',''),'stage':run.stage,'phase':run.phase or None,'tasks_done':change.tasks_done if change else None,'tasks_total':change.tasks_total if change else None,'updated':run.updated.isoformat(),'replacement':run.configuration.get('replacement'),'closed_recovery':closed_recovery(run)}
 
 def operation_data(op):
     resolution=Event.objects.filter(run=op.run,kind='operation-reconciled-stopped',data__operation_id=op.pk).order_by('-pk').first()
@@ -1507,6 +1508,9 @@ def command(request,body:Command):
     if name=='run.cancel_replaced':
         from .run_replacement import reconcile
         return reconcile(actor,data)
+    if name=='run.link_recovery':
+        from .run_replacement import link_recovery
+        return link_recovery(actor,data)
     if name=='run.progress':return commands.progress(actor,data)
     if name=='run.mandates.add':
         from cab_platform.stage_actions import add_mandates

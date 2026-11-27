@@ -94,7 +94,9 @@ def terminal_proof(run):
 def evaluate(run):
     result={'project_id':run.project_id,'run_id':run.run_id,'state':run.state,'suspension':run.suspension,'action':'blocked','reasons':[],'archive_allowed':False,'historical':False}
     from .models import FinalizationPlan
-    from .run_replacement import CANCELLED
+    from .run_replacement import CANCELLED, closed_recovery
+    if run.state == 'BLOCKED':
+        result['closed_recovery'] = closed_recovery(run)
     if run.state==CANCELLED:
         result.update(action='cancelled',replacement=run.configuration.get('replacement'))
         return {**result,'evaluation_digest':c.digest(result)}

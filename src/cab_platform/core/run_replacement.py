@@ -59,3 +59,51 @@ def reconcile(actor, data):
               'run-replacement-not-delivered',409)
     require_closed_change(successor)
     return cancelled(run,successor,actor,c.identifier(data['request_id']))
+
+
+@transaction.atomic
+def link_recovery(actor, data):
+    """Relie un blocage conservé à une reprise achevée sur preuves."""
+    c.require(set(data) == {'project_id', 'run_id', 'recovery_run_id', 'request_id'},
+              'run-recovery-fields-invalid', 400)
+    request_id = c.identifier(data['request_id'])
+    run = c.run_scope(actor, data['run_id'], data['project_id'], lock=True, owner=False)
+    c.require(actor.role == 'admin' or run.actor_id == actor.pk, 'run-recovery-authority-required', 403)
+    blocked = run.review.get('closure', {})
+    c.require(run.state == 'BLOCKED' and blocked.get('branch') == 'BLOQUÉ',
+              'run-recovery-not-blocked')
+    c.require(not run.suspension and c.no_pending(run)
+              and not Lease.objects.filter(run=run, state='HELD').exists(),
+              'closure-effects-protected')
+    successor = c.run_scope(actor, data['recovery_run_id'], data['project_id'], lock=True, owner=False)
+    c.require(run.pk != successor.pk and run.mode == successor.mode == 'direct'
+              and run.actor_id == successor.actor_id and run.session_id == successor.session_id
+              and run.change_record_id is not None and run.change_record_id == successor.change_record_id
+              and successor.created > run.created, 'run-recovery-divergent')
+    from .run_lifecycle import archive_state, terminal_proof
+    c.require(successor.state == 'CLOSED', 'run-recovery-not-closed')
+    closure = terminal_proof(successor)['receipt']
+    c.require(closure.get('branch') == 'TERMINÉ' and closure.get('delivered') is True
+              and GitDelivery.objects.filter(run=successor, state='COMPLETED',
+                   plan__source_revision=closure.get('source_revision')).exists(),
+              'run-recovery-not-delivered')
+    archive, _ = archive_state(successor)
+    link = {'run_id': successor.run_id, 'request_id': request_id,
+            'closure_receipt': closure['receipt_id'], 'archive_path': archive,
+            'blocked_receipt': blocked['receipt_id']}
+    previous = run.configuration.get('closed_recovery')
+    if previous:
+        c.require(previous == link, 'run-recovery-link-conflict')
+        return previous
+    run.configuration = {**run.configuration, 'closed_recovery': link}
+    run.save(update_fields=['configuration'])
+    c.event(run, 'run-recovery-linked', {**link, 'authority': actor.pk})
+    return link
+
+
+def closed_recovery(run):
+    link = run.configuration.get('closed_recovery')
+    if link and Run.objects.filter(project_id=run.project_id, run_id=link['run_id'],
+                                  state='CLOSED', review__closure__receipt_id=link['closure_receipt']).exists():
+        return {'run_id': link['run_id'], 'closure_receipt': link['closure_receipt']}
+    return None

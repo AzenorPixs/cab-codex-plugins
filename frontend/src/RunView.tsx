@@ -6,7 +6,7 @@ import {TabBar} from './InterfaceSettings'
 import {useRunElectric} from './useRunElectric'
 import {StageOverview,CycleIterations,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
 import {api} from './api'
-import {reasonText,runStateLabel,runProtection} from './SessionLifecycle'
+import {ClosedRecoveryLink,reasonText,runStateLabel,runProtection,type ClosedRecovery} from './SessionLifecycle'
 
 export const cycleStages=['Initialisation','Prévol','Analyse','Cadrage','Spécification','Implémentation','Vérifications','Revue','Archivage','Statistiques','Clôture']
 const versionStages=[...cycleStages.slice(0,5),'Lecture du skill Version',...cycleStages.slice(5)]
@@ -19,7 +19,7 @@ const tabs = [
   {id:'cycle',label:'Étapes du cycle'},
   {id:'change',label:'Change'},
 ] as const
-type RunData={mode?:string;cycle_summary?:CycleSummary;replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
+type RunData={closed_recovery?:ClosedRecovery|null;mode?:string;cycle_summary?:CycleSummary;replacement?:{run_id:string}|null;run_id:string;session_id:string;change:string;state:string;suspension:string;monitor:{stage_protocol?:{current:{stage:number;attempt:number;validated:boolean}|null;reports:{stage:number;attempt:number;state:string;error?:string}[]}|null;last_reminder?:{message:string;state:string;at:string}|null;stage:number|null;cycle_steps?:number;stages?:string[];phase:string|null;pending_requests:number|null;native_activity:{source:string;observed_at:string}|null;current_mandate:{id:string;paths:string[];criteria:string[]}|null;terminal_gate:Record<string,unknown>|null;last_proven_milestone:{label:string;at:string}|null;waiting_cause:string|null;blocking_runs:string[];change_record:{identifier:string;source_path:string;source_state:string;tasks:Task[];tasks_done:number|null;tasks_total:number|null;tasks_sha256:string;observed_at:string|null}|null}}
 export function RunView({projectId,runId,routeId}:{projectId:string;runId:string;routeId?:string}){
   const live=useRunElectric(projectId,runId)
   const [selectedStage,setSelectedStage]=useState(0)
@@ -124,6 +124,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
   ]
   return <article className="run-view run-view-detail">
     <Link to="/projects/$projectId/sessions" params={{projectId:routeId||projectId}} className="action-link">← Sessions du projet</Link>
+    {run.closed_recovery&&<p><ClosedRecoveryLink projectId={routeId||projectId} recovery={run.closed_recovery}/></p>}
     {!live&&<p role="status" className="configuration-help">Synchronisation temps réel…</p>}
     <section className="run-session-block">
       <TabBar items={tabs} selected={selectedTab} select={setSelectedTab} prefix={prefix} label="Vue de la session"/>

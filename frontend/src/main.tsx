@@ -21,7 +21,7 @@ import {ProjectIncidents} from './ProjectIncidents'
 import {ProjectReservations} from './ProjectReservations'
 import {UpdateBadge,HomeVersionCheck,SystemUpdatePage} from './SystemUpdate'
 import {RunView,stageLabel} from './RunView'
-import {SessionActions,SessionArchives,useEvaluations,runStateLabel,runProtection} from './SessionLifecycle'
+import {ClosedRecoveryLink,SessionActions,SessionArchives,useEvaluations,runStateLabel,runProtection} from './SessionLifecycle'
 import {McpConnectionsProvider,McpVersions} from './McpConnections'
 import {CabVersionProvider,useCabVersion} from './CabVersion'
 import {Notifications} from './Notifications'
@@ -66,7 +66,9 @@ function Projects({children}:{children:(projects:Project[])=>React.ReactNode}){
 }
 function SessionRows({project,rows,showProject}:{project:Project;rows:Session[];showProject:boolean}){
   const evaluations=useEvaluations(project.id)
-  return <>{rows.map(row=><tr key={`${project.id}:${row.run_id}`}>{showProject&&<td data-label="Projets"><Link className="text-button" to="/projects/$projectId" params={{projectId:project.identifier||project.id}}>{project.identifier||project.id}</Link></td>}<td data-label="RUN / Session"><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.identifier||project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td data-label="Change">{row.change}</td><td data-label="Profil">{row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe'}</td><td data-label="État"><span className="badge">{runStateLabel(row.state,row.suspension)}</span>{runProtection(row.suspension)&&<small className="protection-label">{runProtection(row.suspension)}</small>}</td><td data-label="Étape">{stageLabel(row.stage,row.cycle_steps,undefined,row.cycle_profile)}</td><td data-label="Tâches réalisées">{row.mode==='service'?'Sans objet':row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td data-label="Actualisation">{new Date(row.updated).toLocaleString('fr-FR')}</td><td data-label="Actions"><SessionActions projectId={project.id} runId={row.run_id} evaluation={evaluations.data?.evaluations.find(item=>item.run_id===row.run_id)}/></td></tr>)}</>
+  return <>{rows.map(row=>{
+    const evaluation=evaluations.data?.evaluations.find(item=>item.run_id===row.run_id)
+    return <tr key={`${project.id}:${row.run_id}`}>{showProject&&<td data-label="Projets"><Link className="text-button" to="/projects/$projectId" params={{projectId:project.identifier||project.id}}>{project.identifier||project.id}</Link></td>}<td data-label="RUN / Session"><Link className="text-button" to="/projects/$projectId/runs/$runId" params={{projectId:project.identifier||project.id,runId:row.run_id}}>{row.run_id}</Link><small>{row.session_id}</small></td><td data-label="Change">{row.change}{evaluation?.closed_recovery&&<small><ClosedRecoveryLink projectId={project.identifier||project.id} recovery={evaluation.closed_recovery}/></small>}</td><td data-label="Profil">{row.mode==='service'?'Service':row.mode==='piloted'?'Pilotée':'Directe'}</td><td data-label="État"><span className="badge">{runStateLabel(row.state,row.suspension)}</span>{runProtection(row.suspension)&&<small className="protection-label">{runProtection(row.suspension)}</small>}</td><td data-label="Étape">{stageLabel(row.stage,row.cycle_steps,undefined,row.cycle_profile)}</td><td data-label="Tâches réalisées">{row.mode==='service'?'Sans objet':row.tasks_total===null?'—':`${row.tasks_done}/${row.tasks_total}`}</td><td data-label="Actualisation">{new Date(row.updated).toLocaleString('fr-FR')}</td><td data-label="Actions"><SessionActions projectId={project.id} runId={row.run_id} evaluation={evaluation}/></td></tr>})}</>
 }
 function SessionList({project,projects=[]}:{project?:Project;projects?:Project[]}){
   const pageSize=useTablePageSize('sessions')

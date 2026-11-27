@@ -9,7 +9,13 @@ import {api} from './api'
 import {Shape,ShapeStream} from '@electric-sql/client'
 import type {Project} from './Projects'
 
-export type Evaluation={run_id:string;action:string;state:string;suspension:string;reasons:string[];archive_allowed:boolean;archive_path?:string;evaluation_digest?:string;evidence_digest?:string}
+export type ClosedRecovery={run_id:string;closure_receipt:string}
+export type Evaluation={run_id:string;action:string;state:string;suspension:string;reasons:string[];archive_allowed:boolean;archive_path?:string;evaluation_digest?:string;evidence_digest?:string;closed_recovery?:ClosedRecovery|null}
+
+export function ClosedRecoveryLink({projectId,recovery}:{projectId:string;recovery:ClosedRecovery}){
+  return <Link to="/projects/$projectId/runs/$runId" params={{projectId,runId:recovery.run_id}}
+    title={recovery.closure_receipt}>Change clôturé · RUN de reprise</Link>
+}
 const reasons:Record<string,string>={
   'session-git-index-protected':'L’index Git de cette session doit être conservé tant que sa livraison n’est pas confirmée.',
   'session-not-closed':'La session doit être clôturée sur preuves avant suppression.',

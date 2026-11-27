@@ -16,7 +16,8 @@ _CODEX_USAGE_FIELDS=('input_tokens','output_tokens','cached_input_tokens','cache
 _MAX_TOKEN_COUNT=2**63-1
 _CODEX_LINE_LIMIT = 2 * 1024 * 1024
 _CODEX_COMPACTION = re.compile(
-    rb'\A\s*\{\s*"timestamp"\s*:\s*"[^"\\]{1,64}"\s*,\s*"type"\s*:\s*"compacted"\s*,\s*"payload"\s*:'
+    rb'\A\s*\{\s*"timestamp"\s*:\s*"[^"\\]{1,64}"\s*,\s*'
+    rb'(?:"ordinal"\s*:\s*\d+\s*,\s*)?"type"\s*:\s*"compacted"\s*,\s*"payload"\s*:'
 )
 
 
