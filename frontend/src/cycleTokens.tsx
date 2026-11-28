@@ -40,12 +40,16 @@ function tokenSlot(value:string,fixed:boolean,title?:string){
   return fixed?<FixedStageValue value={value} sample={'99\u202f999,99\u202fM\u00a0\u00a0\u00a0'} title={title}/>:value
 }
 
+export function formatCostValue(value:string|null|undefined){
+  const parts=/^(\d+)(?:\.(\d+))?$/.exec(value??'')
+  if(!parts)return ''
+  const digits=(parts[2]??'').padEnd(3,'0')
+  const cents=BigInt(parts[1])*100n+BigInt(digits.slice(0,2))+(digits[2]>='5'?1n:0n)
+  return `${cents/100n},${String(cents%100n).padStart(2,'0')}`
+}
+
 function tokenCost(costs:CycleTokenCosts|undefined,role:TokenRole,field:TokenField){
-  const value=costs?.[role]?.[field]??''
-  const parts=/^(\d+)(?:\.(\d{1,2}))?$/.exec(value)
-  if(!parts)return value
-  const fraction=parts[2]?.replace(/0+$/,'')
-  return formatter.format(BigInt(parts[1]))+(fraction?','+fraction:'')+'\u202f$'
+  return formatCostValue(costs?.[role]?.[field])
 }
 
 export function TokenColumns({tokens,costs,piloted=false,header=false,includeCosts=false}:{

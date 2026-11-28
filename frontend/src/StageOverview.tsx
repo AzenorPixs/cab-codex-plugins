@@ -1,7 +1,7 @@
 import {useLayoutEffect,useRef,useState,type ReactNode,type RefObject} from 'react'
 import {filterTableRows,TableFiller,TableNavigation,tablePage,useTableSearch} from './TableNavigation'
 import {stageDuration} from './stageDuration'
-import {FixedStageValue,formatTokens,tokenColumnCount,tokenFields,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens,type TokenCounts} from './cycleTokens'
+import {FixedStageValue,formatCostValue,formatTokens,tokenColumnCount,tokenFields,TokenColumns,TokenCostSummary,TokenRoleHeaders,TokenSummary,type CycleTokenCosts,type CycleTokens,type TokenCounts} from './cycleTokens'
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
 type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;started_at?:string;ended_at?:string|null;rates?:TokenCounts}
@@ -136,8 +136,7 @@ function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableE
         <td>{piloted&&agent.role==='orchestrator'?'Orchestrateur':'Codage'}</td>
         <td title={agent.provider||undefined}>{agent.provider||'—'}</td>
         {tokenFields.map(([field])=>{
-          const rate=agent.rates?.[field]
-          const text=rate==null?'':rate.replace('.',',')+'\u202f$/M'
+          const text=formatCostValue(agent.rates?.[field])
           return <td key={field} title={text||undefined}>{text}</td>
         })}
         <td title={agent.reasoning||undefined}>{agent.reasoning||'—'}</td><td title={agent.model}>{agent.model}</td>

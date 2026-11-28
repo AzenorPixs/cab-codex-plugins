@@ -525,14 +525,14 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 #### Scenario: Tarif par identifiant observé
 
 - **WHEN** CAB dispose de l’identifiant natif du modèle d’un codeur ou d’un orchestrateur
-- **THEN** le tableau Agents affiche les tarifs d’entrée, de sortie, de lecture et d’écriture du cache, en dollars par million de tokens, depuis l’entrée exacte de ce fournisseur dans le catalogue
+- **THEN** le tableau Agents affiche les tarifs d’entrée, de sortie, de lecture et d’écriture du cache depuis l’entrée exacte de ce fournisseur dans le catalogue. Chaque cellule affiche le nombre arrondi à deux décimales avec une virgule, sans suffixe monétaire ni mention du million
 - **AND** un tarif nul s’affiche avec sa valeur zéro
 - **AND** une correspondance ambiguë ou incompatible avec le fournisseur observé laisse les tarifs vides
 - **AND** les montants de coût observés restent des données distinctes des tarifs du catalogue
 
 ### Requirement: Coûts des passages calculés en direct
 
-CAB MUST calculer le montant en dollars par rôle et catégorie du passage à partir des tokens natifs déclarés et du tarif catalogue par million du modèle et du fournisseur applicables. CAB MUST stocker les montants par RUN et passage dans `sessions.token_costs`. Le chargement du tableau Cycle et du bloc de coûts de l’étape MUST lire cette projection persistée. Electric MUST signaler toute mise à jour de cette projection via le RUN. Les montants affichés MUST avoir au plus deux décimales.
+CAB MUST calculer le montant en dollars par rôle et catégorie du passage à partir des tokens natifs déclarés et du tarif catalogue par million du modèle et du fournisseur applicables. CAB MUST stocker les montants par RUN et passage dans `sessions.token_costs`. Le chargement du tableau Cycle et du bloc de coûts de l’étape MUST lire cette projection persistée. Electric MUST signaler toute mise à jour de cette projection via le RUN. Les montants affichés dans Cycle et son récapitulatif MUST être rendus avec une virgule et exactement deux décimales, arrondies au plus près, sans suffixe monétaire.
 
 #### Scenario: Modèles successifs dans un même passage
 - **WHEN** CAB observe plusieurs réglages de modèle successifs pour un rôle dans un passage
