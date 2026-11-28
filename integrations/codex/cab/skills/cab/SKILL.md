@@ -175,6 +175,16 @@ rendu périodique au codeur. L’intégration Codex configure le délai du serve
 pour cette attente. Chaque agent utilise son profil privé distinct ; aucun
 jeton SQL ou root n’est transmis au client.
 
+Si `run_stage_begin` indique `telemetry_required`, chaque rôle demandé
+appelle immédiatement `run_stage_action(action="telemetrie")` avec
+l’identifiant de tentative et sa propre identité, avant son travail.
+En piloté, l’orchestrateur transmet la tentative au codeur et chacun confirme
+son rôle. CAB lit le modèle, le raisonnement et les compteurs depuis la
+source native. Examiner le reçu et `run_stage_status` avant de poursuivre.
+Avec `PENDING`, traiter les champs signalés et vérifier de nouveau la même
+tentative. Zéro est recevable s’il provient de la source. Une reprise d’étape
+ouvre une nouvelle tentative et requiert des confirmations distinctes.
+
 Après archivage d’un RUN direct, utiliser `run_reconcile_archive` (ou
 `cab call run.reconcile_archive`) avec l’archive exacte et le framing_digest
 courant. Aucun effet non terminal ni bail détenu ; identités, gel et reçus

@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Corriger la valorisation des tokens Codex lus ou écrits en cache et intégrer la sortie de raisonnement OpenCode au coût de sortie. Exiger une confirmation native du modèle, du raisonnement et des compteurs au début de chaque tentative des nouveaux RUN.
+
 - Vérifier la collecte des modèles et des tokens à chaque étape, garder Implémentation en attente des compteurs natifs quand du temps agent lui est alloué et ventiler le temps du tableau Actions. Porter les tarifs et coûts à quatre décimales avec des colonnes alignées.
 
 - Réduire le coût CPU du service CAB en regroupant les événements projet, en évitant les synchronisations de métadonnées inchangées et en bornant les balayages des clôtures historiques et des connecteurs MCP.

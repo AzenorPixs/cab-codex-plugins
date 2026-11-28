@@ -235,8 +235,16 @@ def declare(actor,data):
               <= {'project_id','run_id','request_id','attempt','action','text','mandates','blocker_path'},
               'stage-action-fields-invalid',400)
     from .stage_protocol import authority, enabled
+    from .stage_telemetry import CONFIRMATION, confirmation_evidence, confirmation_role, confirmation_roles, confirmed_roles
     run=c.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)
-    c.require(enabled(run) and authority(actor,run),'stage-agent-authority-required',403)
+    c.require(enabled(run),'stage-agent-authority-required',403)
+    action = data['action']
+    roles = confirmation_roles(run)
+    role = confirmation_role(actor, run)
+    if action == CONFIRMATION:
+        c.require(role in roles,'stage-agent-authority-required',403)
+    else:
+        c.require(authority(actor,run),'stage-agent-authority-required',403)
     current=_current(run)
     key=c.identifier(data['request_id'])
     fingerprint=c.digest(data)
@@ -249,14 +257,25 @@ def declare(actor,data):
     c.require(type(data['attempt']) is int and data['attempt']==current.get('attempt') and not current.get('validated'),
               'stage-attempt-not-current')
     name=keys_for(run)[current['stage']-1]
-    c.require(name!='vacant','stage-action-not-allowed',400)
-    action=data['action']
-    c.require(isinstance(action,str) and (action in AGENT_ACTIONS[name] or action=='blocage'),'stage-action-not-allowed',400)
+    c.require(isinstance(action,str) and (
+        action == CONFIRMATION or name != 'vacant' and (action in AGENT_ACTIONS[name] or action == 'blocage')
+    ),'stage-action-not-allowed',400)
+    confirmed = confirmed_roles(run, current['attempt']) if roles else set()
+    if action not in (CONFIRMATION, 'blocage'):
+        c.require(confirmed.issuperset(roles), 'stage-telemetry-confirmation-required')
     at=timezone.now()
     parent=_parent(run,name,at,latest=True)
     c.require(parent is not None,'stage-parent-not-observed')
     receipt={'attempt':current['attempt'],'request_id':key,'actor':actor.pk}
-    label=AGENT_ACTIONS[name].get(action,'Bilan de blocage rédigé')
+    label=AGENT_ACTIONS.get(name,{}).get(action,'Bilan de blocage rédigé')
+    if action == CONFIRMATION:
+        c.require(role not in confirmed, 'stage-telemetry-already-confirmed')
+        c.require(not ({'mandates', 'blocker_path'} & data.keys()), 'stage-action-fields-invalid', 400)
+        evidence, missing = confirmation_evidence(run, role)
+        if missing:
+            return {'attempt':current['attempt'], 'action':action, 'role':role, 'state':'PENDING', 'missing':missing}
+        receipt.update(evidence, action=action)
+        label = 'Télémétrie native confirmée'
     if action=='mandats':
         provided=normalize_mandates(data.get('mandates'))
         c.require(set(provided)==set(mandates_for(run)),'stage-mandates-divergent')
@@ -275,6 +294,8 @@ def declare(actor,data):
     row=_capture(run,parent,action,label,'agent','agent:'+key,at,'COMPLETED',receipt)
     result={'id':row.pk,'attempt':current['attempt'],'action':action,'state':row.state,'at':at.isoformat(),
             **({'mandates':receipt['mandates']} if 'mandates' in receipt else {})}
+    if action == CONFIRMATION:
+        result['evidence'] = evidence
     c.event(run,'stage-action-declared',{'request_id':key,'fingerprint':fingerprint,'result':result})
     return result
 
@@ -285,6 +306,10 @@ def catalogue(actor,data):
     name=_stage_name(run)
     options=dict(AGENT_ACTIONS.get(name,{}))
     if name and name!='vacant':options['blocage']='Bilan de blocage rédigé'
+    from .stage_telemetry import CONFIRMATION, confirmation_role, confirmation_roles
+    from .stage_protocol import enabled
+    if name and enabled(run) and confirmation_role(actor, run) in confirmation_roles(run):
+        options[CONFIRMATION] = 'Confirmer la télémétrie native de son rôle'
     return {'stage':name,'attempt':current.get('attempt'),'agent_actions':options,
             'mandates':mandates_for(run)}
 

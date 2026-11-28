@@ -142,6 +142,52 @@ def _catalog_rates(summary):
     return rates
 
 
+def _codex_billable_input(counts):
+    entered, _, read, written = counts
+    if entered is None or read is None or written is None or read + written > entered:
+        return None
+    return entered - read - written
+
+
+def _cost_counts(run):
+    query = CycleTokenUsage.objects.filter(run=run)
+    counts = token_totals(query, 'stage_passage_id')
+    codex_roles = {role for role, actor, _ in native_sources(run) if actor.agent in ('codex', 'codex-cli')}
+    if not codex_roles:
+        return counts
+    billable = defaultdict(lambda: 0)
+    incomplete = set()
+    for passage, role, *values in query.filter(role__in=codex_roles).values_list(
+        'stage_passage_id', 'role', *USAGE_FIELDS,
+    ).iterator():
+        key = (passage, role)
+        amount = _codex_billable_input(values)
+        if amount is None:
+            incomplete.add(key)
+        else:
+            billable[key] += amount
+        entered, _, read, written = values
+        if entered is not None:
+            for field, value, other in (
+                ('cache_read_tokens', read, written), ('cache_write_tokens', written, read),
+            ):
+                cache_key = (*key, field)
+                if value is None or value + (other or 0) > entered:
+                    incomplete.add(cache_key)
+        else:
+            for field, value in (('cache_read_tokens', read), ('cache_write_tokens', written)):
+                if value is None:
+                    incomplete.add((*key, field))
+    for (passage,), roles in counts.items():
+        for role in codex_roles.intersection(roles):
+            key = (passage, role)
+            roles[role]['input_tokens'] = None if key in incomplete else str(billable[key])
+            for field in USAGE_FIELDS[2:]:
+                if (*key, field) in incomplete:
+                    roles[role][field] = None
+    return counts
+
+
 def store_session_agents(run, sources):
     """Conserve les réglages natifs applicables aux tours qui recoupent un passage."""
     if not sources or not run.coding_session_id:
@@ -234,7 +280,7 @@ def store_cycle_costs(run, session):
             rates = _catalog_rates(entry[2]) if entry else {}
             segments[key].append((duration, rates))
 
-    counts = token_totals(CycleTokenUsage.objects.filter(run=run), 'stage_passage_id')
+    counts = _cost_counts(run)
     costs = defaultdict(dict)
     with localcontext() as context:
         context.prec = 80

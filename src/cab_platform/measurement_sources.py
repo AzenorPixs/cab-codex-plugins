@@ -111,11 +111,11 @@ def _time_lines(stream, size, usage=None, models=None):
             covered_from = covered_from or stamp
             provider = _agent_label(payload.get('model_provider'),160) or provider
         if models is not None and ('turn_context' == row.get('type') or 'thread_settings_applied' in (row.get('type'),payload.get('type'))):
-            settings=payload.get('settings')
-            settings=settings if isinstance(settings,dict) else payload
+            settings = payload.get('thread_settings', payload.get('settings'))
+            settings = settings if isinstance(settings, dict) else payload
             model=_agent_label(settings.get('model'),255)
             effort=_agent_label(settings.get('reasoning_effort') or settings.get('effort'),80)
-            provider=_agent_label(settings.get('model_provider') or settings.get('provider'),160) or provider
+            provider=_agent_label(settings.get('model_provider_id') or settings.get('model_provider') or settings.get('provider'),160) or provider
             if model or (effort and last_model):
                 last_model=model or last_model
                 models.append((stamp,last_model,provider,effort))
@@ -245,8 +245,11 @@ def _opencode_usage(row):
     if not isinstance(row.get('id'), str) or not row['id'] or not isinstance(counters, dict):
         return None
     cache = counters.get('cache')
-    counts = (*_usage_counts(counters, ('input','output')),
-              *_usage_counts(cache if isinstance(cache, dict) else {}, ('read','write')))
+    input_tokens, output_tokens, reasoning_tokens = _usage_counts(counters, ('input', 'output', 'reasoning'))
+    # OpenCode sépare le raisonnement de la sortie textuelle.
+    if output_tokens is not None and reasoning_tokens is not None:
+        output_tokens = _token_count(output_tokens + reasoning_tokens)
+    counts = (input_tokens, output_tokens, *_usage_counts(cache if isinstance(cache, dict) else {}, ('read','write')))
     return counts if any(value is not None for value in counts) else None
 
 

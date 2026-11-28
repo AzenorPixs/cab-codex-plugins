@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .core.models import ChangeStageIteration, CycleTokenUsage, Event, Maintenance, Operation, Run, SessionAgent
 from .cycle_attribution import elapsed
-from .measurement_sources import USAGE_FIELDS
+from .measurement_sources import USAGE_FIELDS, native_work_time
 
 
 EVENT = 'stage-telemetry-reminder'
@@ -15,6 +15,57 @@ ACTIVE = ('WORKING', 'REVIEW_PENDING')
 GRACE = timedelta(seconds=10)
 EXPIRY = timedelta(minutes=5)
 ROLE_LABELS = {'coder':'codeur', 'orchestrator':'orchestrateur'}
+CONFIRMATION = 'telemetrie'
+NATIVE_AGENTS = ('codex', 'codex-cli', 'opencode')
+
+
+def confirmation_roles(run):
+    from .stage_protocol import KEY, VERSION
+    if run.configuration[KEY]['version'] != VERSION or run.actor.agent not in NATIVE_AGENTS:
+        return ()
+    return ('coder', 'orchestrator') if run.mode == 'piloted' else ('coder',)
+
+
+def confirmation_role(actor, run):
+    if actor.pk == run.actor_id:
+        return 'coder'
+    if run.mode == 'piloted' and actor.pk == run.mandate.get('orchestrator_id'):
+        return 'orchestrator'
+    return None
+
+
+def confirmed_roles(run, attempt):
+    return set(ChangeStageIteration.objects.filter(
+        run=run, state='COMPLETED', receipt__attempt=attempt, receipt__action=CONFIRMATION,
+    ).values_list('receipt__role', flat=True))
+
+
+def confirmation_evidence(run, role):
+    from .cycle_tokens import _codex_billable_input, native_sources
+    source = next(((actor, thread) for key, actor, thread in native_sources(run) if key == role), None)
+    if source is None:
+        return {}, ['source-native']
+    actor, thread = source
+    native = native_work_time(run, actor=actor, thread=thread if role == 'orchestrator' else None,
+                              tokens=True, models=True)
+    if native is None:
+        return {}, ['source-native']
+    _, usage, models = native
+    model_stamp, model, provider, reasoning = max(models, default=(None, '', '', ''), key=lambda row: row[0])
+    stamp, _, counts = max(usage, default=(None, None, (None,) * len(USAGE_FIELDS)), key=lambda row: row[0])
+    missing = [field for field, value in zip(USAGE_FIELDS, counts) if value is None]
+    if not model:
+        missing.append('modele')
+    if not reasoning:
+        missing.append('raisonnement')
+    if actor.agent in ('codex', 'codex-cli') and not any(field in missing for field in USAGE_FIELDS):
+        if _codex_billable_input(counts) is None:
+            missing.append('entree-cache-incoherents')
+    evidence = {'role':role, 'session':thread, 'model':model, 'provider':provider, 'reasoning':reasoning,
+                'counters':dict(zip(USAGE_FIELDS, counts)),
+                'settings_at':model_stamp.isoformat() if model_stamp else None,
+                'counters_at':stamp.isoformat() if stamp else None}
+    return evidence, missing
 
 
 def _missing(diagnosis):

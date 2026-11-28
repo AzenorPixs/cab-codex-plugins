@@ -8,13 +8,14 @@ from .core import commands as c
 from .core.models import ChangeStageIteration, Event, FinalizationPlan, GitDelivery, Operation, Run
 
 KEY = 'stage_protocol'
-VERSION = 'agent-stages-v1'
+VERSION = 'agent-stages-v2'
+LEGACY_VERSION = 'agent-stages-v1'
 DEADLOCK_SQLSTATE = '40P01'
 MAX_DEADLOCK_RETRIES = 3
 
 
 def enabled(run):
-    return run.configuration.get(KEY, {}).get('version') == VERSION
+    return run.configuration.get(KEY, {}).get('version') in (LEGACY_VERSION, VERSION)
 
 
 def authority(actor, run):
@@ -205,6 +206,10 @@ def _begin(actor, data):
     _save(run,updated)
     result={'text':f'{"Retour" if again else "Début"} à l’étape {stage}/{len(keys)} — {LABELS[name]}. {description}',
             'stage':stage,'attempt':attempt,'cab':dict(entry['cab']),'reports':reports(run)}
+    from .stage_telemetry import confirmation_roles
+    roles = confirmation_roles(run)
+    if roles:
+        result['telemetry_required'] = list(roles)
     c.event(run,'stage-agent-started',{'request_id':key,'digest':fingerprint,'actor':actor.pk,'result':result})
     return result
 
@@ -274,6 +279,14 @@ def validate(actor, data):
     c.require(current and type(data['attempt']) is int and current['attempt']==data['attempt']
               and not current['validated'],'stage-attempt-not-current')
     name=keys_for(run)[current['stage']-1]
+    from .stage_telemetry import confirmation_roles, confirmed_roles
+    roles = confirmation_roles(run)
+    if roles:
+        confirmed = confirmed_roles(run, current['attempt'])
+        missing = [f'stage:{current["stage"]}:telemetry-required:{role}' for role in roles if role not in confirmed]
+        if missing:
+            return {'validated':False,'stage':current['stage'],'attempt':current['attempt'],
+                    'missing':missing,'reports':reports(run)}
     if name=='initialization' and protocol.get('mandate_confirmation'):
         from .stage_actions import mandates_validated
         if not mandates_validated(run,current['attempt']):
@@ -333,7 +346,14 @@ def view(run):
     if not enabled(run):
         return None
     protocol=run.configuration[KEY]
-    return {'current':protocol.get('current'),'reports':reports(run)}
+    current = protocol.get('current')
+    result = {'current':current,'reports':reports(run)}
+    from .stage_telemetry import confirmation_roles, confirmed_roles
+    roles = confirmation_roles(run)
+    if current and roles:
+        confirmed = confirmed_roles(run, current['attempt'])
+        result['telemetry'] = {role:'CONFIRMED' if role in confirmed else 'PENDING' for role in roles}
+    return result
 
 
 def _set_publication(run, attempt, state, **details):
