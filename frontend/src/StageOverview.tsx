@@ -5,14 +5,16 @@ import {FixedStageValue,formatCostValue,formatTokens,tokenColumnCount,tokenField
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
 type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;started_at?:string;ended_at?:string|null;rates?:TokenCounts}
+type AgentPeriod={number:number|null;started_at:string|null;ended_at:string|null;agents?:StageAgent[]}
+type CycleCosts={token_costs?:CycleTokenCosts;total_cost?:string|null}
 type PassageTelemetry={native:string;allocated_seconds:number;model:string;tokens:string;absent_counters:string[]}
 type Passage=Attribution & {telemetry?:Partial<Record<'coder'|'orchestrator',PassageTelemetry>>;
   action_accounting?:{actions:Record<string,number>;unrecorded_seconds:number;display_seconds:number}|null;
   raw_action_duration_seconds?:number|null;id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
-export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
+export type CycleMetric=Attribution & AgentPeriod & CycleCosts & {display_duration_seconds?:number;id:number;number:number;duration_seconds:number|null;complete:boolean}
 export type CycleSummary={tokens?:CycleTokens;iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
-export type StageMetrics={tokens?:CycleTokens;session_tokens?:CycleTokens;piloted?:boolean;stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null;cycle_summary?:CycleSummary}
+export type StageMetrics={tokens?:CycleTokens;session_tokens?:CycleTokens;piloted?:boolean;stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null;cycle_summary?:CycleSummary;cycle_cost_summary?:CycleCosts}
 const date=(value:string|null)=>value?new Date(value).toLocaleString('fr-FR'):''
 const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAILED:'Échec',UNKNOWN:'Indéterminé',PENDING:'En attente',SKIPPED:'Non exécuté',NOT_REQUESTED:'Non demandé',CANCELLED:'Annulé'}
 const cycleSample='Cycle\u00a0\u00a0'
@@ -89,7 +91,9 @@ function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
 
-function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableElement|null>;items:Passage[];piloted:boolean}){
+function StageAgentTable({cycleRef,items,piloted,leadingColumns=6}:{
+  cycleRef:RefObject<HTMLTableElement|null>;items:AgentPeriod[];piloted:boolean;leadingColumns?:number
+}){
   const typeSample=useRef<HTMLSpanElement>(null)
   const reasoningSample=useRef<HTMLSpanElement>(null)
   const [geometry,setGeometry]=useState<number[]>([])
@@ -100,7 +104,7 @@ function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableE
     const type=typeSample.current
     const reasoning=reasoningSample.current
     if(!cycle||!first||!type||!reasoning)return
-    const cells=second?[...Array.from(first.cells).slice(0,6),...Array.from(second.cells),first.cells[first.cells.length-1]]:Array.from(first.cells)
+    const cells=second?[...Array.from(first.cells).slice(0,leadingColumns),...Array.from(second.cells),first.cells[first.cells.length-1]]:Array.from(first.cells)
     const measure=()=>{
       const width=cycle.getBoundingClientRect().width
       if(!width)return
@@ -118,7 +122,7 @@ function StageAgentTable({cycleRef,items,piloted}:{cycleRef:RefObject<HTMLTableE
     const observer=new ResizeObserver(measure)
     for(const element of [cycle,...cells,type,reasoning])observer.observe(element)
     return ()=>observer.disconnect()
-  },[cycleRef,piloted])
+  },[cycleRef,piloted,leadingColumns])
 
   const rows=items.flatMap(passage=>(passage.agents??[]).filter(agent=>piloted||agent.role==='coder').map(agent=>({passage,agent})))
   return <>
@@ -263,14 +267,25 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
     <StageActions stage={stage} expanded={expanded} piloted={piloted} showAllRows={showAllRows}/>
   </>}</section>
 }
-export function CycleIterations({cycles,piloted=false,showAllRows=false}:{cycles:CycleMetric[];piloted?:boolean;showAllRows?:boolean}){
+export function CycleIterations({cycles,piloted=false,showAllRows=false,withCostsAndAgents=false}:{
+  cycles:CycleMetric[];piloted?:boolean;showAllRows?:boolean;withCostsAndAgents?:boolean
+}){
+  const cycleRef=useRef<HTMLTableElement>(null)
+  const grouped=withCostsAndAgents&&piloted
+  const rowSpan=grouped?2:undefined
+  const tokenHeaders=<TokenColumns header piloted={piloted} includeCosts={withCostsAndAgents}/>
   return <section className="change-progress"><h2>Itérations du cycle</h2>
-    <StageTable showAllRows={showAllRows} title="Itérations du cycle" items={cycles} columns={8+tokenColumnCount(piloted)}
-      header={<tr><th>Itération</th><th>Début</th><th>Fin</th><th>CAB</th><th>Agent(s)</th><th>Attente</th><th>Durée totale</th><TokenColumns header piloted={piloted}/><th>État</th></tr>}
+    <StageTable showAllRows={showAllRows} compact={withCostsAndAgents} title="Itérations du cycle" items={cycles}
+      tableRef={cycleRef} afterTable={withCostsAndAgents?<StageAgentTable cycleRef={cycleRef} items={cycles} piloted={piloted} leadingColumns={7}/>:undefined}
+      columns={8+tokenColumnCount(piloted)*(withCostsAndAgents?2:1)}
+      header={<><tr>{['Itération','Début','Fin','CAB','Agent(s)','Attente','Durée totale'].map(label=>
+        <th key={label} scope="col" rowSpan={rowSpan}>{label}</th>)}
+        {grouped?<TokenRoleHeaders/>:tokenHeaders}<th scope="col" rowSpan={rowSpan}>État</th>
+      </tr>{grouped&&<tr>{tokenHeaders}</tr>}</>}
       content={cycle=>[cycle.number,date(cycle.started_at),date(cycle.ended_at),stageDuration(cycle.cab_seconds),
         stageDuration(cycle.agent_seconds),stageDuration(cycle.waiting_seconds),
         stageDuration(cycle.display_duration_seconds??cycle.duration_seconds),
         cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours',...tokenValues(cycle.tokens)]}
-      render={cycle=><tr key={cycle.id}><td>{cycle.number}</td><td>{date(cycle.started_at)}</td><td>{date(cycle.ended_at)}</td><td>{stageDuration(cycle.cab_seconds)}</td><td>{stageDuration(cycle.agent_seconds)}</td><td><Waiting time={cycle}/></td><td>{stageDuration(cycle.display_duration_seconds??cycle.duration_seconds)}</td><TokenColumns tokens={cycle.tokens} piloted={piloted}/><td>{cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours'}</td></tr>}/>
+      render={cycle=><tr key={cycle.id}><td>{cycle.number}</td><td>{date(cycle.started_at)}</td><td>{date(cycle.ended_at)}</td><td>{stageDuration(cycle.cab_seconds)}</td><td>{stageDuration(cycle.agent_seconds)}</td><td><Waiting time={cycle}/></td><td>{stageDuration(cycle.display_duration_seconds??cycle.duration_seconds)}</td><TokenColumns tokens={cycle.tokens} costs={cycle.token_costs} piloted={piloted} includeCosts={withCostsAndAgents}/><td>{cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours'}</td></tr>}/>
   </section>
 }

@@ -328,6 +328,49 @@ def stage_agents(run):
     return agents
 
 
+def _sum_costs(rows):
+    amounts = defaultdict(dict)
+    with localcontext() as context:
+        context.prec = 80
+        for tokens, costs in rows:
+            for role in tokens.keys() | costs.keys():
+                counters = tokens.get(role, {})
+                prices = costs.get(role, {})
+                for field in counters.keys() | prices.keys():
+                    value = prices.get(field)
+                    if value is None and counters.get(field) is None:
+                        continue
+                    previous = amounts[role].get(field, Decimal(0))
+                    amounts[role][field] = None if value is None or previous is None else previous + Decimal(value)
+    return {role: {field: str(value) if value is not None else None for field, value in values.items()}
+            for role, values in amounts.items() if values}
+
+
+def _total_cost(costs):
+    values = [value for role in costs.values() for value in role.values()]
+    if not values or None in values:
+        return None
+    with localcontext() as context:
+        context.prec = 80
+        return str(sum(map(Decimal, values)))
+
+
+def _cycle_agents(rows):
+    segments = []
+    previous_by_role = {}
+    settings = ('model', 'provider', 'reasoning', 'rates')
+    for row in sorted(rows, key=lambda agent: (agent['started_at'], agent['id'])):
+        previous = previous_by_role.get(row['role'])
+        if (previous and previous['ended_at'] == row['started_at']
+                and all(previous[field] == row[field] for field in settings)):
+            previous['ended_at'] = row['ended_at']
+        else:
+            segment = {**row}
+            segments.append(segment)
+            previous_by_role[row['role']] = segment
+    return segments
+
+
 def overview(change, run, records, cycles):
     query = CycleTokenUsage.objects.filter(change=change)
     if run is not None:
@@ -338,17 +381,30 @@ def overview(change, run, records, cycles):
     by_cycle = token_totals(query, 'stage_passage__cycle_id')
     agents=stage_agents(run) if run is not None else {}
     stored_costs=run.coding_session.token_costs.get(str(run.pk),{}) if run is not None and run.coding_session_id else {}
+    cycle_passages = defaultdict(list)
     for record in records:
         source = passes if record.get('parent_id') is None else actions
         record['tokens'] = source.get((record['id'],), {})
         if run is not None and record.get('parent_id') is None:
             record['agents']=agents.get(record['id'],[])
             record['token_costs']=stored_costs.get(str(record['id']),{})
+            if record.get('cycle_id') is not None:
+                cycle_passages[record['cycle_id']].append(record)
     for cycle in cycles:
         cycle['tokens'] = by_cycle.get((cycle['id'],), {})
+        if run is not None:
+            passages = cycle_passages[cycle['id']]
+            costs = _sum_costs((record['tokens'], record['token_costs']) for record in passages)
+            cycle.update(token_costs=costs, total_cost=_total_cost(costs),
+                         agents=_cycle_agents(agent for record in passages for agent in record['agents']))
     total = token_totals(query).get((), {})
     session = {}
     if run is not None and run.coding_session_id:
         session = token_totals(CycleTokenUsage.objects.filter(
             project_id=run.project_id, session_id=run.coding_session_id)).get((), {})
     return by_stage, total, session
+
+
+def cycle_cost_summary(cycles):
+    costs = _sum_costs((cycle['tokens'], cycle['token_costs']) for cycle in cycles)
+    return {'token_costs': costs, 'total_cost': _total_cost(costs)}

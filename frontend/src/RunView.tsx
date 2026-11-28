@@ -102,7 +102,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
       {cycleTabs.map(({id},number)=><div key={id} role="tabpanel" id={cyclePrefix+'-panel-'+id}
         aria-labelledby={cyclePrefix+'-tab-'+id} hidden={activeStage!==number} tabIndex={0}>
         {activeStage===number&&(number===0?<>          <section className="run-cycle">
-            <div className="run-cycle-heading"><h2>Les {steps} étapes du cycle</h2><p className="cycle-token-summary"><strong>Dernier Cycle</strong><span>Durée : {duration(summary?.last_duration_seconds)}</span><TokenSummary tokens={lastCycle?.tokens} piloted={piloted}/></p></div>
+            <div className="run-cycle-heading"><h2>Les {steps} étapes du cycle</h2><p className="cycle-token-summary"><strong>Dernier Cycle</strong><span>Durée : {duration(summary?.last_duration_seconds)}</span><TokenSummary tokens={lastCycle?.tokens} piloted={piloted} withCosts costs={lastCycle?.token_costs} totalCost={lastCycle?.total_cost}/></p></div>
             <ol>{labels.map((label,index)=><li key={index} className={monitor.stage===index+1?'current-stage':''}
               aria-current={monitor.stage===index+1?'step':undefined}>
               <button type="button" className="action-link" onClick={()=>openStage(index+1)}>
@@ -111,8 +111,8 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>
-          <p className="cycle-token-summary cycle-total"><span><strong>Totale de tous les cycles</strong> : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={cycleTokens} piloted={piloted}/></p>
-          {metrics.data?.cycles&&<CycleIterations cycles={metrics.data.cycles} piloted={piloted} showAllRows/>}
+          <p className="cycle-token-summary cycle-total"><span><strong>Totale de tous les cycles</strong> : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={cycleTokens} piloted={piloted} withCosts costs={metrics.data?.cycle_cost_summary?.token_costs} totalCost={metrics.data?.cycle_cost_summary?.total_cost}/></p>
+          {metrics.data?.cycles&&<CycleIterations cycles={metrics.data.cycles} piloted={piloted} showAllRows withCostsAndAgents/>}
         </>:<>
           {metrics.isPending&&<p role="status">Chargement de l’étape…</p>}
           {metrics.error&&<p role="alert">Détail de l’étape indisponible.</p>}

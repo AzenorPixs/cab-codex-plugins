@@ -330,6 +330,8 @@ header .brand {
 @media(max-width:600px){.run-cycle-heading p{padding-inline-start:12px}}
 .cycle-token-summary,.cycle-token-group{display:flex;flex-wrap:wrap;align-items:baseline;gap:.35rem 1rem}
 .cycle-token-group span,.cycle-token-value{white-space:nowrap}
+.cycle-token-with-cost{display:inline-grid;grid-template-columns:auto auto;column-gap:.25em}
+.cycle-token-with-cost>span:nth-child(odd){text-align:end}
 .cycle-table-scroll{max-width:100%;overflow-x:auto}
 .cycle-table-scroll th small{display:block}
 .stage-passages-compact{width:100%}

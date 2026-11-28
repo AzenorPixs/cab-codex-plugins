@@ -522,9 +522,11 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None,age
     measured=[r['duration_seconds'] for r in stages if r['duration_seconds'] is not None]
     result = {'stages':stages,'cycles':cycle_data,'complete_cycle_duration_seconds':sum(complete) if complete else None,'duration_seconds':sum(measured) if measured else None}
     if projection is None:
-        from .cycle_tokens import overview
+        from .cycle_tokens import cycle_cost_summary, overview
         by_stage, total, session = overview(change, run, (item for items in grouped.values() for item in items), cycle_data)
         for stage in stages:
             stage['tokens'] = by_stage.get((stage['key'],), {})
         result.update(tokens=total, session_tokens=session, piloted=any(item.mode == 'piloted' for item in runs))
+        if run is not None:
+            result['cycle_cost_summary'] = cycle_cost_summary(cycle_data)
     return result

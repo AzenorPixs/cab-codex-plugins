@@ -80,9 +80,14 @@ export function TokenCostSummary({costs,piloted=false}:{costs?:CycleTokenCosts;p
   </span>)}</>
 }
 
-export function TokenSummary({tokens,piloted=false}:{tokens?:CycleTokens;piloted?:boolean}){
+export function TokenSummary({tokens,piloted=false,withCosts=false,costs,totalCost}:{
+  tokens?:CycleTokens;piloted?:boolean;withCosts?:boolean;costs?:CycleTokenCosts;totalCost?:string|null
+}){
   return <>{roles(piloted).map(role=><span key={role} className="cycle-token-group">
     {piloted&&<strong>{roleLabel[role]}</strong>}
-    {tokenFields.map(([field,,label])=><span key={field}>{label} : {formatTokens(tokens?.[role]?.[field])}</span>)}
-  </span>)}</>
+    {tokenFields.map(([field,,label])=>withCosts?<span key={field} className="cycle-token-with-cost">
+      <span>{label}</span><span> : {formatTokens(tokens?.[role]?.[field])}</span>
+      <span>Coût</span><span> : {tokenCost(costs,role,field)||'—'}</span>
+    </span>:<span key={field}>{label} : {formatTokens(tokens?.[role]?.[field])}</span>)}
+  </span>)}{withCosts&&<strong>Coût total : {formatCostValue(totalCost)||'—'}</strong>}</>
 }
