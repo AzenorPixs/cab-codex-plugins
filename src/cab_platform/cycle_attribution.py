@@ -45,6 +45,45 @@ def display_parts(parts):
     return [value/10 for value in units]
 
 
+def _action_microseconds(passage, actions):
+    start, end = passage['started_at'], passage['ended_at']
+    if start is None or end is None or passage['state'] in ('SKIPPED','NOT_REQUESTED'):
+        return None
+    bounded = [
+        (max(start, row['started_at']), min(end, row['ended_at']), row['id'])
+        for row in actions
+        if row['started_at'] is not None and row['ended_at'] is not None
+        and row['state'] not in ('SKIPPED','NOT_REQUESTED')
+    ]
+    cursor = start
+    counted = {}
+    for left, right, identity in sorted(bounded):
+        counted[str(identity)] = max(0, microseconds(right-max(left,cursor)))
+        if left < right:
+            cursor = max(cursor,right)
+    unrecorded = max(0,microseconds(end-start)-sum(counted.values()))
+    return counted,unrecorded
+
+
+def action_accounting(passages, actions_by_passage):
+    """Arrondit ensemble les actions et les écarts d’une même étape."""
+    breakdown = {}
+    parts = []
+    for passage in passages:
+        values = _action_microseconds(passage,actions_by_passage.get(passage['id'],()))
+        if values is None:
+            continue
+        amounts,gap = values
+        breakdown[passage['id']] = list(amounts)
+        parts.extend([*amounts.values(),gap])
+    rounded = iter(display_parts(parts))
+    for passage_id, identities in breakdown.items():
+        amounts = {identity:next(rounded) for identity in identities}
+        gap = next(rounded)
+        yield passage_id,{'actions':amounts,'unrecorded_seconds':gap,
+                          'display_seconds':round(sum(amounts.values())+gap,1)}
+
+
 def partition(start,end,cab=(),agent=(),covered=(),*,display=False):
     blank={key:None for key in (*FIELDS,*WAIT_DETAILS)}
     if start is None or end is None or end < start:

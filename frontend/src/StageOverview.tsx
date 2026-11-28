@@ -5,7 +5,10 @@ import {FixedStageValue,formatCostValue,formatTokens,tokenColumnCount,tokenField
 export {stageDuration} from './stageDuration'
 type Attribution={tokens?:CycleTokens;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;wait_observed_seconds?:number|null;attribution_complete?:boolean;measured_until?:string}
 type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:string;provider:string|null;started_at?:string;ended_at?:string|null;rates?:TokenCounts}
-type Passage=Attribution & {id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
+type PassageTelemetry={native:string;allocated_seconds:number;model:string;tokens:string;absent_counters:string[]}
+type Passage=Attribution & {telemetry?:Partial<Record<'coder'|'orchestrator',PassageTelemetry>>;
+  action_accounting?:{actions:Record<string,number>;unrecorded_seconds:number;display_seconds:number}|null;
+  raw_action_duration_seconds?:number|null;id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
 export type CycleMetric=Attribution & {display_duration_seconds?:number;id:number;number:number;started_at:string|null;ended_at:string|null;duration_seconds:number|null;complete:boolean}
 export type CycleSummary={tokens?:CycleTokens;iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
@@ -196,7 +199,7 @@ function ActionTable({title,actions,passage,piloted,showAllRows}:{title:string;a
         </td>
         <td>{action.source==='cab'?'CAB':action.source==='agent'?'Agent':''}</td>
         <td>{date(action.started_at)||'Non attesté'}</td><td>{date(action.ended_at)||(passage.ended_at?'Non attestée':'')}</td>
-        <td>{stageDuration(action.duration_seconds,showAllRows)||'Non observée'}</td>
+        <td title={action.raw_action_duration_seconds==null?undefined:'Durée brute '+stageDuration(action.raw_action_duration_seconds,true)}>{stageDuration(action.duration_seconds,showAllRows)||'Non observée'}</td>
         <TokenColumns tokens={action.tokens} piloted={piloted}/>
         <td>{action.state?states[action.state]||action.state:''}{typeof action.receipt?.error==='string'&&<p>{action.receipt.error}</p>}</td>
       </tr>
@@ -207,7 +210,15 @@ function StageActions({stage,expanded,piloted,showAllRows}:{stage:StageMetric;ex
     .filter(item=>(item.started_at||item.ended_at)&&!['SKIPPED','NOT_REQUESTED'].includes(item.state||''))
     .sort((a,b)=>(a.started_at||a.ended_at||'').localeCompare(b.started_at||b.ended_at||''))
   return <>{stage.iterations.map((passage,index)=>{
-    const actions=observed.filter(action=>action.parent_id===passage.id)
+    const accounting=showAllRows?passage.action_accounting:undefined
+    const actions=observed.filter(action=>action.parent_id===passage.id).map(action=>{
+      const counted=accounting?.actions[String(action.id)]
+      return counted===undefined?action:{...action,duration_seconds:counted,raw_action_duration_seconds:action.duration_seconds}
+    })
+    if(accounting&&accounting.unrecorded_seconds>0){
+      actions.push({id:'outside-'+passage.id,run_id:passage.run_id,number:null,state:null,started_at:null,ended_at:null,
+        duration_seconds:accounting.unrecorded_seconds,description:'Hors actions enregistrées',receipt:null})
+    }
     if(!actions.length)return null
     const suffix=stage.iterations.length>1&&passage.run_id?' · '+passage.run_id:''
     const title='Actions · Itération '+(passage.number??index+1)+suffix
@@ -218,17 +229,20 @@ function StageActions({stage,expanded,piloted,showAllRows}:{stage:StageMetric;ex
 }
 export function StageOverview({stage,title,expanded=false,piloted=false,showAllRows=false}:{stage:StageMetric|undefined;title:string;expanded?:boolean;piloted?:boolean;showAllRows?:boolean}){
   const lastPassage=showAllRows?stage?.iterations.at(-1):undefined
+  const accounted=showAllRows?stage?.iterations.flatMap(item=>item.action_accounting?[item.action_accounting.display_seconds]:[])??[]:[]
   return <section className="change-progress stage-overview" aria-label="Overview de l’étape">
     {lastPassage?<div className="run-cycle-heading stage-cycle-heading">
       <h2>{title}{lastPassage.state&&<StageStateIcon state={lastPassage.state} labelled/>}</h2>
       <p className="cycle-token-summary"><strong>Dernier Cycle de cette étape</strong>
-        <span>Durée : {stageDuration(lastPassage.duration_seconds,true)||'—'}</span>
+        <span>Durée : {stageDuration(lastPassage.action_accounting?.display_seconds??lastPassage.duration_seconds,true)||'—'}</span>
         <TokenSummary tokens={lastPassage.tokens} piloted={piloted}/>
       </p>
     </div>:<h2>{title}</h2>}{stage?.not_required&&<p>Revue non requise pour ce RUN.</p>}{stage?.observed&&<>
     <div className={'run-metadata stage-metadata'+(showAllRows?' stage-metadata-with-costs':'')} data-piloted={piloted||undefined}>
       <dl className="stage-duration-totals">
         {stage.iteration_count!=null&&<><dt>Itérations</dt><dd>{stage.iteration_count}</dd></>}
+        {accounted.length>0&&<><dt>{stage.iterations.some(item=>!item.ended_at)?'Durée des passages terminés':'Durée totale de l’étape'}</dt>
+          <dd>{stageDuration(accounted.reduce((sum,value)=>sum+value,0),true)}</dd></>}
         {stage.cab_seconds!=null&&<><dt>Travail observé par CAB</dt><dd>{stageDuration(stage.cab_seconds,showAllRows)}</dd></>}
         {stage.agent_seconds!=null&&<><dt>Agent(s)</dt><dd>{stageDuration(stage.agent_seconds,showAllRows)}</dd></>}
         {stage.waiting_seconds!=null&&<><dt>Attente</dt><dd><Waiting time={stage} shortUnits={showAllRows}/></dd></>}
@@ -237,6 +251,14 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
       {showAllRows&&<div className="stage-cost-totals"><TokenCostSummary costs={lastPassage?.token_costs} piloted={piloted}/></div>}
     </div>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
+    {showAllRows&&stage.iterations.flatMap(item=>Object.entries(item.telemetry??{}).map(([role,entry])=>{
+      if(!entry||entry.model==='observed'&&entry.tokens==='observed')return null
+      const actor=role==='coder'?'Codeur':'Orchestrateur'
+      const model=entry.model==='observed'?'modèle observé':'modèle non remonté'
+      const tokens=entry.tokens==='observed'?'tokens observés':entry.tokens==='zero'?'compteurs à zéro':'compteurs absents'
+      const source=entry.native==='unavailable'?' · journal natif indisponible':''
+      return <p key={String(item.id)+'-'+role}>Cycle {item.number??'—'} · {actor} · {model} · {tokens}{source}</p>
+    }))}
     <Passages items={stage.iterations} piloted={piloted} showAllRows={showAllRows}/>
     <StageActions stage={stage} expanded={expanded} piloted={piloted} showAllRows={showAllRows}/>
   </>}</section>

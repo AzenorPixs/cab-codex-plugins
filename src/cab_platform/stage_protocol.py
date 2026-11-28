@@ -305,6 +305,11 @@ def validate(actor, data):
             return {'validated':False,'stage':12,'missing':missing,'reports':reports(run)}
     old=ChangeStageIteration.objects.filter(run=run,stage__key=name,parent__isnull=True,
             asynchronous=False,ended_at__isnull=True).first()
+    if old and name=='implementation' and run.actor.agent in ('codex','codex-cli','opencode'):
+        from .stage_telemetry import require_implementation_tokens
+        if not require_implementation_tokens(run,old,timezone.now()):
+            return {'validated':False,'stage':current['stage'],'attempt':current['attempt'],
+                    'missing':['stage:implementation:native-tokens-required'],'reports':reports(run)}
     if old and name!='closure':
         finish_iteration(old,timezone.now(),'agent-validated',state='SKIPPED' if name=='vacant' else 'COMPLETED')
     current={**current,'validated':True}

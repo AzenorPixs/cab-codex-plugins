@@ -117,6 +117,8 @@ def due_reminder(last, attempts, now, delays):
 
 
 def sweep(now=None):
+    from .stage_telemetry import dispatch
+    dispatch(now or timezone.now())
     delays = settings()
     seconds = delays['seconds']
     if not seconds:

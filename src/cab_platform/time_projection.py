@@ -18,6 +18,7 @@ _cursor=0
 def refresh(run_id):
     from .change_stage_metrics import cycle_summary, summarize
     from .cycle_tokens import run_totals, store_cycle_costs, store_session_agents, store_usage
+    from .stage_telemetry import diagnose
 
     run=Run.objects.select_related('actor','project','change_record').filter(pk=run_id).first()
     if not run or not run.change_record_id:
@@ -34,6 +35,7 @@ def refresh(run_id):
             return False
         changed=store_usage(run, usage)
         changed=store_session_agents(run,agents) or changed
+        changed=diagnose(current,batch['passes'],agents) or changed
         if session:
             changed=store_cycle_costs(run,session) or changed
         summary=cycle_summary(overview['cycles'],tokens=run_totals(run))

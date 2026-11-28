@@ -35,6 +35,8 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+Le change `guard-stage-telemetry-and-action-time` couvre le diagnostic de télémétrie, ses relances, la durée des actions et la précision des coûts du cycle. La qualification et l’activation sont établies par les reçus CAB.
+
 [show-stage-session-agents](openspec/changes/archive/2026-11-27-show-stage-session-agents/),
 code non attribué. PostgreSQL, Chromium et Firefox vérifient les observations
 dans `sessions_agents`, le catalogue et l’alignement du tableau Agents sous Cycle.

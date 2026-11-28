@@ -376,7 +376,7 @@ Pour un RUN du nouveau profil, CAB MUST intégrer dans le snapshot Git de toute 
 
 ### Requirement: Tableau compact des passages par étape
 
-Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fin, CAB, Agents et Attentes MUST utiliser des gabarits fixes. Les colonnes de tokens MUST partager une largeur suffisante pour `99 999,99 M`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
+Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fin, CAB, Agents et Attentes MUST utiliser des gabarits fixes. Les colonnes de tokens MUST partager une largeur suffisante pour `999 999,9999`. État MUST recevoir la largeur restante. Le défilement horizontal MUST rester limité au tableau.
 
 #### Scenario: Colonnes dans les douze onglets
 
@@ -395,7 +395,7 @@ Dans les douze onglets, CAB MUST garder une ligne par passage. Cycle, Début, Fi
 #### Scenario: Compteurs de tailles différentes
 
 - **WHEN** les compteurs ont des contenus de tailles différentes
-- **THEN** les huit colonnes de chaque rôle partagent la largeur de `99 999,99 M` suivi de trois espaces ordinaires
+- **THEN** les huit colonnes de chaque rôle partagent la largeur de `999 999,9999` suivi de trois espaces ordinaires
 - **AND** toute valeur dont le format dépassera cette largeur reste consultable en entier dans son infobulle
 
 #### Scenario: Espace disponible pour une ligne complète
@@ -525,14 +525,14 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 #### Scenario: Tarif par identifiant observé
 
 - **WHEN** CAB dispose de l’identifiant natif du modèle d’un codeur ou d’un orchestrateur
-- **THEN** le tableau Agents affiche les tarifs d’entrée, de sortie, de lecture et d’écriture du cache depuis l’entrée exacte de ce fournisseur dans le catalogue. Chaque cellule affiche le nombre arrondi à deux décimales avec une virgule, sans suffixe monétaire ni mention du million
+- **THEN** le tableau Agents affiche les tarifs d’entrée, de sortie, de lecture et d’écriture du cache depuis l’entrée exacte de ce fournisseur dans le catalogue. Chaque cellule affiche le nombre arrondi à quatre décimales avec une virgule, sans suffixe monétaire ni mention du million
 - **AND** un tarif nul s’affiche avec sa valeur zéro
 - **AND** une correspondance ambiguë ou incompatible avec le fournisseur observé laisse les tarifs vides
 - **AND** les montants de coût observés restent des données distinctes des tarifs du catalogue
 
 ### Requirement: Coûts des passages calculés en direct
 
-CAB MUST calculer le montant en dollars par rôle et catégorie du passage à partir des tokens natifs déclarés et du tarif catalogue par million du modèle et du fournisseur applicables. CAB MUST stocker les montants par RUN et passage dans `sessions.token_costs`. Le chargement du tableau Cycle et du bloc de coûts de l’étape MUST lire cette projection persistée. Electric MUST signaler toute mise à jour de cette projection via le RUN. Les montants affichés dans Cycle et son récapitulatif MUST être rendus avec une virgule et exactement deux décimales, arrondies au plus près, sans suffixe monétaire.
+CAB MUST calculer le montant en dollars par rôle et catégorie du passage à partir des tokens natifs déclarés et du tarif catalogue par million du modèle et du fournisseur applicables. CAB MUST stocker les montants par RUN et passage dans `sessions.token_costs`. Le chargement du tableau Cycle et du bloc de coûts de l’étape MUST lire cette projection persistée. Electric MUST signaler toute mise à jour de cette projection via le RUN. Les montants affichés dans Cycle et son récapitulatif MUST être rendus avec une virgule et exactement quatre décimales, arrondies au plus près, sans suffixe monétaire.
 
 #### Scenario: Modèles successifs dans un même passage
 - **WHEN** CAB observe plusieurs réglages de modèle successifs pour un rôle dans un passage
@@ -544,3 +544,39 @@ CAB MUST calculer le montant en dollars par rôle et catégorie du passage à pa
 - **WHEN** des mesures de tokens appartiennent à différents segments
 - **THEN** CAB répartit les tokens déclarés pour chaque catégorie au prorata de la durée des segments du rôle, applique le tarif de chaque segment et arrondit seulement la somme avant de l’enregistrer et de la diffuser via Electric
 - **AND** une catégorie reste sans montant si des tokens positifs rencontrent un segment de durée positive dont le tarif est indisponible, tandis que zéro token déclaré produit un montant nul.
+
+### Requirement: Garde-fou de télémétrie par passage
+
+CAB MUST vérifier les modèles et compteurs natifs par rôle et passage. Un temps agent alloué, même inférieur à une seconde, avec un modèle manquant ou aucun compteur positif MUST être signalé. CAB MUST conserver une preuve du signalement. Les valeurs inconnues restent distinctes de zéro.
+
+#### Scenario: Observer plusieurs passages
+- **WHEN** les réglages natifs sont applicables à plusieurs passages
+- **THEN** CAB utilise l’historique complet des réglages pour chacun d’eux.
+
+#### Scenario: Demander les mesures manquantes
+- **WHEN** le passage terminé a du temps agent alloué et des mesures manquantes
+- **THEN** CAB vérifie de nouveau la projection puis adresse une seule relance par passage et rôle à la session native disponible
+- **AND** la relance demande de vérifier les sources et de signaler les limites de la collecte, sans fabriquer ni transférer les compteurs d’une autre étape
+- **AND** un RUN clôturé ou une session sans canal disponible conserve un diagnostic visible.
+
+#### Scenario: Compteurs obligatoires en Implémentation
+- **WHEN** l’agent demande la validation d’Implémentation avec du temps agent alloué et aucun compteur natif positif rattaché au passage
+- **THEN** CAB garde l’étape en attente et enregistre immédiatement une relance
+- **AND** une mesure native positive rattachée au passage permet de reprendre la validation.
+
+### Requirement: Somme des durées du tableau Actions
+
+Pour un passage aux bornes connues, la somme affichée dans Actions MUST égaler sa durée totale. Un chevauchement compte une fois et les périodes restantes apparaissent comme temps hors actions enregistrées.
+
+#### Scenario: Ventiler une étape terminée
+- **WHEN** des actions se chevauchent ou laissent des intervalles vides
+- **THEN** CAB répartit les dixièmes affichés entre les actions et le temps hors actions pour obtenir exactement le total de l’étape
+- **AND** les bornes natives des actions restent accessibles.
+
+### Requirement: Précision des coûts par catégorie de tokens
+
+CAB MUST arrondir le coût agrégé au dix-millième après le prorata, puis persister le résultat. Les montants et tarifs affichés MUST conserver quatre décimales, sans suffixe.
+
+#### Scenario: Coût inférieur au centime
+- **WHEN** le montant calculé s’arrondit à 0,0029
+- **THEN** le tableau Cycle et son récapitulatif affichent `0,0029`.

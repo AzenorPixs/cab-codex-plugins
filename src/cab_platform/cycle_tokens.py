@@ -153,8 +153,8 @@ def store_session_agents(run, sources):
     observed=set()
     for role, trace, observations in sources:
         _, turns, unfinished, _, _=trace
-        settings=sorted(observations,key=lambda item:item[0])
-        stamps=[item[0] for item in settings]
+        history=sorted(observations,key=lambda item:item[0])
+        stamps=[item[0] for item in history]
         intervals=[(start,end) for start,end in turns if end>run.created]
         intervals.extend((start,now) for start in unfinished)
         for passage in passages:
@@ -167,7 +167,7 @@ def store_session_agents(run, sources):
                 left=bisect_left(stamps,beginning)
                 if left and stamps[left-1]>=start:
                     left-=1
-                for stamp,model,provider,reasoning in settings[left:bisect_left(stamps,ending)]:
+                for stamp,model,provider,reasoning in history[left:bisect_left(stamps,ending)]:
                     candidates[max(beginning,stamp)]=(model,reasoning,provider)
             if not candidates:
                 continue
@@ -253,7 +253,7 @@ def store_cycle_costs(run, session):
                             continue
                         weighted_rate = sum(duration * Decimal(rates[field]) for duration, rates in weights)
                         amount = int(count) * weighted_rate / (elapsed * 1_000_000)
-                    amounts[field] = str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    amounts[field] = str(amount.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
                 if amounts:
                     costs[str(passage)][role] = amounts
     key = str(run.pk)

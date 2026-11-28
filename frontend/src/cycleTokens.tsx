@@ -37,15 +37,15 @@ export function FixedStageValue({value,sample,title}:{value:string;sample:string
 }
 
 function tokenSlot(value:string,fixed:boolean,title?:string){
-  return fixed?<FixedStageValue value={value} sample={'99\u202f999,99\u202fM\u00a0\u00a0\u00a0'} title={title}/>:value
+  return fixed?<FixedStageValue value={value} sample={'999\u202f999,9999\u00a0\u00a0\u00a0'} title={title}/>:value
 }
 
 export function formatCostValue(value:string|null|undefined){
   const parts=/^(\d+)(?:\.(\d+))?$/.exec(value??'')
   if(!parts)return ''
-  const digits=(parts[2]??'').padEnd(3,'0')
-  const cents=BigInt(parts[1])*100n+BigInt(digits.slice(0,2))+(digits[2]>='5'?1n:0n)
-  return `${cents/100n},${String(cents%100n).padStart(2,'0')}`
+  const digits=(parts[2]??'').padEnd(5,'0')
+  const units=BigInt(parts[1])*10000n+BigInt(digits.slice(0,4))+(digits[4]>='5'?1n:0n)
+  return `${units/10000n},${String(units%10000n).padStart(4,'0')}`
 }
 
 function tokenCost(costs:CycleTokenCosts|undefined,role:TokenRole,field:TokenField){

@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .core.models import ChangeStage, ChangeStageIteration, Run, RunCycleIteration
-from .cycle_attribution import FIELDS, WAIT_DETAILS, PROJECTION_SCHEMA, merged, microseconds, missing_intervals, native_complete, partition
+from .cycle_attribution import FIELDS, WAIT_DETAILS, PROJECTION_SCHEMA, action_accounting, merged, microseconds, missing_intervals, native_complete, partition
 
 
 LEGACY_KEYS = (
@@ -251,8 +251,8 @@ def _timeline(run, *, local_only=False, usage=None, agent_observations=None):
             trace, occurrences, *models = trace
             if occurrences:
                 usage.append((role, actor.pk, thread, occurrences))
-            if models and models[0] and trace:
-                agent_observations.append((role,trace,models[0]))
+            if agent_observations is not None and trace:
+                agent_observations.append((role,trace,models[0] if models else ()))
         traces.append(trace)
     return events, traces[0], intervals, traces
 
@@ -472,7 +472,8 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None,age
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
                 native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
-                description=visible_description(record.description), source=record.description_source or None, receipt=visible_receipt(record.receipt)))
+                description=visible_description(record.description), source=record.description_source or None,
+                receipt=visible_receipt(record.receipt)))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None
             right = ending['created'] if ending else None
@@ -495,6 +496,14 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None,age
                 children.append({'key':child_key,'iterations':items,'iteration_count':sum(i['started_at'] is not None for i in items),
                                  **{field:_stage_total(items,field) for field in ('duration_seconds','work_seconds','wait_seconds',*FIELDS,*WAIT_DETAILS)}})
         labels=labels_for(run) if run is not None else OLD_LABELS
+        if run is not None:
+            actions_by_passage=defaultdict(list)
+            for child in children:
+                for action in child['iterations']:
+                    actions_by_passage[action['parent_id']].append(action)
+            accounting=dict(action_accounting(iterations,actions_by_passage))
+            for passage in iterations:
+                passage['action_accounting']=accounting.get(passage['id'])
         stages.append({'key':key,'label':labels.get(key,key),'iterations':iterations,'children':children,
                        'observed':bool(iterations or children),'not_required':key=='review' and not iterations and not review_required,
                        'iteration_count':len(iterations) if iterations else None,
