@@ -293,7 +293,7 @@ def begin_run(actor,data,*,stage_protocol=False):
     configuration={'cycle_profile':'publication-12-v1'}
     if stage_protocol:
         from cab_platform.stage_protocol import KEY,VERSION
-        configuration[KEY]={'version':VERSION,'active':{},'mandate_confirmation':True}
+        configuration[KEY]={'version':VERSION,'active':{},'mandate_confirmation':True,'automatic_telemetry':True}
         configuration['statistics_at_closure']=True
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration=configuration,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize

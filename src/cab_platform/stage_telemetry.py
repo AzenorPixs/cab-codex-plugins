@@ -19,11 +19,41 @@ CONFIRMATION = 'telemetrie'
 NATIVE_AGENTS = ('codex', 'codex-cli', 'opencode')
 
 
-def confirmation_roles(run):
+def _roles(run):
     from .stage_protocol import KEY, VERSION
     if run.configuration[KEY]['version'] != VERSION or run.actor.agent not in NATIVE_AGENTS:
         return ()
     return ('coder', 'orchestrator') if run.mode == 'piloted' else ('coder',)
+
+
+def automatic(run):
+    from .stage_protocol import KEY
+    return run.configuration.get(KEY, {}).get('automatic_telemetry') is True
+
+
+def confirmation_roles(run):
+    return () if automatic(run) else _roles(run)
+
+
+def open_tracking(run, row, attempt, request_id):
+    if not automatic(run) or row.stage.key == 'vacant':
+        return {}
+    roles = {}
+    for role in _roles(run):
+        evidence, missing = confirmation_evidence(run, role)
+        roles[role] = {'reference': evidence, 'missing': missing, 'state': 'pending'}
+    if roles:
+        row.receipt = {**row.receipt, 'token_tracking': {
+            'attempt': attempt, 'request_id': request_id, 'opened_at': row.started_at.isoformat(), 'roles': roles,
+        }}
+        row.save(update_fields=['receipt'])
+    return {role: 'pending' for role in roles}
+
+
+def tracking_view(row, projection):
+    return projection.get('token_tracking') or {
+        role: {'state': 'pending'} for role in row.receipt.get('token_tracking', {}).get('roles', {})
+    }
 
 
 def confirmation_role(actor, run):
@@ -116,6 +146,19 @@ def diagnose(run, projections, sources, *, now=None):
                 'absent_counters': [field for field in USAGE_FIELDS if counters.get(field) is None],
             }
             diagnostics[role] = entry
+            if role in row.receipt.get('token_tracking', {}).get('roles', {}):
+                tracking = projection.setdefault('token_tracking', {})
+                if counters and not entry['absent_counters']:
+                    tracking[role] = {'state': 'observed'}
+                    continue
+                elif not end or now < end + GRACE:
+                    tracking[role] = {'state': 'pending'}
+                    continue
+                else:
+                    reason = ('compteurs natifs incomplets' if counters else
+                              'aucun relevé natif attribuable au passage' if trace else
+                              'source native indisponible')
+                    tracking[role] = {'state': 'indeterminate', 'reason': reason}
             if not attested or not _missing(entry) or now<end+GRACE or (row.pk,role) in prior:
                 continue
             queued.append(Event(project_id=run.project_id,run=run,kind=EVENT,data={

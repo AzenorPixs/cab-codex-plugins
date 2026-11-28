@@ -8,7 +8,9 @@ type StageAgent={id:number;role:'coder'|'orchestrator';model:string;reasoning:st
 type AgentPeriod={number:number|null;started_at:string|null;ended_at:string|null;agents?:StageAgent[]}
 type CycleCosts={token_costs?:CycleTokenCosts;total_cost?:string|null}
 type PassageTelemetry={native:string;allocated_seconds:number;model:string;tokens:string;absent_counters:string[]}
+type TokenTracking={state:'pending'|'observed'|'indeterminate';reason?:string}
 type Passage=Attribution & {telemetry?:Partial<Record<'coder'|'orchestrator',PassageTelemetry>>;
+  token_tracking?:Partial<Record<'coder'|'orchestrator',TokenTracking>>;
   action_accounting?:{actions:Record<string,number>;unrecorded_seconds:number;display_seconds:number}|null;
   raw_action_duration_seconds?:number|null;id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
 export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
@@ -20,6 +22,20 @@ const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAIL
 const cycleSample='Cycle\u00a0\u00a0'
 const dateSample='00/00/0000 00:00:00\u00a0\u00a0\u00a0'
 const durationSample='9999,9\u202fs\u00a0\u00a0\u00a0\u00a0'
+
+export function StageTokenTracking({passage,piloted=false,showCounters=false}:{passage?:Passage;piloted?:boolean;showCounters?:boolean}){
+  if(!passage?.token_tracking||!Object.keys(passage.token_tracking).length)return null
+  const labels={pending:'En attente de mesure',observed:'Compteurs mesurés',indeterminate:'Attribution indéterminée'}
+  return <span className="cycle-token-group" aria-label="Suivi des tokens">{(['coder','orchestrator'] as const).map(role=>{
+    const entry=passage.token_tracking?.[role]
+    if(!entry)return null
+    const counts=passage.tokens?.[role]
+    return <span key={role}>{piloted&&(role==='coder'?'Codeur · ':'Orchestrateur · ')}
+      {labels[entry.state]}{entry.reason&&' · '+entry.reason}
+      {showCounters&&counts&&tokenFields.map(([field,abbr,label])=>
+        <span key={field} title={label}> · {abbr} {formatTokens(counts[field])}</span>)}</span>
+  })}</span>
+}
 
 function StageStateIcon({state,label}:{state:string;label?:string}){
   let icon:ReactNode
@@ -268,7 +284,9 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
       {showAllRows&&<div className="stage-cost-totals"><TokenCostSummary costs={lastPassage?.token_costs} piloted={piloted}/></div>}
     </div>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
-    {showAllRows&&stage.iterations.flatMap(item=>Object.entries(item.telemetry??{}).map(([role,entry])=>{
+    {showAllRows&&stage.iterations.map(item=>Object.keys(item.token_tracking??{}).length>0&&
+      <p key={item.id}>Cycle {item.number??'—'} <StageTokenTracking passage={item} piloted={piloted}/></p>)}
+    {showAllRows&&stage.iterations.filter(item=>!Object.keys(item.token_tracking??{}).length).flatMap(item=>Object.entries(item.telemetry??{}).map(([role,entry])=>{
       if(!entry||entry.model==='observed'&&entry.tokens==='observed')return null
       const actor=role==='coder'?'Codeur':'Orchestrateur'
       const model=entry.model==='observed'?'modèle observé':'modèle non remonté'

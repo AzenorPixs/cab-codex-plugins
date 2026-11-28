@@ -79,7 +79,10 @@ def finish_iteration(record,at,reason,state='COMPLETED'):
     record.ended_at=max(record.started_at,at)
     record.end_reason=reason;record.state=state
     record.duration_seconds=Decimal(str((record.ended_at-record.started_at).total_seconds())) if record.started_at else None
-    record.time_projection=ending_projection(record)
+    ending = ending_projection(record)
+    if 'token_tracking' in record.time_projection:
+        ending['token_tracking'] = record.time_projection['token_tracking']
+    record.time_projection=ending
     record.save(update_fields=['started_at','ended_at','end_reason','state','duration_seconds','time_projection'])
     refresh_total(record.stage_id)
 
@@ -425,6 +428,7 @@ def visible_description(description):
 
 def summarize(change,run=None,*, projection=None,local_only=False,usage=None,agent_observations=None) -> dict:
     """Détails observés et travail attesté, distinct du temps mural."""
+    from .stage_telemetry import tracking_view
     rows=ChangeStageIteration.objects.filter(stage__change=change).select_related('stage','run').order_by('started_at','pk')
     if run is not None:rows=rows.filter(run=run)
     records = list(rows.exclude(stage__key__in=HOST_UPDATE_ACTIONS))
@@ -473,6 +477,7 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None,age
                 native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
                 description=visible_description(record.description), source=record.description_source or None,
+                token_tracking=tracking_view(record, attribution),
                 receipt=visible_receipt(record.receipt)))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None

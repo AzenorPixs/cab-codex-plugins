@@ -4,7 +4,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useId,useRef,useState} from 'react'
 import {TabBar} from './InterfaceSettings'
 import {useRunElectric} from './useRunElectric'
-import {StageOverview,CycleIterations,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
+import {StageOverview,StageTokenTracking,CycleIterations,stageDuration,type StageMetrics,type CycleSummary} from './StageOverview'
 import {api} from './api'
 import {ClosedRecoveryLink,reasonText,runStateLabel,runProtection,type ClosedRecovery} from './SessionLifecycle'
 
@@ -108,6 +108,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
               <button type="button" className="action-link" onClick={()=>openStage(index+1)}>
                 <span>{index+1}/{steps}</span> {label}
               </button>
+              <StageTokenTracking passage={metrics.data?.stages[index]?.iterations.at(-1)} piloted={piloted} showCounters/>
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>

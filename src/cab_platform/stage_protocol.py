@@ -156,6 +156,7 @@ def _begin(actor, data):
     updated={**protocol,'sequence':attempt,'active':active,'current':entry}
     _save(run,updated)
     c.event(run,'run-progress',{'stage':stage,'phase':run.phase})
+    phase_row = None
     if name == 'verification':
         ids = _start_checks(run,attempt)
         if ids:
@@ -186,7 +187,7 @@ def _begin(actor, data):
         run.save(update_fields=['configuration','updated'])
         revision=c.revision(run)
         entry['cab']={'state':'QUEUED','version':version,'scope':scope,'source_revision':revision,'reference':reference}
-        phase(run,'publication',reference,'RUNNING')
+        phase_row = phase(run,'publication',reference,'RUNNING')
         if prior_delivery and prior_delivery.state=='COMPLETED':
             same=prior_delivery.plan.get('source_revision')==revision and prior_delivery.plan.get('scope')==scope
             state='COMPLETED' if same else 'FAILED'
@@ -196,20 +197,26 @@ def _begin(actor, data):
     elif name == 'publication':
         from .stage_substeps import phase
         phase(run,'publication','stage-skipped-'+str(attempt),'SKIPPED')
-    if name != 'closure':
-        row=ChangeStageIteration.objects.filter(run=run,stage__key=name,parent__isnull=True,
-            asynchronous=False,ended_at__isnull=True).first()
-        if row:
+    from .stage_telemetry import confirmation_roles, open_tracking
+    row=phase_row or ChangeStageIteration.objects.filter(run=run,stage__key=name,parent__isnull=True,
+        asynchronous=False,started_at__isnull=False,ended_at__isnull=True).first()
+    telemetry = {}
+    if row:
+        if name != 'closure' and not row.asynchronous:
             row.description=description
             row.description_source='agent'
             row.save(update_fields=['description','description_source'])
+        telemetry = open_tracking(run, row, attempt, key)
+        if telemetry:
+            entry['token_tracking_passage'] = row.pk
     _save(run,updated)
     result={'text':f'{"Retour" if again else "Début"} à l’étape {stage}/{len(keys)} — {LABELS[name]}. {description}',
             'stage':stage,'attempt':attempt,'cab':dict(entry['cab']),'reports':reports(run)}
-    from .stage_telemetry import confirmation_roles
     roles = confirmation_roles(run)
     if roles:
         result['telemetry_required'] = list(roles)
+    if telemetry:
+        result['telemetry'] = telemetry
     c.event(run,'stage-agent-started',{'request_id':key,'digest':fingerprint,'actor':actor.pk,'result':result})
     return result
 
@@ -279,7 +286,7 @@ def validate(actor, data):
     c.require(current and type(data['attempt']) is int and current['attempt']==data['attempt']
               and not current['validated'],'stage-attempt-not-current')
     name=keys_for(run)[current['stage']-1]
-    from .stage_telemetry import confirmation_roles, confirmed_roles
+    from .stage_telemetry import confirmation_roles, confirmed_roles, tracking_view
     roles = confirmation_roles(run)
     if roles:
         confirmed = confirmed_roles(run, current['attempt'])
@@ -330,6 +337,9 @@ def validate(actor, data):
     _save(run,{**protocol,'active':active,'current':current})
     result={'validated':True,'stage':current['stage'],'attempt':current['attempt'],
             'text':f'Étape {current["stage"]} validée par l’agent. {description}','reports':reports(run)}
+    if current.get('token_tracking_passage'):
+        tracking = ChangeStageIteration.objects.get(run=run, pk=current['token_tracking_passage'])
+        result['telemetry'] = tracking_view(tracking, tracking.time_projection)
     if name=='closure' and statistics_at_closure(run):
         result['native_end_required']=True
         result['text']+=' Terminer le tour de codage pour que CAB collecte la télémétrie et clôture le RUN.'
@@ -348,11 +358,15 @@ def view(run):
     protocol=run.configuration[KEY]
     current = protocol.get('current')
     result = {'current':current,'reports':reports(run)}
-    from .stage_telemetry import confirmation_roles, confirmed_roles
+    from .stage_telemetry import confirmation_roles, confirmed_roles, tracking_view
     roles = confirmation_roles(run)
     if current and roles:
         confirmed = confirmed_roles(run, current['attempt'])
         result['telemetry'] = {role:'CONFIRMED' if role in confirmed else 'PENDING' for role in roles}
+    if current and current.get('token_tracking_passage'):
+        row = ChangeStageIteration.objects.filter(run=run, pk=current['token_tracking_passage']).first()
+        if row:
+            result['telemetry'] = tracking_view(row, row.time_projection)
     return result
 
 

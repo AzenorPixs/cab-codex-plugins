@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Ouvrir automatiquement le suivi des tokens par tentative et rôle dans CAB. Rapprocher les relevés Codex horodatés et afficher les mesures en attente et les attributions indéterminées.
+
 - Libeller la durée totale du Résumé, préciser les titres et les premières colonnes des deux tableaux et représenter les états des itérations par des pictogrammes accessibles.
 
 - Placer Raisonnement et LLM après Fournisseurs dans le tableau Agents du Résumé, avec des tarifs alignés sur les coûts des itérations. Regrouper les périodes de même configuration par cycle et afficher LLM dans les tableaux Agents des douze étapes.

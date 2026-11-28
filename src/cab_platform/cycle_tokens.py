@@ -9,8 +9,8 @@ import json
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from .core.models import Actor, AgentModel, ChangeStageIteration, CycleTokenUsage, SessionAgent
-from .measurement_sources import USAGE_FIELDS
+from .core.models import Actor, AgentModel, ChangeStageIteration, CycleTokenUsage, Event, SessionAgent
+from .measurement_sources import CodexUsageProof, USAGE_FIELDS
 from .model_policies import comparable_cost
 
 
@@ -32,10 +32,28 @@ def _contains(row, stamp):
         row.ended_at is None or stamp < row.ended_at)
 
 
+def _stage_requests(run, windows):
+    by_attempt = {}
+    requests = {}
+    for row in windows:
+        tracking = row.receipt.get('token_tracking')
+        if row.run_id == run.pk and tracking:
+            by_attempt[tracking['attempt']] = row
+            requests[(run.project_id, run.run_id, tracking['request_id'])] = row
+    for data in Event.objects.filter(run=run, kind='stage-agent-validated').values_list('data', flat=True):
+        row = by_attempt.get(data['result']['attempt'])
+        if row:
+            requests[(run.project_id, run.run_id, data['request_id'])] = row
+    return requests
+
+
 def store_usage(run, sources):
     """Appel sous le verrou du RUN, avec insertion idempotente par événement."""
     if not sources:
         return False
+    from .stage_telemetry import automatic
+
+    tracked = automatic(run)
     passages = ChangeStageIteration.objects.filter(
         run__project_id=run.project_id, run__cycle_steps=12, cycle__isnull=False,
         parent__isnull=True, started_at__isnull=False,
@@ -50,17 +68,30 @@ def store_usage(run, sources):
         own = Q(run__actor_id=actor_id, run__session_id=thread)
         parent = Q(run__mode='piloted', run__mandate__orchestrator_id=actor_id,
                    run__configuration__reminder_orchestrator_thread=thread)
-        windows = list(passages.filter(own | parent).only('run','asynchronous','started_at','ended_at'))
+        windows = list(passages.filter(own | parent).only('run','asynchronous','started_at','ended_at','receipt'))
         if not any(row.run_id == run.pk for row in windows):
             continue
+        requests = _stage_requests(run, windows) if tracked else {}
         pending = {}
         for stamp, source_key, counts in usage:
-            matches = [row for row in windows if _contains(row, stamp)]
-            primary = [row for row in matches if not row.asynchronous]
-            candidates = primary or matches
-            if len(candidates) != 1 or candidates[0].run_id != run.pk:
+            proof = source_key if isinstance(source_key, CodexUsageProof) else None
+            if tracked and proof and proof.response_at is None:
                 continue
-            stage = candidates[0]
+            measured_at = proof.response_at if tracked and proof else stamp
+            if tracked and proof and proof.requests:
+                candidates = {requests.get(request) for request in proof.requests}
+                if len(candidates) != 1 or None in candidates:
+                    continue
+                stage = candidates.pop()
+            else:
+                matches = [row for row in windows if _contains(row, measured_at)]
+                primary = [row for row in matches if not row.asynchronous]
+                candidates = primary or matches
+                if len(candidates) != 1 or candidates[0].run_id != run.pk:
+                    continue
+                stage = candidates[0]
+            if proof:
+                source_key = proof.key
             actions = [row for row in children[stage.pk] if _contains(row, stamp)]
             key = sha256(json.dumps([actor_id, thread, source_key]).encode()).hexdigest()
             pending[key] = CycleTokenUsage(

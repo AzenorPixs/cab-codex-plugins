@@ -35,6 +35,8 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[consolidate-stage-token-telemetry](openspec/changes/archive/2026-11-28-consolidate-stage-token-telemetry/), code non attribué. Ouverture automatique de la mesure, rapprochement des relevés tardifs prouvés et suivi dans le Résumé et les étapes. La qualification et l’activation sont établies par les reçus CAB.
+
 [update-session-cycle-summary-tables](openspec/changes/archive/2026-11-28-update-session-cycle-summary-tables/), code non attribué. Durée du total, titres, en-têtes et états du Résumé. Chromium et Firefox ont vérifié les libellés, les pictogrammes et les alignements le 28 novembre 2026.
 
 [align-session-agent-model-columns](openspec/changes/archive/2026-11-28-align-session-agent-model-columns/), code non attribué. Le Résumé regroupe les périodes de même configuration par cycle et place Raisonnement et LLM avant les quatre tarifs alignés. Chromium et Firefox contrôlent les en-têtes et l’alignement du Résumé et des douze étapes le 28 novembre 2026.

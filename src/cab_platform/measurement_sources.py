@@ -1,5 +1,6 @@
 """Instantanés numériques natifs ; aucun message, outil brut ou secret exporté."""
 from functools import lru_cache
+from dataclasses import dataclass
 import json
 from collections import deque
 import os
@@ -21,6 +22,30 @@ _CODEX_COMPACTION = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class CodexUsageProof:
+    key: tuple
+    response_at: datetime | None
+    requests: tuple
+
+
+def _stage_request(payload):
+    item = payload.get('item')
+    if payload.get('type') != 'item_completed' or not isinstance(item, dict):
+        return None
+    if item.get('type') != 'McpToolCall' or item.get('server') != 'cab' or item.get('status') != 'completed':
+        return None
+    if item.get('tool') not in ('run_stage_begin', 'run_stage_validate'):
+        return None
+    arguments = item.get('arguments')
+    if not isinstance(arguments, dict):
+        return None
+    keys = tuple(arguments.get(field) for field in ('project_id', 'run_id', 'request_id'))
+    if all(isinstance(value, str) and 0 < len(value) <= 200 for value in keys):
+        return keys
+    return None
+
+
 def _token_count(value):
     return value if type(value) is int and 0 <= value <= _MAX_TOKEN_COUNT else None
 
@@ -29,7 +54,7 @@ def _usage_counts(values, fields):
     return tuple(_token_count(values.get(field)) for field in fields)
 
 
-def _codex_usage(payload, stamp, previous, usage):
+def _codex_usage(payload, stamp, previous, usage, response):
     info = payload.get('info')
     if not isinstance(info, dict) or not isinstance(info.get('total_token_usage'), dict):
         return previous
@@ -45,7 +70,11 @@ def _codex_usage(payload, stamp, previous, usage):
         # Keep the original key for events already collected with three counters.
         legacy_delta = delta[:-1]
         key_counts = total[:-1] if any(legacy_delta) or previous is None and 0 in legacy_delta else total
-        usage.append((stamp, (stamp.isoformat(), key_counts), delta))
+        key = (stamp.isoformat(), key_counts)
+        if response and info['total_token_usage'] == response[1]:
+            response_at = response[0] if delta == response[2] else None
+            key = CodexUsageProof(key, response_at, tuple(response[3]))
+        usage.append((stamp, key, delta))
     return total
 
 def native_time(value):
@@ -94,6 +123,7 @@ def _time_lines(stream, size, usage=None, models=None):
     turns, pending, uncertain = [], {}, []
     covered_from = None
     previous_usage = None
+    response = None
     provider = ''
     last_model = ''
     progress = deque(maxlen=96)
@@ -110,6 +140,11 @@ def _time_lines(stream, size, usage=None, models=None):
         if row.get('type') == 'session_meta':
             covered_from = covered_from or stamp
             provider = _agent_label(payload.get('model_provider'),160) or provider
+        if usage is not None and row.get('type') == 'token_usage_record':
+            totals = payload.get('thread_token_usage')
+            counts = payload.get('usage')
+            response = ((stamp, totals, _usage_counts(counts, _CODEX_USAGE_FIELDS), [])
+                        if payload.get('response_id') and isinstance(totals, dict) and isinstance(counts, dict) else None)
         if models is not None and ('turn_context' == row.get('type') or 'thread_settings_applied' in (row.get('type'),payload.get('type'))):
             settings = payload.get('thread_settings', payload.get('settings'))
             settings = settings if isinstance(settings, dict) else payload
@@ -123,7 +158,12 @@ def _time_lines(stream, size, usage=None, models=None):
             continue
         kind, key = payload.get('type'), payload.get('turn_id')
         if usage is not None and kind == 'token_count':
-            previous_usage = _codex_usage(payload, stamp, previous_usage, usage)
+            previous_usage = _codex_usage(payload, stamp, previous_usage, usage, response)
+            response = None
+        elif response is not None:
+            request = _stage_request(payload)
+            if request:
+                response[3].append(request)
         if kind == 'agent_message':
             progress.append((stamp,key,True))
         if not isinstance(key, str):

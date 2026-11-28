@@ -598,23 +598,6 @@ CAB MUST laisser les journaux natifs intacts et valoriser les catégories factur
 - **WHEN** une catégorie nécessaire au calcul est inconnue ou que les sous-compteurs Codex dépassent le total
 - **THEN** le coût concerné reste inconnu et les compteurs bruts restent consultables.
 
-### Requirement: Confirmation native au début de chaque tentative
-
-Pour les nouveaux RUN utilisant le protocole d’étapes, chaque rôle concerné MUST confirmer au début de chaque tentative la remontée de son modèle, de son niveau de raisonnement et de ses compteurs. CAB MUST vérifier la source native liée au RUN et corréler le reçu à la tentative et au rôle. La clôture de l’étape MUST attendre les confirmations requises.
-
-#### Scenario: Confirmation avec un compteur nul
-- **WHEN** les réglages et compteurs requis sont observés dans la source native et qu’un compteur vaut zéro
-- **THEN** CAB accepte la valeur nulle observée et enregistre la preuve.
-
-#### Scenario: Source incomplète
-- **WHEN** la source native n’expose pas une donnée requise ou expose une mesure incohérente
-- **THEN** CAB indique les champs manquants ou invalides et la confirmation reste en attente.
-
-#### Scenario: Nouvelle tentative ou RUN historique
-- **WHEN** un RUN soumis à cette exigence recommence une étape
-- **THEN** les preuves précédentes restent consultables et chaque rôle confirme de nouveau.
-- **AND** un RUN ouvert sous le contrat antérieur conserve ses obligations initiales.
-
 ### Requirement: Coûts et Agents dans le résumé du cycle
 
 Le Résumé d'un RUN MUST afficher chacun des quatre coûts sous le compteur correspondant pour le dernier cycle et pour l'ensemble des cycles, avec les deux-points alignés. Chaque bloc MUST se terminer par le coût total, tous rôles et catégories applicables compris. Les montants MUST être présentés avec quatre décimales et une virgule.
@@ -651,3 +634,31 @@ Le Résumé d'un RUN MUST afficher chacun des quatre coûts sous le compteur cor
 - **THEN** le Résumé affiche une seule ligne avec le premier début et la dernière fin observée
 - **AND** la fin reste vide si une période du groupe est encore ouverte
 - **AND** des réglages différents apparaissent sur des lignes distinctes.
+
+### Requirement: Suivi natif des compteurs de chaque tentative
+
+CAB MUST ouvrir un suivi durable par rôle à chaque tentative exécutée, avec l'identité native liée au RUN, l'heure d'ouverture et la dernière observation disponible comme référence. CAB MUST exposer l'attente dès le début et actualiser l'état en autonomie. Une nouvelle tentative MUST avoir une preuve distincte.
+
+#### Scenario: Ouverture sans relevé nouveau
+
+- **WHEN** CAB ouvre une étape exécutée
+- **THEN** le Résumé et l'étape affichent l'attente par rôle jusqu'à la première mesure attribuée.
+- **AND** le chemin nominal ne demande aucune déclaration de compteurs à l'agent.
+
+#### Scenario: Validation et relevé tardif
+
+- **WHEN** la validation de l'étape arrive avant le relevé correspondant
+- **THEN** CAB conserve l'attente et réexamine les preuves au fil de la collecte.
+- **AND** CAB rattache le relevé une seule fois lorsque la preuve native identifie un passage et un rôle uniques.
+- **AND** un contrôle d'Implémentation exigeant des compteurs conserve sa barrière.
+
+#### Scenario: Attribution indéterminée
+
+- **WHEN** la collecte atteste une activité dont la mesure par passage ne peut être prouvée
+- **THEN** CAB indique l'attribution indéterminée et son motif et conserve les mesures aux niveaux attestés.
+
+#### Scenario: Zéro et étape vacante
+
+- **WHEN** un compteur décrit par la source vaut zéro
+- **THEN** CAB affiche zéro comme valeur observée.
+- **AND** l'étape Vacante reste non exécutée.

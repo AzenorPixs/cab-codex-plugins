@@ -63,7 +63,9 @@ def phase(run,key,reference,state,receipt=None):
         count=stage.iterations.filter(run=run,started_at__isnull=False).count()+1
         row=ChangeStageIteration.objects.create(stage=stage,run=run,cycle=cycle,reference=ref,asynchronous=True,state=state,started_at=now,iteration_number=count,description_source='cab')
     row.state=state
-    if receipt is not None:row.receipt=receipt
+    if receipt is not None:
+        tracking = row.receipt.get('token_tracking')
+        row.receipt = {**receipt, 'token_tracking': tracking} if tracking else receipt
     row.save(update_fields=['state','receipt'])
     if state in ('COMPLETED','FAILED','CANCELLED','SKIPPED'):finish_iteration(row,now,state,state)
     else:refresh_total(row.stage_id)
