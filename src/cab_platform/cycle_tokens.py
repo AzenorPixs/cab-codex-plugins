@@ -15,6 +15,7 @@ from .model_policies import comparable_cost
 
 
 RATE_FIELDS=('input_cost','output_cost','cache_read_cost','cache_write_cost')
+NON_EXECUTED = ('SKIPPED', 'NOT_REQUESTED')
 
 
 def native_sources(run):
@@ -57,7 +58,7 @@ def store_usage(run, sources):
     passages = ChangeStageIteration.objects.filter(
         run__project_id=run.project_id, run__cycle_steps=12, cycle__isnull=False,
         parent__isnull=True, started_at__isnull=False,
-    ).exclude(state__in=('SKIPPED','NOT_REQUESTED'))
+    ).exclude(state__in=NON_EXECUTED)
     children = defaultdict(list)
     for row in ChangeStageIteration.objects.filter(run=run, parent__isnull=False).exclude(
         state__in=('SKIPPED','NOT_REQUESTED'),
@@ -68,7 +69,8 @@ def store_usage(run, sources):
         own = Q(run__actor_id=actor_id, run__session_id=thread)
         parent = Q(run__mode='piloted', run__mandate__orchestrator_id=actor_id,
                    run__configuration__reminder_orchestrator_thread=thread)
-        windows = list(passages.filter(own | parent).only('run','asynchronous','started_at','ended_at','receipt'))
+        windows = list(passages.filter(own | parent).select_related('stage')
+                       .only('run','asynchronous','started_at','ended_at','receipt','stage__key'))
         if not any(row.run_id == run.pk for row in windows):
             continue
         requests = _stage_requests(run, windows) if tracked else {}
@@ -90,6 +92,8 @@ def store_usage(run, sources):
                 if len(candidates) != 1 or candidates[0].run_id != run.pk:
                     continue
                 stage = candidates[0]
+            if stage.stage.key == 'vacant':
+                continue
             if proof:
                 source_key = proof.key
             actions = [row for row in children[stage.pk] if _contains(row, stamp)]
@@ -134,8 +138,14 @@ def token_totals(query, *dimensions):
     return grouped
 
 
+def _executed_usage(query):
+    """Garder les événements natifs et écarter leur projection hors exécution."""
+    return query.exclude(Q(stage_passage__state__in=NON_EXECUTED) |
+                         Q(stage_passage__stage__key='vacant'))
+
+
 def run_totals(run):
-    return token_totals(CycleTokenUsage.objects.filter(run=run)).get((), {})
+    return token_totals(_executed_usage(CycleTokenUsage.objects.filter(run=run))).get((), {})
 
 
 def _agent_catalog(identifiers):
@@ -181,7 +191,7 @@ def _codex_billable_input(counts):
 
 
 def _cost_counts(run):
-    query = CycleTokenUsage.objects.filter(run=run)
+    query = _executed_usage(CycleTokenUsage.objects.filter(run=run))
     counts = token_totals(query, 'stage_passage_id')
     codex_roles = {role for role, actor, _ in native_sources(run) if actor.agent in ('codex', 'codex-cli')}
     if not codex_roles:
@@ -386,6 +396,10 @@ def _total_cost(costs):
         return str(sum(map(Decimal, values)))
 
 
+def passage_costs(passages):
+    return _sum_costs((record['tokens'], record['token_costs']) for record in passages)
+
+
 def _cycle_agents(rows):
     periods = {}
     for row in sorted(rows, key=lambda agent: (agent['started_at'], agent['id'])):
@@ -402,7 +416,7 @@ def _cycle_agents(rows):
 
 
 def overview(change, run, records, cycles):
-    query = CycleTokenUsage.objects.filter(change=change)
+    query = _executed_usage(CycleTokenUsage.objects.filter(change=change))
     if run is not None:
         query = query.filter(run=run)
     passes = token_totals(query, 'stage_passage_id')
@@ -417,21 +431,21 @@ def overview(change, run, records, cycles):
         record['tokens'] = source.get((record['id'],), {})
         if run is not None and record.get('parent_id') is None:
             record['agents']=agents.get(record['id'],[])
-            record['token_costs']=stored_costs.get(str(record['id']),{})
+            record['token_costs']=stored_costs.get(str(record['id']),{}) if record['tokens'] else {}
             if record.get('cycle_id') is not None:
                 cycle_passages[record['cycle_id']].append(record)
     for cycle in cycles:
         cycle['tokens'] = by_cycle.get((cycle['id'],), {})
         if run is not None:
             passages = cycle_passages[cycle['id']]
-            costs = _sum_costs((record['tokens'], record['token_costs']) for record in passages)
+            costs = passage_costs(passages)
             cycle.update(token_costs=costs, total_cost=_total_cost(costs),
                          agents=_cycle_agents(agent for record in passages for agent in record['agents']))
     total = token_totals(query).get((), {})
     session = {}
     if run is not None and run.coding_session_id:
-        session = token_totals(CycleTokenUsage.objects.filter(
-            project_id=run.project_id, session_id=run.coding_session_id)).get((), {})
+        session = token_totals(_executed_usage(CycleTokenUsage.objects.filter(
+            project_id=run.project_id, session_id=run.coding_session_id))).get((), {})
     return by_stage, total, session
 
 

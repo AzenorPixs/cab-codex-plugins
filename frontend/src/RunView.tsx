@@ -112,7 +112,7 @@ export function RunView({projectId,runId,routeId}:{projectId:string;runId:string
             </li>)}</ol>
             <p className="configuration-help">Le cycle accepte les retours vers une étape antérieure. La position ne valide ni les étapes précédentes, ni le gate terminal.</p>
           </section>
-          <p className="cycle-token-summary cycle-total"><span><strong>Totale de tous les cycles</strong> : Durée : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={cycleTokens} piloted={piloted} withCosts costs={metrics.data?.cycle_cost_summary?.token_costs} totalCost={metrics.data?.cycle_cost_summary?.total_cost}/></p>
+          <p className="cycle-token-summary cycle-total"><span><strong>Totale de tous les cycles</strong> : Durée : {duration(summary?.duration_seconds,summary?.duration_complete)}</span><TokenSummary tokens={metrics.data?.cycle_cost_summary?.tokens??cycleTokens} piloted={piloted} withCosts costs={metrics.data?.cycle_cost_summary?.token_costs} totalCost={metrics.data?.cycle_cost_summary?.total_cost}/></p>
           {metrics.data?.cycles&&<CycleIterations cycles={metrics.data.cycles} piloted={piloted} showAllRows withCostsAndAgents/>}
         </>:<>
           {metrics.isPending&&<p role="status">Chargement de l’étape…</p>}

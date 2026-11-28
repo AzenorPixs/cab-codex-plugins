@@ -13,10 +13,10 @@ type Passage=Attribution & {telemetry?:Partial<Record<'coder'|'orchestrator',Pas
   token_tracking?:Partial<Record<'coder'|'orchestrator',TokenTracking>>;
   action_accounting?:{actions:Record<string,number>;unrecorded_seconds:number;display_seconds:number}|null;
   raw_action_duration_seconds?:number|null;id:number|string;run_id:string|null;number:number|null;state:string|null;started_at:string|null;ended_at:string|null;duration_seconds:number|null;work_seconds?:number|null;wait_seconds?:number|null;description:string|null;receipt:Record<string,unknown>|null;parent_id?:number|null;source?:string|null;token_costs?:CycleTokenCosts;agents?:StageAgent[]}
-export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[]}
+export type StageMetric=Attribution & {key:string;label?:string;observed?:boolean;not_required?:boolean;work_seconds?:number|null;wait_seconds?:number|null;iteration_count:number|null;duration_seconds:number|null;iterations:Passage[];children?:StageMetric[];token_costs?:CycleTokenCosts}
 export type CycleMetric=Attribution & AgentPeriod & CycleCosts & {display_duration_seconds?:number;id:number;number:number;duration_seconds:number|null;complete:boolean}
 export type CycleSummary={tokens?:CycleTokens;iteration_count?:number;measured_count?:number;duration_complete?:boolean;last_started_at?:string|null;last_ended_at?:string|null;last_duration_seconds?:number|null;duration_seconds?:number|null;cab_seconds?:number|null;agent_seconds?:number|null;waiting_seconds?:number|null;cab_seconds_complete?:boolean;agent_seconds_complete?:boolean;waiting_seconds_complete?:boolean}
-export type StageMetrics={tokens?:CycleTokens;session_tokens?:CycleTokens;piloted?:boolean;stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null;cycle_summary?:CycleSummary;cycle_cost_summary?:CycleCosts}
+export type StageMetrics={tokens?:CycleTokens;session_tokens?:CycleTokens;piloted?:boolean;stages:StageMetric[];cycles?:CycleMetric[];duration_seconds:number|null;complete_cycle_duration_seconds?:number|null;cycle_summary?:CycleSummary;cycle_cost_summary?:CycleCosts & {tokens?:CycleTokens}}
 const date=(value:string|null)=>value?new Date(value).toLocaleString('fr-FR'):''
 const states:Record<string,string>={RUNNING:'En cours',COMPLETED:'Terminé',FAILED:'Échec',UNKNOWN:'Indéterminé',PENDING:'En attente',SKIPPED:'Non exécuté',NOT_REQUESTED:'Non demandé',CANCELLED:'Annulé'}
 const cycleSample='Cycle\u00a0\u00a0'
@@ -281,7 +281,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
         {stage.waiting_seconds!=null&&<><dt>Attente</dt><dd><Waiting time={stage} shortUnits={showAllRows}/></dd></>}
       </dl>
       <div className="stage-token-totals"><TokenSummary tokens={stage.tokens} piloted={piloted}/></div>
-      {showAllRows&&<div className="stage-cost-totals"><TokenCostSummary costs={lastPassage?.token_costs} piloted={piloted}/></div>}
+      {showAllRows&&<div className="stage-cost-totals"><TokenCostSummary costs={stage.token_costs} piloted={piloted}/></div>}
     </div>
     {stage.iterations.some(item=>item.ended_at&&!item.attribution_complete)&&<p>Une case vide indique une durée non mesurée.</p>}
     {showAllRows&&stage.iterations.map(item=>Object.keys(item.token_tracking??{}).length>0&&
