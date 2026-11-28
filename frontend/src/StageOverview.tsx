@@ -91,9 +91,10 @@ function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
 
-function StageAgentTable({cycleRef,items,piloted,leadingColumns=6}:{
-  cycleRef:RefObject<HTMLTableElement|null>;items:AgentPeriod[];piloted:boolean;leadingColumns?:number
+function StageAgentTable({cycleRef,items,piloted,summary=false}:{
+  cycleRef:RefObject<HTMLTableElement|null>;items:AgentPeriod[];piloted:boolean;summary?:boolean
 }){
+  const leadingColumns=summary?7:6
   const typeSample=useRef<HTMLSpanElement>(null)
   const reasoningSample=useRef<HTMLSpanElement>(null)
   const [geometry,setGeometry]=useState<number[]>([])
@@ -113,41 +114,52 @@ function StageAgentTable({cycleRef,items,piloted,leadingColumns=6}:{
       const preceding=widths.slice(3,costStart).reduce((sum,value)=>sum+value,0)
       const cellStyle=getComputedStyle(cells[0])
       const padding=parseFloat(cellStyle.paddingInlineStart)+parseFloat(cellStyle.paddingInlineEnd)
-      const typeWidth=Math.min(preceding,type.getBoundingClientRect().width+padding)
-      const reasoningWidth=Math.min(widths[widths.length-1]/2,reasoning.getBoundingClientRect().width+padding)
-      const layout=[width,...widths.slice(0,3),typeWidth,preceding-typeWidth,...widths.slice(costStart,costStart+4),reasoningWidth]
+      const stateWidth=widths[widths.length-1]
+      const typeWidth=Math.min(summary?preceding/4:preceding,type.getBoundingClientRect().width+padding)
+      const available=preceding-typeWidth
+      const reasoningWidth=Math.min(summary?available/3:stateWidth/2,reasoning.getBoundingClientRect().width+padding)
+      const costWidths=widths.slice(costStart,costStart+4)
+      const providerWidth=summary?Math.min(available/3,typeWidth):available
+      const layout=summary
+        ?[width-stateWidth,...widths.slice(0,3),typeWidth,providerWidth,reasoningWidth,available-providerWidth-reasoningWidth,...costWidths]
+        :[width,...widths.slice(0,3),typeWidth,providerWidth,...costWidths,reasoningWidth]
       setGeometry(previous=>previous.length===layout.length&&previous.every((value,index)=>value===layout[index])?previous:layout)
     }
     measure()
     const observer=new ResizeObserver(measure)
     for(const element of [cycle,...cells,type,reasoning])observer.observe(element)
     return ()=>observer.disconnect()
-  },[cycleRef,piloted,leadingColumns])
+  },[cycleRef,piloted,leadingColumns,summary])
 
+  const modelHeaders=<><th scope="col" title="Raisonnement">Raisonnement</th><th scope="col">LLM</th></>
   const rows=items.flatMap(passage=>(passage.agents??[]).filter(agent=>piloted||agent.role==='coder').map(agent=>({passage,agent})))
   return <>
     <span ref={typeSample} className="stage-agents-sample" aria-hidden="true">{'Orchestrateur\u00a0\u00a0'}</span>
     <span ref={reasoningSample} className="stage-agents-sample" aria-hidden="true">{'Raisonnement\u00a0\u00a0'}</span>
     <table className="stage-passages monitor-table stage-passages-compact stage-table-step stage-agents-table" aria-label="Agents"
       style={{width:geometry[0],visibility:geometry.length?undefined:'hidden'}}>
-      <colgroup>{geometry.slice(1).map((width,index)=><col key={index} style={{width}}/>)}<col/></colgroup>
+      <colgroup>{geometry.slice(1).map((width,index)=><col key={index} style={{width}}/>)}{!summary&&<col/>}</colgroup>
       <thead><tr>
         <th scope="col">Cycle</th><th scope="col">Début</th><th scope="col">Fin</th>
         <th scope="col">Type</th><th scope="col">Fournisseurs</th>
+        {summary&&modelHeaders}
         {tokenFields.map(([field,abbreviation,label])=><th key={field} scope="col" title={'Tarif en dollars par million de tokens · '+label}>C{abbreviation}</th>)}
-        <th scope="col" title="Raisonnement">Raisonnement</th><th scope="col">Agents</th>
+        {!summary&&modelHeaders}
       </tr></thead>
-      <tbody>{rows.length?rows.map(({passage,agent})=><tr key={agent.id}>
-        <td>{passage.number}</td><td title={agent.started_at}>{date(agent.started_at??passage.started_at)}</td>
-        <td title={agent.ended_at??undefined}>{date(agent.ended_at===undefined?passage.ended_at:agent.ended_at)}</td>
-        <td>{piloted&&agent.role==='orchestrator'?'Orchestrateur':'Codage'}</td>
-        <td title={agent.provider||undefined}>{agent.provider||'—'}</td>
-        {tokenFields.map(([field])=>{
-          const text=formatCostValue(agent.rates?.[field])
-          return <td key={field} title={text||undefined}>{text}</td>
-        })}
-        <td title={agent.reasoning||undefined}>{agent.reasoning||'—'}</td><td title={agent.model}>{agent.model}</td>
-      </tr>):<tr><td colSpan={11}>Aucun agent observé.</td></tr>}</tbody>
+      <tbody>{rows.length?rows.map(({passage,agent})=>{
+        const modelCells=<><td title={agent.reasoning||undefined}>{agent.reasoning||'—'}</td><td title={agent.model}>{agent.model}</td></>
+        return <tr key={agent.id}>
+          <td>{passage.number}</td><td title={agent.started_at}>{date(agent.started_at??passage.started_at)}</td>
+          <td title={agent.ended_at??undefined}>{date(agent.ended_at===undefined?passage.ended_at:agent.ended_at)}</td>
+          <td>{piloted&&agent.role==='orchestrator'?'Orchestrateur':'Codage'}</td>
+          <td title={agent.provider||undefined}>{agent.provider||'—'}</td>
+          {summary&&modelCells}
+          {tokenFields.map(([field])=>{
+            const text=formatCostValue(agent.rates?.[field])
+            return <td key={field} title={text||undefined}>{text}</td>
+          })}
+          {!summary&&modelCells}
+        </tr>}):<tr><td colSpan={11}>Aucun agent observé.</td></tr>}</tbody>
     </table>
   </>
 }
@@ -276,7 +288,7 @@ export function CycleIterations({cycles,piloted=false,showAllRows=false,withCost
   const tokenHeaders=<TokenColumns header piloted={piloted} includeCosts={withCostsAndAgents}/>
   return <section className="change-progress"><h2>Itérations du cycle</h2>
     <StageTable showAllRows={showAllRows} compact={withCostsAndAgents} title="Itérations du cycle" items={cycles}
-      tableRef={cycleRef} afterTable={withCostsAndAgents?<StageAgentTable cycleRef={cycleRef} items={cycles} piloted={piloted} leadingColumns={7}/>:undefined}
+      tableRef={cycleRef} afterTable={withCostsAndAgents?<StageAgentTable cycleRef={cycleRef} items={cycles} piloted={piloted} summary/>:undefined}
       columns={8+tokenColumnCount(piloted)*(withCostsAndAgents?2:1)}
       header={<><tr>{['Itération','Début','Fin','CAB','Agent(s)','Attente','Durée totale'].map(label=>
         <th key={label} scope="col" rowSpan={rowSpan}>{label}</th>)}

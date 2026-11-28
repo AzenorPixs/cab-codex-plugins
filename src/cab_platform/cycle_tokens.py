@@ -356,19 +356,18 @@ def _total_cost(costs):
 
 
 def _cycle_agents(rows):
-    segments = []
-    previous_by_role = {}
-    settings = ('model', 'provider', 'reasoning', 'rates')
+    periods = {}
     for row in sorted(rows, key=lambda agent: (agent['started_at'], agent['id'])):
-        previous = previous_by_role.get(row['role'])
-        if (previous and previous['ended_at'] == row['started_at']
-                and all(previous[field] == row[field] for field in settings)):
-            previous['ended_at'] = row['ended_at']
+        key = (row['role'], row['model'], row['provider'], row['reasoning'],
+               tuple(sorted(row['rates'].items())))
+        period = periods.get(key)
+        if period is None:
+            periods[key] = row.copy()
+        elif period['ended_at'] is None or row['ended_at'] is None:
+            period['ended_at'] = None
         else:
-            segment = {**row}
-            segments.append(segment)
-            previous_by_role[row['role']] = segment
-    return segments
+            period['ended_at'] = max(period['ended_at'], row['ended_at'])
+    return list(periods.values())
 
 
 def overview(change, run, records, cycles):

@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Placer Raisonnement et LLM après Fournisseurs dans le tableau Agents du Résumé, avec des tarifs alignés sur les coûts des itérations. Regrouper les périodes de même configuration par cycle et afficher LLM dans les tableaux Agents des douze étapes.
+
 - Afficher dans le Résumé des cycles les coûts par type de tokens, les totaux et les périodes de modèle observées par itération.
 
 - Corriger la valorisation des tokens Codex lus ou écrits en cache et intégrer la sortie de raisonnement OpenCode au coût de sortie. Exiger une confirmation native du modèle, du raisonnement et des compteurs au début de chaque tentative des nouveaux RUN.

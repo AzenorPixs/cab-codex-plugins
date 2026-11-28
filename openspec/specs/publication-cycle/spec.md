@@ -519,7 +519,7 @@ CAB MUST conserver dans PostgreSQL, dans `sessions_agents`, les modèles et nive
 - **THEN** Agents suit immédiatement Cycle, avec les mêmes trois premières colonnes et les mêmes largeurs
 - **AND** Type est dimensionné pour « Orchestrateur » suivi de deux espaces et Fournisseurs précède les quatre coûts
 - **AND** les quatre coûts suivent les bords et largeurs du groupe de coûts le plus à droite de Cycle
-- **AND** Raisonnement précède Agents, dont le nom de modèle occupe le reste sans retour à la ligne
+- **AND** Raisonnement précède la colonne LLM, dont le nom de modèle occupe le reste sans retour à la ligne
 - **AND** un tarif par type indisponible reste vide
 
 #### Scenario: Tarif par identifiant observé
@@ -628,6 +628,12 @@ Le Résumé d'un RUN MUST afficher chacun des quatre coûts sous le compteur cor
 #### Scenario: Consulter les périodes de modèle
 
 - **WHEN** des modèles sont observés pendant une itération
-- **THEN** Agents suit immédiatement Itérations du cycle, avec ses colonnes d'agent et de tarifs
-- **AND** les segments contigus du même rôle, modèle, fournisseur, raisonnement et tarifs sont joints dans l'itération
-- **AND** un changement ou une discontinuité d'observation ouvre un segment distinct.
+- **THEN** Agents suit immédiatement Itérations du cycle, avec Raisonnement et LLM immédiatement après Fournisseurs
+- **AND** les quatre tarifs ont les mêmes bords et largeurs que le dernier groupe de coûts d’Itérations du cycle.
+
+#### Scenario: Regrouper les observations d’un LLM dans un cycle
+
+- **WHEN** douze périodes du même cycle ont le même rôle, LLM, raisonnement, fournisseur et tarifs, y compris si elles sont espacées
+- **THEN** le Résumé affiche une seule ligne avec le premier début et la dernière fin observée
+- **AND** la fin reste vide si une période du groupe est encore ouverte
+- **AND** des réglages différents apparaissent sur des lignes distinctes.

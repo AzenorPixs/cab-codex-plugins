@@ -35,6 +35,8 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[align-session-agent-model-columns](openspec/changes/archive/2026-11-28-align-session-agent-model-columns/), code non attribué. Le Résumé regroupe les périodes de même configuration par cycle et place Raisonnement et LLM avant les quatre tarifs alignés. Chromium et Firefox contrôlent les en-têtes et l’alignement du Résumé et des douze étapes le 28 novembre 2026.
+
 [show-cycle-summary-costs-and-agents](openspec/changes/archive/2026-11-28-show-cycle-summary-costs-and-agents/), code non attribué. Coûts par catégorie et totaux du Résumé, coûts par itération et périodes des modèles. Agrégats vérifiés sur PostgreSQL et rendu contrôlé sur Chromium et Firefox le 28 novembre 2026.
 
 [correct-cycle-token-accounting-and-stage-telemetry](openspec/changes/archive/2026-11-28-correct-cycle-token-accounting-and-stage-telemetry/), code non attribué. Bases tarifaires des compteurs Codex et OpenCode et contrôle de la télémétrie par rôle et tentative. Qualification PostgreSQL du 28 novembre 2026 et format des coûts vérifié sur Chromium et Firefox.
