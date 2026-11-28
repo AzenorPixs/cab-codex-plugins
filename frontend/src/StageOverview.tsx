@@ -21,8 +21,7 @@ const cycleSample='Cycle\u00a0\u00a0'
 const dateSample='00/00/0000 00:00:00\u00a0\u00a0\u00a0'
 const durationSample='9999,9\u202fs\u00a0\u00a0\u00a0\u00a0'
 
-function StageStateIcon({state,labelled=false}:{state:string;labelled?:boolean}){
-  const label=labelled?(states[state]||state):undefined
+function StageStateIcon({state,label}:{state:string;label?:string}){
   let icon:ReactNode
   switch(state){
     case 'RUNNING':
@@ -60,7 +59,7 @@ function StageStateIcon({state,labelled=false}:{state:string;labelled?:boolean})
         <circle cx="8" cy="8" r="6.3"/><path d="M5 8h6"/>
       </svg>
   }
-  return <span className="stage-cycle-icon" role={label?'img':undefined} aria-label={label} title={label} aria-hidden={!labelled||undefined}>{icon}</span>
+  return <span className="stage-cycle-icon" role={label?'img':undefined} aria-label={label} title={label} aria-hidden={!label||undefined}>{icon}</span>
 }
 
 function Waiting({time,shortUnits=false}:{time:Attribution;shortUnits?:boolean}){
@@ -91,9 +90,10 @@ function tokenValues(tokens:CycleTokens|undefined){
   return Object.values(tokens??{}).flatMap(values=>Object.values(values).map(formatTokens))
 }
 
-function StageAgentTable({cycleRef,items,piloted,summary=false}:{
-  cycleRef:RefObject<HTMLTableElement|null>;items:AgentPeriod[];piloted:boolean;summary?:boolean
+function StageAgentTable({cycleRef,items,piloted,summaryTitle}:{
+  cycleRef:RefObject<HTMLTableElement|null>;items:AgentPeriod[];piloted:boolean;summaryTitle?:string
 }){
+  const summary=Boolean(summaryTitle)
   const leadingColumns=summary?7:6
   const typeSample=useRef<HTMLSpanElement>(null)
   const reasoningSample=useRef<HTMLSpanElement>(null)
@@ -134,13 +134,14 @@ function StageAgentTable({cycleRef,items,piloted,summary=false}:{
   const modelHeaders=<><th scope="col" title="Raisonnement">Raisonnement</th><th scope="col">LLM</th></>
   const rows=items.flatMap(passage=>(passage.agents??[]).filter(agent=>piloted||agent.role==='coder').map(agent=>({passage,agent})))
   return <>
+    {summaryTitle&&<h2>{summaryTitle}</h2>}
     <span ref={typeSample} className="stage-agents-sample" aria-hidden="true">{'Orchestrateur\u00a0\u00a0'}</span>
     <span ref={reasoningSample} className="stage-agents-sample" aria-hidden="true">{'Raisonnement\u00a0\u00a0'}</span>
-    <table className="stage-passages monitor-table stage-passages-compact stage-table-step stage-agents-table" aria-label="Agents"
+    <table className="stage-passages monitor-table stage-passages-compact stage-table-step stage-agents-table" aria-label={summaryTitle??'Agents'}
       style={{width:geometry[0],visibility:geometry.length?undefined:'hidden'}}>
       <colgroup>{geometry.slice(1).map((width,index)=><col key={index} style={{width}}/>)}{!summary&&<col/>}</colgroup>
       <thead><tr>
-        <th scope="col">Cycle</th><th scope="col">Début</th><th scope="col">Fin</th>
+        <th scope="col">{summary?'Itérations':'Cycle'}</th><th scope="col">Début</th><th scope="col">Fin</th>
         <th scope="col">Type</th><th scope="col">Fournisseurs</th>
         {summary&&modelHeaders}
         {tokenFields.map(([field,abbreviation,label])=><th key={field} scope="col" title={'Tarif en dollars par million de tokens · '+label}>C{abbreviation}</th>)}
@@ -248,7 +249,7 @@ export function StageOverview({stage,title,expanded=false,piloted=false,showAllR
   const accounted=showAllRows?stage?.iterations.flatMap(item=>item.action_accounting?[item.action_accounting.display_seconds]:[])??[]:[]
   return <section className="change-progress stage-overview" aria-label="Overview de l’étape">
     {lastPassage?<div className="run-cycle-heading stage-cycle-heading">
-      <h2>{title}{lastPassage.state&&<StageStateIcon state={lastPassage.state} labelled/>}</h2>
+      <h2>{title}{lastPassage.state&&<StageStateIcon state={lastPassage.state} label={states[lastPassage.state]||lastPassage.state}/>}</h2>
       <p className="cycle-token-summary"><strong>Dernier Cycle de cette étape</strong>
         <span>Durée : {stageDuration(lastPassage.action_accounting?.display_seconds??lastPassage.duration_seconds,true)||'—'}</span>
         <TokenSummary tokens={lastPassage.tokens} piloted={piloted}/>
@@ -286,11 +287,13 @@ export function CycleIterations({cycles,piloted=false,showAllRows=false,withCost
   const grouped=withCostsAndAgents&&piloted
   const rowSpan=grouped?2:undefined
   const tokenHeaders=<TokenColumns header piloted={piloted} includeCosts={withCostsAndAgents}/>
-  return <section className="change-progress"><h2>Itérations du cycle</h2>
-    <StageTable showAllRows={showAllRows} compact={withCostsAndAgents} title="Itérations du cycle" items={cycles}
-      tableRef={cycleRef} afterTable={withCostsAndAgents?<StageAgentTable cycleRef={cycleRef} items={cycles} piloted={piloted} summary/>:undefined}
+  const title=withCostsAndAgents?'Itération du cycle des 12 étapes':'Itérations du cycle'
+  return <section className="change-progress"><h2>{title}</h2>
+    <StageTable showAllRows={showAllRows} compact={withCostsAndAgents} title={title} items={cycles}
+      tableRef={cycleRef} afterTable={withCostsAndAgents?<StageAgentTable cycleRef={cycleRef} items={cycles} piloted={piloted}
+        summaryTitle="LLM par itération du cycle des 12 étapes"/>:undefined}
       columns={8+tokenColumnCount(piloted)*(withCostsAndAgents?2:1)}
-      header={<><tr>{['Itération','Début','Fin','CAB','Agent(s)','Attente','Durée totale'].map(label=>
+      header={<><tr>{[withCostsAndAgents?'Itérations':'Itération','Début','Fin','CAB','Agent(s)','Attente','Durée totale'].map(label=>
         <th key={label} scope="col" rowSpan={rowSpan}>{label}</th>)}
         {grouped?<TokenRoleHeaders/>:tokenHeaders}<th scope="col" rowSpan={rowSpan}>État</th>
       </tr>{grouped&&<tr>{tokenHeaders}</tr>}</>}
@@ -298,6 +301,16 @@ export function CycleIterations({cycles,piloted=false,showAllRows=false,withCost
         stageDuration(cycle.agent_seconds),stageDuration(cycle.waiting_seconds),
         stageDuration(cycle.display_duration_seconds??cycle.duration_seconds),
         cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours',...tokenValues(cycle.tokens)]}
-      render={cycle=><tr key={cycle.id}><td>{cycle.number}</td><td>{date(cycle.started_at)}</td><td>{date(cycle.ended_at)}</td><td>{stageDuration(cycle.cab_seconds)}</td><td>{stageDuration(cycle.agent_seconds)}</td><td><Waiting time={cycle}/></td><td>{stageDuration(cycle.display_duration_seconds??cycle.duration_seconds)}</td><TokenColumns tokens={cycle.tokens} costs={cycle.token_costs} piloted={piloted} includeCosts={withCostsAndAgents}/><td>{cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours'}</td></tr>}/>
+      render={cycle=>{
+        const state=cycle.complete?'COMPLETED':cycle.ended_at?'CANCELLED':'RUNNING'
+        const label=cycle.complete?'Complet':cycle.ended_at?'Interrompu':'En cours'
+        return <tr key={cycle.id}>
+          <td>{cycle.number}</td><td>{date(cycle.started_at)}</td><td>{date(cycle.ended_at)}</td>
+          <td>{stageDuration(cycle.cab_seconds)}</td><td>{stageDuration(cycle.agent_seconds)}</td><td><Waiting time={cycle}/></td>
+          <td>{stageDuration(cycle.display_duration_seconds??cycle.duration_seconds)}</td>
+          <TokenColumns tokens={cycle.tokens} costs={cycle.token_costs} piloted={piloted} includeCosts={withCostsAndAgents}/>
+          <td>{withCostsAndAgents?<StageStateIcon state={state} label={label}/>:label}</td>
+        </tr>
+      }}/>
   </section>
 }
