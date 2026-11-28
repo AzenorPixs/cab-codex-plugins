@@ -21,9 +21,12 @@ def _parent(path):
     return path
 
 @transaction.atomic
-def workshop(run):
+def workshop(run, *, terminal=False):
     # Le verrou du RUN sérialise toute création/déplacement.
-    type(run).objects.select_for_update().get(pk=run.pk)
+    run = type(run).objects.select_for_update().get(pk=run.pk)
+    if terminal:
+        from .run_cleanup import cleanup_passage
+        require(not cleanup_passage(run), 'session-terminal-run-inactive')
     known=Workshop.objects.filter(run=run).first()
     if known:
         p=Path(known.path)
@@ -56,3 +59,45 @@ def workshop(run):
         from .core.commands import event
         event(run,'legacy-workshop-detached',{'path':known.path,'device':known.device,'inode':known.inode,'replacement':str(target)})
     return target
+
+
+def cleanup_workshop(run):
+    """Retire l’atelier enregistré, sous verrou du RUN et sans suivre les liens."""
+    from .session_terminal import CONSOLES, REGISTRY
+
+    require(REGISTRY.acquire(blocking=False), 'cleanup-terminal-pending')
+    try:
+        require(not any(console.scope[0] == run.pk and console.finished is None
+                        for console in CONSOLES.values()), 'cleanup-terminal-pending')
+        known = Workshop.objects.filter(run=run).first()
+        if known is None:
+            return 'ABSENT'
+        target = Path('/tmp/cab') / run.project_id / '.cab-tests' / run.change / run.run_id
+        require(Path(known.path) == target and target.resolve() == target,
+                'cleanup-workshop-identity-changed')
+        try:
+            parent = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            return 'ABSENT'
+        try:
+            info = os.fstat(parent)
+            require(info.st_uid == os.geteuid() and not info.st_mode & 0o022,
+                    'cleanup-workshop-parent-unsafe')
+            try:
+                info = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                return 'ABSENT'
+            require(stat.S_ISDIR(info.st_mode) and info.st_uid == known.uid == run.actor.uid
+                    and (info.st_dev, info.st_ino) == (known.device, known.inode),
+                    'cleanup-workshop-identity-changed')
+            with open('/proc/self/mountinfo', encoding='utf-8', errors='surrogateescape') as mounts:
+                mount_paths = (entry.split(' ', 5)[4] for entry in mounts)
+                require(not any(path == str(target) or path.startswith(str(target) + '/')
+                                for path in mount_paths), 'cleanup-workshop-mount-present')
+            require(shutil.rmtree.avoids_symlink_attacks, 'cleanup-workshop-removal-unsupported')
+            shutil.rmtree(target.name, dir_fd=parent)
+        finally:
+            os.close(parent)
+    finally:
+        REGISTRY.release()
+    return 'REMOVED'

@@ -183,6 +183,8 @@ def _reserve_files_locked(actor, data, connector_id=None):
         if prior:
             require(prior.data.get('digest') == fingerprint, 'session-git-request-conflict', 409)
             return prior.data['receipt']
+        from .run_cleanup import cleanup_passage
+        require(cleanup_passage(current) is None, 'cleanup-file-reservation-not-allowed')
         require(current.change_record_id is not None and current.coding_session_id is not None, 'session-git-change-unavailable', 409)
         project = Project.objects.get(pk=current.project_id)
         change = Change.objects.select_for_update().get(pk=current.change_record_id)

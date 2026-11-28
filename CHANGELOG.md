@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Activer l’étape 10 Nettoyage des nouveaux RUN. CAB nettoie l’atelier, restitue les bancs et les verrous sur preuves, puis soumet l’inventaire Git à la revue du codeur. La suppression d’un fichier étranger au projet reste soumise à l’accord du développeur.
+
 - Rétablir l’accès au Résumé et au détail des étapes lorsque le suivi des tokens a déjà été enregistré.
 
 - Rétablir les coûts du Résumé en écartant les mesures rattachées aux étapes non exécutées et cumuler les coûts de toutes les itérations de chaque étape.

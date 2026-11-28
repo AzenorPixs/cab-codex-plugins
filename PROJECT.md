@@ -184,12 +184,12 @@ OpenSpec et le contrat distribué de la version effectivement active font autori
 | 7. Temps, tokens et cache LLM | Préfixes stables, états différentiels, attente mécanique hors tours LLM, calcul local des identités/empreintes et compactage fondé sur le budget avec checkpoint durable. Gains de cache et latences mesurés par SGS, jamais supposés ; temps mural et temps agent concurrents restent distincts. |
 | 8. Réalisation et livraison | Une version consolidée2.4.0 sous SCM, tests vitaux ciblés, cohérence OpenSpec et cadrages, commit/publication via CI/CD DIU puis CABU. Qualification source, publication et activation sont prouvées séparément. |
 
-L’atelier commun est `.cab-tests/<change>/<RUN>/` à la racine de **chaque
-projet**. Toutes les briques vérifient/créent `.cab-tests/` au démarrage pour
-ce projet. Le codeur peut y créer, modifier et copier des fichiers du change
+Le contrat initial plaçait les ateliers sous `.cab-tests/<change>/<RUN>/`
+à la racine du projet. Le service courant attribue les nouveaux ateliers
+sous `/tmp/cab/<projet>/.cab-tests/<change>/<RUN>/`. Le codeur peut y créer, modifier et copier des fichiers du change
 sans autorisation supplémentaire ; il ne touche pas aux ateliers des pairs.
-Le sous-espace propre est vidé à la clôture, la racine reste présente. Les
-liens symboliques ne doivent pas permettre de sortir de cet espace.
+Dans le profil Nettoyage, CAB retire l’atelier propre au passage 10. Les liens
+symboliques ne doivent pas permettre de sortir de cet espace.
 
 CAB direct est un opt-in explicite (« utiliser CAB en mode direct ») : une
 session Codex réelle alimente SGS et apparaît dans le Web Monitor, sans
@@ -852,6 +852,11 @@ une purge manuelle des historiques antérieurs à 1/3/7/30/365 jours, après
 prévisualisation puis confirmation. Elle préserve les contextes actifs ou
 référencés, les états opérationnels et les preuves métier. Cette exception
 de maintenance ne permet aucune décision, permission ou modification de RUN.
+
+Les nouveaux RUN passés à l’étape Nettoyage restituent leurs ressources avant
+Publication. CAB vérifie les preuves et fournit l’inventaire Git du projet.
+Le codeur demande la validation du développeur pour les fichiers étrangers
+qu’il propose de supprimer.
 
 ### 5.4 Plugin Codex
 

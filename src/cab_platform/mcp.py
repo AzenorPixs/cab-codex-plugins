@@ -73,7 +73,7 @@ async def cab_update(request_id:str,version:str='',timeout_ms:int=1800000)->dict
 @public_tool()
 def cab_contract()->dict:
     """Contrat commun avant cadrage et autonomie ; aucune initialisation ni permission implicite."""
-    return {'version':__version__,'service':'cab.service','api':'/api/v1/openapi.json','profiles':['direct','piloted'],'pilotage':'choix résolus et mandat initial, autonomie de réalisation/tests/coordination, exceptions et revue finale seulement','exceptions':['outside-change','outside-framing','missing-tool','web-consultation'],'workshop':'piloted: /tmp/cab/<project>/.cab-tests/<change>/<RUN> ; direct: projet/.cab-tests','recovery':'Même request_id, lecture du reçu ; UNKNOWN interdit tout rejeu.','finalization':__import__('cab_platform.finalization_contract',fromlist=['describe']).describe()}
+    return {'version':__version__,'service':'cab.service','api':'/api/v1/openapi.json','profiles':['direct','piloted'],'pilotage':'choix résolus et mandat initial, autonomie de réalisation/tests/coordination, exceptions et revue finale seulement','exceptions':['outside-change','outside-framing','missing-tool','web-consultation'],'workshop':'/tmp/cab/<project>/.cab-tests/<change>/<RUN> ; atelier historique enregistré selon le RUN','recovery':'Même request_id, lecture du reçu ; UNKNOWN interdit tout rejeu.','finalization':__import__('cab_platform.finalization_contract',fromlist=['describe']).describe()}
 @public_tool()
 def finalization_validate(policy:dict,criteria:list[str],mode:str='direct')->dict:
     """Prévol pur : schéma strict, critères exacts et modes ; aucun RUN ni effet."""

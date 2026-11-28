@@ -30,7 +30,8 @@ LAUNCHER = (
 
 
 def active(run):
-    return run.state == 'WORKING' and not run.suspension
+    from .run_cleanup import cleanup_passage
+    return run.state == 'WORKING' and not run.suspension and cleanup_passage(run) is None
 
 
 def launch_shell(project, workshop, run_id, session_id, change, generation):
@@ -199,7 +200,7 @@ def access(run, owner, session_key, action, terminal_id=None, offset=0, text='')
             require(len(CONSOLES) < MAX_CONSOLES, 'session-terminal-capacity', 409)
             require(run.actor.uid != 0, 'session-terminal-owner-unavailable', 409)
             try:
-                console = Console(scope, *spawn_shell(run, workshop(run)))
+                console = Console(scope, *spawn_shell(run, workshop(run, terminal=True)))
             except (OSError, KeyError) as error:
                 raise Refused('session-terminal-unavailable', 409) from error
             CONSOLES[console.id] = console

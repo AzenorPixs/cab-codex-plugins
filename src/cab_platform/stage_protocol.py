@@ -111,7 +111,11 @@ def _begin(actor, data):
     restart=data.get('restart',False)
     c.require(type(restart) is bool and (not restart or previous and previous['stage']==stage),'stage-restart-invalid',400)
     again = transition(previous,stage,restart=restart)
-    if name in ('implementation','verification','review','archival','statistics','vacant','publication','closure'):
+    if name == 'publication' and previous and previous['stage'] == 10 and keys[9] == 'cleanup':
+        from .run_cleanup import inventory
+        approved = previous.get('cab', {}).get('inventory', {})
+        c.require(approved.get('digest') == inventory(run)['digest'], 'cleanup-inventory-changed')
+    if name in ('implementation','verification','review','archival','statistics','vacant','cleanup','publication','closure'):
         from .version_skill import require_acknowledged
         require_acknowledged(run)
     active = dict(protocol.get('active', {}))
@@ -163,6 +167,8 @@ def _begin(actor, data):
             entry['cab']={'state':'ADMITTED','operations':ids}
     elif name == 'archival' and _plan(run).get('checks'):
         entry['cab']={'state':'ARCHIVE_WAITING'}
+    elif name == 'cleanup':
+        entry['cab'] = _cleanup(run, attempt)
     elif name == 'statistics':
         from .publication_boundary import prepare
         marker=prepare(run,commit_reports=_requires_delivery(run),publication=None)
@@ -229,7 +235,9 @@ def reports(run):
         admission=cab.get('state')
         state=admission
         details={}
-        if 'operations' in cab:
+        if 'cleanup' in cab:
+            details = {k: cab[k] for k in ('reason', 'banks', 'workshop', 'inventory') if k in cab}
+        elif 'operations' in cab:
             ops=list(Operation.objects.filter(run=run,pk__in=cab['operations']).order_by('pk'))
             fresh=[op for op in ops if op.state=='COMPLETED' and op.receipt.get('exit_code')==0]
             state=('COMPLETED' if len(fresh)==len(cab['operations']) else 'UNKNOWN' if any(op.state=='UNKNOWN' for op in ops)
@@ -274,8 +282,24 @@ def close_missing(run):
     return missing
 
 
-@transaction.atomic
+def _cleanup(run, attempt):
+    from .run_cleanup import execute
+    try:
+        result = execute(run, attempt)
+    except c.Refused as error:
+        result = {'state': 'PENDING', 'reason': error.code}
+    except OSError:
+        result = {'state': 'PENDING', 'reason': 'cleanup-workshop-unavailable'}
+    return {'cleanup': True, **result}
+
+
 def validate(actor, data):
+    from .preexisting_git import git_guard
+    with git_guard(), transaction.atomic():
+        return _validate(actor, data)
+
+
+def _validate(actor, data):
     c.require(set(data)=={'project_id','run_id','request_id','attempt','text'},'stage-validation-fields-invalid',400)
     run,key,fingerprint,prior=_request(actor,data,'stage-agent-validated')
     if prior:
@@ -309,6 +333,17 @@ def validate(actor, data):
             _archive_checks(run)
             run.refresh_from_db()
             protocol=run.configuration[KEY];current=protocol['current']
+    if name == 'cleanup':
+        from .run_cleanup import reviewed
+        cab = _cleanup(run, current['attempt'])
+        current = {**current, 'cab': cab}
+        protocol = {**protocol, 'current': current, 'active': {**protocol['active'], '10': current}}
+        _save(run, protocol)
+        if cab['state'] == 'COMPLETED':
+            inventory = cab['inventory']
+            if not inventory['available'] or not reviewed(run, current['attempt'], inventory['digest']):
+                return {'validated': False, 'stage': 10, 'attempt': current['attempt'],
+                        'missing': ['stage:10:inventory-review-required'], 'reports': reports(run)}
     report=next((item for item in reports(run) if item['attempt']==current['attempt']),None)
     if report and report['state']!='COMPLETED':
         return {'validated':False,'stage':current['stage'],'attempt':current['attempt'],

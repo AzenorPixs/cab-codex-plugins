@@ -41,7 +41,7 @@ champ de tag par défaut, CAB utilise PROJECT_VERSION sans préfixe ajouté.
 Une saisie nouvelle préfixée est refusée ; les lectures historiques restent
 compatibles. Les anciennes références ne sont pas renommées automatiquement.
 
-Pour les RUN à étape 10 vacante, le commit de Publication intègre les
+Pour les RUN à étape 10 Vacante ou Nettoyage, le commit de Publication intègre les
 STATISTICS.md et BLOCKERS.md admissibles déjà présents dans le projet. Son tag
 de version identifie le commit livré. En Clôture, suivre le signal
 `native_end_required` du skill CAB. Une fois le tour terminé, CAB génère

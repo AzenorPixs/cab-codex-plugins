@@ -295,6 +295,7 @@ def begin_run(actor,data,*,stage_protocol=False):
         from cab_platform.stage_protocol import KEY,VERSION
         configuration[KEY]={'version':VERSION,'active':{},'mandate_confirmation':True,'automatic_telemetry':True}
         configuration['statistics_at_closure']=True
+        configuration['cleanup_at_stage_10']=True
     r=Run.objects.create(project=project,run_id=run_id,session_id=sid,actor=actor,mode=mode,change=change,cycle_steps=12,stage=1,configuration=configuration,mandate={**data,'framing_digest':digest(data)})
     from .run_evidence import initialize
     initialize(r,data.get('finalization'))
@@ -396,6 +397,11 @@ def start_operation(actor,data,*,host_authorized=False):
     resources=data.get('resources',[])
     require(isinstance(resources,list) and len(resources)<=128 and all(isinstance(key,str) and key for key in resources),
             'resources-invalid',400)
+    from cab_platform.run_cleanup import BANK_PHASES, cleanup_passage
+    cleanup = cleanup_passage(r)
+    require(cleanup is None or (r.stage == 10 and not cleanup.get('validated')
+            and data['kind'] == 'external' and data.get('phase') in BANK_PHASES),
+            'cleanup-operation-not-allowed')
     operation_write_paths(r,data)
     if data['kind']=='external':require(data.get('adapter_id') in r.mandate.get('external_adapters',{}),'external-adapter-required',403)
     op=Operation.objects.create(run=r,request_id=request_id,input_digest=input_hash,request=data,source_revision=revision(r),dispatch_nonce=secrets.token_hex(32),state='WAITING')
@@ -548,6 +554,8 @@ def coordinate(actor,data):
 def reserve_bank(actor,data):
     from cab_platform.resource_reservations import live, resource_guard, return_unused_banks
     r=run_scope(actor,data['run_id'],data['project_id'],lock=True);working(r);key=data['resource']
+    from cab_platform.run_cleanup import cleanup_passage
+    require(cleanup_passage(r) is None, 'cleanup-bank-reservation-not-allowed')
     require(key in r.mandate.get('resources',[]) and key.startswith(('lxc:','docker:','browser:')),'bank-outside-mandate',403)
     resource_guard()
     return_unused_banks(timezone.now(), key)
@@ -628,6 +636,11 @@ def release_bank(actor,data):
     lease=Lease.objects.select_for_update().get(pk=data['lease_id'],run=r,operation__isnull=True);require(lease.state=='HELD' and no_pending(r),'bank-release-not-ready')
     cleanup=data.get('cleanup_request_id')
     verification=data.get('verification_request_id')
+    if r.configuration.get('cleanup_at_stage_10') is True:
+        from cab_platform.run_cleanup import bank_proof
+        proof = bank_proof(lease)
+        required = (cleanup, verification) if cleanup or verification else None
+        require(not lease.evidence.get('uncertain') and proof == required, 'cleanup-not-proven')
     if not cleanup and not verification:
         require(not bank_activity(lease.run_id, lease.resource_id, lease.created).exists(),'cleanup-not-proven')
         lease.evidence={'disposition':'unused'}

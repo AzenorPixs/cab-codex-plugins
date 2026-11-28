@@ -2434,6 +2434,16 @@ Les contrôles administratifs forcés restent authentifiés et distincts du cach
 
 Un surveillant inotify par projet suit récursivement ses répertoires sans suivre les liens symboliques. Les modifications sont regroupées en mémoire par projet ; l’inventaire réaffecte les surveillances après déplacement et une perte d’événements déclenche une reconstruction. Les délais PostgreSQL sont appliqués à chaud. Les analyses partagent une exclusion PostgreSQL globale. L’intervalle minimal s’applique aux seules analyses automatiques ; le clic manuel le contourne. Une lecture automatique en attente est satisfaite par une mesure manuelle plus récente. Leur projection existante est transmise via Electric.
 
+## Nettoyage avant Publication
+
+Le profil enregistré à la création du RUN sélectionne Nettoyage en étape 10.
+CAB restitue les bancs inutilisés ou couverts par deux reçus successifs, puis
+les verrous dont le contenu est vérifié dans l’index de session. L’atelier
+temporaire est retiré après vérification de l’inode, du propriétaire, des
+terminaux et des opérations. Le reçu conserve le résultat de la restitution.
+La validation agent lie la revue de l’inventaire Git filtré à son empreinte.
+Un effet non résolu ou un résultat de nettoyage manquant bloque le passage.
+
 ## Git par session — CAB 3.2.16
 
 Les migrations 0030 à 0036 créent git_changes, les index et réservations de

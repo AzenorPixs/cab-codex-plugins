@@ -196,6 +196,10 @@ Pour une session Codex directe, demander explicitement CAB en mode direct.
 SGS et le Web Monitor suivent alors cette session sans créer de session
 OpenCode ou d’orchestrateur fictif.
 
+## Étape Nettoyage
+
+Après Archivage, les nouveaux RUN nettoient leur atelier temporaire et rendent leurs réservations avant Publication. CAB vérifie les reçus pour les bancs Docker et LXC utilisés. L’agent examine l’inventaire Git du projet et présente au développeur tout fichier qu’il propose de supprimer.
+
 ## Autonomie et atelier de test
 
 Dans le change validé, l’orchestrateur décide, contrôle et valide ; l’agent de
@@ -204,8 +208,8 @@ l’exploration sont autonomes dans ce périmètre. Toute écriture projet hors
 atelier et tout accès web requièrent la validation prévue par le protocole.
 Les actions hors change et les ressources supplémentaires relèvent du développeur.
 
-Chaque projet possède un atelier `.cab-tests/<change>/<RUN>/`. L’agent peut
-y créer, modifier et copier des fichiers du change sans autorisation
+CAB attribue au RUN un atelier sous `/tmp/cab/<projet>/.cab-tests/<change>/<RUN>/`.
+L’agent peut y créer, modifier et copier des fichiers du change sans autorisation
 supplémentaire, en préservant les espaces des autres sessions. L’atelier est
 prioritaire pour les tests ; le codeur justifie le recours à LXC ou Docker
 et l’orchestrateur tranche. Les résultats de tests sont soumis à sa validation.

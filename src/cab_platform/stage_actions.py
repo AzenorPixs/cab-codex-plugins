@@ -18,6 +18,7 @@ AGENT_ACTIONS = {
     'verification': {'resultat': 'Résultats de vérification contrôlés'},
     'review': {'revue': 'Revue effectuée', 'ecart': 'Écart vérifié'},
     'archival': {'archive': 'Archive contrôlée'},
+    'cleanup': {'inventaire': 'Inventaire du projet examiné'},
     'statistics': {'rapport': 'Rapport statistique contrôlé'},
     'publication': {'publication': 'Publication contrôlée', 'artefact': 'Artefact contrôlé'},
     'closure': {'dossier': 'Dossier de clôture contrôlé'},
@@ -36,6 +37,8 @@ CAB_EVENTS = {
     'statistics-inputs-frozen': ('gel', 'Données des statistiques figées', 'statistics'),
     'statistics-phase-validated': ('rapport-valide', 'Rapports statistiques validés', 'statistics'),
     'statistics-phase-failed': ('rapport-echec', 'Rapports statistiques en échec', 'statistics'),
+    'run-cleanup-workshop-removed': ('atelier', 'Atelier du RUN nettoyé', 'cleanup'),
+    'run-cleanup-resources': ('restitution', 'Ressources du RUN restituées', 'cleanup'),
     'stage-cab-publication-admitted': ('livraison-admise', 'Livraison prise en charge', 'publication'),
     'finalization-started': ('preuves', 'Preuves de clôture validées', 'closure'),
     'run-closed': ('sceau', 'Reçu de clôture enregistré', 'closure'),
@@ -276,6 +279,13 @@ def declare(actor,data):
             return {'attempt':current['attempt'], 'action':action, 'role':role, 'state':'PENDING', 'missing':missing}
         receipt.update(evidence, action=action)
         label = 'Télémétrie native confirmée'
+    if action == 'inventaire':
+        report = current.get('cab', {})
+        inventory = report.get('inventory', {})
+        c.require(report.get('state') == 'COMPLETED' and inventory.get('available')
+                  and isinstance(data.get('text'), str) and data['text'].strip(),
+                  'cleanup-inventory-review-not-ready')
+        receipt['inventory_digest'] = inventory['digest']
     if action=='mandats':
         provided=normalize_mandates(data.get('mandates'))
         c.require(set(provided)==set(mandates_for(run)),'stage-mandates-divergent')
@@ -296,6 +306,8 @@ def declare(actor,data):
             **({'mandates':receipt['mandates']} if 'mandates' in receipt else {})}
     if action == CONFIRMATION:
         result['evidence'] = evidence
+    if action == 'inventaire':
+        result['inventory_digest'] = receipt['inventory_digest']
     c.event(run,'stage-action-declared',{'request_id':key,'fingerprint':fingerprint,'result':result})
     return result
 

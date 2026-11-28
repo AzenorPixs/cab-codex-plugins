@@ -7,11 +7,11 @@ Séparer les statistiques du travail du journal opérationnel de publication et 
 ## Requirements
 
 ### Requirement: Cycle Publication versionné à12 étapes
-CAB MUST créer les nouveaux cycles avec Initialisation/Prévol fusionnés, Analyse, Cadrage, Spécification, Versionning, Implémentation, Vérifications, Revue, Archivage, Vacante, Publication puis Clôture. CAB MUST conserver le profil et les numéros des anciens RUN.
+CAB MUST créer les nouveaux cycles avec Initialisation/Prévol fusionnés, Analyse, Cadrage, Spécification, Versionning, Implémentation, Vérifications, Revue, Archivage, Nettoyage, Publication puis Clôture. CAB MUST conserver le profil et les numéros des anciens RUN.
 
 #### Scenario: Nouvelle session et session historique
 - **WHEN** un nouveau RUN est créé après activation
-- **THEN** son étape 10 est vacante, sa Publication est à l’étape 11 et sa Clôture à l’étape 12. Les passages historiques gardent leurs numéros et libellés du profil enregistré.
+- **THEN** son étape 10 est Nettoyage, sa Publication est à l’étape 11 et sa Clôture à l’étape 12. Les passages historiques gardent leurs numéros et libellés du profil enregistré.
 
 ### Requirement: Statistiques gelées avant publication
 Pour les RUN du profil précédent, CAB MUST inclure l’archivage dans les mesures puis figer les statistiques avant les commits, envois, générations et publications d’artefacts. CAB MUST conserver les reçus et durées opérationnels hors des statistiques gelées du profil précédent. Pour les nouveaux RUN, la Publication fige les sources et la collecte native continue jusqu’à la fin attestée du travail.
@@ -343,11 +343,11 @@ CAB MUST afficher le cumul des tokens entrants, sortants, lus dans le cache et �
 - **AND** les contributions des deux rôles sont identifiables en session pilotée
 
 ### Requirement: Statistiques en dernières actions de Clôture
-CAB MUST utiliser pour les nouveaux RUN un profil à douze étapes où l’étape 10 reste vacante. CAB MUST horodater son ouverture et sa validation vide. La Publication reste à l’étape 11 et « Clôture » à l’étape 12. CAB MUST conserver le profil des RUN existants.
+CAB MUST conserver la Publication à l’étape 11 et la Clôture à l’étape 12, ainsi que le profil des RUN existants.
 
 #### Scenario: Passage vacant
-- **WHEN** l’agent ouvre et valide l’étape 10 du nouveau profil
-- **THEN** CAB conserve ses deux bornes et n’exécute aucune tâche à cette étape.
+- **WHEN** un RUN historique ouvre et valide le passage Vacante de son profil enregistré
+- **THEN** CAB conserve ses deux bornes sans exécuter de tâche à ce passage.
 
 #### Scenario: Dernier tour de codage
 - **WHEN** les preuves de publication et la validation finale applicable sont acquises
@@ -679,3 +679,16 @@ CAB MUST limiter les compteurs et les coûts du cycle aux passages exécutés. L
 - **WHEN** une mesure historique se trouve sur un passage non exécuté
 - **THEN** elle est exclue des compteurs et des coûts affichés pour le passage, l'étape, le cycle et leurs cumuls.
 - **AND** l'absence de coût sur ce passage ne rend aucun des coûts exécutés indisponible.
+
+### Requirement: Nettoyage vérifié avant Publication
+
+CAB MUST déclencher le nettoyage à l’entrée de l’étape 10 du nouveau profil et consigner la restitution des ressources du RUN. CAB MUST empêcher la validation du passage et la progression vers Publication tant que la restitution reste en attente ou indéterminée. CAB MUST mettre à disposition du codeur un inventaire Git filtré en lecture seule pour la revue des fichiers étrangers au projet.
+
+#### Scenario: Fichier suspect dans le projet
+- **WHEN** le codeur identifie un candidat à la suppression dans l’inventaire
+- **THEN** il soumet au développeur le chemin et le motif et attend une validation explicite avant toute suppression.
+- **AND** la collecte CAB ne supprime aucun fichier du projet et exclut les chemins protégés.
+
+#### Scenario: Ancienne étape Vacante
+- **WHEN** un RUN conserve le profil avec une étape 10 Vacante
+- **THEN** ce passage conserve son libellé et sa validation vide.

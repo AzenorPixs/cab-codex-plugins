@@ -292,7 +292,16 @@ au parent. autonomous_recovery expose le motif si une preuve manque. Un processu
 vivant, un atelier invérifiable, un test externe ou host_authorization garde ses
 protections. La validation des sources actuelles reste distincte du résultat perdu.
 
-Pour les RUN à étape 10 vacante, le tag identifie le commit de Publication.
+Pour les RUN à étape 10 Nettoyage, ouvrir ce passage après Archivage. CAB
+restitue les ressources prouvées et expose les bancs encore en attente dans
+le même passage. Pour un banc utilisé, fournir via CAB les opérations
+`cleanup` puis `verify-cleanup` sur le banc du RUN. Relire le retour du
+passage. Examiner l’inventaire Git, soumettre au développeur tout candidat
+à la suppression et attendre sa décision avant suppression ou Publication.
+Après examen, enregistrer l’action `inventaire` puis valider le passage.
+Si CAB a produit un nouvel inventaire, examiner et consigner son résultat.
+
+Pour les RUN à étape 10 Vacante ou Nettoyage, le tag identifie le commit de Publication.
 CAB y inclut aussi les fichiers STATISTICS.md et BLOCKERS.md admissibles déjà
 présents dans le projet, indépendamment de leur RUN d’origine. La Clôture
 produit seulement les rapports locaux. Les règles Git du profil enregistré

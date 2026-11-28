@@ -38,6 +38,10 @@ mise à niveau publient uniquement la table des notifications dans Electric ;
 les reçus de décision restent hors de son flux. La migration inverse supprime
 les notifications et reçus : elle nécessite un choix explicite de restauration.
 
+L’étape 10 Nettoyage traite les résidus du RUN dans son atelier identifié.
+Les répertoires temporaires de construction des artefacts de livraison sont
+gérés par les constructeurs pendant la Publication.
+
 ## Livraison CAB — Debian et clients légers
 
 Le paquet Debian dépend de `inotify-tools`, qui fournit les outils de surveillance inotify. CAB utilise également l’API inotify du noyau directement.

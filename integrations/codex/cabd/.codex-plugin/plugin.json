@@ -1,6 +1,6 @@
 {
   "name": "CABD",
-  "version": "3.54.2",
+  "version": "3.55.0",
   "description": "Configurer le lancement GNOME de Codex Desktop sur son daemon local.",
   "author": {
     "name": "CAB"
