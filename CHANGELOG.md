@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Rétablir l’accès au Résumé et au détail des étapes lorsque le suivi des tokens a déjà été enregistré.
+
 - Rétablir les coûts du Résumé en écartant les mesures rattachées aux étapes non exécutées et cumuler les coûts de toutes les itérations de chaque étape.
 
 - Ouvrir automatiquement le suivi des tokens par tentative et rôle dans CAB. Rapprocher les relevés Codex horodatés et afficher les mesures en attente et les attributions indéterminées.

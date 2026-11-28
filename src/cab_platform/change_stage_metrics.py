@@ -474,10 +474,10 @@ def summarize(change,run=None,*, projection=None,local_only=False,usage=None,age
                                                        merged(agent_intervals,start,end),known,record.pk))
             grouped[key].append(_passage(current.run_id, record.pk, start, end,
                 number=record.iteration_number, state=record.state or None, duration=record.duration_seconds,
-                native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from, attribution=attribution,
+                native=native_evidence, intervals=intervals, wait_only=waiting_review, work_from=work_from,
+                attribution={**attribution, 'token_tracking': tracking_view(record, attribution)},
                 parent_id=record.parent_id, cycle_id=record.cycle_id, reference=record.reference or None,
                 description=visible_description(record.description), source=record.description_source or None,
-                token_tracking=tracking_view(record, attribution),
                 receipt=visible_receipt(record.receipt)))
         for key, beginning, ending in _restore_stage_passages(current, events, present):
             left = beginning['created'] if beginning else None

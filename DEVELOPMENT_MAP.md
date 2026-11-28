@@ -35,6 +35,8 @@ contrôle les anciennes adresses, les deux onglets et le retour depuis un RUN re
 
 ## Tableaux des cycles de session
 
+[fix-stage-details-with-token-tracking](openspec/changes/archive/2026-11-28-fix-stage-details-with-token-tracking/), code non attribué. Rétablissement de la lecture des étapes avec suivi des tokens persisté.
+
 [fix-cycle-and-stage-cost-totals](openspec/changes/archive/2026-11-28-fix-cycle-and-stage-cost-totals/), code non attribué. Périmètre des coûts du Résumé et cumul des coûts du bloc de chaque étape.
 
 [consolidate-stage-token-telemetry](openspec/changes/archive/2026-11-28-consolidate-stage-token-telemetry/), code non attribué. Ouverture automatique de la mesure, rapprochement des relevés tardifs prouvés et suivi dans le Résumé et les étapes. La qualification et l’activation sont établies par les reçus CAB.

@@ -1,6 +1,6 @@
 [project]
 name = "cab"
-version = "3.54.1"
+version = "3.54.2"
 description = "Socle CAB"
 requires-python = ">=3.12"
 dependencies = [

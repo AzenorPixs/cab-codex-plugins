@@ -643,6 +643,12 @@ CAB MUST ouvrir un suivi durable par rôle à chaque tentative exécutée, avec 
 - **THEN** CAB affiche zéro comme valeur observée.
 - **AND** l'étape Vacante reste non exécutée.
 
+#### Scenario: Relire une tentative suivie
+
+- **WHEN** le Résumé ou le détail d’étape est demandé pour une tentative de tout projet
+- **THEN** CAB MUST retourner un seul état par rôle, avec la mesure persistée si elle existe, ou l’attente prévue à l’ouverture.
+- **AND** un passage historique sans suivi reste consultable.
+
 ### Requirement: Coûts cumulés dans le bloc des étapes
 
 Dans les douze onglets d’étape, le bloc avant Cycle MUST présenter durées, tokens et coûts en trois colonnes équilibrées lorsque la largeur le permet. Une séparation verticale MUST délimiter les groupes de tokens et de coûts. Chaque coût MUST cumuler les passages de l’étape par catégorie et par rôle, selon le même périmètre que les compteurs.
